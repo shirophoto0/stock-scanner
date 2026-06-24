@@ -17,27 +17,39 @@ from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 import pandas as pd
 
-# ป้องกัน Error ในเครื่องตัวเอง
+# --- ส่วนระบุตัวตน (วางไว้หลัง import ต่างๆ) ---
 try:
     user_email = st.user.email
 except:
-    user_email = "shirophoto0@gmail.com" # ใส่เมลตัวเองไว้สำหรับทดสอบ
+    user_email = "shirophoto0@gmail.com"
 
-# 2. แปลงอีเมลให้เป็นชื่อ User ที่เรากรอกไว้ใน Google Sheets
-# **ให้พี่อ้ำเปลี่ยนอีเมลในเครื่องหมายคำพูดให้เป็นอีเมลจริงของพี่อ้ำกับคุณ Nuji นะครับ**
-if user_email == "shiropho0@gmail.com": 
+if user_email == "shirophoto0@gmail.com": 
     current_user = "Aum"
 elif user_email == "jirapa2@gmail.com":
     current_user = "Nuji"
 else:
-    # เผื่อกรณีรันเทสบนเครื่องตัวเองที่ยังไม่มี Login Email
-    current_user = "Aum" 
+    current_user = "Aum"
 
 st.write(f"ยินดีต้อนรับคุณ: **{current_user}**")
 
-# 3. สมมติตัวแปร df_all คือข้อมูลพอร์ตทั้งหมดที่ดึงมาจาก Google Sheets
-# (ให้พี่อ้ำใช้โค้ดดึง Google Sheets ของพี่อ้ำตามปกติได้เลยครับ)
-# df_all = pd.read_csv(...) หรือโค้ด Google Sheets เดิม
+# --- โหลดข้อมูล Portfolio (ต้องดึงข้อมูลก่อน ถึงจะเอาไปกรองได้) ---
+# เราดึงข้อมูลจาก GSheet มาเก็บไว้ในตัวแปร df_all ก่อน
+if "my_portfolio" not in st.session_state:
+    load_portfolio() # เรียกฟังก์ชันโหลดที่พี่อ้ำเขียนไว้
+
+# แปลงข้อมูลใน session_state ให้เป็น DataFrame ชื่อ df_all
+if st.session_state.my_portfolio:
+    df_all = pd.DataFrame(st.session_state.my_portfolio)
+else:
+    df_all = pd.DataFrame() # ถ้าข้อมูลว่างเปล่า
+
+# --- ส่วนกรองข้อมูล (จุดที่พี่อ้ำติด Error) ---
+if not df_all.empty and 'User' in df_all.columns:
+    df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
+    st.write(f"พอร์ตการลงทุนของคุณ {current_user}:")
+    st.dataframe(df_user)
+else:
+    st.warning("ยังไม่มีข้อมูลพอร์ตหุ้นในระบบ หรือข้อมูลไม่พบชื่อ User ของคุณ")
 # 2. ฟังก์ชัน Load/Save Sheets
 def get_gsheet_client():
     # ดึงค่าจาก secrets.toml
