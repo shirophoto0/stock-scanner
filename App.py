@@ -134,38 +134,26 @@ def load_portfolio():
         st.session_state.my_portfolio = []
 
 # --- ส่วนระบุตัวตน (วางไว้หลัง import ต่างๆ) ---
-# --- แก้ไขส่วนดึง User ให้ปลอดภัย 100% ---
-# --- ใช้โค้ดนี้แทนครับ (ไม่มี st.user.email แล้ว) ---
-# --- ใช้โค้ดนี้แทนครับ รับรองไม่ Error แน่นอน ---
+# --- ใช้โค้ดนี้แทนครับ (ลบบรรทัดเดิมที่ขึ้น Error ทิ้งไปเลย!) ---
 
-# 1. พยายามดึงอีเมลจากระบบ Login
+# 1. ลองดึงจาก st.experimental_user โดยตรง
+# ใช้ to_dict() เพื่อป้องกัน AttributeError
 try:
-    # กรณีเป็นระบบใหม่ของ Streamlit Cloud
-    user_info = st.experimental_user
+    user_info = st.experimental_user.to_dict()
     user_email = user_info.get("email", "unknown")
 except:
     user_email = "unknown"
 
-# 2. กรณีที่ดึงค่าไม่ได้ (เช่น รันในเครื่องตัวเอง)
-if user_email == "unknown":
-    # ใส่เมลพี่อ้ำเป็นค่าเริ่มต้นสำหรับทดสอบ
-    user_email = "shirophoto0@gmail.com" 
+# 2. แสดงผลที่ Sidebar (ห้ามเรียก st.user.email เด็ดขาดครับ)
+st.sidebar.write(f"อีเมลที่อ่านได้: {user_email}")
 
-# 3. แสดงอีเมลใน Sidebar เพื่อเช็คค่า
-st.sidebar.write(f"อีเมล: {user_email}")
-
-# 4. กำหนด User
+# 3. กำหนดชื่อ User
 if user_email == "jirapa2@gmail.com":
     current_user = "Nuji"
 else:
     current_user = "Aum"
 
 st.sidebar.write(f"ผู้ใช้งาน: {current_user}")
-# ตรวจสอบว่าดึงได้ไหม (เอาไว้เช็คใน Sidebar)
-st.sidebar.write(f"อีเมลที่อ่านได้: {user_email}")
-# เพิ่มโค้ดนี้เพื่อเช็คค่า
-st.sidebar.write(f"อีเมลที่ระบบอ่านได้คือ: {st.user.email}")
-
 # --- โหลดข้อมูล Portfolio (ต้องดึงข้อมูลก่อน ถึงจะเอาไปกรองได้) ---
 # เราดึงข้อมูลจาก GSheet มาเก็บไว้ในตัวแปร df_all ก่อน
 if "my_portfolio" not in st.session_state:
