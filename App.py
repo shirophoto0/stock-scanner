@@ -14,6 +14,35 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
 
+import streamlit as st
+import pandas as pd
+
+# 1. ดึงอีเมลคนที่ Login เข้ามา (ระบบ Streamlit Cloud Private App)
+user_email = st.experimental_user.get("email", "")
+
+# 2. แปลงอีเมลให้เป็นชื่อ User ที่เรากรอกไว้ใน Google Sheets
+# **ให้พี่อ้ำเปลี่ยนอีเมลในเครื่องหมายคำพูดให้เป็นอีเมลจริงของพี่อ้ำกับคุณ Nuji นะครับ**
+if user_email == "shiropho0@gmail.com": 
+    current_user = "Aum"
+elif user_email == "jirapa2@gmail.com":
+    current_user = "Nuji"
+else:
+    # เผื่อกรณีรันเทสบนเครื่องตัวเองที่ยังไม่มี Login Email
+    current_user = "Aum" 
+
+st.write(f"ยินดีต้อนรับคุณ: **{current_user}**")
+
+# 3. สมมติตัวแปร df_all คือข้อมูลพอร์ตทั้งหมดที่ดึงมาจาก Google Sheets
+# (ให้พี่อ้ำใช้โค้ดดึง Google Sheets ของพี่อ้ำตามปกติได้เลยครับ)
+# df_all = pd.read_csv(...) หรือโค้ด Google Sheets เดิม
+
+# 4. [จุดสำคัญ] สั่งกรองข้อมูลเอาเฉพาะของ User ที่กำลังใช้งานอยู่
+df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
+
+# 5. หลังจากนี้ ให้เอาตัวแปร df_user ไปทำ Dashboard, คำนวณกำไร/ขาดทุน หรือโชว์ตาราง
+st.write("พอร์ตการลงทุนของคุณ:")
+st.dataframe(df_user)
+
 # 2. ฟังก์ชัน Load/Save Sheets
 def get_gsheet_client():
     # ดึงค่าจาก secrets.toml
