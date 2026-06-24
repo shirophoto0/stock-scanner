@@ -168,9 +168,7 @@ else:
 # 4. [จุดสำคัญ] สั่งกรองข้อมูลเอาเฉพาะของ User ที่กำลังใช้งานอยู่
 df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
 
-# 5. หลังจากนี้ ให้เอาตัวแปร df_user ไปทำ Dashboard, คำนวณกำไร/ขาดทุน หรือโชว์ตาราง
-st.write("พอร์ตการลงทุนของคุณ:")
-st.dataframe(df_user)
+
 
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
