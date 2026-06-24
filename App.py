@@ -139,12 +139,13 @@ try:
 except:
     user_email = "shirophoto0@gmail.com"
 
+# --- เช็คส่วนนี้ใน App.py ---
 if user_email == "shirophoto0@gmail.com": 
     current_user = "Aum"
-elif user_email == "jirapa2@gmail.com":
+elif user_email == "jirapa2@gmail.com": # <--- อีเมลนี้ของแฟนต้องตรงเป๊ะ!
     current_user = "Nuji"
 else:
-    current_user = "Aum"
+    current_user = "Guest" # ถ้ามันขึ้น Guest แสดงว่าอีเมลไม่ตรงกับ 2 บรรทัดบน
 
 st.write(f"ยินดีต้อนรับคุณ: **{current_user}**")
 
