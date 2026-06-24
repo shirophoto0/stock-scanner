@@ -135,22 +135,22 @@ def load_portfolio():
 
 # --- ส่วนระบุตัวตน (วางไว้หลัง import ต่างๆ) ---
 # --- แก้ไขส่วนดึง User ให้ปลอดภัย 100% ---
-# ใช้ st.experimental_user ถ้ามี ถ้าไม่มีให้เป็น Guest
+# --- ใช้โค้ดนี้แทนครับ (ไม่มี st.user.email แล้ว) ---
 try:
-    # ดึงข้อมูลจากระบบ Login ของ Streamlit
-    user_info = st.experimental_user
+    # ดึงค่าผ่านฟังก์ชัน .to_dict() ของ st.experimental_user
+    user_info = st.experimental_user.to_dict()
     user_email = user_info.get("email", "unknown")
 except:
     user_email = "unknown"
 
-# แสดง Debug ไว้ดูเฉยๆ (ถ้าใช้แล้วไม่ชอบค่อยลบออก)
-st.sidebar.write(f"อีเมล: {user_email}")
+# แสดงผลแบบไม่พัง (ใช้ st.sidebar.write แค่เพื่อดูค่าเฉยๆ)
+st.sidebar.write(f"อีเมลที่อ่านได้: {user_email}")
 
-# กำหนด User ตามอีเมล
+# กำหนด User
 if user_email == "jirapa2@gmail.com":
     current_user = "Nuji"
 else:
-    current_user = "Aum" # ถ้าไม่ใช่ Nuji ให้เหมาว่าเป็นพี่อ้ำ
+    current_user = "Aum"
 
 # ตรวจสอบว่าดึงได้ไหม (เอาไว้เช็คใน Sidebar)
 st.sidebar.write(f"อีเมลที่อ่านได้: {user_email}")
