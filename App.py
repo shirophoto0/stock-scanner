@@ -368,13 +368,14 @@ if max_pe < 100:
 filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
 filtered_df = filtered_df[(filtered_df['RSI_14'].notna()) & (filtered_df['RSI_14'] >= rsi_range[0]) & (filtered_df['RSI_14'] <= rsi_range[1])]
 
-
+use_ema_filter = st.checkbox("กรองด้วยสัญญาณ EMA Crossover", value=False)
 if use_ema_filter:
     # เงื่อนไข: เส้น Fast ต้องมากกว่าเส้น Slow (เพื่อบอกว่าตัดขึ้นแล้ว)
     filtered_df = filtered_df[filtered_df[ema_fast] > filtered_df[ema_slow]]
     
     # เพิ่ม column ให้โชว์ในตารางด้วย (เลือกได้)
     show_columns += [ema_fast, ema_slow]
+st.write("กำลังใช้ตัวกรอง EMA...")
 
 # กรองกลยุทธ์ (เพิ่มเงื่อนไข RS New High)
 if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
