@@ -137,39 +137,17 @@ def load_portfolio():
 # --- ใช้โค้ดนี้แทนครับ (ลบบรรทัดเดิมที่ขึ้น Error ทิ้งไปเลย!) ---
 
 # 1. ลองดึงจาก st.experimental_user โดยตรง
-# ใช้ to_dict() เพื่อป้องกัน AttributeError
-try:
-    user_info = st.experimental_user.to_dict()
-    user_email = user_info.get("email", "unknown")
-except:
-    user_email = "unknown"
+# --- เปลี่ยนมาใช้การเลือก User ที่ Sidebar แทน ---
+# ลบส่วนดึงอีเมลเดิมทิ้งไป แล้วใช้ตัวนี้ครับ
 
-# 2. แสดงผลที่ Sidebar (ห้ามเรียก st.user.email เด็ดขาดครับ)
-st.sidebar.write(f"อีเมลที่อ่านได้: {user_email}")
+# สร้างปุ่มเลือกที่ Sidebar
+st.sidebar.title("เลือกผู้ใช้งาน")
+current_user = st.sidebar.radio("โปรดเลือกชื่อของคุณ:", ["Aum", "Nuji"])
 
-# 3. กำหนดชื่อ User
-if user_email == "jirapa2@gmail.com":
-    current_user = "Nuji"
-else:
-    current_user = "Aum"
+st.sidebar.write(f"ผู้ใช้งานที่เลือก: **{current_user}**")
 
-st.sidebar.write(f"ผู้ใช้งาน: {current_user}")
-# --- โหลดข้อมูล Portfolio (ต้องดึงข้อมูลก่อน ถึงจะเอาไปกรองได้) ---
-# เราดึงข้อมูลจาก GSheet มาเก็บไว้ในตัวแปร df_all ก่อน
-if "my_portfolio" not in st.session_state:
-    load_portfolio() # เรียกฟังก์ชันโหลดที่พี่อ้ำเขียนไว้
-
-# แปลงข้อมูลใน session_state ให้เป็น DataFrame ชื่อ df_all
-if st.session_state.my_portfolio:
-    df_all = pd.DataFrame(st.session_state.my_portfolio)
-else:
-    df_all = pd.DataFrame() # ถ้าข้อมูลว่างเปล่า
-
-# --- ส่วนกรองข้อมูล (จุดที่พี่อ้ำติด Error) ---
-if not df_all.empty and 'User' in df_all.columns:
-    df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
-else:
-    st.warning("ยังไม่มีข้อมูลพอร์ตหุ้นในระบบ หรือข้อมูลไม่พบชื่อ User ของคุณ")
+# --- หลังจากนั้นโค้ดส่วนที่กรองข้อมูล df_user ก็จะทำงานได้ถูกต้อง ---
+# df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
 
 # 4. [จุดสำคัญ] สั่งกรองข้อมูลเอาเฉพาะของ User ที่กำลังใช้งานอยู่
 df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
