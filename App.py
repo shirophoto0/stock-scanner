@@ -133,10 +133,7 @@ def load_portfolio():
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
 
-# --- ส่วนระบุตัวตน (วางไว้หลัง import ต่างๆ) ---
-# --- ใช้โค้ดนี้แทนครับ (ลบบรรทัดเดิมที่ขึ้น Error ทิ้งไปเลย!) ---
-
-# 1. ลองดึงจาก st.experimental_user โดยตรง
+st.experimental_user โดยตรง
 # --- เปลี่ยนมาใช้การเลือก User ที่ Sidebar แทน ---
 # ลบส่วนดึงอีเมลเดิมทิ้งไป แล้วใช้ตัวนี้ครับ
 
@@ -151,6 +148,45 @@ df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
 
 # และตอนสั่งโชว์ตาราง ต้องสั่งโชว์ df_user (ไม่ใช่ df_all)
 st.dataframe(df_user)
+
+# --- ส่วนเริ่มต้นของไฟล์ ---#
+
+if "journal_data" not in st.session_state:
+    load_journal()   # <--- ใส่บรรทัดนี้ลงไปครับ! มันจะช่วยดึงข้อมูลจากไฟล์มาโชว์ตอนเปิดแอป
+
+if "my_portfolio" not in st.session_state:
+    load_portfolio()
+
+if "journal_data" not in st.session_state:
+    load_journal()
+
+# --- Initialize Session State ---
+# เช็คว่ามีค่าใน session_state หรือยัง ถ้าไม่มีให้โหลดจากไฟล์
+if "cash_balance" not in st.session_state:
+    st.session_state.cash_balance = 100000.0
+# 1. โหลดข้อมูลทั้งหมดเข้ามา (ห้ามกรองตรงนี้ ให้เก็บไว้เป็น df_all)
+df_all = pd.DataFrame(st.session_state.my_portfolio)
+
+# 2. กรองข้อมูลตามที่เลือกที่ Sidebar
+if not df_all.empty:
+    # กรองเฉพาะแถวที่ User ตรงกับที่เลือก
+    df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
+    
+    # 3. แสดงผลตาราง (ต้องใช้ตัวแปร df_user)
+    st.write(f"แสดงข้อมูลพอร์ตของ: {current_user}")
+    st.dataframe(df_user)
+else:
+    st.warning("ไม่มีข้อมูลในพอร์ต")
+# ตั้งค่าหน้าจอ
+st.set_page_config(layout="wide")
+
+st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย (Mark Minervini Style - RS vs SET Index)")
+st.write("ระบบสแกนหุ้นกลุ่ม SET100 พร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
+
+# จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
+if "selected_ticker" not in st.session_state:
+    st.session_state.selected_ticker = "KBANK"
+
 
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
