@@ -189,7 +189,7 @@ SET100_TICKERS = [
 # =============================================================
 # ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100
 # ============================================================
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=60)
 def load_and_calculate_stock_data():
     stock_list = []
     progress_bar = st.progress(0)
@@ -279,24 +279,24 @@ def load_and_calculate_stock_data():
             
             calc_div_yield = (total_div_1y / latest_price) * 100 if total_div_1y > 0 else 0.0
             pe_ratio = info.get('trailingPE', None)
+
+            # คำนวณ EMA
+            ema10 = combined['Close'].ewm(span=10, adjust=False).mean().iloc[-1]
+            ema20 = combined['Close'].ewm(span=20, adjust=False).mean().iloc[-1]
+            ema50 = combined['Close'].ewm(span=50, adjust=False).mean().iloc[-1]
+            ema200 = combined['Close'].ewm(span=200, adjust=False).mean().iloc[-1]
+    
+            if not stock_list:
+                columns = [
+                    'Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 
+                    'RS_Line_ปัจจุบัน', 'Is_RS_Above_0', 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', 
+                    'อยู่ใต้เส้น0มาแล้ว(วัน)', 'Is_3M_High', 'Is_6M_High', 'Is_52W_High',
+                    'New_High_3M_มาแล้ว(วัน)', 'New_High_6M_มาแล้ว(วัน)', 'New_High_52W_มาแล้ว(วัน)',
+                    'EMA10', 'EMA20', 'EMA50', 'EMA200'
+                ]
+                return pd.DataFrame(columns=columns)
             
-            stock_list.append({
-                'Ticker': ticker.replace('.BK', ''),
-                'ราคาล่าสุด': round(latest_price, 2),
-                'PE_Ratio': round(pe_ratio, 2) if pe_ratio else None,
-                'ปันผล_%': round(calc_div_yield, 2),
-                'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else None,
-                'RS_Line_ปัจจุบัน': round(current_rs_val, 2),
-                'Is_RS_Above_0': is_rs_above_zero,
-                'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero if is_rs_above_zero else 0,
-                'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero if not is_rs_above_zero else 0,
-                'Is_3M_High': latest_price >= (high_3m * 0.99),
-                'Is_6M_High': latest_price >= (high_6m * 0.99),
-                'Is_52W_High': latest_price >= (high_52w * 0.99),
-                'New_High_3M_มาแล้ว(วัน)': days_3m,
-                'New_High_6M_มาแล้ว(วัน)': days_6m,
-                'New_High_52W_มาแล้ว(วัน)': days_52w
-            })
+            return pd.DataFrame(stock_list)
         except Exception as e:
             continue
             
@@ -368,6 +368,13 @@ if max_pe < 100:
 filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
 filtered_df = filtered_df[(filtered_df['RSI_14'].notna()) & (filtered_df['RSI_14'] >= rsi_range[0]) & (filtered_df['RSI_14'] <= rsi_range[1])]
 
+if use_ema_filter:
+    # เงื่อนไข: เส้น Fast ต้องมากกว่าเส้น Slow (เพื่อบอกว่าตัดขึ้นแล้ว)
+    filtered_df = filtered_df[filtered_df[ema_fast] > filtered_df[ema_slow]]
+    
+    # เพิ่ม column ให้โชว์ในตารางด้วย (เลือกได้)
+    show_columns += [ema_fast, ema_slow]
+
 # กรองกลยุทธ์ (เพิ่มเงื่อนไข RS New High)
 if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
     filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
@@ -408,7 +415,12 @@ elif strategy_option == "52 Week High":
 else:
     show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน']
     sort_by_col, ascending_sort = 'Ticker', True
-
+    
+with st.sidebar.expander("🚀 ตัวกรอง EMA Crossover"):
+    ema_fast = st.selectbox("เส้นเร็ว (Fast):", options=['EMA10', 'EMA20', 'EMA50'])
+    ema_slow = st.selectbox("เส้นช้า (Slow):", options=['EMA20', 'EMA50', 'EMA200'])
+    use_ema_filter = st.checkbox("เปิดใช้งานตัวกรอง EMA Crossover")
+    
 # สรุปผล
 final_sorted_df = filtered_df[show_columns].sort_values(by=sort_by_col, ascending=ascending_sort).reset_index(drop=True)
 
