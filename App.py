@@ -134,19 +134,23 @@ def load_portfolio():
         st.session_state.my_portfolio = []
 
 # --- ส่วนระบุตัวตน (วางไว้หลัง import ต่างๆ) ---
+# --- แก้ไขส่วนดึง User ให้ปลอดภัย 100% ---
+# ใช้ st.experimental_user ถ้ามี ถ้าไม่มีให้เป็น Guest
 try:
-    user_email = st.user.email
+    # ดึงข้อมูลจากระบบ Login ของ Streamlit
+    user_info = st.experimental_user
+    user_email = user_info.get("email", "unknown")
 except:
-    user_email = "shirophoto0@gmail.com"
-# แก้ช่วงดึงอีเมลเป็นแบบนี้ครับ
-if "user" in st.session_state:
-    user_email = st.session_state.user.get("email", "unknown@gmail.com")
-elif hasattr(st, "experimental_user"):
-    # ลองดึงจาก experimental_user แทน
-    user_email = st.experimental_user.get("email", "unknown@gmail.com")
+    user_email = "unknown"
+
+# แสดง Debug ไว้ดูเฉยๆ (ถ้าใช้แล้วไม่ชอบค่อยลบออก)
+st.sidebar.write(f"อีเมล: {user_email}")
+
+# กำหนด User ตามอีเมล
+if user_email == "jirapa2@gmail.com":
+    current_user = "Nuji"
 else:
-    # ถ้าดึงไม่ได้เลย ให้ค่า default เป็นเมลพี่อ้ำเพื่อเทส
-    user_email = "shirophoto0@gmail.com"
+    current_user = "Aum" # ถ้าไม่ใช่ Nuji ให้เหมาว่าเป็นพี่อ้ำ
 
 # ตรวจสอบว่าดึงได้ไหม (เอาไว้เช็คใน Sidebar)
 st.sidebar.write(f"อีเมลที่อ่านได้: {user_email}")
