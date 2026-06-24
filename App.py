@@ -160,10 +160,6 @@ if "journal_data" not in st.session_state:
 if "my_portfolio" not in st.session_state:
     load_portfolio()
 
-# เรียกโหลดข้อมูลทุกครั้งที่รันแอปฯ
-if "my_portfolio" not in st.session_state:
-    load_portfolio()
-
 if "journal_data" not in st.session_state:
     load_journal()
 
@@ -171,7 +167,19 @@ if "journal_data" not in st.session_state:
 # เช็คว่ามีค่าใน session_state หรือยัง ถ้าไม่มีให้โหลดจากไฟล์
 if "cash_balance" not in st.session_state:
     st.session_state.cash_balance = 100000.0
+# 1. โหลดข้อมูลทั้งหมดเข้ามา (ห้ามกรองตรงนี้ ให้เก็บไว้เป็น df_all)
+df_all = pd.DataFrame(st.session_state.my_portfolio)
 
+# 2. กรองข้อมูลตามที่เลือกที่ Sidebar
+if not df_all.empty:
+    # กรองเฉพาะแถวที่ User ตรงกับที่เลือก
+    df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
+    
+    # 3. แสดงผลตาราง (ต้องใช้ตัวแปร df_user)
+    st.write(f"แสดงข้อมูลพอร์ตของ: {current_user}")
+    st.dataframe(df_user)
+else:
+    st.warning("ไม่มีข้อมูลในพอร์ต")
 # ตั้งค่าหน้าจอ
 st.set_page_config(layout="wide")
 
