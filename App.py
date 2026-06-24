@@ -17,8 +17,8 @@ from oauth2client.service_account import ServiceAccountCredentials
 import streamlit as st
 import pandas as pd
 
-# 1. ดึงอีเมลคนที่ Login เข้ามา (ระบบ Streamlit Cloud Private App)
-user_email = st.experimental_user.get("email", "")
+# ใช้ st.user แทนครับ
+user_email = st.user.email
 
 # 2. แปลงอีเมลให้เป็นชื่อ User ที่เรากรอกไว้ใน Google Sheets
 # **ให้พี่อ้ำเปลี่ยนอีเมลในเครื่องหมายคำพูดให้เป็นอีเมลจริงของพี่อ้ำกับคุณ Nuji นะครับ**
