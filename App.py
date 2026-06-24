@@ -146,8 +146,9 @@ elif user_email == "jirapa2@gmail.com": # <--- อีเมลนี้ของ
     current_user = "Nuji"
 else:
     current_user = "Guest" # ถ้ามันขึ้น Guest แสดงว่าอีเมลไม่ตรงกับ 2 บรรทัดบน
-
-st.write(f"ยินดีต้อนรับคุณ: **{current_user}**")
+# เพิ่มโค้ดนี้เพื่อเช็คค่า
+# เพิ่มโค้ดนี้เพื่อเช็คค่า
+st.sidebar.write(f"อีเมลที่ระบบอ่านได้คือ: {st.user.email}")
 
 # --- โหลดข้อมูล Portfolio (ต้องดึงข้อมูลก่อน ถึงจะเอาไปกรองได้) ---
 # เราดึงข้อมูลจาก GSheet มาเก็บไว้ในตัวแปร df_all ก่อน
