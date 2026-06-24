@@ -138,15 +138,18 @@ try:
     user_email = st.user.email
 except:
     user_email = "shirophoto0@gmail.com"
-
-# --- เช็คส่วนนี้ใน App.py ---
-if user_email == "shirophoto0@gmail.com": 
-    current_user = "Aum"
-elif user_email == "jirapa2@gmail.com": # <--- อีเมลนี้ของแฟนต้องตรงเป๊ะ!
-    current_user = "Nuji"
+# แก้ช่วงดึงอีเมลเป็นแบบนี้ครับ
+if "user" in st.session_state:
+    user_email = st.session_state.user.get("email", "unknown@gmail.com")
+elif hasattr(st, "experimental_user"):
+    # ลองดึงจาก experimental_user แทน
+    user_email = st.experimental_user.get("email", "unknown@gmail.com")
 else:
-    current_user = "Guest" # ถ้ามันขึ้น Guest แสดงว่าอีเมลไม่ตรงกับ 2 บรรทัดบน
-# เพิ่มโค้ดนี้เพื่อเช็คค่า
+    # ถ้าดึงไม่ได้เลย ให้ค่า default เป็นเมลพี่อ้ำเพื่อเทส
+    user_email = "shirophoto0@gmail.com"
+
+# ตรวจสอบว่าดึงได้ไหม (เอาไว้เช็คใน Sidebar)
+st.sidebar.write(f"อีเมลที่อ่านได้: {user_email}")
 # เพิ่มโค้ดนี้เพื่อเช็คค่า
 st.sidebar.write(f"อีเมลที่ระบบอ่านได้คือ: {st.user.email}")
 
