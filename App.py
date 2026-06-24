@@ -162,8 +162,6 @@ else:
 # --- ส่วนกรองข้อมูล (จุดที่พี่อ้ำติด Error) ---
 if not df_all.empty and 'User' in df_all.columns:
     df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
-    st.write(f"พอร์ตการลงทุนของคุณ {current_user}:")
-    st.dataframe(df_user)
 else:
     st.warning("ยังไม่มีข้อมูลพอร์ตหุ้นในระบบ หรือข้อมูลไม่พบชื่อ User ของคุณ")
 
