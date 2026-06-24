@@ -1,5 +1,15 @@
-streamlit
-yfinance
-pandas
-plotly
-gspread
+# 1. ฟังก์ชัน Import และ Setup
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import altair as alt
+import numpy as np
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import os
+import json
+import gspread
+import seaborn as sns
+import matplotlib.pyplot as plt
+from oauth2client.service_account import ServiceAccountCredentials
