@@ -133,21 +133,23 @@ def load_portfolio():
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
 
-st.experimental_user โดยตรง
-# --- เปลี่ยนมาใช้การเลือก User ที่ Sidebar แทน ---
-# ลบส่วนดึงอีเมลเดิมทิ้งไป แล้วใช้ตัวนี้ครับ
+# 1. เช็คก่อนว่ามีข้อมูลใน Session ไหม ถ้าไม่มีให้ไปโหลด
+if "my_portfolio" not in st.session_state or not st.session_state.my_portfolio:
+    load_portfolio()
 
-# สร้างปุ่มเลือกที่ Sidebar
-st.sidebar.title("เลือกผู้ใช้งาน")
-current_user = st.sidebar.radio("โปรดเลือกชื่อของคุณ:", ["Aum", "Nuji"])
+# 2. สร้าง df_all จากข้อมูลที่โหลดมา (ต้องทำบรรทัดนี้ก่อนบรรทัด 150)
+if "my_portfolio" in st.session_state and st.session_state.my_portfolio:
+    df_all = pd.DataFrame(st.session_state.my_portfolio)
+else:
+    df_all = pd.DataFrame() # ถ้าไม่มีข้อมูลให้สร้างตารางเปล่าๆ ไว้ก่อน
 
-st.sidebar.write(f"ผู้ใช้งานที่เลือก: **{current_user}**")
-
-# ส่วนนี้คือจุดสำคัญที่สุด! ต้องวางไว้หลังจากที่ user เลือกชื่อใน Sidebar แล้ว
-df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
-
-# และตอนสั่งโชว์ตาราง ต้องสั่งโชว์ df_user (ไม่ใช่ df_all)
-st.dataframe(df_user)
+# 3. ค่อยสั่งกรองข้อมูล (บรรทัด 150 ของพี่อ้ำ)
+if not df_all.empty:
+    df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
+    st.write(f"แสดงข้อมูลพอร์ตของ: {current_user}")
+    st.dataframe(df_user)
+else:
+    st.info("กำลังโหลดข้อมูล หรือยังไม่มีข้อมูลในพอร์ต")
 
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
