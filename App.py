@@ -138,18 +138,7 @@ if "my_portfolio" not in st.session_state or not st.session_state.my_portfolio:
     load_portfolio()
 
 # 2. สร้าง df_all จากข้อมูลที่โหลดมา (ต้องทำบรรทัดนี้ก่อนบรรทัด 150)
-if "my_portfolio" in st.session_state and st.session_state.my_portfolio:
-    df_all = pd.DataFrame(st.session_state.my_portfolio)
-else:
-    df_all = pd.DataFrame() # ถ้าไม่มีข้อมูลให้สร้างตารางเปล่าๆ ไว้ก่อน
 
-# 3. ค่อยสั่งกรองข้อมูล (บรรทัด 150 ของพี่อ้ำ)
-if not df_all.empty:
-    df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
-    st.write(f"แสดงข้อมูลพอร์ตของ: {current_user}")
-    st.dataframe(df_user)
-else:
-    st.info("กำลังโหลดข้อมูล หรือยังไม่มีข้อมูลในพอร์ต")
 
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
@@ -232,6 +221,19 @@ if "selected_ticker" not in st.session_state:
 st.sidebar.title("เลือกผู้ใช้งาน")
 current_user = st.sidebar.radio("โปรดเลือกชื่อของคุณ:", ["Aum", "Nuji"])
 st.sidebar.write(f"ผู้ใช้งานที่เลือก: **{current_user}**")
+
+if "my_portfolio" in st.session_state and st.session_state.my_portfolio:
+    df_all = pd.DataFrame(st.session_state.my_portfolio)
+else:
+    df_all = pd.DataFrame() # ถ้าไม่มีข้อมูลให้สร้างตารางเปล่าๆ ไว้ก่อน
+
+# 3. ค่อยสั่งกรองข้อมูล (บรรทัด 150 ของพี่อ้ำ)
+if not df_all.empty:
+    df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
+    st.write(f"แสดงข้อมูลพอร์ตของ: {current_user}")
+    st.dataframe(df_user)
+else:
+    st.info("กำลังโหลดข้อมูล หรือยังไม่มีข้อมูลในพอร์ต")
 # =============================================================
 # ฟังก์ชันคำนวณทางเทคนิค (RSI สำหรับใช้ในตารางสแกน)
 # =============================================================
