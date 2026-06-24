@@ -38,14 +38,6 @@ st.write(f"ยินดีต้อนรับคุณ: **{current_user}**")
 # 3. สมมติตัวแปร df_all คือข้อมูลพอร์ตทั้งหมดที่ดึงมาจาก Google Sheets
 # (ให้พี่อ้ำใช้โค้ดดึง Google Sheets ของพี่อ้ำตามปกติได้เลยครับ)
 # df_all = pd.read_csv(...) หรือโค้ด Google Sheets เดิม
-
-# 4. [จุดสำคัญ] สั่งกรองข้อมูลเอาเฉพาะของ User ที่กำลังใช้งานอยู่
-df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
-
-# 5. หลังจากนี้ ให้เอาตัวแปร df_user ไปทำ Dashboard, คำนวณกำไร/ขาดทุน หรือโชว์ตาราง
-st.write("พอร์ตการลงทุนของคุณ:")
-st.dataframe(df_user)
-
 # 2. ฟังก์ชัน Load/Save Sheets
 def get_gsheet_client():
     # ดึงค่าจาก secrets.toml
@@ -161,6 +153,13 @@ def load_portfolio():
     except Exception as e:
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
+
+# 4. [จุดสำคัญ] สั่งกรองข้อมูลเอาเฉพาะของ User ที่กำลังใช้งานอยู่
+df_user = df_all[df_all['User'] == current_user].reset_index(drop=True)
+
+# 5. หลังจากนี้ ให้เอาตัวแปร df_user ไปทำ Dashboard, คำนวณกำไร/ขาดทุน หรือโชว์ตาราง
+st.write("พอร์ตการลงทุนของคุณ:")
+st.dataframe(df_user)
 
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
