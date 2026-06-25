@@ -208,7 +208,7 @@ def get_equity_curve_data():
     # ... (ส่วนดึงข้อมูล df_j และ df_cash เหมือนเดิม) ...
     
     # 5. คำนวณ Cash_Base (เงินสดสะสม + กำไรที่ขายแล้ว)
-    daily_pnl = df_j.groupby('วันที่ขาย')['กำไร/ขาดทุน (บาท)'].sum().cumsum().reset_index()
+    daily_pnl = df_j.groupby('วันที่ขาย')['กำไร/ขาดทุน'].sum().cumsum().reset_index()
     daily_pnl.columns = ['Date', 'Cumulative_PnL']
     
     daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
