@@ -1394,7 +1394,7 @@ with tab_risk:
         # --- 2. ส่วนที่เรียกใช้งานใน Tab ---
         st.markdown("---")
         
-        st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ (เลือกช่วงเวลา)")
+       st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
     
         # เพิ่มส่วนเลือกช่วงเวลา
         time_period = st.radio(
@@ -1405,7 +1405,8 @@ with tab_risk:
         
         if "journal_data" in st.session_state and st.session_state.journal_data:
             df_journal = pd.DataFrame(st.session_state.journal_data)
-            df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'])
+            # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime
+            df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
             
             # คำนวณวันย้อนหลังตามช่วงเวลา
             today = pd.Timestamp.now()
@@ -1416,28 +1417,32 @@ with tab_risk:
             else: filter_date = pd.Timestamp('1900-01-01') # Overall
             
             # กรองข้อมูล
-            df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date]
+            df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date].copy()
             
             if not df_filtered.empty:
-                stats = calculate_journal_stats(df_filtered)
-                latest_stats = stats.iloc[-1] # ดึงสถิติสรุปมา
+                # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
+                # คำนวณ ROI% เองโดยตรงจาก df_filtered
+                df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
                 
-                # คำนวณ R:R และ Win Rate
-                win_rate_real = latest_stats['Win_Rate'] / 100
-                avg_profit_real = abs(latest_stats['Avg_Profit_Pct'] / 100)
-                avg_loss_real = abs(latest_stats['Avg_Loss_Pct'] / 100)
-                rr_ratio = avg_profit_real / avg_loss_real if avg_loss_real != 0 else 0
+                total_trades = len(df_filtered)
+                win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
+                loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
+                
+                win_rate_val = (len(win_trades) / total_trades) * 100
+                avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
+                avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
+                rr_ratio = (avg_profit_val / avg_loss_val) if avg_loss_val != 0 else 0
                 
                 # แสดงผล
                 col1, col2, col3 = st.columns(3)
-                col1.metric("Win Rate", f"{latest_stats['Win_Rate']}%")
+                col1.metric("Win Rate", f"{win_rate_val:.1f}%")
                 col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
-                col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_real >= 0.45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+                col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
                 
-                st.write(f"ผลงานในช่วง {time_period} (ทั้งหมด {latest_stats['Trade_Count']} ไม้):")
+                st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
             else:
                 st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
-        
+                
         st.divider()
     
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
