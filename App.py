@@ -1394,32 +1394,50 @@ with tab_risk:
         # --- 2. ส่วนที่เรียกใช้งานใน Tab ---
         st.markdown("---")
         
-        st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ (อิงจากสถิติจริง)")
+        st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ (เลือกช่วงเวลา)")
     
-        # 1. ดึงสถิติจริงจาก Journal
+        # เพิ่มส่วนเลือกช่วงเวลา
+        time_period = st.radio(
+            "เลือกช่วงเวลาที่ต้องการวิเคราะห์:",
+            ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "Overall"],
+            horizontal=True
+        )
+        
         if "journal_data" in st.session_state and st.session_state.journal_data:
             df_journal = pd.DataFrame(st.session_state.journal_data)
-            stats = calculate_journal_stats(df_journal)
+            df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'])
             
-            # ดึงค่าล่าสุด (เดือนล่าสุดที่เทรด)
-            latest_stats = stats.iloc[-1]
-            win_rate_real = latest_stats['Win_Rate'] / 100
-            avg_profit_real = abs(latest_stats['Avg_Profit_Pct'] / 100)
-            avg_loss_real = abs(latest_stats['Avg_Loss_Pct'] / 100)
-            rr_ratio = avg_profit_real / avg_loss_real if avg_loss_real != 0 else 0
+            # คำนวณวันย้อนหลังตามช่วงเวลา
+            today = pd.Timestamp.now()
+            if time_period == "1 เดือน": filter_date = today - pd.Timedelta(days=30)
+            elif time_period == "3 เดือน": filter_date = today - pd.Timedelta(days=90)
+            elif time_period == "6 เดือน": filter_date = today - pd.Timedelta(days=180)
+            elif time_period == "1 ปี": filter_date = today - pd.Timedelta(days=365)
+            else: filter_date = pd.Timestamp('1900-01-01') # Overall
             
-            # 2. แสดงผลสรุปสถิติจริง
-            st.subheader("💡 คำแนะนำสำหรับพอร์ตปัจจุบันของคุณ")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Win Rate จริง", f"{latest_stats['Win_Rate']}%")
-            col2.metric("Profit/Loss Ratio (R:R)", f"{rr_ratio:.2f} : 1")
-            col3.metric("คำแนะนำกลยุทธ์", "ทบต้น" if win_rate_real >= 0.45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+            # กรองข้อมูล
+            df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date]
             
-            st.write(f"จากการเทรด {latest_stats['Trade_Count']} ครั้งล่าสุด: คุณได้กำไรเฉลี่ย {abs(latest_stats['Avg_Profit_Pct'])}% ต่อไม้ และขาดทุนเฉลี่ย {abs(latest_stats['Avg_Loss_Pct'])}% ต่อไม้")
-            
-        else:
-            st.warning("ยังไม่มีข้อมูลในสมุดบันทึก (Journal) เพื่อคำนวณสถิติ")
-    
+            if not df_filtered.empty:
+                stats = calculate_journal_stats(df_filtered)
+                latest_stats = stats.iloc[-1] # ดึงสถิติสรุปมา
+                
+                # คำนวณ R:R และ Win Rate
+                win_rate_real = latest_stats['Win_Rate'] / 100
+                avg_profit_real = abs(latest_stats['Avg_Profit_Pct'] / 100)
+                avg_loss_real = abs(latest_stats['Avg_Loss_Pct'] / 100)
+                rr_ratio = avg_profit_real / avg_loss_real if avg_loss_real != 0 else 0
+                
+                # แสดงผล
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Win Rate", f"{latest_stats['Win_Rate']}%")
+                col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
+                col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_real >= 0.45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+                
+                st.write(f"ผลงานในช่วง {time_period} (ทั้งหมด {latest_stats['Trade_Count']} ไม้):")
+            else:
+                st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
+        
         st.divider()
     
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
