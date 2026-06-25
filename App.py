@@ -1344,8 +1344,8 @@ with tab_risk:
             res_col3.metric(label="ตั้ง Stop Loss ที่ราคา", value=f"{sl_price:.2f} บาท", delta=f"-{actual_sl_pct:.2f}%")
             res_col4.metric(label="หากแพ้จะเสียเงินสูงสุด", value=f"{max_risk_money:,.2f} บาท", delta="ปลอดภัยตามวินัยเทรด", delta_color="inverse")
 #######################          
-        st.markdown("---")
-        
+    st.markdown("---")
+    with st.expander("📊 สถิติการเทรดรายเดือน", expanded=False):
         def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
             # 1. ไม่ทบต้น (Fixed Risk: ลงทุนจำนวนเงินเท่าเดิมต่อไม้)
             fixed_capital = initial_capital
