@@ -178,6 +178,32 @@ def load_portfolio():
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
 
+def get_equity_curve_data():
+    # 1. ดึงข้อมูลจาก Journal
+    df_j = pd.DataFrame(st.session_state.journal_data)
+    df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'])
+    
+    # 2. ดึงข้อมูลจาก CashFlow (Sheet)
+    client = get_gsheet_client()
+    sheet = client.open('.Json').worksheet('CashFlow')
+    df_cash = pd.DataFrame(sheet.get_all_records())
+    df_cash['Date'] = pd.to_datetime(df_cash['Date'])
+    
+    # 3. จัดกลุ่ม (Group by Date)
+    # รวมผลกำไรขาดทุนรายวัน
+    daily_pnl = df_j.groupby('วันที่ขาย')['กำไร/ขาดทุน (บาท)'].sum().cumsum().reset_index()
+    daily_pnl.columns = ['Date', 'Cumulative_PnL']
+    
+    # รวมการฝาก/ถอนเงินรายวัน
+    daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
+    daily_cash.columns = ['Date', 'Net_Cash_In']
+    
+    # 4. Merge ข้อมูลเข้าด้วยกัน
+    df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
+    df_equity['Equity'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + 69102.44 # ยอดเริ่มต้น
+    
+    return df_equity
+
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
 if "journal_data" not in st.session_state:
@@ -927,7 +953,24 @@ with tab_dashboard:
                 
                 st.altair_chart(chart_line, use_container_width=True)
 
-            ##### เร่ิมกราฟกระจายตัว ###########
+            ######### Equity Curve ############
+            st.subheader("📈 Equity Curve")
+
+            equity_data = get_equity_curve_data()
+            
+            if not equity_data.empty:
+                # สร้างกราฟเส้น
+                st.line_chart(equity_data.set_index('Date')['Equity'], color="#00ff00")
+                
+                # สถิติเสริมใต้กราฟ
+                col1, col2 = st.columns(2)
+                max_equity = equity_data['Equity'].max()
+                current_equity = equity_data['Equity'].iloc[-1]
+                col1.metric("Equity สูงสุด", f"{max_equity:,.0f} ฿")
+                col2.metric("Equity ปัจจุบัน", f"{current_equity:,.0f} ฿")
+            else:
+                st.info("สะสมข้อมูลการเทรดสักพัก เพื่อสร้างเส้น Equity Curve ครับ")
+                        ##### เร่ิมกราฟกระจายตัว ###########
             # --- 1. คำนวณ % ตั้งแต่เนิ่นๆ ---
             df_filtered = df_clean.copy() # หรือตาม logic เดิมของพี่อ้ำ
             # (ตรวจสอบให้แน่ใจว่าได้ filter ตามวันที่เรียบร้อยแล้วก่อนบรรทัดนี้)
