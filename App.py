@@ -1149,12 +1149,22 @@ with tab_portfolio:
             total_value += market_value
 
         # สรุปยอดรวม
-        col_s1, col_s2, col_s3 = st.columns(3)
-        col_s1.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
-        col_s2.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
+        # สรุปยอดรวม (ปรับเป็น 4 คอลัมน์)
+        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+        
+        # 1. เงินสดคงเหลือ
+        col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.cash_balance:,.0f} ฿")
+        
+        # 2. เงินลงทุนรวม (หุ้น)
+        col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
+        
+        # 3. มูลค่าปัจจุบัน (หุ้น)
+        col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
+        
+        # 4. กำไร/ขาดทุนรวม
         diff = total_value - total_invest
-        col_s3.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", 
-                    delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
+        col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", 
+                      delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
 
         # แสดงตารางเดียวที่แก้ไขได้
         df_p = pd.DataFrame(portfolio_list)
