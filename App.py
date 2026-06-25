@@ -86,6 +86,23 @@ def save_portfolio():
             
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึกพอร์ต: {e}")
+        
+def save_cash_balance(amount):
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('.Json').worksheet('CashFlow')
+        sheet.update('D2', [[amount]]) # เขียนเงินสดลงเซลล์ D2
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึกเงินสด: {e}")
+
+def load_cash_balance():
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('.Json').worksheet('CashFlow')
+        val = sheet.acell('D2').value
+        return float(val) if val else 100000.0
+    except:
+        return 100000.0
 
 # ปรับฟังก์ชัน LOAD (อ่านจาก Google Sheets)
 def load_journal():
@@ -936,7 +953,8 @@ with tab_portfolio:
     st.markdown("#### 💼 ระบบบันทึกพอร์ตโฟลิโอส่วนตัว")
     
     # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
-    if "cash_balance" not in st.session_state: st.session_state.cash_balance = 100000.0
+    if "cash_balance" not in st.session_state:
+    st.session_state.cash_balance = load_cash_balance()
     
     # ส่วนแสดงเงินสดและปุ่มปรับปรุงเงินสด
     col_a, col_b = st.columns([2, 1])
@@ -1014,8 +1032,11 @@ with tab_portfolio:
                 st.session_state.journal_data.append(new_entry)
 
                 # 3. บันทึกลง Google Sheets
-                save_portfolio() 
+                # ... ในส่วน submitted ของ form
+                st.session_state.cash_balance -= (total_val + p_comm) # หรือ + สำหรับการขาย
+                save_portfolio()
                 save_journal()
+                save_cash_balance(st.session_state.cash_balance) # เพิ่มบรรทัดนี้ครับ!
                 
                 st.success(f"บันทึกรายการ {ticker_upper} เรียบร้อย! เงินสดคงเหลือ: {st.session_state.cash_balance:,.2f} ฿")
                 st.rerun()
