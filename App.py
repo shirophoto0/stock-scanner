@@ -1263,7 +1263,7 @@ if st.session_state.journal_data:
     df_journal = df_journal.sort_values(by=['temp_sort', 'วันที่'], ascending=[True, False])
     df_journal = df_journal.drop(columns=['temp_sort'])
 
-    with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=True):
+    with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=False):
         # แบ่งหน้า (Pagination)
         items_per_page = 50
         total_pages = (len(df_journal) - 1) // items_per_page + 1
