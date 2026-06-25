@@ -13,6 +13,32 @@ import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+def plot_dual_equity_curve(df_equity):
+    # df_equity ต้องมีคอลัมน์: 'Date', 'Market_To_Market', 'Cash_Base'
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # เส้นที่ 1: Market to Market (แกนซ้าย)
+    fig.add_trace(
+        go.Scatter(x=df_equity['Date'], y=df_equity['Market_To_Market'], name="มูลค่าพอร์ตจริง (M2M)", line=dict(color="#00CC96", width=2)),
+        secondary_y=False,
+    )
+
+    # เส้นที่ 2: Cash Base (แกนขวา)
+    fig.add_trace(
+        go.Scatter(x=df_equity['Date'], y=df_equity['Cash_Base'], name="เงินสด+กำไรที่ขายแล้ว", line=dict(color="#636EFA", width=2, dash='dot')),
+        secondary_y=True,
+    )
+
+    # ปรับแต่ง Layout
+    fig.update_layout(title_text="เปรียบเทียบพอร์ต: M2M vs Cash Base")
+    fig.update_yaxes(title_text="มูลค่าพอร์ตจริง (฿)", secondary_y=False)
+    fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 # 2. ฟังก์ชัน Load/Save Sheets
 def get_gsheet_client():
@@ -179,42 +205,67 @@ def load_portfolio():
         st.session_state.my_portfolio = []
 
 def get_equity_curve_data():
-    # 1. ดึงข้อมูลจาก Journal
-    df_j = pd.DataFrame(st.session_state.journal_data)
-    df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'])
+    # ... (ส่วนดึงข้อมูล df_j และ df_cash เหมือนเดิม) ...
     
-    # 2. ดึงข้อมูลจาก CashFlow
-    client = get_gsheet_client()
-    sheet = client.open('.Json').worksheet('CashFlow')
-    df_cash = pd.DataFrame(sheet.get_all_records())
-    df_cash['Date'] = pd.to_datetime(df_cash['Date'])
-    
-    # --- เริ่มจุดที่ปรับแก้ ---
-    # 3. กำหนดวันที่เริ่มแสดงผล (1 เมษายน 2026)
-    start_date = pd.Timestamp('2026-04-01')
-    
-    # 4. รวมข้อมูลเฉพาะที่ >= 2026-04-01
-    df_j = df_j[df_j['วันที่ขาย'] >= start_date].copy()
-    df_cash = df_cash[df_cash['Date'] >= start_date].copy()
-    # --- จบจุดที่ปรับแก้ ---
-    
-    # 5. คำนวณ Cumulative PnL และ Cash In
+    # 5. คำนวณ Cash_Base (เงินสดสะสม + กำไรที่ขายแล้ว)
     daily_pnl = df_j.groupby('วันที่ขาย')['กำไร/ขาดทุน (บาท)'].sum().cumsum().reset_index()
     daily_pnl.columns = ['Date', 'Cumulative_PnL']
     
     daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
     daily_cash.columns = ['Date', 'Net_Cash_In']
     
-    # 6. Merge ข้อมูล
+    # รวมเป็น Cash_Base
     df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
-    
-    # ถ้าวันที่เริ่มต้นไม่มีค่า ให้ตั้งค่า Balance เริ่มต้น ณ วันที่ 1 เมษายน 2026
-    # พี่อ้ำอาจจะไปเช็คใน Sheet ว่าเงินสด ณ วันที่ 1 เม.ย. มีเท่าไหร่ แล้วใส่แทนค่าที่นี่ได้เลยครับ
     initial_balance = 69102.44 
-    df_equity['Equity'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
+    df_equity['Cash_Base'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
+    
+    # 6. เพิ่มคอลัมน์ Market_To_Market (M2M)
+    # เราใช้ Cash_Base ณ วันนั้น แล้วบวกด้วยมูลค่าหุ้นปัจจุบัน (Market Value)
+    current_market_val = get_total_market_value()
+    df_equity['Market_To_Market'] = df_equity['Cash_Base'] + current_market_val - df_equity['Cumulative_PnL']
+    # อธิบาย: หัก Cumulative PnL ออกเพื่อเอาเฉพาะเงินสด แล้วบวกมูลค่าหุ้นปัจจุบันเข้าไปแทน
     
     return df_equity
+    
+def get_total_market_value():
+    """คำนวณมูลค่าหุ้นทั้งหมดที่ถืออยู่ ณ ราคาปัจจุบัน"""
+    total_val = 0
+    if "my_portfolio" in st.session_state:
+        for item in st.session_state.my_portfolio:
+            ticker = item['หุ้น']
+            shares = float(item['shares'])
+            try:
+                # ดึงราคาปิดล่าสุด
+                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+            except:
+                m_price = float(item['avg_price']) # ถ้าดึงไม่ได้ ให้ใช้ต้นทุนไปก่อน
+            total_val += (shares * m_price)
+    return total_val
 
+def plot_dual_equity_curve(df_equity):
+    # df_equity ต้องมีคอลัมน์: 'Date', 'Market_To_Market', 'Cash_Base'
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # เส้นที่ 1: Market to Market (แกนซ้าย)
+    fig.add_trace(
+        go.Scatter(x=df_equity['Date'], y=df_equity['Market_To_Market'], name="มูลค่าพอร์ตจริง (M2M)", line=dict(color="#00CC96", width=2)),
+        secondary_y=False,
+    )
+
+    # เส้นที่ 2: Cash Base (แกนขวา)
+    fig.add_trace(
+        go.Scatter(x=df_equity['Date'], y=df_equity['Cash_Base'], name="เงินสด+กำไรที่ขายแล้ว", line=dict(color="#636EFA", width=2, dash='dot')),
+        secondary_y=True,
+    )
+
+    # ปรับแต่ง Layout
+    fig.update_layout(title_text="เปรียบเทียบพอร์ต: M2M vs Cash Base")
+    fig.update_yaxes(title_text="มูลค่าพอร์ตจริง (฿)", secondary_y=False)
+    fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
+    
+    st.plotly_chart(fig, use_container_width=True)
+    
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
 if "journal_data" not in st.session_state:
