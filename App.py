@@ -167,9 +167,6 @@ if "journal_data" not in st.session_state:
     load_journal()
 
 # --- Initialize Session State ---
-# เช็คว่ามีค่าใน session_state หรือยัง ถ้าไม่มีให้โหลดจากไฟล์
-if "cash_balance" not in st.session_state:
-    st.session_state.cash_balance = 100000.0
 
 # ตั้งค่าหน้าจอ
 st.set_page_config(layout="wide")
