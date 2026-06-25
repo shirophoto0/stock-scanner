@@ -1345,7 +1345,6 @@ with tab_risk:
             res_col4.metric(label="หากแพ้จะเสียเงินสูงสุด", value=f"{max_risk_money:,.2f} บาท", delta="ปลอดภัยตามวินัยเทรด", delta_color="inverse")
 #######################          
         st.markdown("---")
-        with st.expander("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น"), expanded=False):
             def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
                 # 1. ไม่ทบต้น (Fixed Risk: ลงทุนจำนวนเงินเท่าเดิมต่อไม้)
                 fixed_capital = initial_capital
@@ -1374,7 +1373,7 @@ with tab_risk:
             # --- ส่วนเพิ่ม: ฟังก์ชันวิเคราะห์ตารางเปรียบเทียบกลยุทธ์ ---
             def show_strategy_analysis():
                 st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
-                
+            with st.expander("📊 กดเพื่อดูตารางเปรียบเทียบผลตอบแทน ทบต้น vs ไม่ทบต้น"):   
                 # กำหนดค่าคงที่
                 initial_cap = 100000
                 loss_pct = 0.08  # Fix loss 8% ตามที่พี่อ้ำต้องการ
