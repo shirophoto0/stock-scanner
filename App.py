@@ -206,19 +206,9 @@ def load_portfolio():
 
 def get_equity_curve_data():
     # ... (ส่วนดึงข้อมูล df_j และ df_cash เหมือนเดิม) ...
-    df_j = pd.DataFrame(st.session_state.journal_data)
-    
-    # 1. ทำความสะอาดชื่อคอลัมน์ (ลบช่องว่างข้างหน้า/หลังชื่อ)
-    df_j.columns = df_j.columns.str.strip()
-    
-    # 2. แปลงวันที่ (ตรวจสอบว่ามีคอลัมน์ชื่อ 'วันที่ขาย' จริงๆ)
-    if 'วันที่ขาย' not in df_j.columns:
-        st.error(f"ไม่พบชื่อคอลัมน์ 'วันที่ขาย' ในข้อมูล! มีแต่: {df_j.columns.tolist()}")
-        return pd.DataFrame()
-        
-    df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'])
-    
     # ... (ส่วนที่เหลือของฟังก์ชัน)
+    # ใส่บรรทัดนี้ไว้ก่อนบรรทัดที่เป็น Error
+    st.write("Columns in df_j:", df_j.columns.tolist())
     # 5. คำนวณ Cash_Base (เงินสดสะสม + กำไรที่ขายแล้ว)
     daily_pnl = df_j.groupby('วันที่ขาย')['กำไร/ขาดทุน'].sum().cumsum().reset_index()
     daily_pnl.columns = ['Date', 'Cumulative_PnL']
