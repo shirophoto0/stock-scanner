@@ -1489,7 +1489,7 @@ with tab_risk:
                     })
             st.table(pd.DataFrame(data))
         
-        # --- 2. ส่วนที่เรียกใช้งานใน Tab ---
+        # --- ส่วนแสดงผลความเสี่ยง ทบต้น VS ไม่ทบต้น ---
         st.markdown("---")
         
         st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
@@ -1545,24 +1545,35 @@ with tab_risk:
     
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-            # ใช้ค่าจาก Logic เดิมแต่ปรับให้ดูง่าย
-            initial_cap = 100000
-            trades = 30
+            # 1. เตรียมค่า Actual เพื่อเป็นจุดกึ่งกลาง
+            act_wr = win_rate_val / 100
+            act_profit = avg_profit_val / 100
+            act_loss = avg_loss_val / 100
             
-            # สร้างตารางข้อมูลจำลองตามช่วงที่พี่อ้ำสนใจ
-            data = []
-            for wr in [0.4, 0.5, 0.6]:
-                for pr in [0.10, 0.12, 0.14]:
-                    wins = trades * wr
-                    losses = trades * (1 - wr)
-                    fixed_profit = (wins * pr * initial_cap) - (losses * 0.08 * initial_cap)
-                    data.append({
-                        "Win Rate": f"{int(wr*100)}%",
-                        "Profit %": f"{int(pr*100)}%",
-                        "กำไรแบบไม่ทบต้น": f"{fixed_profit:,.0f}"
-                    })
-            st.table(pd.DataFrame(data))
-            st.write("*หมายเหตุ: ตารางนี้เป็นข้อมูลจำลองทางสถิติเพื่อดูแนวโน้ม*")
+            # 2. สร้างตาราง Vary ค่า
+            wr_range = [act_wr - 0.1, act_wr, act_wr + 0.1]
+            pr_range = [act_profit - 0.05, act_profit, act_profit + 0.05]
+            
+            sim_data = []
+            for wr in wr_range:
+                row = {"Win Rate": f"{wr*100:.1f}%"}
+                for pr in pr_range:
+                    # คำนวณ Expected Value (EV) ต่อ 1 ไม้
+                    ev = (wr * pr) - ((1 - wr) * act_loss)
+                    row[f"Profit {pr*100:.1f}%"] = ev * 100 # แสดงเป็น % กำไรต่อไม้
+                sim_data.append(row)
+            
+            df_sim = pd.DataFrame(sim_data).set_index("Win Rate")
+            
+            # 3. ใส่สี Highlight
+            # ใช้ background_gradient เพื่อดูจุดที่คุ้มค่าที่สุด
+            st.dataframe(
+                df_sim.style.background_gradient(cmap="RdYlGn", axis=None),
+                use_container_width=True
+            )
+            
+            st.write(f"**หมายเหตุ:** ตารางคำนวณจาก Loss คงที่ที่ **{avg_loss_val:.2f}%** ต่อไม้")
+            st.caption("สีเขียวเข้มคือจุดที่ให้ผลตอบแทนคาดหวังสูงสุด")
     
 
 
