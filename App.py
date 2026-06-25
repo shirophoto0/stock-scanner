@@ -205,27 +205,55 @@ def load_portfolio():
         st.session_state.my_portfolio = []
 
 def get_equity_curve_data():
-    # ... (ส่วนดึงข้อมูล df_j และ df_cash เหมือนเดิม) ...
-    # ... (ส่วนที่เหลือของฟังก์ชัน)
-    # ใส่บรรทัดนี้ไว้ก่อนบรรทัดที่เป็น Error
-    st.write("Columns in df_j:", df_j.columns.tolist())
-    # 5. คำนวณ Cash_Base (เงินสดสะสม + กำไรที่ขายแล้ว)
-    daily_pnl = df_j.groupby('วันที่ขาย')['กำไร/ขาดทุน'].sum().cumsum().reset_index()
+    # 1. เตรียมข้อมูล Journal
+    if "journal_data" not in st.session_state or not st.session_state.journal_data:
+        return pd.DataFrame()
+    
+    df_j = pd.DataFrame(st.session_state.journal_data)
+    # ทำความสะอาดชื่อคอลัมน์ (ตัดช่องว่างหน้าหลัง)
+    df_j.columns = df_j.columns.str.strip()
+    
+    # ตรวจสอบชื่อคอลัมน์จริง (ใช้บรรทัดนี้ Debug ถ้ายัง Error)
+    # st.write("Columns found:", df_j.columns.tolist())
+    
+    # เปลี่ยนชื่อคอลัมน์ให้ตรงกับที่เราเรียกใช้
+    # หากใน Sheet พี่อ้ำเขียนว่า 'กำไร/ขาดทุน' ให้ใช้ชื่อนั้นครับ
+    if 'กำไร/ขาดทุน' in df_j.columns:
+        df_j = df_j.rename(columns={'กำไร/ขาดทุน': 'PnL'})
+    elif 'กำไร/ขาดทุน (บาท)' in df_j.columns:
+        df_j = df_j.rename(columns={'กำไร/ขาดทุน (บาท)': 'PnL'})
+    
+    df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'], errors='coerce')
+
+    # 2. เตรียมข้อมูล CashFlow
+    client = get_gsheet_client()
+    sheet = client.open('.Json').worksheet('CashFlow')
+    df_cash = pd.DataFrame(sheet.get_all_records())
+    df_cash.columns = df_cash.columns.str.strip()
+    df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
+    
+    # 3. Filter วันที่
+    start_date = pd.Timestamp('2026-04-01')
+    df_j = df_j[df_j['วันที่ขาย'] >= start_date].copy()
+    df_cash = df_cash[df_cash['Date'] >= start_date].copy()
+    
+    # 4. คำนวณ
+    daily_pnl = df_j.groupby('วันที่ขาย')['PnL'].sum().cumsum().reset_index()
     daily_pnl.columns = ['Date', 'Cumulative_PnL']
     
     daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
     daily_cash.columns = ['Date', 'Net_Cash_In']
     
-    # รวมเป็น Cash_Base
+    # 5. รวมตาราง
     df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
     initial_balance = 69102.44 
+    
     df_equity['Cash_Base'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
     
-    # 6. เพิ่มคอลัมน์ Market_To_Market (M2M)
-    # เราใช้ Cash_Base ณ วันนั้น แล้วบวกด้วยมูลค่าหุ้นปัจจุบัน (Market Value)
+    # 6. คำนวณ M2M
     current_market_val = get_total_market_value()
-    df_equity['Market_To_Market'] = df_equity['Cash_Base'] + current_market_val - df_equity['Cumulative_PnL']
-    # อธิบาย: หัก Cumulative PnL ออกเพื่อเอาเฉพาะเงินสด แล้วบวกมูลค่าหุ้นปัจจุบันเข้าไปแทน
+    # หัก Cumulative PnL ออกเพื่อให้เหลือเงินสดจริง แล้วบวกมูลค่าหุ้นปัจจุบัน
+    df_equity['Market_To_Market'] = (df_equity['Cash_Base'] - df_equity['Cumulative_PnL']) + current_market_val
     
     return df_equity
     
