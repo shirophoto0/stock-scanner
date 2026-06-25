@@ -983,22 +983,35 @@ with tab_portfolio:
     # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
     if "cash_balance" not in st.session_state:
         st.session_state.cash_balance = load_cash_balance()
+        
+    # ส่วนแสดงปุ่มเข้าออกเงินสด 
+    with st.expander("💰 บันทึกรายการเงินสดเข้า-ออก"):
+        with st.form("cash_flow_form", clear_on_submit=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                log_date = st.date_input("วันที่:")
+            with c2:
+                log_type = st.selectbox("ประเภท:", ["เติมเงินสด", "เงินปันผล", "เงินรายได้อื่นๆ", "ถอนเงินสด"])
+            with c3:
+                log_amount = st.number_input("จำนวนเงิน:", step=100.0)
+            
+            log_note = st.text_input("หมายเหตุ:")
+            submitted_cash = st.form_submit_button("บันทึกรายการเงินสด")
     
-    # ส่วนแสดงเงินสดและปุ่มปรับปรุงเงินสด
-    col_a, col_b = st.columns([2, 1])
-    with col_a:
-        st.metric("💵 เงินสดในมือ (Cash Balance)", f"{st.session_state.cash_balance:,.2f} ฿")
-    with col_b:
-        with st.expander("➕/➖ ปรับเงินสด"):
-            new_cash = st.number_input("ยอดเงินที่จะ เติม(+) หรือ ถอน(-):", step=1000.0)
-            if st.button("ยืนยันปรับยอดเงิน"):
+            if submitted_cash:
+                # คำนวณค่าบวก/ลบ ตามประเภท
+                actual_amount = log_amount if log_type in ["เติมเงินสด", "เงินปันผล", "เงินรายได้อื่นๆ"] else -log_amount
+                
+                # บันทึกผ่านฟังก์ชันที่เราทำไว้
                 log_cash_transaction(
-                    date=pd.Timestamp.now().strftime('%Y-%m-%d'),
-                    trans_type="เติมเงิน/ถอนเงิน",
-                    amount=new_cash,
-                    note="ปรับปรุงยอดเงินสด"
+                    date=str(log_date),
+                    trans_type=log_type,
+                    amount=actual_amount,
+                    note=log_note
                 )
-                st.session_state.cash_balance += new_cash
+                # อัปเดต Session เพื่อให้ยอดเงินโชว์ทันที
+                st.session_state.cash_balance += actual_amount
+                st.success(f"บันทึก {log_type} สำเร็จ!")
                 st.rerun()
     
     # 2. ฟอร์มเพิ่ม/ลดหุ้น
