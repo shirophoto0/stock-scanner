@@ -1394,13 +1394,55 @@ with tab_risk:
         # --- 2. ส่วนที่เรียกใช้งานใน Tab ---
         st.markdown("---")
         
-        with st.expander("📊 กดเพื่อดูตารางเปรียบเทียบผลตอบแทน ทบต้น vs ไม่ทบต้น"):
-            show_strategy_analysis()
-            st.info("""
-            **คำแนะนำ:** - ถ้า Win Rate ต่ำ (40%) ควรเน้น 'ไม่ทบต้น' เพื่อคุมความเสี่ยง
-            - การทบต้นจะเริ่มทรงพลังเมื่อ Win Rate สูงขึ้น และ R/R ดี (Profit > 1.5 เท่าของ Loss)
-            """) 
-
+        st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ (อิงจากสถิติจริง)")
+    
+        # 1. ดึงสถิติจริงจาก Journal
+        if "journal_data" in st.session_state and st.session_state.journal_data:
+            df_journal = pd.DataFrame(st.session_state.journal_data)
+            stats = calculate_journal_stats(df_journal)
+            
+            # ดึงค่าล่าสุด (เดือนล่าสุดที่เทรด)
+            latest_stats = stats.iloc[-1]
+            win_rate_real = latest_stats['Win_Rate'] / 100
+            avg_profit_real = abs(latest_stats['Avg_Profit_Pct'] / 100)
+            avg_loss_real = abs(latest_stats['Avg_Loss_Pct'] / 100)
+            rr_ratio = avg_profit_real / avg_loss_real if avg_loss_real != 0 else 0
+            
+            # 2. แสดงผลสรุปสถิติจริง
+            st.subheader("💡 คำแนะนำสำหรับพอร์ตปัจจุบันของคุณ")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Win Rate จริง", f"{latest_stats['Win_Rate']}%")
+            col2.metric("Profit/Loss Ratio (R:R)", f"{rr_ratio:.2f} : 1")
+            col3.metric("คำแนะนำกลยุทธ์", "ทบต้น" if win_rate_real >= 0.45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+            
+            st.write(f"จากการเทรด {latest_stats['Trade_Count']} ครั้งล่าสุด: คุณได้กำไรเฉลี่ย {abs(latest_stats['Avg_Profit_Pct'])}% ต่อไม้ และขาดทุนเฉลี่ย {abs(latest_stats['Avg_Loss_Pct'])}% ต่อไม้")
+            
+        else:
+            st.warning("ยังไม่มีข้อมูลในสมุดบันทึก (Journal) เพื่อคำนวณสถิติ")
+    
+        st.divider()
+    
+        # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
+        with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
+            # ใช้ค่าจาก Logic เดิมแต่ปรับให้ดูง่าย
+            initial_cap = 100000
+            trades = 30
+            
+            # สร้างตารางข้อมูลจำลองตามช่วงที่พี่อ้ำสนใจ
+            data = []
+            for wr in [0.4, 0.5, 0.6]:
+                for pr in [0.10, 0.12, 0.14]:
+                    wins = trades * wr
+                    losses = trades * (1 - wr)
+                    fixed_profit = (wins * pr * initial_cap) - (losses * 0.08 * initial_cap)
+                    data.append({
+                        "Win Rate": f"{int(wr*100)}%",
+                        "Profit %": f"{int(pr*100)}%",
+                        "กำไรแบบไม่ทบต้น": f"{fixed_profit:,.0f}"
+                    })
+            st.table(pd.DataFrame(data))
+            st.write("*หมายเหตุ: ตารางนี้เป็นข้อมูลจำลองทางสถิติเพื่อดูแนวโน้ม*")
+    
 
 
 
