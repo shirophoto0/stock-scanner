@@ -107,7 +107,34 @@ def load_cash_balance():
     except Exception as e:
         st.error(f"โหลดเงินสดจาก Sheets ไม่ได้: {e}")
         return 100000.0 # ถ้าพังจริงๆ ก็ใช้ 100,000 ไปก่อน
-
+        
+def log_cash_transaction(date, trans_type, amount, note):
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('.Json').worksheet('CashFlow')
+        
+        # เตรียมข้อมูลที่จะบันทึก (Date, Type, Amount, Note)
+        row_data = [str(date), trans_type, amount, note]
+        
+        # เพิ่มแถวใหม่ต่อท้ายข้อมูลเดิม
+        sheet.append_row(row_data)
+        st.toast("บันทึกรายการเงินสดเรียบร้อย!", icon="💰")
+    except Exception as e:
+        st.error(f"บันทึกรายการเงินสดไม่สำเร็จ: {e}")
+        
+def load_total_cash_balance():
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('.Json').worksheet('CashFlow')
+        df = pd.DataFrame(sheet.get_all_records())
+        
+        if not df.empty:
+            # รวมยอด Amount ทั้งหมด
+            return float(df['Amount'].sum())
+        return 69102.44 # ถ้าไม่มีข้อมูลให้ใช้ยอดเริ่มต้น
+    except:
+        return 69102.44
+        
 # ปรับฟังก์ชัน LOAD (อ่านจาก Google Sheets)
 def load_journal():
     try:
@@ -965,6 +992,12 @@ with tab_portfolio:
         with st.expander("➕/➖ ปรับเงินสด"):
             new_cash = st.number_input("ยอดเงินที่จะ เติม(+) หรือ ถอน(-):", step=1000.0)
             if st.button("ยืนยันปรับยอดเงิน"):
+                log_cash_transaction(
+                    date=pd.Timestamp.now().strftime('%Y-%m-%d'),
+                    trans_type="เติมเงิน/ถอนเงิน",
+                    amount=new_cash,
+                    note="ปรับปรุงยอดเงินสด"
+                )
                 st.session_state.cash_balance += new_cash
                 st.rerun()
     
@@ -996,12 +1029,20 @@ with tab_portfolio:
             if submitted:
                 total_val = (p_qty * p_price)
                 ticker_upper = p_ticker.upper()
-    
-                # 1. จัดการข้อมูล Portfolio และหักลบเงินสด
+
+                # 1. จัดการข้อมูล Portfolio
                 found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
                 
                 if "ซื้อ" in p_type:
+                    # บันทึกประวัติเงินสด (จ่ายออก)
+                    log_cash_transaction(
+                        date=str(p_buy_date),
+                        trans_type="ซื้อหุ้น " + ticker_upper,
+                        amount=-(total_val + p_comm),
+                        note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}"
+                    )
                     st.session_state.cash_balance -= (total_val + p_comm)
+                    
                     if found_idx != -1:
                         old = st.session_state.my_portfolio[found_idx]
                         new_shares = old['shares'] + p_qty
@@ -1009,9 +1050,18 @@ with tab_portfolio:
                         st.session_state.my_portfolio[found_idx] = {'หุ้น': ticker_upper, 'shares': new_shares, 'avg_price': new_cost}
                     else:
                         st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price})
+                
                 else: # กรณีขาย
+                    # บันทึกประวัติเงินสด (รับเข้า)
+                    log_cash_transaction(
+                        date=str(p_buy_date),
+                        trans_type="ขายหุ้น " + ticker_upper,
+                        amount=(total_val - p_comm),
+                        note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}"
+                    )
+                    st.session_state.cash_balance += (total_val - p_comm)
+                    
                     if found_idx != -1:
-                        st.session_state.cash_balance += (total_val - p_comm)
                         st.session_state.my_portfolio[found_idx]['shares'] -= p_qty
                         if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
                             st.session_state.my_portfolio.pop(found_idx)
