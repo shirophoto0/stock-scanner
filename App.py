@@ -1049,19 +1049,12 @@ with tab_dashboard:
             st.subheader("📈 Equity Curve")
 
             equity_data = get_equity_curve_data()
-            
+
             if not equity_data.empty:
-                # สร้างกราฟเส้น
-                st.line_chart(equity_data.set_index('Date')['Equity'], color="#00ff00")
-                
-                # สถิติเสริมใต้กราฟ
-                col1, col2 = st.columns(2)
-                max_equity = equity_data['Equity'].max()
-                current_equity = equity_data['Equity'].iloc[-1]
-                col1.metric("Equity สูงสุด", f"{max_equity:,.0f} ฿")
-                col2.metric("Equity ปัจจุบัน", f"{current_equity:,.0f} ฿")
+                # เรียกใช้ฟังก์ชัน Dual Axis ที่เราเขียนไว้
+                plot_dual_equity_curve(equity_data)
             else:
-                st.info("สะสมข้อมูลการเทรดสักพัก เพื่อสร้างเส้น Equity Curve ครับ")
+                st.info("ไม่มีข้อมูลให้แสดงผลใน Equity Curve")
                         ##### เร่ิมกราฟกระจายตัว ###########
             # --- 1. คำนวณ % ตั้งแต่เนิ่นๆ ---
             df_filtered = df_clean.copy() # หรือตาม logic เดิมของพี่อ้ำ
