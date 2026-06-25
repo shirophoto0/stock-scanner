@@ -1545,35 +1545,39 @@ with tab_risk:
     
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-            # 1. เตรียมค่า Actual เพื่อเป็นจุดกึ่งกลาง
+            # 1. เตรียมค่า Actual
             act_wr = win_rate_val / 100
             act_profit = avg_profit_val / 100
             act_loss = avg_loss_val / 100
             
-            # 2. สร้างตาราง Vary ค่า
-            wr_range = [act_wr - 0.1, act_wr, act_wr + 0.1]
-            pr_range = [act_profit - 0.05, act_profit, act_profit + 0.05]
+            # 2. สร้าง Range 5 ช่อง (ละ 5% หรือ 0.05)
+            # เราต้องการ [act-0.10, act-0.05, act, act+0.05, act+0.10]
+            wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
+            
+            # สำหรับ Profit ก็ปรับช่วงให้เหมาะสม (เช่น ละ 2.5% หรือ 0.025)
+            pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
             
             sim_data = []
             for wr in wr_range:
-                row = {"Win Rate": f"{wr*100:.1f}%"}
+                # ป้องกันไม่ให้ Win Rate ติดลบหรือเกิน 100%
+                wr_display = max(0, min(1, wr)) 
+                row = {"Win Rate": f"{wr_display*100:.1f}%"}
+                
                 for pr in pr_range:
-                    # คำนวณ Expected Value (EV) ต่อ 1 ไม้
-                    ev = (wr * pr) - ((1 - wr) * act_loss)
-                    row[f"Profit {pr*100:.1f}%"] = ev * 100 # แสดงเป็น % กำไรต่อไม้
+                    # คำนวณ Expected Value (EV)
+                    ev = (wr_display * pr) - ((1 - wr_display) * act_loss)
+                    row[f"{pr*100:.1f}% Profit"] = ev * 100 # แสดงผลเป็น %
                 sim_data.append(row)
             
             df_sim = pd.DataFrame(sim_data).set_index("Win Rate")
             
-            # 3. ใส่สี Highlight
-            # ใช้ background_gradient เพื่อดูจุดที่คุ้มค่าที่สุด
+            # 3. แสดงผลตารางพร้อมสี Highlight
             st.dataframe(
                 df_sim.style.background_gradient(cmap="RdYlGn", axis=None),
                 use_container_width=True
             )
             
-            st.write(f"**หมายเหตุ:** ตารางคำนวณจาก Loss คงที่ที่ **{avg_loss_val:.2f}%** ต่อไม้")
-            st.caption("สีเขียวเข้มคือจุดที่ให้ผลตอบแทนคาดหวังสูงสุด")
+            st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {avg_loss_val:.2f}%")
     
 
 
