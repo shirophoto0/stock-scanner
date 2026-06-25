@@ -4,7 +4,7 @@ import yfinance as yf
 import pandas as pd
 import altair as alt
 import numpy as np
-import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
@@ -1344,4 +1344,81 @@ with tab_risk:
             res_col3.metric(label="ตั้ง Stop Loss ที่ราคา", value=f"{sl_price:.2f} บาท", delta=f"-{actual_sl_pct:.2f}%")
             res_col4.metric(label="หากแพ้จะเสียเงินสูงสุด", value=f"{max_risk_money:,.2f} บาท", delta="ปลอดภัยตามวินัยเทรด", delta_color="inverse")
 #######################          
-    
+        st.markdown("---")
+        
+        def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
+            # 1. ไม่ทบต้น (Fixed Risk: ลงทุนจำนวนเงินเท่าเดิมต่อไม้)
+            fixed_capital = initial_capital
+            fixed_balance = initial_capital
+            results_fixed = []
+            
+            # 2. ทบต้น (Compounding: ทบเงินกำไร)
+            comp_balance = initial_capital
+            results_comp = []
+            
+            for i in range(trades):
+                # สุ่มผลลัพธ์ตาม Win Rate
+                win = np.random.rand() < win_rate
+                
+                # คำนวณแบบไม่ทบต้น
+                fixed_profit = (profit_pct * fixed_capital) if win else (-loss_pct * fixed_capital)
+                fixed_balance += fixed_profit
+                
+                # คำนวณแบบทบต้น
+                comp_profit = (profit_pct * comp_balance) if win else (-loss_pct * comp_balance)
+                comp_balance += comp_profit
+                
+            return fixed_balance, comp_balance
+        
+        # สร้างตารางวิเคราะห์
+        # --- ส่วนเพิ่ม: ฟังก์ชันวิเคราะห์ตารางเปรียบเทียบกลยุทธ์ ---
+        def show_strategy_analysis():
+            st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
+            
+            # กำหนดค่าคงที่
+            initial_cap = 100000
+            loss_pct = 0.08  # Fix loss 8% ตามที่พี่อ้ำต้องการ
+            trades = 30
+            win_rates = [0.4, 0.5, 0.6]
+            profit_pcts = [0.10, 0.12, 0.14, 0.16]
+        
+            data = []
+            for wr in win_rates:
+                for pr in profit_pcts:
+                    # คำนวณแบบไม่ทบต้น (Fixed Risk)
+                    # กำไรสะสม = ทุน + (จำนวนครั้งที่ชนะ * กำไรต่อไม้) - (จำนวนครั้งที่แพ้ * ขาดทุนต่อไม้)
+                    wins = trades * wr
+                    losses = trades * (1 - wr)
+                    fixed_profit = (wins * pr * initial_cap) - (losses * loss_pct * initial_cap)
+                    
+                    # คำนวณแบบทบต้น (Compounding)
+                    comp_cap = initial_cap
+                    for i in range(trades):
+                        if np.random.rand() < wr:
+                            comp_cap *= (1 + pr)
+                        else:
+                            comp_cap *= (1 - loss_pct)
+                    
+                    data.append({
+                        "Win Rate": f"{int(wr*100)}%",
+                        "Profit %": f"{int(pr*100)}%",
+                        "ไม่ทบต้น (กำไร/ขาดทุน)": f"{fixed_profit:,.0f}",
+                        "ทบต้น (เงินรวมสุดท้าย)": f"{comp_cap - initial_cap:,.0f}",
+                        "กลยุทธ์ที่แนะนำ": "ทบต้น" if comp_cap > (initial_cap + fixed_profit) else "ไม่ทบต้น"
+                    })
+        
+            df_viz = pd.DataFrame(data)
+            st.table(df_viz)
+            
+            st.info("""
+            **คำแนะนำ:** - ถ้า Win Rate ต่ำ (40%) ควรเน้น 'ไม่ทบต้น' เพื่อคุมความเสี่ยง
+            - การทบต้นจะเริ่มทรงพลังเมื่อ Win Rate สูงขึ้น (50%+) และ Profit per trade มากกว่า Loss 1.5 เท่า
+            """)
+        
+        # เรียกใช้ฟังก์ชันในหน้าแอป
+        show_strategy_analysis()
+        
+
+
+
+
