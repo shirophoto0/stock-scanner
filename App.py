@@ -100,9 +100,13 @@ def load_cash_balance():
         client = get_gsheet_client()
         sheet = client.open('.Json').worksheet('CashFlow')
         val = sheet.acell('D2').value
-        return float(val) if val else 100000.0
-    except:
-        return 100000.0
+        if val is None or val == "":
+            st.warning("เซลล์ D2 ว่างเปล่า ระบบใช้ 100,000 เป็นค่าเริ่มต้น")
+            return 100000.0
+        return float(val)
+    except Exception as e:
+        st.error(f"โหลดเงินสดจาก Sheets ไม่ได้: {e}")
+        return 100000.0 # ถ้าพังจริงๆ ก็ใช้ 100,000 ไปก่อน
 
 # ปรับฟังก์ชัน LOAD (อ่านจาก Google Sheets)
 def load_journal():
