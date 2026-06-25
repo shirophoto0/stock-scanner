@@ -183,24 +183,35 @@ def get_equity_curve_data():
     df_j = pd.DataFrame(st.session_state.journal_data)
     df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'])
     
-    # 2. ดึงข้อมูลจาก CashFlow (Sheet)
+    # 2. ดึงข้อมูลจาก CashFlow
     client = get_gsheet_client()
     sheet = client.open('.Json').worksheet('CashFlow')
     df_cash = pd.DataFrame(sheet.get_all_records())
     df_cash['Date'] = pd.to_datetime(df_cash['Date'])
     
-    # 3. จัดกลุ่ม (Group by Date)
-    # รวมผลกำไรขาดทุนรายวัน
+    # --- เริ่มจุดที่ปรับแก้ ---
+    # 3. กำหนดวันที่เริ่มแสดงผล (1 เมษายน 2026)
+    start_date = pd.Timestamp('2026-04-01')
+    
+    # 4. รวมข้อมูลเฉพาะที่ >= 2026-04-01
+    df_j = df_j[df_j['วันที่ขาย'] >= start_date].copy()
+    df_cash = df_cash[df_cash['Date'] >= start_date].copy()
+    # --- จบจุดที่ปรับแก้ ---
+    
+    # 5. คำนวณ Cumulative PnL และ Cash In
     daily_pnl = df_j.groupby('วันที่ขาย')['กำไร/ขาดทุน (บาท)'].sum().cumsum().reset_index()
     daily_pnl.columns = ['Date', 'Cumulative_PnL']
     
-    # รวมการฝาก/ถอนเงินรายวัน
     daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
     daily_cash.columns = ['Date', 'Net_Cash_In']
     
-    # 4. Merge ข้อมูลเข้าด้วยกัน
+    # 6. Merge ข้อมูล
     df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
-    df_equity['Equity'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + 69102.44 # ยอดเริ่มต้น
+    
+    # ถ้าวันที่เริ่มต้นไม่มีค่า ให้ตั้งค่า Balance เริ่มต้น ณ วันที่ 1 เมษายน 2026
+    # พี่อ้ำอาจจะไปเช็คใน Sheet ว่าเงินสด ณ วันที่ 1 เม.ย. มีเท่าไหร่ แล้วใส่แทนค่าที่นี่ได้เลยครับ
+    initial_balance = 69102.44 
+    df_equity['Equity'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
     
     return df_equity
 
