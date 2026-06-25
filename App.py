@@ -938,24 +938,27 @@ with tab_portfolio:
     # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
     if "cash_balance" not in st.session_state: st.session_state.cash_balance = 100000.0
     
-    # ใช้ callback หรืออัปเดตค่าจาก input นี้ไปที่ session_state โดยตรง
-    st.session_state.cash_balance = st.number_input(
-        "💵 เงินสดคงเหลือในพอร์ต (บาท):", 
-        value=float(st.session_state.cash_balance), 
-        step=1000.0
-    )
+    # ส่วนแสดงเงินสดและปุ่มปรับปรุงเงินสด
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        st.metric("💵 เงินสดในมือ (Cash Balance)", f"{st.session_state.cash_balance:,.2f} ฿")
+    with col_b:
+        with st.expander("➕/➖ ปรับเงินสด"):
+            new_cash = st.number_input("ยอดเงินที่จะ เติม(+) หรือ ถอน(-):", step=1000.0)
+            if st.button("ยืนยันปรับยอดเงิน"):
+                st.session_state.cash_balance += new_cash
+                st.rerun()
     
     # 2. ฟอร์มเพิ่ม/ลดหุ้น
     with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
         with st.form("portfolio_journal_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             
-            # ดึงรายชื่อหุ้นจากพอร์ตเพื่อนำมาแสดงใน selectbox
             portfolio_stocks = [item['หุ้น'] for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
             
             with col1:
                 options = ["  "] + portfolio_stocks
-                select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต (หรือพิมพ์ใหม่):", options)
+                select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options)
                 p_ticker = st.text_input("ชื่อหุ้น:") if select_ticker == "  " else select_ticker
                 p_buy_date = st.date_input("วันที่ทำรายการ:")
                 p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"])
@@ -974,8 +977,8 @@ with tab_portfolio:
             if submitted:
                 total_val = (p_qty * p_price)
                 ticker_upper = p_ticker.upper()
-
-                # 1. จัดการข้อมูล Portfolio (อัปเดตสถานะจำนวนหุ้น)
+    
+                # 1. จัดการข้อมูล Portfolio และหักลบเงินสด
                 found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
                 
                 if "ซื้อ" in p_type:
@@ -993,7 +996,7 @@ with tab_portfolio:
                         st.session_state.my_portfolio[found_idx]['shares'] -= p_qty
                         if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
                             st.session_state.my_portfolio.pop(found_idx)
-                
+                    
                 # 2. เพิ่มข้อมูลเข้า Journal (ปรับ Key ให้ตรงกับสูตรสถิติเดิมของพี่อ้ำ)
                 new_entry = {
                     "วันที่": str(p_buy_date), 
@@ -1014,7 +1017,7 @@ with tab_portfolio:
                 save_portfolio() 
                 save_journal()
                 
-                st.success(f"บันทึกรายการ {ticker_upper} เรียบร้อย!")
+                st.success(f"บันทึกรายการ {ticker_upper} เรียบร้อย! เงินสดคงเหลือ: {st.session_state.cash_balance:,.2f} ฿")
                 st.rerun()
 
     # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
