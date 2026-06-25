@@ -954,7 +954,7 @@ with tab_portfolio:
     
     # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
     if "cash_balance" not in st.session_state:
-    st.session_state.cash_balance = load_cash_balance()
+        st.session_state.cash_balance = load_cash_balance()
     
     # ส่วนแสดงเงินสดและปุ่มปรับปรุงเงินสด
     col_a, col_b = st.columns([2, 1])
