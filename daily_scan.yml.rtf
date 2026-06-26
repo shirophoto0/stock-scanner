@@ -26,6 +26,6 @@ jobs:\
       - name: Install dependencies\
         run: pip install yfinance pandas gspread oauth2client\
       - name: Run script\
-        run: python scanner.py\
+        run: python app.py\
         env:\
           GOOGLE_APPLICATION_CREDENTIALS: $\{\{ secrets.GOOGLE_APPLICATION_CREDENTIALS \}\}}
