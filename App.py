@@ -1570,12 +1570,13 @@ with tab_risk:
                     row[f"{pr*100:.1f}% Profit"] = ev * 100 
                 sim_data.append(row)
             
-            # 3. แยก Data สำหรับแสดงผล vs Data สำหรับคำนวณสี (ป้องกัน KeyError)
+            # 3. แยก Data สำหรับแสดงผล vs Data สำหรับคำนวณสี
             df_full = pd.DataFrame(sim_data)
             df_display = df_full.set_index("Win Rate")
             
-            # สร้างตารางตัวเลขล้วนเพื่อใช้คำนวณสี (Gradient)
+            # --- จุดที่แก้ไข: ทำความสะอาดข้อมูลตัวเลขก่อนนำไปทำ Gradient ---
             df_numeric = df_full.drop(columns=["Win Rate"]).astype(float)
+            df_numeric = df_numeric.fillna(0).replace([float('inf'), float('-inf')], 0)
             
             # 4. แสดงผลตาราง
             st.dataframe(
