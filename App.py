@@ -1544,19 +1544,19 @@ with tab_risk:
         st.divider()
     
         # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
+        # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
             
-            # แก้ไข: ดึงค่าจากตัวแปรที่คำนวณไว้แล้ว และตั้งค่า Default เป็น 0 หากตัวแปรนั้นยังไม่มีค่า
+            # 1. ดึงค่าและจัดการ Default value ป้องกัน Error
             wr_val = w_rate if 'w_rate' in locals() else 0
             pr_val = avg_profit if 'avg_profit' in locals() else 0
             ls_val = avg_loss if 'avg_loss' in locals() else 0
             
-            # 1. เตรียมค่า Actual
             act_wr = wr_val / 100
             act_profit = pr_val / 100
             act_loss = ls_val / 100
             
-            # 2. สร้าง Range 5 ช่อง
+            # 2. สร้าง Range
             wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
             pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
             
@@ -1566,16 +1566,24 @@ with tab_risk:
                 row = {"Win Rate": f"{wr_display*100:.1f}%"}
                 
                 for pr in pr_range:
-                    # คำนวณ Expected Value (EV)
-                    ev = (wr_display * pr) - ((1 - wr_display) * abs(act_loss)) # ใช้ abs เพื่อให้มั่นใจว่าค่า loss ติดลบ
+                    ev = (wr_display * pr) - ((1 - wr_display) * abs(act_loss))
                     row[f"{pr*100:.1f}% Profit"] = ev * 100 
                 sim_data.append(row)
             
-            df_sim = pd.DataFrame(sim_data).set_index("Win Rate")
+            # 3. แยก Data สำหรับแสดงผล vs Data สำหรับคำนวณสี (ป้องกัน KeyError)
+            df_full = pd.DataFrame(sim_data)
+            df_display = df_full.set_index("Win Rate")
             
-            # 3. แสดงผลตารางพร้อมสี Highlight
+            # สร้างตารางตัวเลขล้วนเพื่อใช้คำนวณสี (Gradient)
+            df_numeric = df_full.drop(columns=["Win Rate"]).astype(float)
+            
+            # 4. แสดงผลตาราง
             st.dataframe(
-                df_sim.style.background_gradient(cmap="RdYlGn", axis=None),
+                df_display.style.background_gradient(
+                    cmap="RdYlGn", 
+                    subset=df_display.columns, 
+                    gmap=df_numeric
+                ),
                 use_container_width=True
             )
             
