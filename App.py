@@ -1283,7 +1283,7 @@ if st.session_state.journal_data:
             
             df_period = df_journal[(df_journal['วันที่ขาย'] >= cutoff_date) & 
                           (df_journal['สถานะ'] == 'Closed (ขายแล้ว)')].copy()
-            
+
             
             if not df_period.empty:
                 # 1. ตรวจสอบและสร้างคอลัมน์วันที่ (ใช้ df_period)
@@ -1543,30 +1543,32 @@ with tab_risk:
                 
         st.divider()
     
-        # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
+        # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
+            
+            # แก้ไข: ดึงค่าจากตัวแปรที่คำนวณไว้แล้ว และตั้งค่า Default เป็น 0 หากตัวแปรนั้นยังไม่มีค่า
+            wr_val = w_rate if 'w_rate' in locals() else 0
+            pr_val = avg_profit if 'avg_profit' in locals() else 0
+            ls_val = avg_loss if 'avg_loss' in locals() else 0
+            
             # 1. เตรียมค่า Actual
-            act_wr = win_rate_val / 100
-            act_profit = avg_profit_val / 100
-            act_loss = avg_loss_val / 100
+            act_wr = wr_val / 100
+            act_profit = pr_val / 100
+            act_loss = ls_val / 100
             
-            # 2. สร้าง Range 5 ช่อง (ละ 5% หรือ 0.05)
-            # เราต้องการ [act-0.10, act-0.05, act, act+0.05, act+0.10]
+            # 2. สร้าง Range 5 ช่อง
             wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
-            
-            # สำหรับ Profit ก็ปรับช่วงให้เหมาะสม (เช่น ละ 2.5% หรือ 0.025)
             pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
             
             sim_data = []
             for wr in wr_range:
-                # ป้องกันไม่ให้ Win Rate ติดลบหรือเกิน 100%
                 wr_display = max(0, min(1, wr)) 
                 row = {"Win Rate": f"{wr_display*100:.1f}%"}
                 
                 for pr in pr_range:
                     # คำนวณ Expected Value (EV)
-                    ev = (wr_display * pr) - ((1 - wr_display) * act_loss)
-                    row[f"{pr*100:.1f}% Profit"] = ev * 100 # แสดงผลเป็น %
+                    ev = (wr_display * pr) - ((1 - wr_display) * abs(act_loss)) # ใช้ abs เพื่อให้มั่นใจว่าค่า loss ติดลบ
+                    row[f"{pr*100:.1f}% Profit"] = ev * 100 
                 sim_data.append(row)
             
             df_sim = pd.DataFrame(sim_data).set_index("Win Rate")
@@ -1577,5 +1579,4 @@ with tab_risk:
                 use_container_width=True
             )
             
-            st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {avg_loss_val:.2f}%")
-    
+            st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
