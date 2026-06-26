@@ -1544,10 +1544,9 @@ with tab_risk:
         st.divider()
     
         # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
-        # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-            
-            # 1. ดึงค่าและจัดการ Default value ป้องกัน Error
+    
+            # 1. ดึงค่า Default
             wr_val = w_rate if 'w_rate' in locals() else 0
             pr_val = avg_profit if 'avg_profit' in locals() else 0
             ls_val = avg_loss if 'avg_loss' in locals() else 0
@@ -1564,28 +1563,25 @@ with tab_risk:
             for wr in wr_range:
                 wr_display = max(0, min(1, wr)) 
                 row = {"Win Rate": f"{wr_display*100:.1f}%"}
-                
                 for pr in pr_range:
                     ev = (wr_display * pr) - ((1 - wr_display) * abs(act_loss))
                     row[f"{pr*100:.1f}% Profit"] = ev * 100 
                 sim_data.append(row)
             
-            # 3. แยก Data สำหรับแสดงผล vs Data สำหรับคำนวณสี
+            # 3. เตรียมข้อมูล
             df_full = pd.DataFrame(sim_data)
-            df_display = df_full.set_index("Win Rate")
             
-            # --- จุดที่แก้ไข: ทำความสะอาดข้อมูลตัวเลขก่อนนำไปทำ Gradient ---
+            # แยกส่วนแสดงผล (String) และส่วนคำนวณ (Numeric)
             df_numeric = df_full.drop(columns=["Win Rate"]).astype(float)
-            df_numeric = df_numeric.fillna(0).replace([float('inf'), float('-inf')], 0)
+            df_numeric.index = df_full["Win Rate"] # ใช้ Win Rate เป็น Index
             
-            # 4. แสดงผลตาราง
-            st.dataframe(
-                df_display.style.background_gradient(
-                    cmap="RdYlGn", 
-                    subset=df_display.columns, 
-                    gmap=df_numeric
-                ),
-                use_container_width=True
-            )
+            # 4. ระบายสีจาก df_numeric แล้วค่อยแสดงผล
+            # เราสั่งให้มันระบายสีตัวมันเอง โดยไม่ต้องส่ง gmap
+            st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None)
+            
+            # จัด Format ให้สวยงาม (เปลี่ยนกลับเป็น % ให้ดูง่าย)
+            st_table = st_table.format("{:.2f}%")
+            
+            st.dataframe(st_table, use_container_width=True)
             
             st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
