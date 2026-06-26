@@ -1674,9 +1674,20 @@ with tab_risk:
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
             # 1. เตรียมค่า Actual
-            avg_profit_val = avg_profit  # กำหนดค่าตัวแปรที่ขาดหายไป
-            win_rate_val = w_rate        # กำหนดค่าตัวแปรที่ขาดหายไป
-            win_rate_val = 0
+            # --- ให้ประกาศค่าเริ่มต้นไว้ก่อนเสมอ (ถ้าข้อมูลไม่มี ก็ให้เป็น 0) ---
+            avg_profit = 0.0
+            avg_loss = 0.0
+            w_rate = 0.0
+            
+            # --- แล้วค่อยเริ่มตรวจสอบข้อมูล ---
+            if not df_period.empty:
+                # ... (ส่วนคำนวณเดิมของพี่อ้ำ) ...
+                # ตัวแปร avg_profit, avg_loss, w_rate จะถูกคำนวณใหม่ในนี้
+                avg_profit = (df_period[df_period[col_profit_loss] > 0][col_profit_loss] / 
+                              df_period[df_period[col_profit_loss] > 0][col_cost]).mean() * 100
+                # ...
+            
+            avg_profit_val = avg_profit
             act_wr = win_rate_val / 100
             act_profit = avg_profit_val / 100
             act_loss = avg_loss_val / 100
