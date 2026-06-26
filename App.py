@@ -1653,7 +1653,7 @@ with tab_risk:
                 total_trades = len(df_filtered)
                 win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
                 loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
-                
+            
                 win_rate_val = (len(win_trades) / total_trades) * 100
                 avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
                 avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
@@ -1674,6 +1674,7 @@ with tab_risk:
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
             # 1. เตรียมค่า Actual
+            win_rate_val = 0
             act_wr = win_rate_val / 100
             act_profit = avg_profit_val / 100
             act_loss = avg_loss_val / 100
