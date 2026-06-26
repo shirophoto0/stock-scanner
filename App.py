@@ -1085,27 +1085,27 @@ with tab_dashboard:
             ####################
             # Equity Curve 
             st.subheader("📈 Equity Curve")
-
+        
             df_equity = get_equity_curve_data()
-
-            # 2. ตรวจสอบว่าข้อมูลมีไหม ก่อนจะพล็อต
+    
+            # 1. เช็คว่ามีข้อมูลไหม
             if not df_equity.empty:
-                # เรียกฟังก์ชันพล็อตกราฟคู่ที่พี่อ้ำเขียนไว้
+                # พล็อตกราฟ
                 plot_dual_equity_curve(df_equity)
-            else:
-                st.info("ยังไม่มีข้อมูลสำหรับวาด Equity Curve ครับ")
-
-
                 
-                # สถิติเสริมใต้กราฟ
+                # 2. แสดงสถิติเสริมใต้กราฟ
+                # ใช้คอลัมน์จาก df_equity ที่พี่อ้ำคำนวณไว้ (Market_To_Market แทน Equity ที่หาไม่เจอ)
                 col1, col2 = st.columns(2)
-                max_equity = equity_data['Equity'].max()
-                current_equity = equity_data['Equity'].iloc[-1]
+                max_equity = df_equity['Market_To_Market'].max()
+                current_equity = df_equity['Market_To_Market'].iloc[-1]
+                
                 col1.metric("Equity สูงสุด", f"{max_equity:,.0f} ฿")
                 col2.metric("Equity ปัจจุบัน", f"{current_equity:,.0f} ฿")
+                
             else:
+                # ถ้าไม่มีข้อมูลให้แสดงข้อความนี้ข้อความเดียว
                 st.info("สะสมข้อมูลการเทรดสักพัก เพื่อสร้างเส้น Equity Curve ครับ")
-########################
+#########################            
 with tab_portfolio:
     st.markdown("#### 💼 ระบบบันทึกพอร์ตโฟลิโอส่วนตัว")
     
