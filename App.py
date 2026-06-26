@@ -1674,6 +1674,8 @@ with tab_risk:
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
             # 1. เตรียมค่า Actual
+            avg_profit_val = avg_profit  # กำหนดค่าตัวแปรที่ขาดหายไป
+            win_rate_val = w_rate        # กำหนดค่าตัวแปรที่ขาดหายไป
             win_rate_val = 0
             act_wr = win_rate_val / 100
             act_profit = avg_profit_val / 100
