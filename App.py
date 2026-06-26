@@ -177,6 +177,112 @@ def load_portfolio():
     except Exception as e:
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
+        
+def get_current_portfolio_value():
+    # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
+    total_market_value = 0
+    for item in st.session_state.my_portfolio:
+        ticker = item['หุ้น']
+        shares = item['shares']
+        # ดึงราคาตลาดปัจจุบัน (Real-time)
+        try:
+            m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+        except:
+            m_price = item['avg_price'] # ถ้าดึงไม่ได้ ให้ใช้ราคาต้นทุน
+        total_market_value += (shares * m_price)
+    return total_market_value
+
+def get_equity_curve_data():
+    # 1. เตรียมข้อมูล Journal
+    if "journal_data" not in st.session_state or not st.session_state.journal_data:
+        return pd.DataFrame()
+    
+    df_j = pd.DataFrame(st.session_state.journal_data)
+    # ทำความสะอาดชื่อคอลัมน์ (ตัดช่องว่างหน้าหลัง)
+    df_j.columns = df_j.columns.str.strip()
+    
+    # ตรวจสอบชื่อคอลัมน์จริง (ใช้บรรทัดนี้ Debug ถ้ายัง Error)
+    # st.write("Columns found:", df_j.columns.tolist())
+    
+    # เปลี่ยนชื่อคอลัมน์ให้ตรงกับที่เราเรียกใช้
+    # หากใน Sheet พี่อ้ำเขียนว่า 'กำไร/ขาดทุน' ให้ใช้ชื่อนั้นครับ
+    if 'กำไร/ขาดทุน' in df_j.columns:
+        df_j = df_j.rename(columns={'กำไร/ขาดทุน': 'PnL'})
+    elif 'กำไร/ขาดทุน (บาท)' in df_j.columns:
+        df_j = df_j.rename(columns={'กำไร/ขาดทุน (บาท)': 'PnL'})
+    
+    df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'], errors='coerce')
+
+    # 2. เตรียมข้อมูล CashFlow
+    client = get_gsheet_client()
+    sheet = client.open('.Json').worksheet('CashFlow')
+    df_cash = pd.DataFrame(sheet.get_all_records())
+    df_cash.columns = df_cash.columns.str.strip()
+    df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
+    
+    # 3. Filter วันที่
+    start_date = pd.Timestamp('2026-04-01')
+    df_j = df_j[df_j['วันที่ขาย'] >= start_date].copy()
+    df_cash = df_cash[df_cash['Date'] >= start_date].copy()
+    
+    # 4. คำนวณ
+    daily_pnl = df_j.groupby('วันที่ขาย')['PnL'].sum().cumsum().reset_index()
+    daily_pnl.columns = ['Date', 'Cumulative_PnL']
+    
+    daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
+    daily_cash.columns = ['Date', 'Net_Cash_In']
+    
+    # 5. รวมตาราง
+    df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
+    initial_balance = 69102.44 
+    
+    df_equity['Cash_Base'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
+    
+    # 6. คำนวณ M2M
+    current_market_val = get_total_market_value()
+    # หัก Cumulative PnL ออกเพื่อให้เหลือเงินสดจริง แล้วบวกมูลค่าหุ้นปัจจุบัน
+    df_equity['Market_To_Market'] = (df_equity['Cash_Base'] - df_equity['Cumulative_PnL']) + current_market_val
+    
+    return df_equity
+    
+def get_total_market_value():
+    """คำนวณมูลค่าหุ้นทั้งหมดที่ถืออยู่ ณ ราคาปัจจุบัน"""
+    total_val = 0
+    if "my_portfolio" in st.session_state:
+        for item in st.session_state.my_portfolio:
+            ticker = item['หุ้น']
+            shares = float(item['shares'])
+            try:
+                # ดึงราคาปิดล่าสุด
+                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+            except:
+                m_price = float(item['avg_price']) # ถ้าดึงไม่ได้ ให้ใช้ต้นทุนไปก่อน
+            total_val += (shares * m_price)
+    return total_val
+    
+def plot_dual_equity_curve(df_equity):
+    # df_equity ต้องมีคอลัมน์: 'Date', 'Market_To_Market', 'Cash_Base'
+    
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # เส้นที่ 1: Market to Market (แกนซ้าย)
+    fig.add_trace(
+        go.Scatter(x=df_equity['Date'], y=df_equity['Market_To_Market'], name="มูลค่าพอร์ตจริง (M2M)", line=dict(color="#00CC96", width=2)),
+        secondary_y=False,
+    )
+
+    # เส้นที่ 2: Cash Base (แกนขวา)
+    fig.add_trace(
+        go.Scatter(x=df_equity['Date'], y=df_equity['Cash_Base'], name="เงินสด+กำไรที่ขายแล้ว", line=dict(color="#636EFA", width=2, dash='dot')),
+        secondary_y=True,
+    )
+
+    # ปรับแต่ง Layout
+    fig.update_layout(title_text="เปรียบเทียบพอร์ต: M2M vs Cash Base")
+    fig.update_yaxes(title_text="มูลค่าพอร์ตจริง (฿)", secondary_y=False)
+    fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
+    
+    st.plotly_chart(fig, use_container_width=True)
 
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
@@ -975,7 +1081,25 @@ with tab_dashboard:
             
             fig.tight_layout(pad=2.0)
             st.pyplot(fig)
+            
+            ####################
+            # Equity Curve 
+            st.subheader("📈 Equity Curve")
 
+            equity_data = get_equity_curve_data()
+            
+            if not equity_data.empty:
+                # สร้างกราฟเส้น
+                st.line_chart(equity_data.set_index('Date')['Equity'], color="#00ff00")
+                
+                # สถิติเสริมใต้กราฟ
+                col1, col2 = st.columns(2)
+                max_equity = equity_data['Equity'].max()
+                current_equity = equity_data['Equity'].iloc[-1]
+                col1.metric("Equity สูงสุด", f"{max_equity:,.0f} ฿")
+                col2.metric("Equity ปัจจุบัน", f"{current_equity:,.0f} ฿")
+            else:
+                st.info("สะสมข้อมูลการเทรดสักพัก เพื่อสร้างเส้น Equity Curve ครับ")
 ########################
 with tab_portfolio:
     st.markdown("#### 💼 ระบบบันทึกพอร์ตโฟลิโอส่วนตัว")
