@@ -1088,22 +1088,27 @@ with tab_dashboard:
         
             df_equity = get_equity_curve_data()
     
-            # 1. เช็คว่ามีข้อมูลไหม
             if not df_equity.empty:
                 # พล็อตกราฟ
                 plot_dual_equity_curve(df_equity)
                 
-                # 2. แสดงสถิติเสริมใต้กราฟ
-                # ใช้คอลัมน์จาก df_equity ที่พี่อ้ำคำนวณไว้ (Market_To_Market แทน Equity ที่หาไม่เจอ)
-                col1, col2 = st.columns(2)
-                max_equity = df_equity['Market_To_Market'].max()
-                current_equity = df_equity['Market_To_Market'].iloc[-1]
+                # คำนวณค่าสถิติ
+                max_m2m = df_equity['Market_To_Market'].max()
+                cur_m2m = df_equity['Market_To_Market'].iloc[-1]
+                max_cash = df_equity['Cash_Base'].max()
+                cur_cash = df_equity['Cash_Base'].iloc[-1]
                 
-                col1.metric("Equity สูงสุด", f"{max_equity:,.0f} ฿")
-                col2.metric("Equity ปัจจุบัน", f"{current_equity:,.0f} ฿")
+                # แสดง Metric 4 ช่อง
+                st.markdown("##### 📊 สรุปสถิติพอร์ต")
+                col1, col2 = st.columns(2)
+                col1.metric("มูลค่าพอร์ตสูงสุด (M2M)", f"{max_m2m:,.0f} ฿")
+                col2.metric("มูลค่าพอร์ตปัจจุบัน (M2M)", f"{cur_m2m:,.0f} ฿")
+                
+                col3, col4 = st.columns(2)
+                col3.metric("เงินสด+กำไรสูงสุด", f"{max_cash:,.0f} ฿")
+                col4.metric("เงินสด+กำไรปัจจุบัน", f"{cur_cash:,.0f} ฿")
                 
             else:
-                # ถ้าไม่มีข้อมูลให้แสดงข้อความนี้ข้อความเดียว
                 st.info("สะสมข้อมูลการเทรดสักพัก เพื่อสร้างเส้น Equity Curve ครับ")
 #########################            
 with tab_portfolio:
