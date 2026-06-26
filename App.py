@@ -13,32 +13,6 @@ import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
-def plot_dual_equity_curve(df_equity):
-    # df_equity ต้องมีคอลัมน์: 'Date', 'Market_To_Market', 'Cash_Base'
-    
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    # เส้นที่ 1: Market to Market (แกนซ้าย)
-    fig.add_trace(
-        go.Scatter(x=df_equity['Date'], y=df_equity['Market_To_Market'], name="มูลค่าพอร์ตจริง (M2M)", line=dict(color="#00CC96", width=2)),
-        secondary_y=False,
-    )
-
-    # เส้นที่ 2: Cash Base (แกนขวา)
-    fig.add_trace(
-        go.Scatter(x=df_equity['Date'], y=df_equity['Cash_Base'], name="เงินสด+กำไรที่ขายแล้ว", line=dict(color="#636EFA", width=2, dash='dot')),
-        secondary_y=True,
-    )
-
-    # ปรับแต่ง Layout
-    fig.update_layout(title_text="เปรียบเทียบพอร์ต: M2M vs Cash Base")
-    fig.update_yaxes(title_text="มูลค่าพอร์ตจริง (฿)", secondary_y=False)
-    fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
-    
-    st.plotly_chart(fig, use_container_width=True)
 
 # 2. ฟังก์ชัน Load/Save Sheets
 def get_gsheet_client():
@@ -204,98 +178,6 @@ def load_portfolio():
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
 
-def get_equity_curve_data():
-    # 1. เตรียมข้อมูล Journal
-    if "journal_data" not in st.session_state or not st.session_state.journal_data:
-        return pd.DataFrame()
-    
-    df_j = pd.DataFrame(st.session_state.journal_data)
-    # ทำความสะอาดชื่อคอลัมน์ (ตัดช่องว่างหน้าหลัง)
-    df_j.columns = df_j.columns.str.strip()
-    
-    # ตรวจสอบชื่อคอลัมน์จริง (ใช้บรรทัดนี้ Debug ถ้ายัง Error)
-    # st.write("Columns found:", df_j.columns.tolist())
-    
-    # เปลี่ยนชื่อคอลัมน์ให้ตรงกับที่เราเรียกใช้
-    # หากใน Sheet พี่อ้ำเขียนว่า 'กำไร/ขาดทุน' ให้ใช้ชื่อนั้นครับ
-    if 'กำไร/ขาดทุน' in df_j.columns:
-        df_j = df_j.rename(columns={'กำไร/ขาดทุน': 'PnL'})
-    elif 'กำไร/ขาดทุน (บาท)' in df_j.columns:
-        df_j = df_j.rename(columns={'กำไร/ขาดทุน (บาท)': 'PnL'})
-    
-    df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'], errors='coerce')
-
-    # 2. เตรียมข้อมูล CashFlow
-    client = get_gsheet_client()
-    sheet = client.open('.Json').worksheet('CashFlow')
-    df_cash = pd.DataFrame(sheet.get_all_records())
-    df_cash.columns = df_cash.columns.str.strip()
-    df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
-    
-    # 3. Filter วันที่
-    start_date = pd.Timestamp('2026-04-01')
-    df_j = df_j[df_j['วันที่ขาย'] >= start_date].copy()
-    df_cash = df_cash[df_cash['Date'] >= start_date].copy()
-    
-    # 4. คำนวณ
-    daily_pnl = df_j.groupby('วันที่ขาย')['PnL'].sum().cumsum().reset_index()
-    daily_pnl.columns = ['Date', 'Cumulative_PnL']
-    
-    daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
-    daily_cash.columns = ['Date', 'Net_Cash_In']
-    
-    # 5. รวมตาราง
-    df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
-    initial_balance = 69102.44 
-    
-    df_equity['Cash_Base'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
-    
-    # 6. คำนวณ M2M
-    current_market_val = get_total_market_value()
-    # หัก Cumulative PnL ออกเพื่อให้เหลือเงินสดจริง แล้วบวกมูลค่าหุ้นปัจจุบัน
-    df_equity['Market_To_Market'] = (df_equity['Cash_Base'] - df_equity['Cumulative_PnL']) + current_market_val
-    
-    return df_equity
-    
-def get_total_market_value():
-    """คำนวณมูลค่าหุ้นทั้งหมดที่ถืออยู่ ณ ราคาปัจจุบัน"""
-    total_val = 0
-    if "my_portfolio" in st.session_state:
-        for item in st.session_state.my_portfolio:
-            ticker = item['หุ้น']
-            shares = float(item['shares'])
-            try:
-                # ดึงราคาปิดล่าสุด
-                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
-            except:
-                m_price = float(item['avg_price']) # ถ้าดึงไม่ได้ ให้ใช้ต้นทุนไปก่อน
-            total_val += (shares * m_price)
-    return total_val
-
-def plot_dual_equity_curve(df_equity):
-    # df_equity ต้องมีคอลัมน์: 'Date', 'Market_To_Market', 'Cash_Base'
-    
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    # เส้นที่ 1: Market to Market (แกนซ้าย)
-    fig.add_trace(
-        go.Scatter(x=df_equity['Date'], y=df_equity['Market_To_Market'], name="มูลค่าพอร์ตจริง (M2M)", line=dict(color="#00CC96", width=2)),
-        secondary_y=False,
-    )
-
-    # เส้นที่ 2: Cash Base (แกนขวา)
-    fig.add_trace(
-        go.Scatter(x=df_equity['Date'], y=df_equity['Cash_Base'], name="เงินสด+กำไรที่ขายแล้ว", line=dict(color="#636EFA", width=2, dash='dot')),
-        secondary_y=True,
-    )
-
-    # ปรับแต่ง Layout
-    fig.update_layout(title_text="เปรียบเทียบพอร์ต: M2M vs Cash Base")
-    fig.update_yaxes(title_text="มูลค่าพอร์ตจริง (฿)", secondary_y=False)
-    fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
-    
-    st.plotly_chart(fig, use_container_width=True)
-    
 # --- ส่วนเริ่มต้นของไฟล์ ---#
 
 if "journal_data" not in st.session_state:
@@ -1045,17 +927,7 @@ with tab_dashboard:
                 
                 st.altair_chart(chart_line, use_container_width=True)
 
-            ######### Equity Curve ############
-            st.subheader("📈 Equity Curve")
-
-            equity_data = get_equity_curve_data()
-
-            if not equity_data.empty:
-                # เรียกใช้ฟังก์ชัน Dual Axis ที่เราเขียนไว้
-                plot_dual_equity_curve(equity_data)
-            else:
-                st.info("ไม่มีข้อมูลให้แสดงผลใน Equity Curve")
-                        ##### เร่ิมกราฟกระจายตัว ###########
+            ##### เร่ิมกราฟกระจายตัว ###########
             # --- 1. คำนวณ % ตั้งแต่เนิ่นๆ ---
             df_filtered = df_clean.copy() # หรือตาม logic เดิมของพี่อ้ำ
             # (ตรวจสอบให้แน่ใจว่าได้ filter ตามวันที่เรียบร้อยแล้วก่อนบรรทัดนี้)
@@ -1653,7 +1525,7 @@ with tab_risk:
                 total_trades = len(df_filtered)
                 win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
                 loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
-            
+                
                 win_rate_val = (len(win_trades) / total_trades) * 100
                 avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
                 avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
@@ -1674,20 +1546,6 @@ with tab_risk:
         # 3. ตารางเปรียบเทียบ (แบบซ่อนได้)
         with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
             # 1. เตรียมค่า Actual
-            # --- ให้ประกาศค่าเริ่มต้นไว้ก่อนเสมอ (ถ้าข้อมูลไม่มี ก็ให้เป็น 0) ---
-            avg_profit = 0.0
-            avg_loss = 0.0
-            w_rate = 0.0
-            
-            # --- แล้วค่อยเริ่มตรวจสอบข้อมูล ---
-            if not df_period.empty:
-                # ... (ส่วนคำนวณเดิมของพี่อ้ำ) ...
-                # ตัวแปร avg_profit, avg_loss, w_rate จะถูกคำนวณใหม่ในนี้
-                avg_profit = (df_period[df_period[col_profit_loss] > 0][col_profit_loss] / 
-                              df_period[df_period[col_profit_loss] > 0][col_cost]).mean() * 100
-                # ...
-            
-            avg_profit_val = avg_profit
             act_wr = win_rate_val / 100
             act_profit = avg_profit_val / 100
             act_loss = avg_loss_val / 100
@@ -1721,6 +1579,3 @@ with tab_risk:
             
             st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {avg_loss_val:.2f}%")
     
-
-
-
