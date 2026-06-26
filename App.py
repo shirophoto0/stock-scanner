@@ -13,12 +13,22 @@ import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
+import streamlit as st
 
 # 2. ฟังก์ชัน Load/Save Sheets
+
+
 def get_gsheet_client():
-    # ดึงค่าจาก secrets.toml
-    creds_dict = st.secrets["gcp_service_account"]
-    scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets']
+    scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive"]
+    
+    # เช็คว่าอยู่ใน GitHub Actions หรือไม่
+    if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+        # กรณีรันบน GitHub
+        creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
+    else:
+        # กรณีรันบน Streamlit ปกติ
+        creds_dict = st.secrets["gcp_service_account"]
+        
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client
