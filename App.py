@@ -1086,11 +1086,16 @@ with tab_dashboard:
             # Equity Curve 
             st.subheader("📈 Equity Curve")
 
-            equity_data = get_equity_curve_data()
-            
-            if not equity_data.empty:
-                # สร้างกราฟเส้น
-                st.line_chart(equity_data.set_index('Date')['Equity'], color="#00ff00")
+            df_equity = get_equity_curve_data()
+
+            # 2. ตรวจสอบว่าข้อมูลมีไหม ก่อนจะพล็อต
+            if not df_equity.empty:
+                # เรียกฟังก์ชันพล็อตกราฟคู่ที่พี่อ้ำเขียนไว้
+                plot_dual_equity_curve(df_equity)
+            else:
+                st.info("ยังไม่มีข้อมูลสำหรับวาด Equity Curve ครับ")
+
+
                 
                 # สถิติเสริมใต้กราฟ
                 col1, col2 = st.columns(2)
