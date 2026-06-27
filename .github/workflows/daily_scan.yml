@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.9'
       - name: Install dependencies
-        run: pip install yfinance pandas gspread oauth2client
+        run: pip install streamlit yfinance pandas altair numpy plotly gspread seaborn matplotlib oauth2client
       - name: Run script
         run: python App.py
         env:
