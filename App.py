@@ -1018,12 +1018,13 @@ def main():
         df['Is_52W_High'] = df['Is_52W_High'].astype(bool)
         
         # กรองแบบนี้ครับ (สังเกตว่า True ไม่มีเครื่องหมายคำพูด)
+        # กรองแบบเปรียบเทียบว่าเป็นคำว่า 'true' (ตัวเล็ก) หรือไม่
         if strategy_option == "New High 3M":
-            final_sorted_df = df[df['Is_3M_High'] == True]
+            final_sorted_df = df[df['Is_3M_High'].astype(str).str.lower() == 'true']
         elif strategy_option == "New High 6M":
-            final_sorted_df = df[df['Is_6M_High'] == True]
+            final_sorted_df = df[df['Is_6M_High'].astype(str).str.lower() == 'true']
         elif strategy_option == "New High 52W":
-            final_sorted_df = df[df['Is_52W_High'] == True]
+            final_sorted_df = df[df['Is_52W_High'].astype(str).str.lower() == 'true']
         else:
             final_sorted_df = df
         
