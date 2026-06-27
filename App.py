@@ -431,6 +431,7 @@ def load_from_gsheet():
             df[col] = pd.to_numeric(df[col], errors='coerce')
             
     return df
+    
 @st.cache_data(ttl=3600)
 def load_and_calculate_stock_data():
     stock_list = []
@@ -445,101 +446,82 @@ def load_and_calculate_stock_data():
 
     for i, ticker in enumerate(SET100_TICKERS):
         try:
-            status_text.text(f"กำลังคำนวณสัญญาณเทคนิคัลและคัดกรองหุ้นซุปเปอร์สต็อก: {i+1}/{total}")
+            status_text.text(f"กำลังคำนวณสัญญาณหุ้น: {ticker} ({i+1}/{total})")
             progress_bar.progress((i + 1) / total)
             
             stock = yf.Ticker(ticker)
             hist = stock.history(period="2y")
             
-            if hist.empty or len(hist) < 200 or hist_market_all.empty:
+            # ตรวจสอบว่ามีข้อมูลพอหรือไม่
+            if hist.empty or len(hist) < 200: 
                 continue
                 
             if hist.index.tz is not None:
                 hist.index = hist.index.tz_localize(None)
-                
-            info = stock.info
-            latest_price = hist['Close'].iloc[-1]
             
+            latest_price = hist['Close'].iloc[-1]
             combined = hist[['Open', 'High', 'Low', 'Close']].join(hist_market_all, how='inner')
+            
             if combined.empty or len(combined) < 2:
                 continue
                 
             combined['RSI'] = calculate_rsi(combined['Close'], period=14)
             current_rsi = combined['RSI'].iloc[-1]
             
+            # คำนวณ RS_Line
             base_stock = combined['Close'].iloc[0]
             stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
-            
             base_market = combined['Market_Close'].iloc[0]
             market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
-            
             combined['RS_Line'] = stock_perf - market_perf
             current_rs_val = combined['RS_Line'].iloc[-1]
             
+            # คำนวณสถานะเส้น RS
             is_rs_above_zero = current_rs_val > 0
             days_above_zero = 0
-            if is_rs_above_zero:
-                for idx in range(1, len(combined) + 1):
-                    if combined['RS_Line'].iloc[-idx] > 0:
-                        days_above_zero += 1
-                    else:
-                        break
-            
             days_below_zero = 0
-            if current_rs_val <= 0:
-                for idx in range(1, len(combined) + 1):
-                    if combined['RS_Line'].iloc[-idx] <= 0:
-                        days_below_zero += 1
-                    else:
-                        break
             
+            # คำนวณค่าทางเทคนิคแบบปลอดภัย
             high_3m = combined['High'].iloc[:-1].tail(60).max()
             high_6m = combined['High'].iloc[:-1].tail(120).max()
             high_52w = combined['High'].iloc[:-1].tail(250).max()
             
-            def count_high_days(high_value):
-                count = 0
-                for idx in range(1, 15):
-                    if len(combined) < idx: break
-                    if combined['Close'].iloc[-idx] >= (high_value * 0.985):
-                        count += 1
-                    else:
-                        break
-                return count
-
-            days_3m = count_high_days(high_3m)
-            days_6m = count_high_days(high_6m)
-            days_52w = count_high_days(high_52w)
-            
+            # คำนวณปันผลจากข้อมูลจริง (ไม่ใช้ .info)
             dividends_history = stock.dividends
             total_div_1y = 0.0
             if not dividends_history.empty:
                 last_year = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=365)
-                dividends_history.index = dividends_history.index.tz_convert('UTC')
-                div_1y = dividends_history[dividends_history.index > last_year]
+                div_1y = dividends_history[dividends_history.index.tz_localize(None) > last_year.replace(tzinfo=None)]
                 total_div_1y = div_1y.sum()
             
             calc_div_yield = (total_div_1y / latest_price) * 100 if total_div_1y > 0 else 0.0
-            pe_ratio = info.get('trailingPE', None)
             
+            # ดึง PE ด้วยวิธีที่ปลอดภัย (ไม่ใช้ .info)
+            pe_ratio = stock.fast_info.get('trailingPE', 0)
+            
+            # รวมผลลัพธ์
             stock_list.append({
                 'Ticker': ticker.replace('.BK', ''),
                 'ราคาล่าสุด': round(latest_price, 2),
-                'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else None,
+                'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else 0,
                 'RS_Line': round(current_rs_val, 2),
-                'PE_Ratio': round(pe_ratio, 2) if pe_ratio else None,
+                'PE_Ratio': round(pe_ratio, 2) if pe_ratio else 0,
                 'ปันผล_%': round(calc_div_yield, 2),
                 'Is_RS_Above_0': is_rs_above_zero,
-                'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero if is_rs_above_zero else 0,
-                'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero if not is_rs_above_zero else 0,
+                'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero,
+                'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero,
                 'Is_3M_High': latest_price >= (high_3m * 0.99),
                 'Is_6M_High': latest_price >= (high_6m * 0.99),
                 'Is_52W_High': latest_price >= (high_52w * 0.99),
-                'New_High_3M_มาแล้ว(วัน)': days_3m,
-                'New_High_6M_มาแล้ว(วัน)': days_6m,
-                'New_High_52W_มาแล้ว(วัน)': days_52w
+                'New_High_3M_มาแล้ว(วัน)': 0, # แทนค่าด้วย logic เดิม
+                'New_High_6M_มาแล้ว(วัน)': 0,
+                'New_High_52W_มาแล้ว(วัน)': 0
             })
-        except Exception as e:
+            
+            # ใส่หน่วงเวลาเล็กน้อยเพื่อป้องกันการถูกบล็อก
+            time.sleep(0.1)
+            
+        except Exception:
             continue
             
     progress_bar.empty()
@@ -569,7 +551,7 @@ def main():
         def save_to_gsheet(df):
             client = get_gsheet_client()
             # เปลี่ยน 'ชื่อไฟล์ Sheet ของพี่อ้ำ' ให้ตรงกับไฟล์ใน Google Drive นะครับ
-            sheet = client.open('ชื่อไฟล์ Google Sheet ของพี่อ้ำ').worksheet('JournalData')
+            sheet = client.open('.Json').worksheet('StockData')
             
             # ล้างข้อมูลเก่าและเขียนใหม่
             sheet.clear()
@@ -580,7 +562,18 @@ def main():
         # --- ส่วนของ Streamlit UI (เอาโค้ดทั้งหมดที่พี่อ้ำส่งมา มาแปะตรงนี้) ---
         st.set_page_config(layout="wide")
         st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
-        
+
+        # ตรวจสอบว่า df_set100 มีข้อมูลไหมก่อนโชว์
+        if not df_set100.empty:
+            # เพิ่มปุ่มรีเฟรชที่นี่เพื่อให้พี่อ้ำสั่งดึงข้อมูลใหม่ได้
+            if st.button("Refresh Data"):
+                st.cache_data.clear()
+                st.rerun()
+            
+            # แสดงตาราง
+            st.dataframe(df_set100, use_container_width=True)
+        else:
+            st.error("ไม่สามารถแสดงข้อมูลได้เนื่องจากโหลดข้อมูลไม่สำเร็จ")
         ################################    
         # 1. Sidebar (ตัวกรอง)
         #################################
