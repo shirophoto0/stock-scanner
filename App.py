@@ -114,7 +114,7 @@ def get_current_portfolio_value():
 def save_to_gsheet(df):
     client = get_gsheet_client()
     # เปลี่ยน 'ชื่อไฟล์ Sheet ของพี่อ้ำ' ให้ตรงกับไฟล์ใน Google Drive นะครับ
-    sheet = client.open('ชื่อไฟล์ Google Sheet ของพี่อ้ำ').worksheet('JournalData')
+    sheet = client.open('.Json').worksheet('StockData')
     
     # ล้างข้อมูลเก่าและเขียนใหม่
     sheet.clear()
