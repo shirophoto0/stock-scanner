@@ -1,10 +1,9 @@
-# 1. ฟังก์ชัน Import และ Setup
+# Import และ Setup
 import streamlit as st
-import yfinance as yf
 import pandas as pd
+import yfinance as yf
 import altair as alt
 import numpy as np
-import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
@@ -13,11 +12,10 @@ import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
-import streamlit as st
 
-# 2. ฟังก์ชัน Load/Save Sheets
-
-
+# =============================================================
+# 1. ฟังก์ชันจัดการ Google Sheets (Utility)
+# =============================================================
 def get_gsheet_client():
     scope = ["https://spreadsheets.google.com/feeds", 'https://www.googleapis.com/auth/spreadsheets', "https://www.googleapis.com/auth/drive"]
     
@@ -32,6 +30,85 @@ def get_gsheet_client():
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client
+# =============================================================
+# 2. ฟังก์ชัน Load/Save ข้อมูล
+# =============================================================
+# ปรับฟังก์ชัน SAVE (บันทึกลง Google Sheets)
+def save_journal():
+    df_temp = pd.DataFrame(st.session_state.journal_data)
+    
+    # แปลงวันที่เป็น String ก่อนบันทึก
+    date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
+    for col in date_cols:
+        if col in df_temp.columns:
+            df_temp[col] = pd.to_datetime(df_temp[col], errors='coerce').dt.strftime('%Y-%m-%d')
+            
+    # บันทึกลง Google Sheet
+    client = get_gsheet_client()
+    sheet = client.open('.Json').worksheet('JournalData')
+    
+    # ล้างข้อมูลเดิมและเขียนใหม่ (Header + Data)
+    sheet.clear()
+    sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
+
+def load_journal():
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('.Json').worksheet('JournalData')
+        data = sheet.get_all_records()
+        st.session_state.journal_data = data
+    except Exception as e:
+        st.error(f"ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้: {e}")
+        st.session_state.journal_data = []
+        
+def save_portfolio():
+    try:
+        if st.session_state.my_portfolio is None:
+            st.session_state.my_portfolio = []
+            
+        client = get_gsheet_client()
+        sheet = client.open('.Json').worksheet('PortfolioData')
+        
+        sheet.clear() # ล้างข้อมูลเก่า
+        if st.session_state.my_portfolio:
+            df = pd.DataFrame(st.session_state.my_portfolio)
+            # เขียน Header + ข้อมูล
+            sheet.update([df.columns.values.tolist()] + df.fillna('').values.tolist())
+            st.toast("บันทึกข้อมูลพอร์ตเรียบร้อย!", icon="✅") # เพิ่มตัวช่วยแจ้งเตือน
+        else:
+            st.toast("ข้อมูลพอร์ตว่างเปล่า", icon="⚠️")
+            
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึกพอร์ต: {e}")
+
+# --- ฟังก์ชันโหลดพอร์ต (วางไว้คู่กัน) ---
+def load_portfolio():
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('.Json').worksheet('PortfolioData')
+        data = sheet.get_all_records()
+        
+        # ใส่บรรทัดนี้ไว้เช็ค (รันแล้วลองดูว่ามันแสดงข้อมูลอะไรออกมาที่หน้าเว็บไหม)
+        # st.write("ข้อมูลที่ดึงมา:", data) 
+        
+        st.session_state.my_portfolio = data if data else []
+    except Exception as e:
+        st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
+        st.session_state.my_portfolio = []
+        
+def get_current_portfolio_value():
+    # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
+    total_market_value = 0
+    for item in st.session_state.my_portfolio:
+        ticker = item['หุ้น']
+        shares = item['shares']
+        # ดึงราคาตลาดปัจจุบัน (Real-time)
+        try:
+            m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+        except:
+            m_price = item['avg_price'] # ถ้าดึงไม่ได้ ให้ใช้ราคาต้นทุน
+        total_market_value += (shares * m_price)
+    return total_market_value
 
 def save_to_gsheet(df):
     client = get_gsheet_client()
@@ -58,44 +135,6 @@ def get_gsheet_client():
     ]
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     return gspread.authorize(creds)
-
-# ปรับฟังก์ชัน SAVE (บันทึกลง Google Sheets)
-def save_journal():
-    df_temp = pd.DataFrame(st.session_state.journal_data)
-    
-    # แปลงวันที่เป็น String ก่อนบันทึก
-    date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
-    for col in date_cols:
-        if col in df_temp.columns:
-            df_temp[col] = pd.to_datetime(df_temp[col], errors='coerce').dt.strftime('%Y-%m-%d')
-            
-    # บันทึกลง Google Sheet
-    client = get_gsheet_client()
-    sheet = client.open('.Json').worksheet('JournalData')
-    
-    # ล้างข้อมูลเดิมและเขียนใหม่ (Header + Data)
-    sheet.clear()
-    sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
-
-def save_portfolio():
-    try:
-        if st.session_state.my_portfolio is None:
-            st.session_state.my_portfolio = []
-            
-        client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('PortfolioData')
-        
-        sheet.clear() # ล้างข้อมูลเก่า
-        if st.session_state.my_portfolio:
-            df = pd.DataFrame(st.session_state.my_portfolio)
-            # เขียน Header + ข้อมูล
-            sheet.update([df.columns.values.tolist()] + df.fillna('').values.tolist())
-            st.toast("บันทึกข้อมูลพอร์ตเรียบร้อย!", icon="✅") # เพิ่มตัวช่วยแจ้งเตือน
-        else:
-            st.toast("ข้อมูลพอร์ตว่างเปล่า", icon="⚠️")
-            
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึกพอร์ต: {e}")
         
 def save_cash_balance(amount):
     try:
@@ -145,17 +184,6 @@ def load_total_cash_balance():
     except:
         return 69102.44
         
-# ปรับฟังก์ชัน LOAD (อ่านจาก Google Sheets)
-def load_journal():
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('JournalData')
-        data = sheet.get_all_records()
-        st.session_state.journal_data = data
-    except Exception as e:
-        st.error(f"ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้: {e}")
-        st.session_state.journal_data = []
-
 # ฟังก์ชัน Load ไฟล์ CSV/Excel (ยังคงใช้ได้เหมือนเดิม)
 def load_data_from_file(uploaded_file):
     if uploaded_file is not None:
@@ -172,35 +200,6 @@ def load_data_from_file(uploaded_file):
             st.rerun()
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
-
-# --- ฟังก์ชันโหลดพอร์ต (วางไว้คู่กัน) ---
-def load_portfolio():
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('PortfolioData')
-        data = sheet.get_all_records()
-        
-        # ใส่บรรทัดนี้ไว้เช็ค (รันแล้วลองดูว่ามันแสดงข้อมูลอะไรออกมาที่หน้าเว็บไหม)
-        # st.write("ข้อมูลที่ดึงมา:", data) 
-        
-        st.session_state.my_portfolio = data if data else []
-    except Exception as e:
-        st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
-        st.session_state.my_portfolio = []
-        
-def get_current_portfolio_value():
-    # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
-    total_market_value = 0
-    for item in st.session_state.my_portfolio:
-        ticker = item['หุ้น']
-        shares = item['shares']
-        # ดึงราคาตลาดปัจจุบัน (Real-time)
-        try:
-            m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
-        except:
-            m_price = item['avg_price'] # ถ้าดึงไม่ได้ ให้ใช้ราคาต้นทุน
-        total_market_value += (shares * m_price)
-    return total_market_value
 
 def get_equity_curve_data():
     # 1. เตรียมข้อมูล Journal
@@ -294,7 +293,9 @@ def plot_dual_equity_curve(df_equity):
     
     st.plotly_chart(fig, use_container_width=True)
 
-# --- ส่วนเริ่มต้นของไฟล์ ---#
+# =============================================================
+# ส่วนเร่ิมต้นของ file
+# =============================================================
 
 if "journal_data" not in st.session_state:
     load_journal()   # <--- ใส่บรรทัดนี้ลงไปครับ! มันจะช่วยดึงข้อมูลจากไฟล์มาโชว์ตอนเปิดแอป
@@ -322,7 +323,7 @@ if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = "KBANK"
 
 # =============================================================
-# ฟังก์ชันคำนวณทางเทคนิค (RSI สำหรับใช้ในตารางสแกน)
+# 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
 # =============================================================
 def calculate_rsi(series, period=14):
     delta = series.diff()
@@ -346,9 +347,8 @@ SET100_TICKERS = [
     'SJWD.BK', 'SPALI.BK', 'SPRC.BK', 'STA.BK', 'STGT.BK', 'STEC.BK', 'SYNEX.BK', 'TASCO.BK', 'TCAP.BK', 'THANI.BK',
     'CCET.BK', 'TISCO.BK', 'TMB.BK', 'TOP.BK', 'TOA.BK', 'TPIPP.BK', 'TRUE.BK', 'TTA.BK', 'TTW.BK', 'TU.BK', 'TVI.BK','ttb.BK', 'UNIQ.BK', 'UNION.BK', 'UPA.BK', 'VGI.BK', 'WHA.BK', 'WICE.BK', 'WORK.BK', 'WPH.BK', 'WPRO.BK'
 ]
-# 3. โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
 # =============================================================
-# ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100
+# 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
 # ============================================================
 @st.cache_data(ttl=3600)
 def load_and_calculate_stock_data():
