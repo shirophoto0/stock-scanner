@@ -385,7 +385,7 @@ def load_from_gsheet():
     df = pd.DataFrame(data)
     
     # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ (เพราะดึงมาจาก Sheet มักจะเป็น Text)
-    numeric_cols = ['ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน']
+    numeric_cols = ['ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -488,7 +488,7 @@ def load_and_calculate_stock_data():
                 'PE_Ratio': round(pe_ratio, 2) if pe_ratio else None,
                 'ปันผล_%': round(calc_div_yield, 2),
                 'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else None,
-                'RS_Line_ปัจจุบัน': round(current_rs_val, 2),
+                'RS_Line': round(current_rs_val, 2),
                 'Is_RS_Above_0': is_rs_above_zero,
                 'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero if is_rs_above_zero else 0,
                 'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero if not is_rs_above_zero else 0,
@@ -607,23 +607,23 @@ def main():
         # กรองกลยุทธ์ (เพิ่มเงื่อนไข RS New High)
         if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
             filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
-            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน', 'ตัดเส้น0ขึ้นมาแล้ว(วัน)']
+            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line', 'ตัดเส้น0ขึ้นมาแล้ว(วัน)']
             sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
         
         elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
             # เงื่อนไข: RS Line ปัจจุบัน ต้อง >= ค่าสูงสุดย้อนหลัง 50 วัน (หรือตามที่คุณตั้งค่าไว้)
-            filtered_df = filtered_df[filtered_df['RS_Line_ปัจจุบัน'] >= filtered_df['RS_Line_50D_Max']]
-            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน']
-            sort_by_col, ascending_sort = 'RS_Line_ปัจจุบัน', False
+            filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
+            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
+            sort_by_col, ascending_sort = 'RS_Line', False
         
         elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
             filtered_df = filtered_df[
-                (-5.0 <= filtered_df['RS_Line_ปัจจุบัน']) & 
-                (filtered_df['RS_Line_ปัจจุบัน'] <= 0.0) & 
+                (-5.0 <= filtered_df['RS_Line']) & 
+                (filtered_df['RS_Line'] <= 0.0) & 
                 (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days_threshold)
             ]
-            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน', 'อยู่ใต้เส้น0มาแล้ว(วัน)']
-            sort_by_col, ascending_sort = 'RS_Line_ปัจจุบัน', False
+            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line', 'อยู่ใต้เส้น0มาแล้ว(วัน)']
+            sort_by_col, ascending_sort = 'RS_Line', False
         
         elif strategy_option == "3 Month High":
             filtered_df = filtered_df[filtered_df['Is_3M_High'] == True]
@@ -642,7 +642,7 @@ def main():
             ascending_sort = True
         
         else:
-            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน']
+            show_columns = ['Ticker', 'ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
             sort_by_col, ascending_sort = 'Ticker', True
         
         # สรุปผล
