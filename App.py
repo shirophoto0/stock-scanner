@@ -12,10 +12,12 @@ import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
+
 def get_gsheet_client():
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -23,18 +25,23 @@ def get_gsheet_client():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # ถ้าอยู่ใน GitHub มันจะอ่านจาก os.environ
-    # ถ้าอยู่ใน Streamlit Cloud มันจะอ่านจาก st.secrets
-    if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-        print("GitHub Mode: เริ่มกระบวนการสแกน...")
-        try:
-            df = load_and_calculate_stock_data()
-            print("สแกนเสร็จสิ้น กำลังบันทึก...")
-            save_to_gsheet(df)
-            print("บันทึกข้อมูลเรียบร้อย!")
-        except Exception as e:
-            print(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
-    return gspread.authorize(creds)
+    try:
+        # 1. เช็คจาก GitHub Actions (Environment Variable)
+        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+            creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
+        # 2. เช็คจาก Streamlit Cloud (Secrets)
+        else:
+            # ใช้ dict() เพื่อแปลง st.secrets เป็น dictionary ธรรมดา
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            
+        # สร้าง Credentials ด้วยวิธีมาตรฐานที่รองรับทั้งคู่
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        return gspread.authorize(creds)
+        
+    except Exception as e:
+        # ถ้าพัง ให้ print ออกมาดูใน Log ของ GitHub
+        print(f"Error ในการเชื่อมต่อ Google Sheets: {e}")
+        raise e
 # =============================================================
 # 2. ฟังก์ชัน Load/Save ข้อมูล
 # =============================================================
