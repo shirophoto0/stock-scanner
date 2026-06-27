@@ -618,18 +618,6 @@ def main():
         except:
             st.warning("⚠️ ไม่พบข้อมูลใน Sheet กำลังโหลดใหม่...")
             df_set100 = load_and_calculate_stock_data()
-
-        # ตรวจสอบว่า df_set100 มีข้อมูลไหมก่อนโชว์
-        if not df_set100.empty:
-            # เพิ่มปุ่มรีเฟรชที่นี่เพื่อให้พี่อ้ำสั่งดึงข้อมูลใหม่ได้
-            filtered_df = df_set100.copy()
-            cols_to_numeric = ['PE_Ratio', 'ปันผล_%', 'RSI_14']
-            for col in cols_to_numeric:
-                if col in filtered_df.columns:
-                    filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
-            if st.button("Refresh Data"):
-                st.cache_data.clear()
-                st.rerun()
             
             # แสดงตาราง
             st.dataframe(filtered_df, use_container_width=True)
