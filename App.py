@@ -1017,74 +1017,49 @@ def main():
             st.error(f"⚠️ เกิดข้อผิดพลาดในการวาดกราฟ: {str(e)}")
         
         # =============================================================
-        # 7. ผลลัพธ์การสแกน
+        # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรอง Slider แล้วมาทำต่อ)
         # =============================================================
-        ###################################################
-        # 1. ดึงข้อมูลจาก Sheets
-   
-        if 'filtered_df' in locals():
+        
+        # 1. เช็คว่ามีข้อมูลผ่านการกรอง Slider มาไหม ถ้าไม่มีให้ใช้ df_set100
+        if 'filtered_df' in locals() and not filtered_df.empty:
             df_scan = filtered_df.copy()
         else:
             df_scan = df_set100.copy()
 
-        # 2. แปลงข้อความให้เป็นค่าตรรกะ (สำหรับคอลัมน์ High ต่างๆ)
+        # 2. ฟังก์ชันแปลงข้อมูลให้เป็น Boolean (ห้ามเปลี่ยนชื่อหรือลบออก)
         def to_bool(val):
             return str(val).lower().strip() == 'true'
 
-        for col in ['Is_3M_High', 'Is_6M_High', 'Is_52W_High']:
+        # 3. แปลงคอลัมน์ High ต่างๆ ให้เป็น Boolean
+        bool_cols = ['Is_3M_High', 'Is_6M_High', 'Is_52W_High']
+        for col in bool_cols:
             if col in df_scan.columns:
                 df_scan[col] = df_scan[col].apply(to_bool)
-                
-        # 2. แปลงข้อความให้เป็นค่าตรรกะที่ถูกต้อง (ห้ามใช้ .astype(bool))
-
-        df['Is_3M_High'] = df['Is_3M_High'].apply(to_bool)
-        df['Is_6M_High'] = df['Is_6M_High'].apply(to_bool)
-        df['Is_52W_High'] = df['Is_52W_High'].apply(to_bool)
         
-        # 3. กรองด้วยค่า Boolean ที่ถูกต้องแล้ว
+        # 4. กรองตาม Strategy
         if strategy_option == "3 Month High":
-            final_sorted_df = df[df['Is_3M_High'] == True]
+            final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
         elif strategy_option == "6 Month High":
-            final_sorted_df = df[df['Is_6M_High'] == True]
+            final_sorted_df = df_scan[df_scan['Is_6M_High'] == True]
         elif strategy_option == "52 Week High":
-            final_sorted_df = df[df['Is_52W_High'] == True]
+            final_sorted_df = df_scan[df_scan['Is_52W_High'] == True]
         else:
-            # กรณีเลือก "ไม่กรองเงื่อนไขนี้" หรืออื่นๆ ให้แสดงทั้งหมด
-            final_sorted_df = df
+            final_sorted_df = df_scan
         
-        # 3. DEBUG: ดูว่าหลังกรองแล้วเหลืออะไรบ้าง
-        # st.sidebar.write(f"จำนวนหุ้นที่เหลือ: {len(final_sorted_df)}")
-
-        # ตรวจสอบการทำงานของตัวกรอง (เพิ่มบรรทัดนี้เพื่อ debug)
-        st.write(f"DEBUG: เลือก {strategy_option} เจอหุ้นทั้งหมด {len(final_sorted_df)} ตัว")
-
-        # 4. หากต้องการซ่อนคอลัมน์ Checkbox เพื่อความสวยงาม (เลือกทำ)
-        final_sorted_df = final_sorted_df.drop(columns=['Is_3M_High', 'Is_6M_High', 'Is_52W_High'], errors='ignore')
-            
-        # 5. แสดงผลตาราง
+        # 5. แสดงผล (ใช้ final_sorted_df ที่ผ่านการกรอง 2 ชั้นแล้ว)
         st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): เจอทั้งหมด {len(final_sorted_df)} ตัว")
-        st.write("💡 **คำแนะนำสีไฮไลท์อัจฉริยะ:** สีเขียว 🟢 = เขตสะสมกำลัง (RSI 30-45) | สีแดง 🔴 = เขตร้อนแรงระวังดอย (RSI >= 65)")
         
-        def highlight_rsi_zones(row):
-            if row['RSI_14'] >= 65.0:
-                return ['background-color: #fce4d6; color: black'] * len(row)
-            elif 30.0 <= row['RSI_14'] <= 45.0:
-                return ['background-color: #e2f0d9; color: black'] * len(row)
-            return [''] * len(row)
-            
-        # --- ใส่ Debug ตรงนี้ ---
-        # st.write(f"DEBUG: ก่อนแสดงผล final_sorted_df มีหุ้น {len(final_sorted_df)} ตัว")
-        # -----------------------
+        # ลบเฉพาะคอลัมน์ที่เราไม่ต้องการแสดง
+        df_display = final_sorted_df.drop(columns=bool_cols, errors='ignore')
         
-        styled_df = final_sorted_df.style.format({
-            'ราคาล่าสุด': '{:.2f}',
-            'RSI_14': '{:.2f}',
-            'RS_Line': '{:.2f}',
-            'PE_Ratio': '{:.2f}',
-            'ปันผล_%': '{:.2f}',
+        # ส่วนแสดงผลตาราง (ใช้ df_display)
+        # ... (โค้ด styled_df ของพี่อ้ำ ใช้ df_display แทน final_sorted_df ได้เลยครับ) ...
+        
+        styled_df = df_display.style.format({
+            'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
+            'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
         }, na_rep='-').apply(highlight_rsi_zones, axis=1)
         
-        # แสดงตาราง
         event = st.dataframe(
             styled_df,
             use_container_width=True,
@@ -1092,6 +1067,7 @@ def main():
             on_select="rerun",
             key="stock_table"
         )
+        
         # ดึงข้อมูลการเลือกจาก event
         # เลือกหุ้นจากตาราง scan ไปแสดงผล กราฟ 
         if event.selection and "rows" in event.selection and event.selection["rows"]:
