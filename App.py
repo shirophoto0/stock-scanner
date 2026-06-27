@@ -352,6 +352,24 @@ SET100_TICKERS = [
 # 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
 # ============================================================
 @st.cache_data(ttl=3600)
+def load_from_gsheet():
+    # ดึง Client
+    client = get_gsheet_client()
+    # เปิด Sheet (เปลี่ยนชื่อให้ตรงกับไฟล์ของพี่อ้ำ)
+    sheet = client.open('ชื่อไฟล์ Google Sheet ของพี่อ้ำ').worksheet('JournalData')
+    
+    # ดึงข้อมูลทั้งหมดออกมาเป็น DataFrame
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    
+    # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ (เพราะดึงมาจาก Sheet มักจะเป็น Text)
+    numeric_cols = ['ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน']
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+    return df
+@st.cache_data(ttl=3600)
 def load_and_calculate_stock_data():
     stock_list = []
     progress_bar = st.progress(0)
@@ -473,7 +491,14 @@ def load_and_calculate_stock_data():
 
 def main():
     # โค้ดรันครั้งเดียว: ดึงข้อมูลสแกนหุ้น (ไม่ต้องมี st. จะได้ไม่ error ใน GitHub)
-    df_set100 = load_and_calculate_stock_data()
+    try:
+        # พยายามโหลดจาก Google Sheet ก่อน (เร็วมาก)
+        df_set100 = load_from_gsheet()
+        st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
+    except:
+        # ถ้า Sheet มีปัญหา ให้ไปรันคำนวณใหม่จาก yfinance (สำรอง)
+        st.warning("⚠️ ไม่พบข้อมูลใน Sheet กำลังโหลดใหม่จาก Yahoo Finance...")
+        df_set100 = load_and_calculate_stock_data()
 
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
         # --- ส่วนของ GitHub Actions ---
