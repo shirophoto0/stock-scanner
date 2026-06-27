@@ -677,7 +677,28 @@ def main():
         else:
             # ถ้าหาไม่เจอ ให้ใส่ค่า default เป็น -999 ป้องกัน Error
             df_set100['RS_Line_50D_Max'] = -999.0
+
+        # 1. บังคับแปลงคอลัมน์ให้เป็นตัวเลข (ถ้าแปลงไม่ได้ให้เป็น NaN)
+        cols_to_numeric = ['PE_Ratio', 'ปันผล_%', 'RSI_14']
         
+        for col in cols_to_numeric:
+            if col in filtered_df.columns:
+                filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce')
+        
+        # 2. ทำการกรอง (ใส่เงื่อนไขจัดการค่า NaN เพื่อไม่ให้มันหายไปจากตาราง)
+        # ถ้าอยากให้หุ้นที่ค่าเป็น NaN (ไม่มีข้อมูล) แสดงออกมาด้วย ให้เพิ่มเงื่อนไข .fillna() 
+        # แต่ถ้าอยากกรองเฉพาะหุ้นที่มีค่า ให้ใช้แบบนี้ครับ:
+        
+        if max_pe < 100:
+            filtered_df = filtered_df[filtered_df['PE_Ratio'] <= max_pe]
+        
+        filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
+        
+        filtered_df = filtered_df[
+            (filtered_df['RSI_14'] >= rsi_range[0]) & 
+            (filtered_df['RSI_14'] <= rsi_range[1])
+        ]
+                
         # กรองพื้นฐาน (PE, Dividend, RSI)
         filtered_df = df_set100.copy()
         if max_pe < 100:
