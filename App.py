@@ -636,6 +636,18 @@ def main():
             rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0))
             strategy_option = st.selectbox("เลือกหน้าเทรด:", [...])
 
+                options=[
+                    "ไม่กรองเงื่อนไขนี้", 
+                    "--- กลุ่ม RS Line ---",
+                    "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว", 
+                    "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)",
+                    "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)", 
+                    "--- กลุ่ม New High ---",
+                    "3 Month High", 
+                    "6 Month High", 
+                    "52 Week High"
+                ]
+            )
             # ตรวจสอบว่า df_set100 มีข้อมูลไหมก่อนโชว์
             if not df_set100.empty:
                 # 1. เตรียมข้อมูล
