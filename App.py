@@ -1037,6 +1037,10 @@ def main():
             elif 30.0 <= row['RSI_14'] <= 45.0:
                 return ['background-color: #e2f0d9; color: black'] * len(row)
             return [''] * len(row)
+            
+        # --- ใส่ Debug ตรงนี้ ---
+        st.write(f"DEBUG: ก่อนแสดงผล final_sorted_df มีหุ้น {len(final_sorted_df)} ตัว")
+        # -----------------------
         
         styled_df = final_sorted_df.style.format({
             'ราคาล่าสุด': '{:.2f}',
