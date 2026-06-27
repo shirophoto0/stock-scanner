@@ -1002,10 +1002,17 @@ def main():
         # 7. ผลลัพธ์การสแกน
         # =============================================================
         ###################################################
-        # 1. ดึงข้อมูลจาก Sheets (ทำที่นี่ที่เดียว)
-        df = load_from_gsheet() # ฟังก์ชันนี้ต้องโหลดข้อมูลทั้งหมดที่ GitHub บันทึกไว้
+        # 1. ดึงข้อมูลจาก Sheets
+        df = load_from_gsheet()
         
-        # 2. ทำการกรองตาม Strategy ที่เลือก
+        # 2. ทำความสะอาดข้อมูล (จุดนี้สำคัญมาก! ทำก่อนกรองเสมอ)
+        cols_to_bool = ['Is_3M_High', 'Is_6M_High', 'Is_52W_High']
+        for col in cols_to_bool:
+            if col in df.columns:
+                # แปลงค่าทุกอย่างในคอลัมน์ให้เป็น String ตัวเล็ก แล้วเช็คว่าเป็น 'true' หรือไม่
+                df[col] = df[col].astype(str).str.lower().str.strip() == 'true'
+
+        # 3. ทำการกรองตาม Strategy ที่เลือก
         if strategy_option == "New High 3M":
             final_sorted_df = df[df['Is_3M_High'] == True]
         elif strategy_option == "New High 6M":
@@ -1014,6 +1021,7 @@ def main():
             final_sorted_df = df[df['Is_52W_High'] == True]
         else:
             final_sorted_df = df # กรณีเลือก All หรืออื่นๆ
+            
         st.subheader(f"📊 2. ผลลัพธ์การสแกน ({strategy_option}): เจอทั้งหมด {len(final_sorted_df)} ตัว")
         st.write("💡 **คำแนะนำสีไฮไลท์อัจฉริยะ:** สีเขียว 🟢 = เขตสะสมกำลัง (RSI 30-45) | สีแดง 🔴 = เขตร้อนแรงระวังดอย (RSI >= 65)")
         
