@@ -624,7 +624,7 @@ def main():
                 st.rerun()
             
             # แสดงตาราง
-            st.dataframe(df_set100, use_container_width=True)
+            st.dataframe(filtered_df, use_container_width=True)
         else:
             st.error("ไม่สามารถแสดงข้อมูลได้เนื่องจากโหลดข้อมูลไม่สำเร็จ")
         ################################    
