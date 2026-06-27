@@ -692,6 +692,16 @@ def main():
                     sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
     
                 # 5. แสดงผล
+                results_container = st.empty() 
+            
+                with results_container.container():
+                    st.write(f"จำนวนหุ้นที่พบ: {len(filtered_df)}")
+                    valid_cols = [c for c in show_columns if c in filtered_df.columns]
+                    st.dataframe(
+                        filtered_df[valid_cols].sort_values(by=sort_by_col, ascending=ascending_sort), 
+                        use_container_width=True,
+                        key="stock_table_final" # ใส่ key เพื่อให้ Streamlit มองว่าเป็นคนละตารางกับตอนเริ่ม
+                    )
                 st.write(f"จำนวนหุ้นที่พบ: {len(filtered_df)}")
                 valid_cols = [c for c in show_columns if c in filtered_df.columns]
                 st.dataframe(filtered_df[valid_cols].sort_values(by=sort_by_col, ascending=ascending_sort), use_container_width=True)
@@ -1070,18 +1080,21 @@ def main():
                 st.rerun()
         
         # แก้ไขส่วนการดึงข้อมูลจาก event ให้รัดกุมขึ้น
+        # 6. ดึงข้อมูลการเลือกหุ้น (ใช้การตรวจสอบแบบปลอดภัย)
         if event.selection and "rows" in event.selection and event.selection["rows"]:
             selected_index = event.selection["rows"][0]
             
-            # [จุดสำคัญ] ตรวจสอบว่า Index ที่เลือก มีอยู่จริงในตารางใหม่หรือไม่
+            # ตรวจสอบว่า Index มีอยู่จริงในตารางที่แสดงผลอยู่ปัจจุบัน
             if selected_index < len(final_sorted_df):
                 clicked_ticker = final_sorted_df.iloc[selected_index]['Ticker']
                 
+                # ถ้าหุ้นที่เลือกเปลี่ยนไป ให้ Rerun
                 if st.session_state.get("selected_ticker") != clicked_ticker:
                     st.session_state.selected_ticker = clicked_ticker
                     st.rerun()
             else:
-                # ถ้า Index เกินจำนวนแถว ให้เคลียร์การเลือกหรือทำอะไรบางอย่าง
+                # กรณีตารางถูกกรองใหม่จน Index เกิน ให้ล้างค่า selection ออก
+                st.rerun()
                 st.warning("ตารางถูกกรองใหม่ โปรดเลือกหุ้นใหม่อีกครั้ง")
         # 4. ส่วนของ Tabs ต่างๆ
         # ... (เอาโค้ด tab_dashboard, tab_risk, tab_portfolio ของพี่อ้ำมาใส่) ...
