@@ -528,9 +528,9 @@ def load_and_calculate_stock_data():
                 'Is_RS_Above_0': is_rs_above_zero,
                 'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero,
                 'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero,
-                'Is_3M_High': latest_price >= (high_3m * 0.99),
-                'Is_6M_High': latest_price >= (high_6m * 0.99),
-                'Is_52W_High': latest_price >= (high_52w * 0.99),
+                'Is_3M_High': latest_price >= (high_3m * 0.95),
+                'Is_6M_High': latest_price >= (high_6m * 0.95),
+                'Is_52W_High': latest_price >= (high_52w * 0.95),
                 'New_High_3M_มาแล้ว(วัน)': 0, # แทนค่าด้วย logic เดิม
                 'New_High_6M_มาแล้ว(วัน)': 0,
                 'New_High_52W_มาแล้ว(วัน)': 0
