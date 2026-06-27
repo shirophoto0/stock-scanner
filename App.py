@@ -137,7 +137,7 @@ def load_from_gsheet():
         # แสดงชื่อคอลัมน์ที่อ่านได้จริงออกมาเช็ค (บรรทัดนี้ช่วยได้มาก)
         # st.write("คอลัมน์ที่อ่านได้จาก Sheet:", df.columns.tolist())
         
-        numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line']
+        numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
