@@ -123,13 +123,29 @@ def get_current_portfolio_value():
     return total_market_value
 
 def save_to_gsheet(df):
+    print("DEBUG: กำลังเชื่อมต่อ Google Sheets...")
     client = get_gsheet_client()
-    # เปลี่ยน 'ชื่อไฟล์ Sheet ของพี่อ้ำ' ให้ตรงกับไฟล์ใน Google Drive นะครับ
-    sheet = client.open('MyStockData').worksheet('StockData')
     
-    # ล้างข้อมูลเก่าและเขียนใหม่
+    # 1. ใช้ Key (ID) แทนชื่อไฟล์ เพื่อป้องกันความผิดพลาดกรณีเปลี่ยนชื่อไฟล์
+    # ให้เอาตัวอักษรยาวๆ ใน URL ของ Google Sheets มาใส่แทนตรงนี้ครับ
+    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+    
+    print("DEBUG: กำลังเข้าถึง Worksheet...")
+    sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
+    
+    # 2. ล้างข้อมูลเก่า
+    print("DEBUG: ล้างข้อมูลเดิม...")
     sheet.clear()
-    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    
+    # 3. เตรียมข้อมูล (Header + ข้อมูล)
+    data_to_write = [df.columns.values.tolist()] + df.values.tolist()
+    
+    # 4. เขียนข้อมูลใหม่โดยระบุตำแหน่งเริ่มที่ A1
+    # คำสั่ง update ใน gspread รุ่นใหม่ต้องใส่ 'A1' บอกจุดเริ่มด้วยครับ
+    print("DEBUG: กำลังเขียนข้อมูลลง Sheet...")
+    sheet.update('A1', data_to_write)
+    
+    print("DEBUG: บันทึกข้อมูลเสร็จสิ้น!")
 
 def load_from_gsheet():
     try:
@@ -534,7 +550,16 @@ def load_and_calculate_stock_data():
 ###################################################################
 # # --- ฟังก์ชัน Main ---
 ###################################################################
-
+def save_to_gsheet(df):
+    client = get_gsheet_client()
+    # ใช้ ID แทนชื่อไฟล์เพื่อความชัวร์ (เปลี่ยนเลข ID เป็นของพี่อ้ำนะครับ)
+    sheet = client.open_by_key('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU').worksheet('StockData')
+    
+    sheet.clear()
+    # เขียนข้อมูลโดยระบุตำแหน่ง A1
+    data_to_write = [df.columns.values.tolist()] + df.values.tolist()
+    sheet.update('A1', data_to_write)
+    print("GitHub Actions: บันทึกข้อมูลลง Google Sheet สำเร็จ!")
 def main():
     # โค้ดรันครั้งเดียว: ดึงข้อมูลสแกนหุ้น (ไม่ต้องมี st. จะได้ไม่ error ใน GitHub)
     try:
@@ -550,15 +575,12 @@ def main():
         # --- ส่วนของ GitHub Actions ---
         print("GitHub Mode: ระบบสแกนทำงานเรียบร้อย")
         # ถ้าพี่อ้ำต้องการเซฟผลสแกนลง Sheet ให้ใส่โค้ด save_to_gsheet ที่นี่
-        def save_to_gsheet(df):
-            client = get_gsheet_client()
-            # เปลี่ยน 'ชื่อไฟล์ Sheet ของพี่อ้ำ' ให้ตรงกับไฟล์ใน Google Drive นะครับ
-            sheet = client.open('MyStockData').worksheet('StockData')
-            
-            # ล้างข้อมูลเก่าและเขียนใหม่
-            sheet.clear()
-            sheet.update([df.columns.values.tolist()] + df.values.tolist())
-
+        df_new = load_and_calculate_stock_data()
+        
+        # 2. ต้องเรียกใช้ฟังก์ชันบันทึกที่นี่ครับ!
+        save_to_gsheet(df_new)
+        
+        print("GitHub Mode: ระบบทำงานเสร็จสิ้น")
     
     else:
         # --- ส่วนของ Streamlit UI (เอาโค้ดทั้งหมดที่พี่อ้ำส่งมา มาแปะตรงนี้) ---
