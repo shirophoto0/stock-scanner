@@ -647,7 +647,6 @@ def main():
                 "6 Month High", 
                 "52 Week High"
             ]
-        )
             # ตรวจสอบว่า df_set100 มีข้อมูลไหมก่อนโชว์
             if not df_set100.empty:
                 # 1. เตรียมข้อมูล
