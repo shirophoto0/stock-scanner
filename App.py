@@ -1006,21 +1006,26 @@ def main():
         df = load_from_gsheet()
         
         # 2. ทำความสะอาดข้อมูล (สำคัญ: ต้องทำก่อนทุกการกรอง)
-        cols_to_bool = ['Is_3M_High', 'Is_6M_High', 'Is_52W_High']
-        for col in cols_to_bool:
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.lower().str.strip() == 'true'
-                
-        st.sidebar.write(f"ค่าที่เลือกคือ: '{strategy_option}'")
-        # 3. สร้างตัวแปร final_sorted_df ตามเงื่อนไข
+        # 1. ทำความสะอาดข้อมูลให้เป็น Boolean จริงๆ แบบ "บังคับ"
+        # ตรวจสอบชื่อคอลัมน์ด้วย st.write(df.columns) ถ้ามันมีช่องว่าง ให้แก้ชื่อคอลัมน์ตรงนี้
+        df.columns = df.columns.str.strip() 
+        
+        df['Is_3M_High'] = df['Is_3M_High'].astype(str).str.lower().str.strip() == 'true'
+        df['Is_6M_High'] = df['Is_6M_High'].astype(str).str.lower().str.strip() == 'true'
+        df['Is_52W_High'] = df['Is_52W_High'].astype(str).str.lower().str.strip() == 'true'
+        
+        # 2. กรองข้อมูล (ใช้ .loc เพื่อความปลอดภัย)
         if strategy_option == "New High 3M":
-            final_sorted_df = df[df['Is_3M_High'] == True].copy()
+            final_sorted_df = df.loc[df['Is_3M_High'] == True]
         elif strategy_option == "New High 6M":
-            final_sorted_df = df[df['Is_6M_High'] == True].copy()
+            final_sorted_df = df.loc[df['Is_6M_High'] == True]
         elif strategy_option == "New High 52W":
-            final_sorted_df = df[df['Is_52W_High'] == True].copy()
+            final_sorted_df = df.loc[df['Is_52W_High'] == True]
         else:
-            final_sorted_df = df.copy() # กรณีเลือก All หรืออื่นๆ
+            final_sorted_df = df
+        
+        # 3. DEBUG: ดูว่าหลังกรองแล้วเหลืออะไรบ้าง
+        st.sidebar.write(f"จำนวนหุ้นที่เหลือ: {len(final_sorted_df)}")
 
         # ตรวจสอบการทำงานของตัวกรอง (เพิ่มบรรทัดนี้เพื่อ debug)
         # st.write(f"DEBUG: เลือก {strategy_option} เจอหุ้นทั้งหมด {len(final_sorted_df)} ตัว")
