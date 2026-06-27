@@ -564,7 +564,9 @@ def main():
     # โค้ดรันครั้งเดียว: ดึงข้อมูลสแกนหุ้น (ไม่ต้องมี st. จะได้ไม่ error ใน GitHub)
     try:
         # พยายามโหลดจาก Google Sheet ก่อน (เร็วมาก)
-        df_set100 = load_from_gsheet()
+        # df_set100 = load_from_gsheet()
+        # ใช้บรรทัดนี้แทน เพื่อดึงสดจาก Yahoo Finance
+        df_set100 = load_and_calculate_stock_data()
         st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
     except:
         # ถ้า Sheet มีปัญหา ให้ไปรันคำนวณใหม่จาก yfinance (สำรอง)
