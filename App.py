@@ -23,10 +23,13 @@ def get_gsheet_client():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # เช็คว่าอยู่ใน GitHub Actions หรือไม่
+    # ถ้าอยู่ใน GitHub มันจะอ่านจาก os.environ
+    # ถ้าอยู่ใน Streamlit Cloud มันจะอ่านจาก st.secrets
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+        import json
         creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
     else:
+        # ดึงจาก Streamlit Secrets
         creds_dict = st.secrets["gcp_service_account"]
         
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
@@ -148,16 +151,7 @@ def load_from_gsheet():
         st.error(f"DEBUG: {e}") 
         return None
 
-# ฟังก์ชันเชื่อมต่อ Google Sheets
-def get_gsheet_client():
-    creds_dict = st.secrets["gcp_service_account"]
-    # เพิ่ม Scope ให้ครอบคลุมทุกอย่างที่ Google Sheets ต้องการ
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    return gspread.authorize(creds)
+
         
 def save_cash_balance(amount):
     try:
