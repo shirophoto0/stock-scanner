@@ -582,6 +582,14 @@ def save_to_gsheet(df):
     data_to_write = [df.columns.values.tolist()] + df.values.tolist()
     sheet.update('A1', data_to_write)
     print("GitHub Actions: บันทึกข้อมูลลง Google Sheet สำเร็จ!")
+
+def highlight_rsi_zones(row):
+    if row['RSI_14'] >= 65.0:
+        return ['background-color: #fce4d6; color: black'] * len(row)
+    elif 30.0 <= row['RSI_14'] <= 45.0:
+        return ['background-color: #e2f0d9; color: black'] * len(row)
+    return [''] * len(row)
+
 #####################################
 # Def Main ส่วนครอบ code ทั้งหมด
 ######################################
@@ -1058,7 +1066,7 @@ def main():
         styled_df = df_display.style.format({
             'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
             'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
-        }, na_rep='-').apply(highlight_rsi_zones, axis=1)
+        }, na_rep='-').apply(highlight_rsi_zones, axis=1)   
         
         event = st.dataframe(
             styled_df,
