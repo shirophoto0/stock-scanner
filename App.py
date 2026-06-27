@@ -1010,10 +1010,14 @@ def main():
         # ตรวจสอบชื่อคอลัมน์ด้วย st.write(df.columns) ถ้ามันมีช่องว่าง ให้แก้ชื่อคอลัมน์ตรงนี้
         df.columns = df.columns.str.strip() 
         
-        df['Is_3M_High'] = df['Is_3M_High'].astype(str).str.lower().str.strip() == 'true'
-        df['Is_6M_High'] = df['Is_6M_High'].astype(str).str.lower().str.strip() == 'true'
-        df['Is_52W_High'] = df['Is_52W_High'].astype(str).str.lower().str.strip() == 'true'
+        st.write("ตัวอย่างข้อมูลคอลัมน์ Is_3M_High:", df['Is_3M_High'].unique())
+        st.write("ประเภทของข้อมูลในคอลัมน์:", type(df['Is_3M_High'].iloc[0]))
         
+        # 2. บังคับแปลงด้วยวิธีที่ "ดุ" กว่าเดิม (เผื่อใน Sheet เป็นเลข 1 หรือ True ที่เป็น Text)
+        df['Is_3M_High'] = df['Is_3M_High'].apply(lambda x: str(x).lower().strip() in ['true', '1', 't', 'yes'])
+        df['Is_6M_High'] = df['Is_6M_High'].apply(lambda x: str(x).lower().strip() in ['true', '1', 't', 'yes'])
+        df['Is_52W_High'] = df['Is_52W_High'].apply(lambda x: str(x).lower().strip() in ['true', '1', 't', 'yes'])
+
         # 2. กรองข้อมูล (ใช้ .loc เพื่อความปลอดภัย)
         if strategy_option == "New High 3M":
             final_sorted_df = df.loc[df['Is_3M_High'] == True]
