@@ -494,7 +494,7 @@ def load_and_calculate_stock_data():
                 div_1y = dividends_history[dividends_history.index.tz_localize(None) > last_year.replace(tzinfo=None)]
                 total_div_1y = div_1y.sum()
             
-            calc_div_yield = (total_div_1y / latest_price) / 100 if total_div_1y > 0 else 0.0
+            calc_div_yield = ((total_div_1y / latest_price) * 100) if total_div_1y > 0 else 0.0
             
             # ดึง PE ด้วยวิธีที่ปลอดภัย (ไม่ใช้ .info)
             pe_ratio = stock.fast_info.get('trailingPE', 0)
