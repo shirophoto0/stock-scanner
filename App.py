@@ -956,7 +956,7 @@ def main():
             'PE_Ratio': '{:.2f}',
             'ปันผล_%': '{:.2f}',
             'RSI_14': '{:.2f}',
-            'RS_Line_ปัจจุบัน': '{:.2f}'
+            'RS_Line': '{:.2f}'
         }, na_rep='-').apply(highlight_rsi_zones, axis=1)
         
         
