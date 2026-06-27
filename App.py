@@ -144,8 +144,8 @@ def load_from_gsheet():
         return df
 
     except Exception as e:
-        # พ่น error ออกมาให้ชัดเจน
-        st.error(f"รายละเอียด Error คือ: {e}")
+        # แทนที่จะให้มันแสดงข้อความที่เราพิมพ์ไว้ ให้มันแสดง Error จากระบบเลยครับ
+        st.error(f"DEBUG: {e}") 
         return None
 
 # ฟังก์ชันเชื่อมต่อ Google Sheets
