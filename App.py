@@ -1720,42 +1720,42 @@ def main():
             
                 # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
                 with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-                # 1. ดึงค่า Default
-                wr_val = w_rate if 'w_rate' in locals() else 0
-                pr_val = avg_profit if 'avg_profit' in locals() else 0
-                ls_val = avg_loss if 'avg_loss' in locals() else 0
-                
-                act_wr = wr_val / 100
-                act_profit = pr_val / 100
-                act_loss = ls_val / 100
-                
-                # 2. สร้าง Range
-                wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
-                pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
-                
-                sim_data = []
-                for wr in wr_range:
-                    wr_display = max(0, min(1, wr)) 
-                    row = {"Win Rate": f"{wr_display*100:.1f}%"}
-                    for pr in pr_range:
-                        ev = (wr_display * pr) - ((1 - wr_display) * abs(act_loss))
-                        row[f"{pr*100:.1f}% Profit"] = ev * 100 
-                    sim_data.append(row)
-                
-                # 3. เตรียมข้อมูลและเซต Index
-                df_full = pd.DataFrame(sim_data)
-                df_full = df_full.set_index("Win Rate")
-                
-                # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
-                df_numeric = df_full.astype(float)
-                
-                # 5. สร้าง Styler และจัด Format (แก้ปัญหา Styler object Error)
-                st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
-                
-                # 6. แสดงผลผ่านตาราง
-                st.dataframe(st_table, use_container_width=True)
-                
-                st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
+                    # 1. ดึงค่า Default
+                    wr_val = w_rate if 'w_rate' in locals() else 0
+                    pr_val = avg_profit if 'avg_profit' in locals() else 0
+                    ls_val = avg_loss if 'avg_loss' in locals() else 0
+                    
+                    act_wr = wr_val / 100
+                    act_profit = pr_val / 100
+                    act_loss = ls_val / 100
+                    
+                    # 2. สร้าง Range
+                    wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
+                    pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
+                    
+                    sim_data = []
+                    for wr in wr_range:
+                        wr_display = max(0, min(1, wr)) 
+                        row = {"Win Rate": f"{wr_display*100:.1f}%"}
+                        for pr in pr_range:
+                            ev = (wr_display * pr) - ((1 - wr_display) * abs(act_loss))
+                            row[f"{pr*100:.1f}% Profit"] = ev * 100 
+                        sim_data.append(row)
+                    
+                    # 3. เตรียมข้อมูลและเซต Index
+                    df_full = pd.DataFrame(sim_data)
+                    df_full = df_full.set_index("Win Rate")
+                    
+                    # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
+                    df_numeric = df_full.astype(float)
+                    
+                    # 5. สร้าง Styler และจัด Format (แก้ปัญหา Styler object Error)
+                    st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
+                    
+                    # 6. แสดงผลผ่านตาราง
+                    st.dataframe(st_table, use_container_width=True)
+                    
+                    st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
 
 
 if __name__ == "__main__":
