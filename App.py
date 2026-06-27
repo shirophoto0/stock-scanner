@@ -1023,10 +1023,17 @@ def main():
         # 1. ดึงข้อมูลจาก Sheets
         df = load_from_gsheet()
         df.columns = df.columns.str.strip() 
+        df_scan = filtered_df.copy() 
 
-        # 2. แปลงข้อความให้เป็นค่าตรรกะที่ถูกต้อง (ห้ามใช้ .astype(bool))
+        # 2. แปลงข้อความให้เป็นค่าตรรกะ (สำหรับคอลัมน์ High ต่างๆ)
         def to_bool(val):
             return str(val).lower().strip() == 'true'
+
+        for col in ['Is_3M_High', 'Is_6M_High', 'Is_52W_High']:
+            if col in df_scan.columns:
+                df_scan[col] = df_scan[col].apply(to_bool)
+                
+        # 2. แปลงข้อความให้เป็นค่าตรรกะที่ถูกต้อง (ห้ามใช้ .astype(bool))
 
         df['Is_3M_High'] = df['Is_3M_High'].apply(to_bool)
         df['Is_6M_High'] = df['Is_6M_High'].apply(to_bool)
