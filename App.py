@@ -122,7 +122,7 @@ def save_to_gsheet(df):
 
 def load_from_gsheet():
     client = get_gsheet_client()
-    sheet = client.open('ชื่อไฟล์ Google Sheet ของพี่อ้ำ').worksheet('JournalData')
+    sheet = client.open('.Json').worksheet('StockData')
     data = sheet.get_all_records()
     return pd.DataFrame(data)
 
