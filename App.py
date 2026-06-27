@@ -537,7 +537,7 @@ def main():
             elif time_choice == "6 เดือน (120 วันทำการ)":
                 min_days_threshold = 120
             else:
-        min_days_threshold = 240
+                min_days_threshold = 240
         
         # 2. การคำนวณและ Filter 
         # ... (เอาโค้ดส่วน Filter ของพี่อ้ำมาใส่) ...
