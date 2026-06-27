@@ -1005,21 +1005,6 @@ def main():
         # 1. ดึงข้อมูลจาก Sheets
         df = load_from_gsheet()
 
-        # ก่อนจะกรอง ให้เช็คและแปลงข้อมูลให้ชัวร์
-        # ถ้าค่าใน Sheet คือ "TRUE" หรือ "true" หรือแม้แต่ 1 การใช้ str(x) จะทำให้เราตรวจสอบได้ง่ายขึ้น
-        def clean_and_filter(df):
-            # 1. แปลงคอลัมน์ให้เป็น String ตัวเล็กให้หมด เพื่อตัดปัญหาตัวพิมพ์ใหญ่-เล็ก
-            cols = ['Is_3M_High', 'Is_6M_High', 'Is_52W_High']
-            for col in cols:
-                df[col] = df[col].apply(lambda x: str(x).lower().strip())
-            
-            # 2. ตอนนี้คอลัมน์พวกนี้จะเป็นคำว่า 'true' หรือ 'false' (ที่เป็น String แล้ว)
-            # 3. กรองตามตัวเลือก
-            if strategy_option == "New High 3M":
-                return df[df['Is_3M_High'] == 'true']
-    # ... ทำแบบเดียวกันกับตัวอื่น
-        # 2. ทำความสะอาดข้อมูล (สำคัญ: ต้องทำก่อนทุกการกรอง)
-        # 1. ทำความสะอาดข้อมูลให้เป็น Boolean จริงๆ แบบ "บังคับ"
         # ตรวจสอบชื่อคอลัมน์ด้วย st.write(df.columns) ถ้ามันมีช่องว่าง ให้แก้ชื่อคอลัมน์ตรงนี้
         df.columns = df.columns.str.strip() 
         
@@ -1027,17 +1012,18 @@ def main():
         st.write("ประเภทของข้อมูลในคอลัมน์:", type(df['Is_3M_High'].iloc[0]))
         
         # 2. บังคับแปลงด้วยวิธีที่ "ดุ" กว่าเดิม (เผื่อใน Sheet เป็นเลข 1 หรือ True ที่เป็น Text)
-        df['Is_3M_High'] = df['Is_3M_High'].apply(lambda x: str(x).lower().strip() in ['true', '1', 't', 'yes'])
-        df['Is_6M_High'] = df['Is_6M_High'].apply(lambda x: str(x).lower().strip() in ['true', '1', 't', 'yes'])
-        df['Is_52W_High'] = df['Is_52W_High'].apply(lambda x: str(x).lower().strip() in ['true', '1', 't', 'yes'])
-
-        # 2. กรองข้อมูล (ใช้ .loc เพื่อความปลอดภัย)
+        # ก่อนจะเข้า if/elif ให้มั่นใจว่าคอลัมน์เป็น Boolean แท้ๆ
+        df['Is_3M_High'] = df['Is_3M_High'].astype(bool)
+        df['Is_6M_High'] = df['Is_6M_High'].astype(bool)
+        df['Is_52W_High'] = df['Is_52W_High'].astype(bool)
+        
+        # กรองแบบนี้ครับ (สังเกตว่า True ไม่มีเครื่องหมายคำพูด)
         if strategy_option == "New High 3M":
-            final_sorted_df = df.loc[df['Is_3M_High'] == True]
+            final_sorted_df = df[df['Is_3M_High'] == True]
         elif strategy_option == "New High 6M":
-            final_sorted_df = df.loc[df['Is_6M_High'] == True]
+            final_sorted_df = df[df['Is_6M_High'] == True]
         elif strategy_option == "New High 52W":
-            final_sorted_df = df.loc[df['Is_52W_High'] == True]
+            final_sorted_df = df[df['Is_52W_High'] == True]
         else:
             final_sorted_df = df
         
