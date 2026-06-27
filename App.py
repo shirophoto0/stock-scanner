@@ -1015,13 +1015,14 @@ def main():
         df['Is_52W_High'] = df['Is_52W_High'].apply(to_bool)
         
         # 3. กรองด้วยค่า Boolean ที่ถูกต้องแล้ว
-        if strategy_option == "New High 3M":
+        if strategy_option == "3 Month High":
             final_sorted_df = df[df['Is_3M_High'] == True]
-        elif strategy_option == "New High 6M":
+        elif strategy_option == "6 Month High":
             final_sorted_df = df[df['Is_6M_High'] == True]
-        elif strategy_option == "New High 52W":
+        elif strategy_option == "52 Week High":
             final_sorted_df = df[df['Is_52W_High'] == True]
         else:
+            # กรณีเลือก "ไม่กรองเงื่อนไขนี้" หรืออื่นๆ ให้แสดงทั้งหมด
             final_sorted_df = df
         
         # 3. DEBUG: ดูว่าหลังกรองแล้วเหลืออะไรบ้าง
