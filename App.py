@@ -123,24 +123,21 @@ def save_to_gsheet(df):
 def load_from_gsheet():
     try:
         client = get_gsheet_client()
-        # เปลี่ยน 'ชื่อไฟล์ตรงๆ ใน Google Drive' ให้เป็นชื่อไฟล์พี่อ้ำจริงๆ นะครับ
-        file_name = '.Json' 
-        sheet_name = 'StockData'
-        
-        sheet = client.open('.Json').worksheet('StockData')
+        # เปลี่ยน 'ชื่อไฟล์ของคุณ' ให้ตรงนะครับ
+        sheet = client.open('ชื่อไฟล์ของคุณ').worksheet('StockData')
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
-        # ใส่ตัวแปลงตัวเลข
-        numeric_cols = ['ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน']
+        # แก้ตรงนี้ให้ตรงกับ Header ใน Sheet เป๊ะๆ
+        numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line']
+        
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
+        
         return df
-
     except Exception as e:
-        # ตรงนี้คือหัวใจสำคัญครับ มันจะแสดงสาเหตุที่แท้จริงให้พี่อ้ำเห็นบนหน้าเว็บ
-        st.error(f"เกิดข้อผิดพลาดในการโหลดจาก Sheet: {type(e).__name__} - {e}")
+        st.error(f"Error: {e}")
         return None
 
 # ฟังก์ชันเชื่อมต่อ Google Sheets
