@@ -707,17 +707,7 @@ def main():
                 # กรองคอลัมน์ที่เลือกให้โชว์
                 valid_cols = [c for c in show_columns if c in filtered_df.columns]
                 
-                # แสดงตาราง
-                st.dataframe(
-                    filtered_df[valid_cols].sort_values(by=sort_by_col, ascending=ascending_sort), 
-                    use_container_width=True,
-                    key="final_table" # ใส่ Key เพื่อให้ Streamlit อัปเดตตารางใหม่เมื่อ filtered_df เปลี่ยน
-                )
                 
-                # ปุ่ม Refresh
-                if st.button("Refresh Data"):
-                    st.cache_data.clear()
-                    st.rerun()
 
         ##########################
         # 4. ส่วนการเลือกหุ้น (เป็นตัวกลางส่งค่าไป Fundamental และ กราฟ)
