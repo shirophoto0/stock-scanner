@@ -26,13 +26,14 @@ def get_gsheet_client():
     # ถ้าอยู่ใน GitHub มันจะอ่านจาก os.environ
     # ถ้าอยู่ใน Streamlit Cloud มันจะอ่านจาก st.secrets
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-        import json
-        creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
-    else:
-        # ดึงจาก Streamlit Secrets
-        creds_dict = st.secrets["gcp_service_account"]
-        
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        print("GitHub Mode: เริ่มกระบวนการสแกน...")
+        try:
+            df = load_and_calculate_stock_data()
+            print("สแกนเสร็จสิ้น กำลังบันทึก...")
+            save_to_gsheet(df)
+            print("บันทึกข้อมูลเรียบร้อย!")
+        except Exception as e:
+            print(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
     return gspread.authorize(creds)
 # =============================================================
 # 2. ฟังก์ชัน Load/Save ข้อมูล
