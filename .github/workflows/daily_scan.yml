@@ -17,6 +17,6 @@ jobs:
       - name: Install dependencies
         run: pip install yfinance pandas gspread oauth2client
       - name: Run script
-        run: python scanner.py # เปลี่ยนชื่อไฟล์ให้ตรงกับไฟล์ Python ของพี่อ้ำ
+        run: python App.py # เปลี่ยนชื่อไฟล์ให้ตรงกับไฟล์ Python ของพี่อ้ำ
         env:
           GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
