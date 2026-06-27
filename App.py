@@ -1010,7 +1010,8 @@ def main():
         for col in cols_to_bool:
             if col in df.columns:
                 df[col] = df[col].astype(str).str.lower().str.strip() == 'true'
-
+                
+        st.sidebar.write(f"ค่าที่เลือกคือ: '{strategy_option}'")
         # 3. สร้างตัวแปร final_sorted_df ตามเงื่อนไข
         if strategy_option == "New High 3M":
             final_sorted_df = df[df['Is_3M_High'] == True].copy()
