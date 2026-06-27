@@ -1021,7 +1021,7 @@ def main():
         # =============================================================
         ###################################################
         # 1. ดึงข้อมูลจาก Sheets
-        df = load_from_gsheet()
+   
         df.columns = df.columns.str.strip() 
         df_scan = filtered_df.copy() 
 
