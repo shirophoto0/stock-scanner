@@ -707,18 +707,19 @@ def main():
                 # 5. แสดงผล
                 results_container = st.empty() 
             
-                with results_container.container():
-                    st.write(f"จำนวนหุ้นที่พบ: {len(filtered_df)}")
-                    valid_cols = [c for c in show_columns if c in filtered_df.columns]
-                    st.dataframe(
-                        filtered_df[valid_cols].sort_values(by=sort_by_col, ascending=ascending_sort), 
-                        use_container_width=True,
-                        key="stock_table_final" # ใส่ key เพื่อให้ Streamlit มองว่าเป็นคนละตารางกับตอนเริ่ม
-                    )
                 st.write(f"จำนวนหุ้นที่พบ: {len(filtered_df)}")
+            
+                # กรองคอลัมน์ที่เลือกให้โชว์
                 valid_cols = [c for c in show_columns if c in filtered_df.columns]
-                st.dataframe(filtered_df[valid_cols].sort_values(by=sort_by_col, ascending=ascending_sort), use_container_width=True)
                 
+                # แสดงตาราง
+                st.dataframe(
+                    filtered_df[valid_cols].sort_values(by=sort_by_col, ascending=ascending_sort), 
+                    use_container_width=True,
+                    key="final_table" # ใส่ Key เพื่อให้ Streamlit อัปเดตตารางใหม่เมื่อ filtered_df เปลี่ยน
+                )
+                
+                # ปุ่ม Refresh
                 if st.button("Refresh Data"):
                     st.cache_data.clear()
                     st.rerun()
