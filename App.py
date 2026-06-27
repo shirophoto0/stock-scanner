@@ -121,20 +121,14 @@ def save_to_gsheet(df):
     sheet.update([df.columns.values.tolist()] + df.values.tolist())
 
 def load_from_gsheet():
-    client = get_gsheet_client()
-    # เปลี่ยน 'SET100_Scanner' เป็นชื่อไฟล์จริงๆ ที่พี่อ้ำเห็นใน Google Drive ครับ
-    sheet = client.open('SET100_Scanner').worksheet('StockData')
-    
-    data = sheet.get_all_records()
-    df = pd.DataFrame(data)
-    
-    # อย่าลืมแปลงตัวเลขด้วยนะครับ ไม่งั้นข้อมูลจาก Sheet จะเป็นข้อความหมด
-    numeric_cols = ['ราคาล่าสุด', 'PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line_ปัจจุบัน']
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-    return df
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('ชื่อไฟล์ Google Sheet ของพี่อ้ำ').worksheet('JournalData')
+        data = sheet.get_all_records()
+        return pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"Error รายละเอียด: {e}") # <--- เพิ่มบรรทัดนี้ครับ
+        return None
 
 # ฟังก์ชันเชื่อมต่อ Google Sheets
 def get_gsheet_client():
