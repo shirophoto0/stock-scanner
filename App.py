@@ -123,21 +123,29 @@ def save_to_gsheet(df):
 def load_from_gsheet():
     try:
         client = get_gsheet_client()
-        # เปลี่ยน 'ชื่อไฟล์ของคุณ' ให้ตรงนะครับ
+        # เปลี่ยน 'ใส่ชื่อไฟล์ตรงนี้' ให้เป็นชื่อไฟล์จริงๆ ใน Google Drive
+        # ถ้าชื่อมีช่องว่าง หรือสัญลักษณ์ ต้องใส่ให้ครบนะครับ
         sheet = client.open('.Json').worksheet('StockData')
+        
         data = sheet.get_all_records()
+        if not data:
+            st.error("พบไฟล์และแผ่นงาน แต่ไม่มีข้อมูลข้างในครับ!")
+            return None
+            
         df = pd.DataFrame(data)
         
-        # แก้ตรงนี้ให้ตรงกับ Header ใน Sheet เป๊ะๆ
-        numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line']
+        # แสดงชื่อคอลัมน์ที่อ่านได้จริงออกมาเช็ค (บรรทัดนี้ช่วยได้มาก)
+        # st.write("คอลัมน์ที่อ่านได้จาก Sheet:", df.columns.tolist())
         
+        numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line']
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-        
         return df
+
     except Exception as e:
-        st.error(f"Error: {e}")
+        # พ่น error ออกมาให้ชัดเจน
+        st.error(f"รายละเอียด Error คือ: {e}")
         return None
 
 # ฟังก์ชันเชื่อมต่อ Google Sheets
