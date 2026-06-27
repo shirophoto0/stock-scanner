@@ -1005,24 +1005,30 @@ def main():
         # 1. ดึงข้อมูลจาก Sheets
         df = load_from_gsheet()
         
-        # 2. ทำความสะอาดข้อมูล (จุดนี้สำคัญมาก! ทำก่อนกรองเสมอ)
+        # 2. ทำความสะอาดข้อมูล (สำคัญ: ต้องทำก่อนทุกการกรอง)
         cols_to_bool = ['Is_3M_High', 'Is_6M_High', 'Is_52W_High']
         for col in cols_to_bool:
             if col in df.columns:
-                # แปลงค่าทุกอย่างในคอลัมน์ให้เป็น String ตัวเล็ก แล้วเช็คว่าเป็น 'true' หรือไม่
                 df[col] = df[col].astype(str).str.lower().str.strip() == 'true'
 
-        # 3. ทำการกรองตาม Strategy ที่เลือก
+        # 3. สร้างตัวแปร final_sorted_df ตามเงื่อนไข
         if strategy_option == "New High 3M":
-            final_sorted_df = df[df['Is_3M_High'] == True]
+            final_sorted_df = df[df['Is_3M_High'] == True].copy()
         elif strategy_option == "New High 6M":
-            final_sorted_df = df[df['Is_6M_High'] == True]
+            final_sorted_df = df[df['Is_6M_High'] == True].copy()
         elif strategy_option == "New High 52W":
-            final_sorted_df = df[df['Is_52W_High'] == True]
+            final_sorted_df = df[df['Is_52W_High'] == True].copy()
         else:
-            final_sorted_df = df # กรณีเลือก All หรืออื่นๆ
+            final_sorted_df = df.copy() # กรณีเลือก All หรืออื่นๆ
+
+        # ตรวจสอบการทำงานของตัวกรอง (เพิ่มบรรทัดนี้เพื่อ debug)
+        # st.write(f"DEBUG: เลือก {strategy_option} เจอหุ้นทั้งหมด {len(final_sorted_df)} ตัว")
+
+        # 4. หากต้องการซ่อนคอลัมน์ Checkbox เพื่อความสวยงาม (เลือกทำ)
+        # final_sorted_df = final_sorted_df.drop(columns=['Is_3M_High', 'Is_6M_High', 'Is_52W_High'], errors='ignore')
             
-        st.subheader(f"📊 2. ผลลัพธ์การสแกน ({strategy_option}): เจอทั้งหมด {len(final_sorted_df)} ตัว")
+        # 5. แสดงผลตาราง
+        st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): เจอทั้งหมด {len(final_sorted_df)} ตัว")
         st.write("💡 **คำแนะนำสีไฮไลท์อัจฉริยะ:** สีเขียว 🟢 = เขตสะสมกำลัง (RSI 30-45) | สีแดง 🔴 = เขตร้อนแรงระวังดอย (RSI >= 65)")
         
         def highlight_rsi_zones(row):
@@ -1040,8 +1046,7 @@ def main():
             'ปันผล_%': '{:.2f}',
         }, na_rep='-').apply(highlight_rsi_zones, axis=1)
         
-        
-        # ปรับการรับ Selection ให้รัดกุมขึ้น
+        # แสดงตาราง
         event = st.dataframe(
             styled_df,
             use_container_width=True,
@@ -1050,6 +1055,7 @@ def main():
             key="stock_table"
         )
         # ดึงข้อมูลการเลือกจาก event
+        # เลือกหุ้นจากตาราง scan ไปแสดงผล กราฟ 
         if event.selection and "rows" in event.selection and event.selection["rows"]:
             selected_index = event.selection["rows"][0]
             clicked_ticker = final_sorted_df.iloc[selected_index]['Ticker']
