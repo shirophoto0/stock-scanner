@@ -1725,7 +1725,12 @@ with tab_risk:
             
             # จัด Format ให้สวยงาม (เปลี่ยนกลับเป็น % ให้ดูง่าย)
             st_table = st_table.format("{:.2f}%")
+
+            # ก่อนจะสั่ง st.dataframe ให้พี่อ้ำเพิ่ม 2 บรรทัดนี้เข้าไปครับ
+            st_table = st_table.reset_index(drop=True) # เคลียร์ Index ที่ซ้ำ
+            st_table = st_table.loc[:, ~st_table.columns.duplicated()] # ลบชื่อคอลัมน์ที่ซ้ำออก
             
+            # แล้วค่อยสั่งรันตามปกติ
             st.dataframe(st_table, use_container_width=True)
             
             st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
