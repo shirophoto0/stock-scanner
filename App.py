@@ -124,7 +124,7 @@ def load_from_gsheet():
     try:
         client = get_gsheet_client()
         # เปลี่ยน 'ชื่อไฟล์ของคุณ' ให้ตรงนะครับ
-        sheet = client.open('ชื่อไฟล์ของคุณ').worksheet('StockData')
+        sheet = client.open('.Json').worksheet('StockData')
         data = sheet.get_all_records()
         df = pd.DataFrame(data)
         
