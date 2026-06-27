@@ -57,7 +57,7 @@ def save_journal():
             
     # บันทึกลง Google Sheet
     client = get_gsheet_client()
-    sheet = client.open('.Json').worksheet('JournalData')
+    sheet = client.open('MyStockData').worksheet('JournalData')
     
     # ล้างข้อมูลเดิมและเขียนใหม่ (Header + Data)
     sheet.clear()
@@ -66,7 +66,7 @@ def save_journal():
 def load_journal():
     try:
         client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('JournalData')
+        sheet = client.open('MyStockData').worksheet('JournalData')
         data = sheet.get_all_records()
         st.session_state.journal_data = data
     except Exception as e:
@@ -79,7 +79,7 @@ def save_portfolio():
             st.session_state.my_portfolio = []
             
         client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('PortfolioData')
+        sheet = client.open('MyStockData').worksheet('PortfolioData')
         
         sheet.clear() # ล้างข้อมูลเก่า
         if st.session_state.my_portfolio:
@@ -97,7 +97,7 @@ def save_portfolio():
 def load_portfolio():
     try:
         client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('PortfolioData')
+        sheet = client.open('MyStockData').worksheet('PortfolioData')
         data = sheet.get_all_records()
         
         # ใส่บรรทัดนี้ไว้เช็ค (รันแล้วลองดูว่ามันแสดงข้อมูลอะไรออกมาที่หน้าเว็บไหม)
@@ -125,7 +125,7 @@ def get_current_portfolio_value():
 def save_to_gsheet(df):
     client = get_gsheet_client()
     # เปลี่ยน 'ชื่อไฟล์ Sheet ของพี่อ้ำ' ให้ตรงกับไฟล์ใน Google Drive นะครับ
-    sheet = client.open('.Json').worksheet('StockData')
+    sheet = client.open('MyStockData').worksheet('StockData')
     
     # ล้างข้อมูลเก่าและเขียนใหม่
     sheet.clear()
@@ -136,7 +136,7 @@ def load_from_gsheet():
         client = get_gsheet_client()
         # เปลี่ยน 'ใส่ชื่อไฟล์ตรงนี้' ให้เป็นชื่อไฟล์จริงๆ ใน Google Drive
         # ถ้าชื่อมีช่องว่าง หรือสัญลักษณ์ ต้องใส่ให้ครบนะครับ
-        sheet = client.open('.Json').worksheet('StockData')
+        sheet = client.open('MyStockData').worksheet('StockData')
         
         data = sheet.get_all_records()
         if not data:
@@ -164,7 +164,7 @@ def load_from_gsheet():
 def save_cash_balance(amount):
     try:
         client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('CashFlow')
+        sheet = client.open('MyStockData').worksheet('CashFlow')
         sheet.update('D2', [[amount]]) # เขียนเงินสดลงเซลล์ D2
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึกเงินสด: {e}")
@@ -172,7 +172,7 @@ def save_cash_balance(amount):
 def load_cash_balance():
     try:
         client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('CashFlow')
+        sheet = client.open('MyStockData').worksheet('CashFlow')
         val = sheet.acell('D2').value
         if val is None or val == "":
             st.warning("เซลล์ D2 ว่างเปล่า ระบบใช้ 100,000 เป็นค่าเริ่มต้น")
@@ -185,7 +185,7 @@ def load_cash_balance():
 def log_cash_transaction(date, trans_type, amount, note):
     try:
         client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('CashFlow')
+        sheet = client.open('MyStockData').worksheet('CashFlow')
         
         # เตรียมข้อมูลที่จะบันทึก (Date, Type, Amount, Note)
         row_data = [str(date), trans_type, amount, note]
@@ -199,7 +199,7 @@ def log_cash_transaction(date, trans_type, amount, note):
 def load_total_cash_balance():
     try:
         client = get_gsheet_client()
-        sheet = client.open('.Json').worksheet('CashFlow')
+        sheet = client.open('MyStockData').worksheet('CashFlow')
         df = pd.DataFrame(sheet.get_all_records())
         
         if not df.empty:
@@ -249,7 +249,7 @@ def get_equity_curve_data():
 
     # 2. เตรียมข้อมูล CashFlow
     client = get_gsheet_client()
-    sheet = client.open('.Json').worksheet('CashFlow')
+    sheet = client.open('MyStockData').worksheet('CashFlow')
     df_cash = pd.DataFrame(sheet.get_all_records())
     df_cash.columns = df_cash.columns.str.strip()
     df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
@@ -420,7 +420,7 @@ def load_from_gsheet():
     # ดึง Client
     client = get_gsheet_client()
     # เปิด Sheet (เปลี่ยนชื่อให้ตรงกับไฟล์ของพี่อ้ำ)
-    sheet = client.open('.Json').worksheet('StockData')
+    sheet = client.open('MyStockData').worksheet('StockData')
     
     # ดึงข้อมูลทั้งหมดออกมาเป็น DataFrame
     data = sheet.get_all_records()
@@ -553,7 +553,7 @@ def main():
         def save_to_gsheet(df):
             client = get_gsheet_client()
             # เปลี่ยน 'ชื่อไฟล์ Sheet ของพี่อ้ำ' ให้ตรงกับไฟล์ใน Google Drive นะครับ
-            sheet = client.open('.Json').worksheet('StockData')
+            sheet = client.open('MyStockData').worksheet('StockData')
             
             # ล้างข้อมูลเก่าและเขียนใหม่
             sheet.clear()
