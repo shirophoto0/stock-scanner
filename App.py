@@ -702,7 +702,6 @@ def main():
                 # 5. แสดงผล
                 results_container = st.empty() 
             
-                st.write(f"จำนวนหุ้นที่พบ: {len(filtered_df)}")
             
                 # กรองคอลัมน์ที่เลือกให้โชว์
                 valid_cols = [c for c in show_columns if c in filtered_df.columns]
