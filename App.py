@@ -505,6 +505,26 @@ def load_and_calculate_stock_data():
             high_3m = combined['High'].iloc[:-1].tail(60).max()
             high_6m = combined['High'].iloc[:-1].tail(120).max()
             high_52w = combined['High'].iloc[:-1].tail(250).max()
+
+            # 1. หาวันที่ล่าสุด (วันปัจจุบันที่รันสแกน)
+            today_date = combined.index[-1]
+            
+            # 2. คำนวณจำนวนวันสำหรับ 3 Month High
+            # หาข้อมูลช่วง 3 เดือนที่ผ่านมา
+            df_3m = combined['High'].tail(60)
+            # หาว่า High สูงสุดเกิดขึ้นที่ตำแหน่งไหน (วันไหน)
+            last_high_3m_date = df_3m[df_3m == high_3m].index[-1]
+            days_3m = (today_date - last_high_3m_date).days
+            
+            # 3. คำนวณจำนวนวันสำหรับ 6 Month High
+            df_6m = combined['High'].tail(120)
+            last_high_6m_date = df_6m[df_6m == high_6m].index[-1]
+            days_6m = (today_date - last_high_6m_date).days
+            
+            # 4. คำนวณจำนวนวันสำหรับ 52 Week High
+            df_52w = combined['High'].tail(250)
+            last_high_52w_date = df_52w[df_52w == high_52w].index[-1]
+            days_52w = (today_date - last_high_52w_date).days
             
             # คำนวณปันผลจากข้อมูลจริง (ไม่ใช้ .info)
             dividends_history = stock.dividends
@@ -533,10 +553,10 @@ def load_and_calculate_stock_data():
                 'Is_3M_High': latest_price >= (high_3m * 0.95),
                 'Is_6M_High': latest_price >= (high_6m * 0.95),
                 'Is_52W_High': latest_price >= (high_52w * 0.95),
-                'New_High_3M_มาแล้ว(วัน)': 0, # แทนค่าด้วย logic เดิม
-                'New_High_6M_มาแล้ว(วัน)': 0,
-                'New_High_52W_มาแล้ว(วัน)': 0
-            })
+                'New_High_3M_มาแล้ว(วัน)': days_3m,
+                'New_High_6M_มาแล้ว(วัน)': days_6m,
+                'New_High_52W_มาแล้ว(วัน)': days_52w,
+            }
             
             # ใส่หน่วงเวลาเล็กน้อยเพื่อป้องกันการถูกบล็อก
             time.sleep(0.1)
