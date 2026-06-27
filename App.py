@@ -147,6 +147,7 @@ def save_to_gsheet(df):
     
     print("DEBUG: บันทึกข้อมูลเสร็จสิ้น!")
 
+        
 def load_from_gsheet():
     try:
         client = get_gsheet_client()
@@ -333,6 +334,7 @@ def plot_dual_equity_curve(df_equity):
     fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
     
     st.plotly_chart(fig, use_container_width=True)
+
 
 # =============================================================
 # ส่วนเร่ิมต้นของ file
@@ -560,34 +562,34 @@ def save_to_gsheet(df):
     data_to_write = [df.columns.values.tolist()] + df.values.tolist()
     sheet.update('A1', data_to_write)
     print("GitHub Actions: บันทึกข้อมูลลง Google Sheet สำเร็จ!")
+#####################################
+# Def Main ส่วนครอบ code ทั้งหมด
+######################################
+st.set_page_config(layout="wide")
 def main():
-    # โค้ดรันครั้งเดียว: ดึงข้อมูลสแกนหุ้น (ไม่ต้องมี st. จะได้ไม่ error ใน GitHub)
-    try:
-        # พยายามโหลดจาก Google Sheet ก่อน (เร็วมาก)
-        # df_set100 = load_from_gsheet()
-        # ใช้บรรทัดนี้แทน เพื่อดึงสดจาก Yahoo Finance
-        df_set100 = load_and_calculate_stock_data()
-        st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
-    except:
-        # ถ้า Sheet มีปัญหา ให้ไปรันคำนวณใหม่จาก yfinance (สำรอง)
-        st.warning("⚠️ ไม่พบข้อมูลใน Sheet กำลังโหลดใหม่จาก Yahoo Finance...")
-        df_set100 = load_and_calculate_stock_data()
-
+    # --- กรณีรันผ่าน GitHub Actions ---
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-        # --- ส่วนของ GitHub Actions ---
-        print("GitHub Mode: ระบบสแกนทำงานเรียบร้อย")
-        # ถ้าพี่อ้ำต้องการเซฟผลสแกนลง Sheet ให้ใส่โค้ด save_to_gsheet ที่นี่
+        print("GitHub Mode: กำลังเริ่มสแกน...")
         df_new = load_and_calculate_stock_data()
-        
-        # 2. ต้องเรียกใช้ฟังก์ชันบันทึกที่นี่ครับ!
         save_to_gsheet(df_new)
-        
-        print("GitHub Mode: ระบบทำงานเสร็จสิ้น")
+        print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
+        return # จบการทำงาน ไม่ต้องแสดง UI
+
+    # --- กรณีรันผ่านหน้าเว็บ Streamlit ---
+    st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
     
+    # ดึงข้อมูลจาก Sheets หรือ Yahoo
+    if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
+        with st.spinner("กำลังดึงข้อมูล..."):
+            df_set100 = load_and_calculate_stock_data()
+            save_to_gsheet(df_set100)
     else:
-        # --- ส่วนของ Streamlit UI (เอาโค้ดทั้งหมดที่พี่อ้ำส่งมา มาแปะตรงนี้) ---
-        st.set_page_config(layout="wide")
-        st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
+        try:
+            df_set100 = load_from_gsheet()
+            st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
+        except:
+            st.warning("⚠️ ไม่พบข้อมูลใน Sheet กำลังโหลดใหม่...")
+            df_set100 = load_and_calculate_stock_data()
 
         # ตรวจสอบว่า df_set100 มีข้อมูลไหมก่อนโชว์
         if not df_set100.empty:
@@ -1000,6 +1002,18 @@ def main():
         # 7. ผลลัพธ์การสแกน
         # =============================================================
         ###################################################
+        # 1. ดึงข้อมูลจาก Sheets (ทำที่นี่ที่เดียว)
+        df = load_from_gsheet() # ฟังก์ชันนี้ต้องโหลดข้อมูลทั้งหมดที่ GitHub บันทึกไว้
+        
+        # 2. ทำการกรองตาม Strategy ที่เลือก
+        if strategy_option == "New High 3M":
+            final_sorted_df = df[df['Is_3M_High'] == True]
+        elif strategy_option == "New High 6M":
+            final_sorted_df = df[df['Is_6M_High'] == True]
+        elif strategy_option == "New High 52W":
+            final_sorted_df = df[df['Is_52W_High'] == True]
+        else:
+            final_sorted_df = df # กรณีเลือก All หรืออื่นๆ
         st.subheader(f"📊 2. ผลลัพธ์การสแกน ({strategy_option}): เจอทั้งหมด {len(final_sorted_df)} ตัว")
         st.write("💡 **คำแนะนำสีไฮไลท์อัจฉริยะ:** สีเขียว 🟢 = เขตสะสมกำลัง (RSI 30-45) | สีแดง 🔴 = เขตร้อนแรงระวังดอย (RSI >= 65)")
         
