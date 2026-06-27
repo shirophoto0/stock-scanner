@@ -418,7 +418,7 @@ def load_from_gsheet():
     # ดึง Client
     client = get_gsheet_client()
     # เปิด Sheet (เปลี่ยนชื่อให้ตรงกับไฟล์ของพี่อ้ำ)
-    sheet = client.open('ชื่อไฟล์ Google Sheet ของพี่อ้ำ').worksheet('JournalData')
+    sheet = client.open('.Json').worksheet('StockData')
     
     # ดึงข้อมูลทั้งหมดออกมาเป็น DataFrame
     data = sheet.get_all_records()
