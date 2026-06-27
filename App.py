@@ -986,10 +986,10 @@ def main():
         
         styled_df = final_sorted_df.style.format({
             'ราคาล่าสุด': '{:.2f}',
-            'PE_Ratio': '{:.2f}',
-            'ปันผล_%': '{:.2f}',
             'RSI_14': '{:.2f}',
             'RS_Line': '{:.2f}'
+            'PE_Ratio': '{:.2f}',
+            'ปันผล_%': '{:.2f}',
         }, na_rep='-').apply(highlight_rsi_zones, axis=1)
         
         
