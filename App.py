@@ -1022,8 +1022,7 @@ def main():
         ###################################################
         # 1. ดึงข้อมูลจาก Sheets
    
-        df.columns = df.columns.str.strip() 
-        df_scan = filtered_df.copy() 
+        final_sorted_df = filtered_df.copy()
 
         # 2. แปลงข้อความให้เป็นค่าตรรกะ (สำหรับคอลัมน์ High ต่างๆ)
         def to_bool(val):
