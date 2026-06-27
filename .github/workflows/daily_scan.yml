@@ -1,22 +1,30 @@
-name: Daily Stock Scan
+name: Daily Stock Scanner
+
 on:
   schedule:
-    - cron: '30 10 * * *'
-  workflow_dispatch:
+    - cron: '30 10 * * *'  # ตั้งเวลา 17:30 น. เวลาประเทศไทย
+  workflow_dispatch:        # ให้กดรันเองได้ด้วย
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # เปลี่ยนจาก v2 เป็น v4
+        uses: actions/checkout@v3
+
       - name: Set up Python
-        uses: actions/setup-python@v5 # เปลี่ยนจาก v2 เป็น v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.9'
+
       - name: Install dependencies
-        run: pip install streamlit yfinance pandas altair numpy plotly gspread seaborn matplotlib oauth2client
-      - name: Run script
-        run: python App.py
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Scan Script
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+        run: |
+          # ตรงนี้คือการเรียกไฟล์ App.py ของพี่อ้ำให้ทำงานในโหมด Background
+          python App.py
