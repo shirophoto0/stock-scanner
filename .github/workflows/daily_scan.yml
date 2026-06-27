@@ -1,0 +1,22 @@
+name: Daily Stock Scan
+on:
+  schedule:
+    - cron: '30 10 * * *' # เวลา 17:30 น. ตามเวลาไทย (UTC+7)
+  workflow_dispatch: # ให้เรากดรันเองได้ด้วยถ้าต้องการ
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install yfinance pandas gspread oauth2client
+      - name: Run script
+        run: python scanner.py # เปลี่ยนชื่อไฟล์ให้ตรงกับไฟล์ Python ของพี่อ้ำ
+        env:
+          GOOGLE_SHEETS_CREDENTIALS: ${{ secrets.GOOGLE_SHEETS_CREDENTIALS }}
