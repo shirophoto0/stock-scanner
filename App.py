@@ -1026,13 +1026,13 @@ def main():
             final_sorted_df = df
         
         # 3. DEBUG: ดูว่าหลังกรองแล้วเหลืออะไรบ้าง
-        st.sidebar.write(f"จำนวนหุ้นที่เหลือ: {len(final_sorted_df)}")
+        # st.sidebar.write(f"จำนวนหุ้นที่เหลือ: {len(final_sorted_df)}")
 
         # ตรวจสอบการทำงานของตัวกรอง (เพิ่มบรรทัดนี้เพื่อ debug)
         st.write(f"DEBUG: เลือก {strategy_option} เจอหุ้นทั้งหมด {len(final_sorted_df)} ตัว")
 
         # 4. หากต้องการซ่อนคอลัมน์ Checkbox เพื่อความสวยงาม (เลือกทำ)
-        # final_sorted_df = final_sorted_df.drop(columns=['Is_3M_High', 'Is_6M_High', 'Is_52W_High'], errors='ignore')
+        final_sorted_df = final_sorted_df.drop(columns=['Is_3M_High', 'Is_6M_High', 'Is_52W_High'], errors='ignore')
             
         # 5. แสดงผลตาราง
         st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): เจอทั้งหมด {len(final_sorted_df)} ตัว")
@@ -1046,7 +1046,7 @@ def main():
             return [''] * len(row)
             
         # --- ใส่ Debug ตรงนี้ ---
-        st.write(f"DEBUG: ก่อนแสดงผล final_sorted_df มีหุ้น {len(final_sorted_df)} ตัว")
+        # st.write(f"DEBUG: ก่อนแสดงผล final_sorted_df มีหุ้น {len(final_sorted_df)} ตัว")
         # -----------------------
         
         styled_df = final_sorted_df.style.format({
