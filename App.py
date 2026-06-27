@@ -1004,27 +1004,23 @@ def main():
         ###################################################
         # 1. ดึงข้อมูลจาก Sheets
         df = load_from_gsheet()
-
-        # ตรวจสอบชื่อคอลัมน์ด้วย st.write(df.columns) ถ้ามันมีช่องว่าง ให้แก้ชื่อคอลัมน์ตรงนี้
         df.columns = df.columns.str.strip() 
+
+        # 2. แปลงข้อความให้เป็นค่าตรรกะที่ถูกต้อง (ห้ามใช้ .astype(bool))
+        def to_bool(val):
+            return str(val).lower().strip() == 'true'
+
+        df['Is_3M_High'] = df['Is_3M_High'].apply(to_bool)
+        df['Is_6M_High'] = df['Is_6M_High'].apply(to_bool)
+        df['Is_52W_High'] = df['Is_52W_High'].apply(to_bool)
         
-        st.write("ตัวอย่างข้อมูลคอลัมน์ Is_3M_High:", df['Is_3M_High'].unique())
-        st.write("ประเภทของข้อมูลในคอลัมน์:", type(df['Is_3M_High'].iloc[0]))
-        
-        # 2. บังคับแปลงด้วยวิธีที่ "ดุ" กว่าเดิม (เผื่อใน Sheet เป็นเลข 1 หรือ True ที่เป็น Text)
-        # ก่อนจะเข้า if/elif ให้มั่นใจว่าคอลัมน์เป็น Boolean แท้ๆ
-        df['Is_3M_High'] = df['Is_3M_High'].astype(bool)
-        df['Is_6M_High'] = df['Is_6M_High'].astype(bool)
-        df['Is_52W_High'] = df['Is_52W_High'].astype(bool)
-        
-        # กรองแบบนี้ครับ (สังเกตว่า True ไม่มีเครื่องหมายคำพูด)
-        # กรองแบบเปรียบเทียบว่าเป็นคำว่า 'true' (ตัวเล็ก) หรือไม่
+        # 3. กรองด้วยค่า Boolean ที่ถูกต้องแล้ว
         if strategy_option == "New High 3M":
-            final_sorted_df = df[df['Is_3M_High'].astype(str).str.lower() == 'true']
+            final_sorted_df = df[df['Is_3M_High'] == True]
         elif strategy_option == "New High 6M":
-            final_sorted_df = df[df['Is_6M_High'].astype(str).str.lower() == 'true']
+            final_sorted_df = df[df['Is_6M_High'] == True]
         elif strategy_option == "New High 52W":
-            final_sorted_df = df[df['Is_52W_High'].astype(str).str.lower() == 'true']
+            final_sorted_df = df[df['Is_52W_High'] == True]
         else:
             final_sorted_df = df
         
