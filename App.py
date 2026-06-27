@@ -556,7 +556,7 @@ def load_and_calculate_stock_data():
                 'New_High_3M_มาแล้ว(วัน)': days_3m,
                 'New_High_6M_มาแล้ว(วัน)': days_6m,
                 'New_High_52W_มาแล้ว(วัน)': days_52w,
-            }
+            })
             
             # ใส่หน่วงเวลาเล็กน้อยเพื่อป้องกันการถูกบล็อก
             time.sleep(0.1)
