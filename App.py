@@ -303,7 +303,17 @@ def plot_dual_equity_curve(df_equity):
     fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
     
     st.plotly_chart(fig, use_container_width=True)
-
+    
+def get_pe_ratio(ticker_obj):
+    try:
+        # พยายามดึงจาก info
+        pe = ticker_obj.info.get('trailingPE')
+        if pe is None:
+            # ถ้าไม่มี trailingPE ลองหา forwardPE แทน
+            pe = ticker_obj.info.get('forwardPE', 0)
+        return pe if pe is not None else 0
+    except:
+        return 0   
 
 # =============================================================
 # ส่วนเร่ิมต้นของ file
@@ -431,16 +441,6 @@ def load_from_gsheet():
                 
         return df
     
-def get_pe_ratio(ticker_obj):
-    try:
-        # พยายามดึงจาก info
-        pe = ticker_obj.info.get('trailingPE')
-        if pe is None:
-            # ถ้าไม่มี trailingPE ลองหา forwardPE แทน
-            pe = ticker_obj.info.get('forwardPE', 0)
-        return pe if pe is not None else 0
-    except:
-        return 0   
         
 def load_and_calculate_stock_data():
     stock_list = []
