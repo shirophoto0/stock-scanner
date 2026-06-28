@@ -4,6 +4,7 @@ import pandas as pd
 import yfinance as yf
 import altair as alt
 import numpy as np
+import pandas as pd  
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
@@ -1971,7 +1972,9 @@ def main():
                         ).round(2)
                 
                         # 2. เตรียมข้อมูล High 5 วันย้อนหลัง (ดึงสดผ่าน yfinance)
-                        @st.cache_data(ttl=3600)
+                        # --- ให้วางส่วนนี้ไว้ด้านบนสุดของไฟล์ (นอกฟังก์ชัน) ---
+                        
+                        # --- ฟังก์ชันดึงข้อมูล ---
                         @st.cache_data(ttl=3600)
                         def fetch_stock_stats(tickers):
                             stats = {}
@@ -1982,26 +1985,29 @@ def main():
                                         stats[t] = {
                                             'High_5d': df['High'].tail(5).max(),
                                             'Avg_Vol_20d': df['Volume'].tail(20).mean(),
-                                            'Volume': df['Volume'].iloc[-1] # ดึง Volume วันล่าสุด
+                                            'Volume': df['Volume'].iloc[-1]
                                         }
                                     else:
                                         stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0, 'Volume': 0}
                                 except:
                                     stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0, 'Volume': 0}
                             return stats
-                
-                        # ดึงค่า High 5 วันมาเก็บไว้ในตาราง
-                        # 1. ดึงข้อมูลทีเดียวทั้ง 2 ค่า
-                        stats_map = fetch_stock_stats(plan_df['Ticker'].unique().tolist())
                         
-                        # 2. กระจายค่าออกมาใส่ในตาราง
+                        # --- ส่วนของการทำงาน (ใน main หรือจุดที่เรียกใช้) ---
+                        tickers_to_fetch = plan_df['Ticker'].unique().tolist()
+                        stats_map = fetch_stock_stats(tickers_to_fetch)
+                        
                         plan_df['High_5d'] = plan_df['Ticker'].map(lambda x: stats_map.get(x, {}).get('High_5d', 0))
                         plan_df['Avg_Vol_20d'] = plan_df['Ticker'].map(lambda x: stats_map.get(x, {}).get('Avg_Vol_20d', 0))
-                
-                        # 3. ฟังก์ชันเช็ค Alert
-                        # 1. ฟังก์ชันเช็ค Alert รวมทุกเงื่อนไข
+                        plan_df['Volume'] = plan_df['Ticker'].map(lambda x: stats_map.get(x, {}).get('Volume', 0))
+                        
+                        # --- บังคับแปลงเป็นตัวเลขก่อนเข้าฟังก์ชัน ---
+                        plan_df['High_5d'] = pd.to_numeric(plan_df['High_5d'], errors='coerce').fillna(0)
+                        plan_df['Volume'] = pd.to_numeric(plan_df['Volume'], errors='coerce').fillna(0)
+                        plan_df['Avg_Vol_20d'] = pd.to_numeric(plan_df['Avg_Vol_20d'], errors='coerce').fillna(0)
+                        
+                        # --- ฟังก์ชันเช็ค Alert ---
                         def check_alerts(row):
-                            import pandas as pd
                             price = row['ราคาตลาด']
                             entry = row['Entry_Price']
                             sl = row['Stop_Loss']
@@ -2010,43 +2016,29 @@ def main():
                             alerts = []
                             if price <= 0: return "ไม่มีราคา"
                             
-                            # ก. เงื่อนไขปกติ
                             if abs(price - entry) / entry <= 0.01: alerts.append("⚠️ ใกล้จุดซื้อ")
                             if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: alerts.append("🚨 ใกล้จุด SL!")
                             if price >= tp: alerts.append("💰 ถึงเป้า TP!")
                             
-                            # ข. เช็ค Breakout 5D (ใช้ pd.notnull ป้องกัน Error)
-                            high_5d = row.get('High_5d', 0)
-                            if pd.notnull(high_5d) and high_5d > 0 and price > high_5d:
+                            # เช็ค Breakout 5D
+                            if row['High_5d'] > 0 and price > row['High_5d']:
                                 alerts.append("🚀 Breakout 5D")
                                     
-                            # ค. เช็ค Vol Spike (ดึงจาก row ที่เราคำนวณมาเตรียมไว้แล้ว)
-                            vol = row.get('Volume', 0) # สมมติว่าใน plan_df มีคอลัมน์ Volume
-                            avg_vol = row.get('Avg_Vol_20d', 0)
-                            if pd.notnull(vol) and pd.notnull(avg_vol) and avg_vol > 0:
-                                if vol > (avg_vol * 3):
-                                    alerts.append("🔥 Vol Spike")
+                            # เช็ค Vol Spike
+                            if row['Avg_Vol_20d'] > 0 and row['Volume'] > (row['Avg_Vol_20d'] * 3):
+                                alerts.append("🔥 Vol Spike")
                             
                             return " | ".join(alerts) if alerts else "ปกติ"
-
-                        # บังคับให้คอลัมน์เหล่านี้เป็นตัวเลข ถ้าเป็นตัวหนังสือหรือค่าว่างให้เปลี่ยนเป็น 0
-                        plan_df['High_5d'] = pd.to_numeric(plan_df['High_5d'], errors='coerce').fillna(0)
-                        plan_df['Volume'] = pd.to_numeric(plan_df['Volume'], errors='coerce').fillna(0)
-                        plan_df['Avg_Vol_20d'] = pd.to_numeric(plan_df['Avg_Vol_20d'], errors='coerce').fillna(0)
                         
-                        # แล้วค่อยสั่ง apply
+                        # --- สั่ง Apply เพียงครั้งเดียว ---
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                        # 2. นำไปใช้งานกับ plan_df
-                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                
-                        # 3. จัดเรียง Column
+                        
+                        # --- จัดเรียง Column ---
                         column_order = [
                             'Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 
                             'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL'
                         ]
-                        
-                        existing_cols = [c for c in column_order if c in plan_df.columns]
-                        plan_df = plan_df[existing_cols]
+                        plan_df = plan_df[[c for c in column_order if c in plan_df.columns]]
                 
                         # 3. แสดงตารางแบบแก้ไขได้
                         edited_df = st.data_editor(
