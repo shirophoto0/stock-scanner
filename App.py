@@ -1952,42 +1952,45 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        # 1. แสดงตารางแบบแก้ไขได้ และเปิดการเลือกแถว (selection_mode)
+                        # 1. ดึงราคาตลาดปัจจุบันจาก df_set100
+                        # สร้าง Dictionary เพื่อให้ดึงราคาได้เร็วขึ้น (Ticker -> ราคา)
+                        price_map = df_set100.set_index('Ticker')['ราคาล่าสุด'].to_dict()
+                        
+                        # เพิ่มคอลัมน์ 'ราคาตลาด' เข้าไปในตารางแผน
+                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)
+                        
+                        # 2. คำนวณ % ส่วนต่างเมื่อราคาเข้าใกล้ Stop Loss
+                        # สูตร: ((ราคาตลาด - Stop_Loss) / ราคาตลาด) * 100
+                        plan_df['ห่างจาก_SL(%)'] = (
+                            (plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100
+                        ).round(2)
+                        
+                        # 3. แสดงตาราง
                         edited_df = st.data_editor(
                             plan_df,
                             column_config={
-                                "Image_URL": st.column_config.LinkColumn(
-                                    "รูปแผน", 
-                                    display_text="ดูรูป"
-                                ),
+                                "Image_URL": st.column_config.LinkColumn("รูปแผน", display_text="ดูรูป"),
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
                                 "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
-                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f")
+                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
+                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f"),
+                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%")
                             },
                             use_container_width=True,
                             key="editable_plan_table",
-                            num_rows="dynamic" # อนุญาตให้ลบ/เพิ่มแถวได้จาก UI ของตาราง
+                            num_rows="dynamic"
                         )
                         
-                        # 2. ปุ่มจัดการข้อมูล
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            if st.button("💾 บันทึกการแก้ไข (Update)"):
-                                save_data(edited_df, "TradingPlan")
-                                st.cache_data.clear()
-                                st.success("อัปเดตข้อมูลเรียบร้อย!")
-                                st.rerun()
-                                
-                        with col2:
-                            # วิธีลบง่ายๆ: ตรวจสอบแถวที่ถูกลบไปจาก edited_df
-                            if st.button("🗑️ ลบแถวที่เลือก"):
-                                # ระบบจะเปรียบเทียบ edited_df กับ plan_df 
-                                # หากมีการลบแถวออกในหน้า UI ค่าที่ส่งกลับมาจะหายไปเอง
-                                save_data(edited_df, "TradingPlan")
-                                st.cache_data.clear()
-                                st.warning("ลบข้อมูลแถวที่เลือกออกแล้ว!")
-                                st.rerun()
+                        # 4. ปุ่มบันทึก (ระวัง: อย่าบันทึกคอลัมน์ 'ราคาตลาด' และ 'ห่างจาก_SL(%)' กลับลง Sheet)
+                        if st.button("💾 บันทึกการแก้ไข (Update)"):
+                            # เลือกเฉพาะคอลัมน์ต้นฉบับก่อน save ลง Sheet
+                            cols_to_save = ['Ticker', 'Entry_Price', 'Stop_Loss', 'Take_Profit', 'Image_URL', 'Timestamp']
+                            save_df = edited_df[cols_to_save]
+                            
+                            save_data(save_df, "TradingPlan")
+                            st.cache_data.clear()
+                            st.success("อัปเดตข้อมูลเรียบร้อย!")
+                            st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
 
