@@ -1919,47 +1919,47 @@ def main():
                     
                     st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
                     
-                        with st.form("trading_plan_form", clear_on_submit=True):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
-                                entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f")
-                                stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95), format="%.2f")
-                            with col2:
-                                take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f")
-                                image_url = st.text_input("วาง Link รูปภาพ (URL):") # สำหรับเวอร์ชันเริ่มต้นใช้เป็น URL
-                            
-                            submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
-            
-                        if submit_button:
-                            from datetime import datetime
-                            new_data = {
-                                'Ticker': ticker,
-                                'Entry_Price': entry,
-                                'Stop_Loss': stop_loss,
-                                'Take_Profit': take_profit,
-                                'Image_URL': image_url,
-                                'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            }
-                            if append_to_gsheet(new_data, "TradingPlan"):
-                                st.success("บันทึกแผนเรียบร้อย!")
-                                st.rerun() # สั่ง Rerun เพื่อให้ตารางด้านล่างอัปเดตข้อมูลใหม่
-            
-                        # --- ตารางแสดงแผนการเทรด ---
-                        st.divider()
-                        st.subheader("📊 ตารางแผนการเทรดของฉัน")
-                        plan_df = load_data("TradingPlan") # ใช้ฟังก์ชันเดิมที่แก้ไขแล้ว
+                    with st.form("trading_plan_form", clear_on_submit=True):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
+                            entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f")
+                            stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95), format="%.2f")
+                        with col2:
+                            take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f")
+                            image_url = st.text_input("วาง Link รูปภาพ (URL):") # สำหรับเวอร์ชันเริ่มต้นใช้เป็น URL
                         
-                        if not plan_df.empty:
-                            # ถ้ามีข้อมูลราคาตลาด ให้ Merge หรือคำนวณ % Diff ตรงนี้ได้ครับ
-                            # ตัวอย่างการทำ LinkColumn
-                            st.dataframe(
-                                plan_df,
-                                column_config={
-                                    "Image_URL": st.column_config.LinkColumn("ดูรูปภาพ")
-                                },
-                                use_container_width=True
-                            )
+                        submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
+        
+                    if submit_button:
+                        from datetime import datetime
+                        new_data = {
+                            'Ticker': ticker,
+                            'Entry_Price': entry,
+                            'Stop_Loss': stop_loss,
+                            'Take_Profit': take_profit,
+                            'Image_URL': image_url,
+                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                        if append_to_gsheet(new_data, "TradingPlan"):
+                            st.success("บันทึกแผนเรียบร้อย!")
+                            st.rerun() # สั่ง Rerun เพื่อให้ตารางด้านล่างอัปเดตข้อมูลใหม่
+        
+                    # --- ตารางแสดงแผนการเทรด ---
+                    st.divider()
+                    st.subheader("📊 ตารางแผนการเทรดของฉัน")
+                    plan_df = load_data("TradingPlan") # ใช้ฟังก์ชันเดิมที่แก้ไขแล้ว
+                    
+                    if not plan_df.empty:
+                        # ถ้ามีข้อมูลราคาตลาด ให้ Merge หรือคำนวณ % Diff ตรงนี้ได้ครับ
+                        # ตัวอย่างการทำ LinkColumn
+                        st.dataframe(
+                            plan_df,
+                            column_config={
+                                "Image_URL": st.column_config.LinkColumn("ดูรูปภาพ")
+                            },
+                            use_container_width=True
+                        )
 
 if __name__ == "__main__":
     main()
