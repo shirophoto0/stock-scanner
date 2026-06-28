@@ -452,6 +452,17 @@ def load_from_gsheet():
             
     return df
     
+def get_pe_ratio(ticker_obj):
+    try:
+        # พยายามดึงจาก info
+        pe = ticker_obj.info.get('trailingPE')
+        if pe is None:
+            # ถ้าไม่มี trailingPE ลองหา forwardPE แทน
+            pe = ticker_obj.info.get('forwardPE', 0)
+        return pe if pe is not None else 0
+    except:
+        return 0   
+        
 @st.cache_data(ttl=3600)
 def load_and_calculate_stock_data():
     stock_list = []
@@ -537,7 +548,7 @@ def load_and_calculate_stock_data():
             calc_div_yield = ((total_div_1y / latest_price) * 100) if total_div_1y > 0 else 0.0
             
             # ดึง PE ด้วยวิธีที่ปลอดภัย (ไม่ใช้ .info)
-            pe_ratio = stock.fast_info.get('trailingPE', 0)
+            pe_ratio = get_pe_ratio(stock)
             
             # รวมผลลัพธ์
             stock_list.append({
