@@ -1972,21 +1972,22 @@ def main():
                 
                         # 2. เตรียมข้อมูล High 5 วันย้อนหลัง (ดึงสดผ่าน yfinance)
                         @st.cache_data(ttl=3600)
+                        @st.cache_data(ttl=3600)
                         def fetch_stock_stats(tickers):
                             stats = {}
                             for t in tickers:
                                 try:
-                                    # ดึงข้อมูลย้อนหลัง 25 วัน (เผื่อวันหยุด จะได้ค่าเฉลี่ย 20 วันที่เป๊ะ)
                                     df = yf.download(f"{t}.BK", period="1mo", progress=False)
                                     if not df.empty and len(df) >= 20:
                                         stats[t] = {
                                             'High_5d': df['High'].tail(5).max(),
-                                            'Avg_Vol_20d': df['Volume'].tail(20).mean()
+                                            'Avg_Vol_20d': df['Volume'].tail(20).mean(),
+                                            'Volume': df['Volume'].iloc[-1] # ดึง Volume วันล่าสุด
                                         }
                                     else:
-                                        stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0}
+                                        stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0, 'Volume': 0}
                                 except:
-                                    stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0}
+                                    stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0, 'Volume': 0}
                             return stats
                 
                         # ดึงค่า High 5 วันมาเก็บไว้ในตาราง
