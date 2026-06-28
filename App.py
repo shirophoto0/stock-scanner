@@ -2043,7 +2043,7 @@ def main():
 
                             if alerts:
                             # ป้องกันส่งซ้ำ: ตรวจสอบว่าใน session_state มีการส่งไปแล้วหรือยัง
-                            alert_key = f"alert_{row['Ticker']}_{status_str}"
+                                alert_key = f"alert_{row['Ticker']}_{status_str}"
                                 if st.session_state.get(alert_key) != True:
                                     msg = f"\nหุ้น: {row['Ticker']}\nสถานะ: {status_str}\nราคาตลาด: {row['ราคาตลาด']}"
                                     send_line_notify(msg, LINE_TOKEN)
