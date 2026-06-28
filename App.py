@@ -6,18 +6,29 @@ import altair as alt
 import numpy as np
 import pandas as pd  
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import os
 import json
+import requests
 import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
-
+from plotly.subplots import make_subplots
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
+def send_line_notify(message, token):
+    url = "https://notify-api.line.me/api/notify"
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"message": message}
+    try:
+        requests.post(url, headers=headers, data=payload)
+    except Exception as e:
+        print(f"Error sending Line Notify: {e}")
+
+# ใส่ Token ของพี่อ้ำตรงนี้ครับ
+LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
 
 def get_gsheet_client():
     scope = [
@@ -2029,7 +2040,18 @@ def main():
                                 alerts.append("🔥 Vol Spike")
                             
                             return " | ".join(alerts) if alerts else "ปกติ"
-                        
+
+                            if alerts:
+                            # ป้องกันส่งซ้ำ: ตรวจสอบว่าใน session_state มีการส่งไปแล้วหรือยัง
+                            alert_key = f"alert_{row['Ticker']}_{status_str}"
+                                if st.session_state.get(alert_key) != True:
+                                    msg = f"\nหุ้น: {row['Ticker']}\nสถานะ: {status_str}\nราคาตลาด: {row['ราคาตลาด']}"
+                                    send_line_notify(msg, LINE_TOKEN)
+                                    # บันทึกไว้ว่าส่งไปแล้ว
+                                    st.session_state[alert_key] = True
+                                    
+                            return status_str
+                                            
                         # --- สั่ง Apply เพียงครั้งเดียว ---
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                         
