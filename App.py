@@ -441,7 +441,7 @@ def load_from_gsheet():
                 
         return df
     except Exception as e:
-    st.error(f"เกิดข้อผิดพลาด: {e}")
+        st.error(f"เกิดข้อผิดพลาด: {e}")
         
 def load_and_calculate_stock_data():
     stock_list = []
