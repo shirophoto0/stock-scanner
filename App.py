@@ -1061,7 +1061,13 @@ def main():
             'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
             'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
         }, na_rep='-').apply(highlight_rsi_zones, axis=1)   
-        
+
+        # เพิ่มบรรทัดนี้เพื่อเช็คว่าในตารางมันอ่านค่าเป็นอะไร
+        st.write("--- DEBUG: ตรวจสอบข้อมูลก่อนแสดงผล ---")
+        st.write(df_display[['Ticker', 'PE_Ratio']].head(5))
+        st.write("ประเภทข้อมูล (Data Types):")
+        st.write(df_display.dtypes)
+
         event = st.dataframe(
             styled_df,
             use_container_width=True,
