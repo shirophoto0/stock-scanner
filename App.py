@@ -1955,18 +1955,22 @@ def main():
                         # 1. ดึงราคาตลาดปัจจุบันจาก df_set100
                         # สร้าง Dictionary เพื่อให้ดึงราคาได้เร็วขึ้น (Ticker -> ราคา)
                         # ล้างช่องว่างออกให้หมดก่อนนำไปทำ Map
+                        # 1. ทำความสะอาดข้อมูล (ลบช่องว่าง)
                         df_set100['Ticker'] = df_set100['Ticker'].astype(str).str.strip()
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
                         
-                        price_map = df_set100.set_index('Ticker')['ราคาล่าสุด'].to_dict()
+                        # 2. สร้าง Mapping (ใช้ dict เปล่าเผื่อกรณี df_set100 ว่าง)
+                        price_map = dict(zip(df_set100['Ticker'], df_set100['ราคาล่าสุด']))
                         
-                        # เพิ่มคอลัมน์ 'ราคาตลาด'
+                        # 3. แมปราคา
                         plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)
                         
-                        # ถ้ายังไม่มีราคา ให้ลองโชว์ค่า Ticker ที่หาไม่เจอมาดูครับ
-                        # missing_tickers = plan_df[plan_df['ราคาตลาด'].isna()]['Ticker']
-                        # if not missing_tickers.empty:
-                        st.warning(f"ไม่พบราคาของหุ้น: {missing_tickers.tolist()}")
+                        # 4. ตรวจสอบว่ามีหุ้นตัวไหนหาราคาไม่เจอ (ใช้วิธีเช็คแบบปลอดภัย)
+                        missing_tickers = plan_df[plan_df['ราคาตลาด'].isna()]['Ticker']
+                        
+                        if not missing_tickers.empty:
+                            # ใช้ list() แทน tolist() เพื่อความปลอดภัยกับทุกเวอร์ชัน
+                            st.warning(f"ไม่พบราคาของหุ้นบางตัวในระบบ: {list(missing_tickers)}")
                         
                         # 2. คำนวณ % ส่วนต่างเมื่อราคาเข้าใกล้ Stop Loss
                         # สูตร: ((ราคาตลาด - Stop_Loss) / ราคาตลาด) * 100
