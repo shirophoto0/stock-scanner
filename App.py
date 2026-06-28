@@ -419,29 +419,27 @@ def load_from_gsheet():
         sheet = client.open('MyStockData').worksheet('StockData')
         data = sheet.get_all_records()
         
-        # --- ตรวจสอบข้อมูลดิบที่ได้จาก GSheet ทันที ---
-        if data:
-            # st.write("DEBUG: แถวแรกของข้อมูลดิบ:", data[0])
-            # st.write("ค่า PE_Ratio ในแถวแรก:", data[0].get('PE_Ratio'))
-        # ----------------------------------------
-        # ดึง Client
-        client = get_gsheet_client()
-        # เปิด Sheet (เปลี่ยนชื่อให้ตรงกับไฟล์ของพี่อ้ำ)
-        sheet = client.open('MyStockData').worksheet('StockData')
-        
-        # ดึงข้อมูลทั้งหมดออกมาเป็น DataFrame
-        data = sheet.get_all_records()
+        if not data:
+            st.warning("ไม่มีข้อมูลใน Google Sheet ครับ")
+            return None
+            
+        # ดึงข้อมูลออกมาเป็น DataFrame
         df = pd.DataFrame(data)
         
-        # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ (เพราะดึงมาจาก Sheet มักจะเป็น Text)
+        # ล้างชื่อคอลัมน์ (เผื่อมีช่องว่างติดมา)
+        df.columns = df.columns.str.strip()
+        
+        # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ
         numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce')
-                
+        
         return df
+
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาด: {e}")
+        st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+        return None
         
 def load_and_calculate_stock_data():
     stock_list = []
