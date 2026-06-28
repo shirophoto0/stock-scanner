@@ -146,40 +146,6 @@ def save_to_gsheet(df):
     sheet.update('A1', data_to_write)
     
     print("DEBUG: บันทึกข้อมูลเสร็จสิ้น!")
-
-        
-def load_from_gsheet():
-    try:
-        client = get_gsheet_client()
-        # เปลี่ยน 'ใส่ชื่อไฟล์ตรงนี้' ให้เป็นชื่อไฟล์จริงๆ ใน Google Drive
-        # ถ้าชื่อมีช่องว่าง หรือสัญลักษณ์ ต้องใส่ให้ครบนะครับ
-        sheet = client.open('MyStockData').worksheet('StockData')
-        
-        data = sheet.get_all_records()
-        if not data:
-            st.error("พบไฟล์และแผ่นงาน แต่ไม่มีข้อมูลข้างในครับ!")
-            return None
-            
-        df = pd.DataFrame(data)
-        # ในฟังก์ชัน load_from_gsheet ของพี่อ้ำ ควรมีส่วนนี้ก่อนจะ return df ออกมา
-        df.columns = df.columns.str.strip() # ลบช่องว่างหน้าหลังชื่อคอลัมน์
-        df['PE_Ratio'] = pd.to_numeric(df['PE_Ratio'], errors='coerce').fillna(0)
-        return df
-        # แสดงชื่อคอลัมน์ที่อ่านได้จริงออกมาเช็ค (บรรทัดนี้ช่วยได้มาก)
-        # st.write("คอลัมน์ที่อ่านได้จาก Sheet:", df.columns.tolist())
-        st.write("ชื่อคอลัมน์ที่อ่านได้ทั้งหมด:", df.columns.tolist())
-        numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
-        for col in numeric_cols:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce')
-        return df
-
-    except Exception as e:
-        # แทนที่จะให้มันแสดงข้อความที่เราพิมพ์ไว้ ให้มันแสดง Error จากระบบเลยครับ
-        st.error(f"DEBUG: {e}") 
-        return None
-
-
         
 def save_cash_balance(amount):
     try:
@@ -466,7 +432,6 @@ def get_pe_ratio(ticker_obj):
     except:
         return 0   
         
-@st.cache_data(ttl=3600)
 def load_and_calculate_stock_data():
     stock_list = []
     progress_bar = st.progress(0)
