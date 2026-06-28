@@ -331,7 +331,7 @@ def get_pe_ratio(ticker_obj):
 def append_to_gsheet(data_dict, sheet_name):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet(TradingPlan)
+        sheet = client.open('MyStockData').worksheet("Trading plan")
         # ดึงค่าจาก Dictionary มาทำเป็น List เพื่อ append
         row_values = [
             data_dict.get('Ticker'),
