@@ -440,7 +440,8 @@ def load_from_gsheet():
                 df[col] = pd.to_numeric(df[col], errors='coerce')
                 
         return df
-    
+    except Exception as e:
+    st.error(f"เกิดข้อผิดพลาด: {e}")
         
 def load_and_calculate_stock_data():
     stock_list = []
