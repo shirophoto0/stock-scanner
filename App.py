@@ -1947,50 +1947,36 @@ def main():
                             st.rerun() # สั่ง Rerun เพื่อให้ตารางด้านล่างอัปเดตข้อมูลใหม่
         
                     # --- ตารางแสดงแผนการเทรด ---
+                    # --- ส่วนแสดงตารางแผนการเทรด ---
                     st.divider()
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        # 1. ดึงราคาตลาดปัจจุบันจาก df_all_stocks
-                        # สร้าง Dictionary เพื่อให้ดึงราคาได้เร็วขึ้น (Ticker -> ราคา)
-                        # ล้างช่องว่างออกให้หมดก่อนนำไปทำ Map
-                        # 1. ทำความสะอาดข้อมูล (ลบช่องว่าง)
-                        # 1. เปลี่ยนตัวแปรที่ใช้ดึงราคา จากเดิม df_all_stocks ให้เป็นตัวแปรที่เก็บราคาหุ้นทั้งหมด
-                        # สมมติว่าตัวแปรที่พี่อ้ำใช้เก็บราคาหุ้นทั้งหมดคือ df_all_stocks 
-                        # (เปลี่ยนชื่อให้ตรงกับตัวแปรที่พี่อ้ำมีในโปรแกรมนะครับ)
-                        
-                        # ทำความสะอาดข้อมูลทั้งสองฝั่ง
-                        df_all_stocks['Ticker'] = df_all_stocks['Ticker'].astype(str).str.strip()
+                        # 1. ทำความสะอาด Ticker ก่อนนำไปเทียบ
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
                         
-                        # สร้าง Dictionary สำหรับ Mapping
-                        price_map = dict(zip(df_all_stocks['Ticker'], df_all_stocks['ราคาล่าสุด']))
-                        
-                        # 2. แมปราคาจากราคาหุ้นทั้งหมด
-                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)
-                        
-                        # เติมค่าว่างด้วย 0.0 กรณีไม่พบราคา
-                        plan_df['ราคาตลาด'] = plan_df['ราคาตลาด'].fillna(0.0) 
+                        # ใช้ตัวแปรราคาหุ้นทั้งหมด (สมมติว่าคือ df_all_stocks)
+                        # ตรวจสอบว่า df_all_stocks มีอยู่จริงในหน้านี้
+                        if 'df_all_stocks' in locals() or 'df_all_stocks' in globals():
+                            df_all_stocks['Ticker'] = df_all_stocks['Ticker'].astype(str).str.strip()
+                            price_map = dict(zip(df_all_stocks['Ticker'], df_all_stocks['ราคาล่าสุด']))
+                            plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map).fillna(0.0)
+                        else:
+                            plan_df['ราคาตลาด'] = 0.0
+                            st.warning("ไม่พบฐานข้อมูลราคาหุ้น โปรดตรวจสอบการโหลดข้อมูล")
 
-                        if not missing_tickers.empty:
-                            # ใช้ list() แทน tolist() เพื่อความปลอดภัยกับทุกเวอร์ชัน
-                            st.warning(f"ไม่พบราคาของหุ้นบางตัวในระบบ: {list(missing_tickers)}")
-                        
-                        # 3. คำนวณ % ห่างจาก SL แบบปลอดภัย
+                        # 2. คำนวณ % ห่างจาก SL
                         plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
                             lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
                             if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
-                        
+
                         # 3. แสดงตาราง
                         edited_df = st.data_editor(
                             plan_df,
                             column_config={
                                 "Image_URL": st.column_config.LinkColumn("รูปแผน", display_text="ดูรูป"),
-                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
-                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
-                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f"),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%")
                             },
@@ -1998,6 +1984,15 @@ def main():
                             key="editable_plan_table",
                             num_rows="dynamic"
                         )
+                        
+                        # 4. ปุ่มบันทึก (ระวัง: เก็บเฉพาะคอลัมน์ตั้งต้น)
+                        if st.button("💾 บันทึกการแก้ไข (Update)"):
+                            cols_to_save = ['Ticker', 'Entry_Price', 'Stop_Loss', 'Take_Profit', 'Image_URL', 'Timestamp']
+                            save_data(edited_df[cols_to_save], "TradingPlan")
+                            st.cache_data.clear()
+                            st.rerun()
+                    else:
+                        st.info("ยังไม่มีข้อมูลแผนการเทรด")
                         
                         # 4. ปุ่มบันทึก (ระวัง: อย่าบันทึกคอลัมน์ 'ราคาตลาด' และ 'ห่างจาก_SL(%)' กลับลง Sheet)
                         if st.button("💾 บันทึกการแก้ไข (Update)"):
