@@ -1943,6 +1943,7 @@ def main():
                         }
                         if append_to_gsheet(new_data, "TradingPlan"):
                             st.success("บันทึกแผนเรียบร้อย!")
+                            st.cache_data.clear() # <--- เพิ่มบรรทัดนี้ เพื่อล้างหน่วยความจำเก่า
                             st.rerun() # สั่ง Rerun เพื่อให้ตารางด้านล่างอัปเดตข้อมูลใหม่
         
                     # --- ตารางแสดงแผนการเทรด ---
