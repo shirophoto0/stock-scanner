@@ -421,8 +421,8 @@ def load_from_gsheet():
         
         # --- ตรวจสอบข้อมูลดิบที่ได้จาก GSheet ทันที ---
         if data:
-            st.write("DEBUG: แถวแรกของข้อมูลดิบ:", data[0])
-            st.write("ค่า PE_Ratio ในแถวแรก:", data[0].get('PE_Ratio'))
+            # st.write("DEBUG: แถวแรกของข้อมูลดิบ:", data[0])
+            # st.write("ค่า PE_Ratio ในแถวแรก:", data[0].get('PE_Ratio'))
         # ----------------------------------------
         # ดึง Client
         client = get_gsheet_client()
