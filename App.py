@@ -1018,29 +1018,38 @@ def main():
         # 5. แสดงผล (ใช้ final_sorted_df ที่ผ่านการกรอง 2 ชั้นแล้ว)
         st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): เจอทั้งหมด {len(final_sorted_df)} ตัว")
         
-        # ลบเฉพาะคอลัมน์ที่เราไม่ต้องการแสดง
-        df_display = final_sorted_df.drop(columns=bool_cols, errors='ignore')
+        # --- เพิ่มส่วนนี้: กำหนดคอลัมน์ที่ต้องการแสดง ---
+        # คอลัมน์พื้นฐานที่ต้องการให้โชว์ตลอด
+        fixed_cols = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
         
-        # ส่วนแสดงผลตาราง (ใช้ df_display)
-        # ... (โค้ด styled_df ของพี่อ้ำ ใช้ df_display แทน final_sorted_df ได้เลยครับ) ...
+        # กำหนดคอลัมน์พิเศษตาม Strategy
+        strategy_cols_map = {
+            "3 Month High": ['New_High_3M_มาแล้ว(วัน)'], 
+            "6 Month High": ['New_High_6M_มาแล้ว(วัน)'],
+            "52 Week High": ['New_High_52W_มาแล้ว(วัน)'],
+            "RS Line ตัด 0 ขึ้นมาแล้ว": ['ตัดเส้น0ขึ้นมาแล้ว(วัน)'],
+            "RS Line ใกล้จะตัด 0 (จ่อระเบิด)": ['อยู่ใต้เส้น0มาแล้ว(วัน)']
+        }
         
-        # เพิ่มส่วนนี้เพื่อบังคับให้คอลัมน์ตัวเลขเป็น Numeric จริงๆ
+        # รวมคอลัมน์ทั้งหมดที่ต้องการ
+        cols_to_show = fixed_cols + strategy_cols_map.get(strategy_option, [])
+        
+        # กรองเฉพาะคอลัมน์ที่มีอยู่จริงใน DataFrame (ป้องกัน Error)
+        existing_cols = [c for c in cols_to_show if c in final_sorted_df.columns]
+        df_display = final_sorted_df[existing_cols].copy()
+        # ---------------------------------------------
+
+        # บังคับแปลงตัวเลข
         numeric_cols = ['PE_Ratio', 'ปันผล_%', 'ราคาล่าสุด', 'RSI_14', 'RS_Line']
         for col in numeric_cols:
             if col in df_display.columns:
-                # errors='coerce' จะเปลี่ยนค่าที่อ่านไม่ได้เป็น NaN (แล้วจะแสดงเป็น - ตามที่เราตั้งค่าไว้)
                 df_display[col] = pd.to_numeric(df_display[col], errors='coerce')
-                
+        
+        # จัดรูปแบบตาราง
         styled_df = df_display.style.format({
             'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
             'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
-        }, na_rep='-').apply(highlight_rsi_zones, axis=1)   
-
-        # เพิ่มบรรทัดนี้เพื่อเช็คว่าในตารางมันอ่านค่าเป็นอะไร
-        # st.write("--- DEBUG: ตรวจสอบข้อมูลก่อนแสดงผล ---")
-        # st.write(df_display[['Ticker', 'PE_Ratio']].head(5))
-        # st.write("ประเภทข้อมูล (Data Types):")
-        # st.write(df_display.dtypes)
+        }, na_rep='-').apply(highlight_rsi_zones, axis=1)
 
         event = st.dataframe(
             styled_df,
