@@ -146,7 +146,20 @@ def save_to_gsheet(df):
     sheet.update('A1', data_to_write)
     
     print("DEBUG: บันทึกข้อมูลเสร็จสิ้น!")
-        
+# 2. ฟังก์ชันอเนกประสงค์ (เอามาแทรกตรงนี้)
+@st.cache_data(ttl=600)
+def load_data(sheet_name):
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet(sheet_name)
+    data = sheet.get_all_records()
+    return pd.DataFrame(data)
+
+def save_data(df, sheet_name):
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet(sheet_name)
+    sheet.clear()
+    sheet.update([df.columns.values.tolist()] + df.values.tolist())
+    
 def save_cash_balance(amount):
     try:
         client = get_gsheet_client()
@@ -314,7 +327,26 @@ def get_pe_ratio(ticker_obj):
         return pe if pe is not None else 0
     except:
         return 0   
-
+        
+def append_to_gsheet(data_dict, sheet_name):
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet(TradingPlan)
+        # ดึงค่าจาก Dictionary มาทำเป็น List เพื่อ append
+        row_values = [
+            data_dict.get('Ticker'),
+            data_dict.get('Entry_Price'),
+            data_dict.get('Stop_Loss'),
+            data_dict.get('Take_Profit'),
+            data_dict.get('Image_URL'),
+            data_dict.get('Timestamp')
+        ]
+        sheet.append_row(row_values)
+        return True
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
+        return False
+        
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
@@ -611,7 +643,7 @@ def main():
             st.dataframe(filtered_df, use_container_width=True)
         
         ################################
-        # 1. Sidebar (ตัวกรอง)
+        # 1. Slidebar (ตัวกรอง)
         ################################
         with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
             max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0)
@@ -1079,9 +1111,9 @@ def main():
         st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
         st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
         
-        # 1. ปรับแก้บรรทัดสร้าง Tabs เพิ่ม tab_dashboard เข้าไปครับ
-        tab_dashboard, tab_risk, tab_portfolio, tab_journal = st.tabs([
-            "📈 Dashboard", "🧮 คำนวณความเสี่ยง", "📊 พอร์ตโฟลิโอ", "📖 สมุดบันทึก"
+        # 1. สร้าง Tabs (จัดรวม แผนและ Alert ไว้ใน tab เดียวกัน)
+        tab_dashboard, tab_risk, tab_portfolio, tab_journal, tab_plan = st.tabs([
+            "📈 Dashboard", "🧮 คำนวณความเสี่ยง", "📊 พอร์ตโฟลิโอ", "📖 สมุดบันทึก", "📝 แผนและ Alert"
         ])
         
         ##############################
@@ -1883,7 +1915,51 @@ def main():
                     st.dataframe(st_table, use_container_width=True)
                     
                     st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
-
+                with tab_plan:
+                    
+            st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
+            
+                with st.form("trading_plan_form", clear_on_submit=True):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
+                        entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f")
+                        stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95), format="%.2f")
+                    with col2:
+                        take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f")
+                        image_url = st.text_input("วาง Link รูปภาพ (URL):") # สำหรับเวอร์ชันเริ่มต้นใช้เป็น URL
+                    
+                    submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
+    
+                if submit_button:
+                    from datetime import datetime
+                    new_data = {
+                        'Ticker': ticker,
+                        'Entry_Price': entry,
+                        'Stop_Loss': stop_loss,
+                        'Take_Profit': take_profit,
+                        'Image_URL': image_url,
+                        'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    if append_to_gsheet(new_data, "TradingPlan"):
+                        st.success("บันทึกแผนเรียบร้อย!")
+                        st.rerun() # สั่ง Rerun เพื่อให้ตารางด้านล่างอัปเดตข้อมูลใหม่
+    
+                # --- ตารางแสดงแผนการเทรด ---
+                st.divider()
+                st.subheader("📊 ตารางแผนการเทรดของฉัน")
+                plan_df = load_data("TradingPlan") # ใช้ฟังก์ชันเดิมที่แก้ไขแล้ว
+                
+                if not plan_df.empty:
+                    # ถ้ามีข้อมูลราคาตลาด ให้ Merge หรือคำนวณ % Diff ตรงนี้ได้ครับ
+                    # ตัวอย่างการทำ LinkColumn
+                    st.dataframe(
+                        plan_df,
+                        column_config={
+                            "Image_URL": st.column_config.LinkColumn("ดูรูปภาพ")
+                        },
+                        use_container_width=True
+                    )
 
 if __name__ == "__main__":
     main()
