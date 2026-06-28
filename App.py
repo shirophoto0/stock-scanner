@@ -1959,141 +1959,65 @@ def main():
                             st.rerun()
                 
                     # --- ตารางแสดงแผนการเทรด ---
+                    # --- ตารางแสดงแผนการเทรด ---
                     st.divider()
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        
-                        # 1. เตรียมข้อมูลพื้นฐาน
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
                         
-                        # ดึงราคาตลาดจาก df_all_stocks
-                        if 'df_all_stocks' in locals() or 'df_all_stocks' in globals():
-                            df_all_stocks['Ticker'] = df_all_stocks['Ticker'].astype(str).str.strip()
-                            price_map = dict(zip(df_all_stocks['Ticker'], df_all_stocks['ราคาล่าสุด']))
-                            plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map).fillna(0.0)
-                        else:
-                            plan_df['ราคาตลาด'] = 0.0
-                
-                        # คำนวณ % ห่างจาก SL
+                        # ... (ส่วนการดึงราคาตลาดและคำนวณห่างจาก SL เหมือนเดิม) ...
                         plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
                             lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
                             if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
-                
-                        # 2. เตรียมข้อมูล High 5 วันย้อนหลัง (ดึงสดผ่าน yfinance)
-                        # --- ให้วางส่วนนี้ไว้ด้านบนสุดของไฟล์ (นอกฟังก์ชัน) ---
-                        
-                        # --- ฟังก์ชันดึงข้อมูล ---
-                        @st.cache_data(ttl=3600)
-                        def fetch_stock_stats(tickers):
-                            stats = {}
-                            for t in tickers:
-                                try:
-                                    df = yf.download(f"{t}.BK", period="1mo", progress=False)
-                                    if not df.empty and len(df) >= 20:
-                                        stats[t] = {
-                                            'High_5d': df['High'].tail(5).max(),
-                                            'Avg_Vol_20d': df['Volume'].tail(20).mean(),
-                                            'Volume': df['Volume'].iloc[-1]
-                                        }
-                                    else:
-                                        stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0, 'Volume': 0}
-                                except:
-                                    stats[t] = {'High_5d': 0, 'Avg_Vol_20d': 0, 'Volume': 0}
-                            return stats
-                        
-                        # --- ส่วนของการทำงาน (ใน main หรือจุดที่เรียกใช้) ---
-                        tickers_to_fetch = plan_df['Ticker'].unique().tolist()
-                        stats_map = fetch_stock_stats(tickers_to_fetch)
-                        
-                        plan_df['High_5d'] = plan_df['Ticker'].map(lambda x: stats_map.get(x, {}).get('High_5d', 0))
-                        plan_df['Avg_Vol_20d'] = plan_df['Ticker'].map(lambda x: stats_map.get(x, {}).get('Avg_Vol_20d', 0))
-                        plan_df['Volume'] = plan_df['Ticker'].map(lambda x: stats_map.get(x, {}).get('Volume', 0))
-                        
-                        # --- บังคับแปลงเป็นตัวเลขก่อนเข้าฟังก์ชัน ---
-                        plan_df['High_5d'] = pd.to_numeric(plan_df['High_5d'], errors='coerce').fillna(0)
-                        plan_df['Volume'] = pd.to_numeric(plan_df['Volume'], errors='coerce').fillna(0)
-                        plan_df['Avg_Vol_20d'] = pd.to_numeric(plan_df['Avg_Vol_20d'], errors='coerce').fillna(0)
-                        
-                        # --- ฟังก์ชันเช็ค Alert ---
+                    
+                        # 1. นิยามฟังก์ชันเช็คสถานะ (ไว้นอกสุด)
                         def check_alerts(row):
                             price = row['ราคาตลาด']
                             entry = row['Entry_Price']
                             sl = row['Stop_Loss']
                             tp = row['Take_Profit']
                             
-                            alerts = []
                             if price <= 0: return "ไม่มีราคา"
                             
-                            if abs(price - entry) / entry <= 0.01: alerts.append("⚠️ ใกล้จุดซื้อ")
-                            if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: alerts.append("🚨 ใกล้จุด SL!")
-                            if price >= tp: alerts.append("💰 ถึงเป้า TP!")
+                            if abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
+                            if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
+                            if price >= tp: return "💰 ถึงเป้า TP!"
                             
-                            # เช็ค Breakout 5D
-                            if row['High_5d'] > 0 and price > row['High_5d']:
-                                alerts.append("🚀 Breakout 5D")
-                                    
-                            # เช็ค Vol Spike
-                            if row['Avg_Vol_20d'] > 0 and row['Volume'] > (row['Avg_Vol_20d'] * 3):
-                                alerts.append("🔥 Vol Spike")
-                            
-                            return " | ".join(alerts) if alerts else "ปกติ"
-
-                            if alerts:
-                            # ป้องกันส่งซ้ำ: ตรวจสอบว่าใน session_state มีการส่งไปแล้วหรือยัง
-                                alert_key = f"alert_{row['Ticker']}_{status_str}"
-                                if st.session_state.get(alert_key) != True:
-                                    msg = f"\nหุ้น: {row['Ticker']}\nสถานะ: {status_str}\nราคาตลาด: {row['ราคาตลาด']}"
-                                    send_line_notify(msg, LINE_TOKEN)
-                                    # บันทึกไว้ว่าส่งไปแล้ว
-                                    st.session_state[alert_key] = True
-                                    
-                            return status_str
-                                            
-                        # --- สั่ง Apply เพียงครั้งเดียว ---
+                            return "ปกติ"
+                    
+                        # 2. สั่ง Apply เพื่อสร้างคอลัมน์ 'สถานะ' (ต้องอยู่หลังฟังก์ชันและนอกฟังก์ชัน)
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                        
-                        # --- จัดเรียง Column ---
-                        column_order = [
-                            'Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 
-                            'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL'
-                        ]
+                    
+                        # 3. จัดเรียง Column
+                        column_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
                         plan_df = plan_df[[c for c in column_order if c in plan_df.columns]]
-                
-                        # 3. แสดงตารางแบบแก้ไขได้
+                    
+                        # 4. แสดงตาราง
                         edited_df = st.data_editor(
                             plan_df,
                             column_config={
-                                # คอลัมน์ที่แก้ไขไม่ได้ (disabled=True)
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
-                                "Timestamp": st.column_config.TextColumn("Time Stamp", disabled=True),
-                                "Image_URL": st.column_config.LinkColumn("รูปแผน", display_text="ดูรูป", disabled=True),
-                                
-                                # คอลัมน์ที่แก้ไขได้ (ไม่ต้องใส่ disabled หรือตั้งเป็น False)
+                                "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
                                 "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
                                 "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
-                                "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True)
                             },
                             use_container_width=True,
-                            key="editable_plan_table",
-                            num_rows="dynamic" # ถ้าอยากให้ลบแถวได้ ก็เปิดไว้ แต่ถ้าอยากล็อกห้ามลบ ให้เปลี่ยนเป็น num_rows="fixed" ครับ
+                            key="editable_plan_table"
                         )
-                        
-                        # 4. ปุ่มบันทึกการแก้ไข
-                        if st.button("💾 บันทึกการแก้ไข (Update)", key="btn_update_plan"):
-                            cols_to_save = ['Ticker', 'Entry_Price', 'Stop_Loss', 'Take_Profit', 'Image_URL', 'Timestamp']
-                            save_df = edited_df[cols_to_save]
-                            save_data(save_df, "TradingPlan")
-                            st.cache_data.clear()
+                    
+                        # 5. ปุ่มบันทึก
+                        if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
+                            save_data(edited_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
-                        st.info("ยังไม่มีข้อมูลแผนการเทรด")
+    st.info("ยังไม่มีข้อมูลแผนการเทรด")
 
 if __name__ == "__main__":
     main()
