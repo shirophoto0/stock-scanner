@@ -1966,7 +1966,7 @@ def main():
                         # ถ้ายังไม่มีราคา ให้ลองโชว์ค่า Ticker ที่หาไม่เจอมาดูครับ
                         # missing_tickers = plan_df[plan_df['ราคาตลาด'].isna()]['Ticker']
                         # if not missing_tickers.empty:
-                             st.warning(f"ไม่พบราคาของหุ้น: {missing_tickers.tolist()}")
+                        st.warning(f"ไม่พบราคาของหุ้น: {missing_tickers.tolist()}")
                         
                         # 2. คำนวณ % ส่วนต่างเมื่อราคาเข้าใกล้ Stop Loss
                         # สูตร: ((ราคาตลาด - Stop_Loss) / ราคาตลาด) * 100
