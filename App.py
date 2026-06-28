@@ -1991,8 +1991,8 @@ def main():
                             save_data(edited_df[cols_to_save], "TradingPlan")
                             st.cache_data.clear()
                             st.rerun()
-                    else:
-                        st.info("ยังไม่มีข้อมูลแผนการเทรด")
+                        else:
+                            st.info("ยังไม่มีข้อมูลแผนการเทรด")
                         
                         # 4. ปุ่มบันทึก (ระวัง: อย่าบันทึกคอลัมน์ 'ราคาตลาด' และ 'ห่างจาก_SL(%)' กลับลง Sheet)
                         if st.button("💾 บันทึกการแก้ไข (Update)"):
