@@ -1952,10 +1952,11 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        # 1. เตรียมข้อมูล
+                        
+                        # 1. เตรียมข้อมูลพื้นฐาน
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
                         
-                        # ดึงราคาตลาดจาก df_all_stocks (หรือชื่อที่พี่อ้ำใช้อยู่)
+                        # ดึงราคาตลาดจาก df_all_stocks
                         if 'df_all_stocks' in locals() or 'df_all_stocks' in globals():
                             df_all_stocks['Ticker'] = df_all_stocks['Ticker'].astype(str).str.strip()
                             price_map = dict(zip(df_all_stocks['Ticker'], df_all_stocks['ราคาล่าสุด']))
@@ -1969,7 +1970,25 @@ def main():
                             if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
                 
-                        # 1. ฟังก์ชันเช็ค Alert รวมทุกเงื่อนไข
+                        # 2. เตรียมข้อมูล High 5 วันย้อนหลัง (ดึงสดผ่าน yfinance)
+                        @st.cache_data(ttl=3600)
+                        def fetch_high_5d(tickers):
+                            high_map = {}
+                            for t in tickers:
+                                try:
+                                    # ดึงข้อมูล 5 วันย้อนหลัง (.BK สำหรับหุ้นไทย)
+                                    df = yf.download(f"{t}.BK", period="5d", progress=False)
+                                    if not df.empty:
+                                        high_map[t] = df['High'].max()
+                                except:
+                                    high_map[t] = 0
+                            return high_map
+                
+                        # ดึงค่า High 5 วันมาเก็บไว้ในตาราง
+                        high_map = fetch_high_5d(plan_df['Ticker'].unique())
+                        plan_df['High_5d'] = plan_df['Ticker'].map(high_map)
+                
+                        # 3. ฟังก์ชันเช็ค Alert
                         def check_alerts(row, df_all_stocks):
                             price = row['ราคาตลาด']
                             entry = row['Entry_Price']
@@ -1978,39 +1997,32 @@ def main():
                             ticker = row['Ticker']
                             
                             alerts = []
-                            
-                            # ก. เช็คสถานะราคาปกติ
                             if price <= 0: return "ไม่มีราคา"
                             if abs(price - entry) / entry <= 0.01: alerts.append("⚠️ ใกล้จุดซื้อ")
                             if (price - sl) / sl <= 0.01 and price > sl: alerts.append("🚨 ใกล้จุด SL!")
                             if price >= tp: alerts.append("💰 ถึงเป้า TP!")
                             
-                            # ข. เช็คสถานะพิเศษ (ต้องมั่นใจว่า df_all_stocks มีข้อมูลครบ)
+                            # เช็ค Breakout จาก High 5 วันที่เราดึงมาใหม่
+                            if row['High_5d'] > 0 and price > row['High_5d']:
+                                alerts.append("🚀 Breakout 5D")
+                            
+                            # เช็ค Vol Spike จาก df_all_stocks (ถ้ามี)
                             stock_info = df_all_stocks[df_all_stocks['Ticker'] == ticker]
-                            if not stock_info.empty:
-                                # Breakout Alert (เงื่อนไขตัวอย่าง: ราคาทะลุ High 5 วัน)
-                                if 'High_5d' in stock_info.columns and price > stock_info['High_5d'].values[0] and stock_info['High_5d'].values[0] > 0:
-                                    alerts.append("🚀 Breakout")
-                                
-                                # Volume Spike Alert (เงื่อนไขตัวอย่าง: Vol วันนี้ > 3 เท่าของเฉลี่ย 20 วัน)
-                                if 'Volume' in stock_info.columns and 'Avg_Vol_20d' in stock_info.columns:
-                                    if stock_info['Volume'].values[0] > (stock_info['Avg_Vol_20d'].values[0] * 3):
-                                        alerts.append("🔥 Vol Spike")
-    
+                            if not stock_info.empty and 'Volume' in stock_info.columns and 'Avg_Vol_20d' in stock_info.columns:
+                                if stock_info['Volume'].values[0] > (stock_info['Avg_Vol_20d'].values[0] * 3):
+                                    alerts.append("🔥 Vol Spike")
+                            
                             return " | ".join(alerts) if alerts else "ปกติ"
-    
-                        # 2. นำไปใช้งานกับ plan_df
-                        if 'df_all_stocks' in locals() or 'df_all_stocks' in globals():
-                            plan_df['สถานะ'] = plan_df.apply(lambda row: check_alerts(row, df_all_stocks), axis=1)
-                        else:
-                            plan_df['สถานะ'] = "ปกติ"
-    
-                        # 3. จัดเรียง Column
+                
+                        # 4. นำไปใช้งาน
+                        plan_df['สถานะ'] = plan_df.apply(lambda row: check_alerts(row, df_all_stocks), axis=1)
+                
+                        # 5. จัดเรียง Column
                         column_order = [
                             'Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 
                             'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL'
                         ]
-                        # กรองเฉพาะ Column ที่มีอยู่จริง
+                
                         existing_cols = [c for c in column_order if c in plan_df.columns]
                         plan_df = plan_df[existing_cols]
                 
