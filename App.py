@@ -167,7 +167,7 @@ def load_from_gsheet():
         return df
         # แสดงชื่อคอลัมน์ที่อ่านได้จริงออกมาเช็ค (บรรทัดนี้ช่วยได้มาก)
         # st.write("คอลัมน์ที่อ่านได้จาก Sheet:", df.columns.tolist())
-        
+        st.write("ชื่อคอลัมน์ที่อ่านได้ทั้งหมด:", df.columns.tolist())
         numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
         for col in numeric_cols:
             if col in df.columns:
@@ -1063,10 +1063,10 @@ def main():
         }, na_rep='-').apply(highlight_rsi_zones, axis=1)   
 
         # เพิ่มบรรทัดนี้เพื่อเช็คว่าในตารางมันอ่านค่าเป็นอะไร
-        st.write("--- DEBUG: ตรวจสอบข้อมูลก่อนแสดงผล ---")
-        st.write(df_display[['Ticker', 'PE_Ratio']].head(5))
-        st.write("ประเภทข้อมูล (Data Types):")
-        st.write(df_display.dtypes)
+        # st.write("--- DEBUG: ตรวจสอบข้อมูลก่อนแสดงผล ---")
+        # st.write(df_display[['Ticker', 'PE_Ratio']].head(5))
+        # st.write("ประเภทข้อมูล (Data Types):")
+        # st.write(df_display.dtypes)
 
         event = st.dataframe(
             styled_df,
