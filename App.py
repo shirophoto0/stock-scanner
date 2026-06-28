@@ -1982,18 +1982,21 @@ def main():
                         edited_df = st.data_editor(
                             plan_df,
                             column_config={
-                                "Ticker": st.column_config.TextColumn("หุ้น"),
+                                # คอลัมน์ที่แก้ไขไม่ได้ (disabled=True)
+                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
+                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
+                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
+                                "Timestamp": st.column_config.TextColumn("Time Stamp", disabled=True),
+                                "Image_URL": st.column_config.LinkColumn("รูปแผน", display_text="ดูรูป", disabled=True),
+                                
+                                # คอลัมน์ที่แก้ไขได้ (ไม่ต้องใส่ disabled หรือตั้งเป็น False)
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
-                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f"),
                                 "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
-                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%"),
-                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
-                                "Timestamp": st.column_config.TextColumn("Time Stamp"),
-                                "Image_URL": st.column_config.LinkColumn("รูปแผน", display_text="ดูรูป")
+                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f")
                             },
                             use_container_width=True,
                             key="editable_plan_table",
-                            num_rows="dynamic"
+                            num_rows="dynamic" # ถ้าอยากให้ลบแถวได้ ก็เปิดไว้ แต่ถ้าอยากล็อกห้ามลบ ให้เปลี่ยนเป็น num_rows="fixed" ครับ
                         )
                         
                         # 4. ปุ่มบันทึกการแก้ไข
