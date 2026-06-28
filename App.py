@@ -161,7 +161,10 @@ def load_from_gsheet():
             return None
             
         df = pd.DataFrame(data)
-        
+        # ในฟังก์ชัน load_from_gsheet ของพี่อ้ำ ควรมีส่วนนี้ก่อนจะ return df ออกมา
+        df.columns = df.columns.str.strip() # ลบช่องว่างหน้าหลังชื่อคอลัมน์
+        df['PE_Ratio'] = pd.to_numeric(df['PE_Ratio'], errors='coerce').fillna(0)
+        return df
         # แสดงชื่อคอลัมน์ที่อ่านได้จริงออกมาเช็ค (บรรทัดนี้ช่วยได้มาก)
         # st.write("คอลัมน์ที่อ่านได้จาก Sheet:", df.columns.tolist())
         
