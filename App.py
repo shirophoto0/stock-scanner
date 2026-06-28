@@ -1969,11 +1969,24 @@ def main():
                             if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
                 
+                        def check_alerts(row):
+                            price = row['ราคาตลาด']
+                            entry = row['Entry_Price']
+                            sl = row['Stop_Loss']
+                            tp = row['Take_Profit']
+                            
+                            if price <= 0: return "ไม่มีราคา"
+                            if abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
+                            if (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
+                            if price >= tp: return "💰 ถึงเป้า TP!"
+                            return "ปกติ"
+                    
+                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                         # 2. จัดเรียง Column ตามสั่ง
                         column_order = [
                             'Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 
-                            'ห่างจาก_SL(%)', 'Take_Profit', 'Timestamp', 'Image_URL'
-                        ]
+                            'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL'
+                        ]            
                         # กรองเฉพาะ Column ที่มีอยู่จริง
                         existing_cols = [c for c in column_order if c in plan_df.columns]
                         plan_df = plan_df[existing_cols]
