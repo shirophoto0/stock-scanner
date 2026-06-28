@@ -629,15 +629,15 @@ def main():
     # ดึงข้อมูลจาก Sheets หรือ Yahoo
     if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
         with st.spinner("กำลังดึงข้อมูล..."):
-            df_set100 = load_and_calculate_stock_data()
-            save_to_gsheet(df_set100)
+            df_all_stocks = load_and_calculate_stock_data()
+            save_to_gsheet(df_all_stocks)
     else:
         try:
-            df_set100 = load_from_gsheet()
+            df_all_stocks = load_from_gsheet()
             st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
         except:
             st.warning("⚠️ ไม่พบข้อมูลใน Sheet กำลังโหลดใหม่...")
-            df_set100 = load_and_calculate_stock_data()
+            df_all_stocks = load_and_calculate_stock_data()
             
             # แสดงตาราง
             st.dataframe(filtered_df, use_container_width=True)
@@ -666,9 +666,9 @@ def main():
             )
 
             # ตรวจสอบข้อมูลก่อนโชว์
-            if df_set100 is not None and not df_set100.empty:
+            if df_all_stocks is not None and not df_all_stocks.empty:
                 # 1. เตรียมข้อมูลและทำความสะอาด
-                filtered_df = df_set100.copy()
+                filtered_df = df_all_stocks.copy()
                 filtered_df.columns = filtered_df.columns.str.strip()
                 
                 # แปลงคอลัมน์ตัวเลข
@@ -1029,8 +1029,8 @@ def main():
         # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรองผ่าน Sidebar มาแล้ว)
         # =============================================================
         
-        # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_set100)
-        df_scan = filtered_df.copy() if 'filtered_df' in locals() else df_set100.copy()
+        # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
+        df_scan = filtered_df.copy() if 'filtered_df' in locals() else df_all_stocks.copy()
 
         # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
         if strategy_option == "3 Month High":
@@ -1952,30 +1952,35 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        # 1. ดึงราคาตลาดปัจจุบันจาก df_set100
+                        # 1. ดึงราคาตลาดปัจจุบันจาก df_all_stocks
                         # สร้าง Dictionary เพื่อให้ดึงราคาได้เร็วขึ้น (Ticker -> ราคา)
                         # ล้างช่องว่างออกให้หมดก่อนนำไปทำ Map
                         # 1. ทำความสะอาดข้อมูล (ลบช่องว่าง)
-                        df_set100['Ticker'] = df_set100['Ticker'].astype(str).str.strip()
+                        # 1. เปลี่ยนตัวแปรที่ใช้ดึงราคา จากเดิม df_all_stocks ให้เป็นตัวแปรที่เก็บราคาหุ้นทั้งหมด
+                        # สมมติว่าตัวแปรที่พี่อ้ำใช้เก็บราคาหุ้นทั้งหมดคือ df_all_stocks 
+                        # (เปลี่ยนชื่อให้ตรงกับตัวแปรที่พี่อ้ำมีในโปรแกรมนะครับ)
+                        
+                        # ทำความสะอาดข้อมูลทั้งสองฝั่ง
+                        df_all_stocks['Ticker'] = df_all_stocks['Ticker'].astype(str).str.strip()
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
                         
-                        # 2. สร้าง Mapping (ใช้ dict เปล่าเผื่อกรณี df_set100 ว่าง)
-                        price_map = dict(zip(df_set100['Ticker'], df_set100['ราคาล่าสุด']))
+                        # สร้าง Dictionary สำหรับ Mapping
+                        price_map = dict(zip(df_all_stocks['Ticker'], df_all_stocks['ราคาล่าสุด']))
                         
-                        # 3. แมปราคา
+                        # 2. แมปราคาจากราคาหุ้นทั้งหมด
                         plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)
                         
-                        # 4. ตรวจสอบว่ามีหุ้นตัวไหนหาราคาไม่เจอ (ใช้วิธีเช็คแบบปลอดภัย)
-                        missing_tickers = plan_df[plan_df['ราคาตลาด'].isna()]['Ticker']
-                        
+                        # เติมค่าว่างด้วย 0.0 กรณีไม่พบราคา
+                        plan_df['ราคาตลาด'] = plan_df['ราคาตลาด'].fillna(0.0) 
+
                         if not missing_tickers.empty:
                             # ใช้ list() แทน tolist() เพื่อความปลอดภัยกับทุกเวอร์ชัน
                             st.warning(f"ไม่พบราคาของหุ้นบางตัวในระบบ: {list(missing_tickers)}")
                         
-                        # 2. คำนวณ % ส่วนต่างเมื่อราคาเข้าใกล้ Stop Loss
-                        # สูตร: ((ราคาตลาด - Stop_Loss) / ราคาตลาด) * 100
-                        plan_df['ห่างจาก_SL(%)'] = (
-                            (plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100
+                        # 3. คำนวณ % ห่างจาก SL แบบปลอดภัย
+                        plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
+                            lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
+                            if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
                         
                         # 3. แสดงตาราง
