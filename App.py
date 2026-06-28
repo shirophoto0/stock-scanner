@@ -2027,7 +2027,14 @@ def main():
                                     alerts.append("🔥 Vol Spike")
                             
                             return " | ".join(alerts) if alerts else "ปกติ"
-                
+
+                        # บังคับให้คอลัมน์เหล่านี้เป็นตัวเลข ถ้าเป็นตัวหนังสือหรือค่าว่างให้เปลี่ยนเป็น 0
+                        plan_df['High_5d'] = pd.to_numeric(plan_df['High_5d'], errors='coerce').fillna(0)
+                        plan_df['Volume'] = pd.to_numeric(plan_df['Volume'], errors='coerce').fillna(0)
+                        plan_df['Avg_Vol_20d'] = pd.to_numeric(plan_df['Avg_Vol_20d'], errors='coerce').fillna(0)
+                        
+                        # แล้วค่อยสั่ง apply
+                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                         # 2. นำไปใช้งานกับ plan_df
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                 
