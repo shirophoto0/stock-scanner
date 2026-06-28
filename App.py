@@ -1985,7 +1985,7 @@ def main():
                             return high_map
                 
                         # ดึงค่า High 5 วันมาเก็บไว้ในตาราง
-                        high_map = fetch_high_5d(plan_df['Ticker'].unique())
+                        high_map = fetch_high_5d(plan_df['Ticker'].unique().tolist())
                         plan_df['High_5d'] = plan_df['Ticker'].map(high_map)
                 
                         # 3. ฟังก์ชันเช็ค Alert
