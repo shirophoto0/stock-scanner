@@ -1949,18 +1949,47 @@ def main():
                     # --- ตารางแสดงแผนการเทรด ---
                     st.divider()
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
-                    plan_df = load_data("TradingPlan") # ใช้ฟังก์ชันเดิมที่แก้ไขแล้ว
+                    plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        # ถ้ามีข้อมูลราคาตลาด ให้ Merge หรือคำนวณ % Diff ตรงนี้ได้ครับ
-                        # ตัวอย่างการทำ LinkColumn
-                        st.dataframe(
+                        # 1. แสดงตารางแบบแก้ไขได้ และเปิดการเลือกแถว (selection_mode)
+                        edited_df = st.data_editor(
                             plan_df,
                             column_config={
-                                "Image_URL": st.column_config.LinkColumn("ดูรูปภาพ")
+                                "Image_URL": st.column_config.LinkColumn(
+                                    "รูปแผน", 
+                                    display_text="ดูรูป"
+                                ),
+                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
+                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
+                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f")
                             },
-                            use_container_width=True
+                            use_container_width=True,
+                            key="editable_plan_table",
+                            num_rows="dynamic" # อนุญาตให้ลบ/เพิ่มแถวได้จาก UI ของตาราง
                         )
+                        
+                        # 2. ปุ่มจัดการข้อมูล
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            if st.button("💾 บันทึกการแก้ไข (Update)"):
+                                save_data(edited_df, "TradingPlan")
+                                st.cache_data.clear()
+                                st.success("อัปเดตข้อมูลเรียบร้อย!")
+                                st.rerun()
+                                
+                        with col2:
+                            # วิธีลบง่ายๆ: ตรวจสอบแถวที่ถูกลบไปจาก edited_df
+                            if st.button("🗑️ ลบแถวที่เลือก"):
+                                # ระบบจะเปรียบเทียบ edited_df กับ plan_df 
+                                # หากมีการลบแถวออกในหน้า UI ค่าที่ส่งกลับมาจะหายไปเอง
+                                save_data(edited_df, "TradingPlan")
+                                st.cache_data.clear()
+                                st.warning("ลบข้อมูลแถวที่เลือกออกแล้ว!")
+                                st.rerun()
+                    else:
+                        st.info("ยังไม่มีข้อมูลแผนการเทรด")
 
 if __name__ == "__main__":
     main()
