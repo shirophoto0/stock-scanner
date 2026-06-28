@@ -1047,6 +1047,13 @@ def main():
         # ส่วนแสดงผลตาราง (ใช้ df_display)
         # ... (โค้ด styled_df ของพี่อ้ำ ใช้ df_display แทน final_sorted_df ได้เลยครับ) ...
         
+        # เพิ่มส่วนนี้เพื่อบังคับให้คอลัมน์ตัวเลขเป็น Numeric จริงๆ
+        numeric_cols = ['PE_Ratio', 'ปันผล_%', 'ราคาล่าสุด', 'RSI_14', 'RS_Line']
+        for col in numeric_cols:
+            if col in df_display.columns:
+                # errors='coerce' จะเปลี่ยนค่าที่อ่านไม่ได้เป็น NaN (แล้วจะแสดงเป็น - ตามที่เราตั้งค่าไว้)
+                df_display[col] = pd.to_numeric(df_display[col], errors='coerce')
+                
         styled_df = df_display.style.format({
             'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
             'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
