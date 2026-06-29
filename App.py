@@ -30,26 +30,25 @@ def send_line_notify(message, token):
 
 # ใส่ Token ของพี่อ้ำตรงนี้ครับ
 LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
-        
-def clear_and_save_data, sheet_name):
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('TradingPlan')
-        
-        # 1. ล้างข้อมูลทั้งหมด
-        sheet.clear()
-        
-        # 2. เตรียม Header + ข้อมูล โดยเน้นการดึงค่าจาก df.values
-        # ตรวจสอบให้แน่ใจว่า df ได้รับการ reindex/เรียงคอลัมน์มาแล้วจากด้านบน
-        header = df.columns.tolist()
-        data = df.fillna("").values.tolist()
-        
-        # 3. บันทึกรวดเดียว
-        sheet.update('A1', [header] + data)
-        return True
-    except Exception as e:
-        st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
-        return False
+
+def save_trading_plan_exclusive(df):
+    """ฟังก์ชันนี้ใช้สำหรับ TradingPlan โดยเฉพาะ (บังคับเรียง 9 คอลัมน์)"""
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet("TradingPlan")
+    
+    # ล้างเก่า
+    sheet.clear()
+    
+    # บังคับเรียงลำดับคอลัมน์ให้ถูกต้องสำหรับ TradingPlan เท่านั้น
+    cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+    # เติมคอลัมน์ที่ขาดด้วยค่าว่าง
+    for c in cols:
+        if c not in df.columns: df[c] = ""
+    
+    final_df = df[cols]
+    
+    # เขียนใหม่
+    sheet.update('A1', [final_df.columns.tolist()] + final_df.fillna("").values.tolist())
     
 def get_gsheet_client():
     scope = [
@@ -349,24 +348,6 @@ def get_pe_ratio(ticker_obj):
     except:
         return 0   
         
-def append_to_gsheet(data_dict, sheet_name):
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet("TradingPlan")
-        # ดึงค่าจาก Dictionary มาทำเป็น List เพื่อ append
-        row_values = [
-            data_dict.get('Ticker'),
-            data_dict.get('Entry_Price'),
-            data_dict.get('Stop_Loss'),
-            data_dict.get('Take_Profit'),
-            data_dict.get('Image_URL'),
-            data_dict.get('Timestamp')
-        ]
-        sheet.append_row(row_values)
-        return True
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
-        return False
         
 def get_latest_prices(tickers):
     prices = {}
