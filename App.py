@@ -1980,8 +1980,8 @@ def main():
                             'Entry_Price': entry,
                             'Stop_Loss': stop_loss,
                             'Take_Profit': take_profit,
-                            'Image_URL': image_url,
-                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'Image_URL': image_url
                         }
                         if append_to_gsheet(new_data, "TradingPlan"):
                             st.success("บันทึกแผนเรียบร้อย!")
@@ -1995,64 +1995,82 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        prices = [] # สร้าง List เก็บราคา
+                        # 0. กำหนดลำดับคอลัมน์มาตรฐานที่ตรงกับ Google Sheet ของพี่อ้ำ
+                        col_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+                        
+                        # 1. จัดการเรื่องราคาตลาด
+                        prices = []
                         for ticker in plan_df['Ticker']:
-                            symbol = f"{ticker}.BK"
                             try:
-                                # ดึงราคาแบบเดียวกับพอร์ต
-                                m_price = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
+                                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
                                 prices.append(float(m_price))
                             except:
-                                prices.append(0.0) # ถ้าดึงไม่ได้ให้เป็น 0
-                                
-                        # เอา List ราคาที่ได้ใส่กลับเข้าไปใน DataFrame โดยตรง
+                                prices.append(0.0)
                         plan_df['ราคาตลาด'] = prices
                     
-                        # 4. คำนวณห่างจาก SL (เช็คไม่ให้หารด้วย 0)
-                        plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
-                            lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
-                            if x['ราคาตลาด'] > 0 else 0.0, axis=1
-                        ).round(2)
-                    
-                        # 5. ฟังก์ชันสถานะ
-                        def check_alerts(row):
-                            price = row['ราคาตลาด']
-                            entry = row['Entry_Price']
-                            sl = row['Stop_Loss']
-                            tp = row['Take_Profit']
-                            if price <= 0: return "ไม่มีราคา"
-                            if abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
-                            if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
-                            if price >= tp: return "💰 ถึงเป้า TP!"
-                            return "ปกติ"
-                    
-                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                    
-                        # 6. แสดงผล
-                        edited_df = st.data_editor(
-                            plan_df[['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']],
-                            column_config={
-                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
-                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
-                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
-                                "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
-                                # เพิ่มส่วนนี้ครับ:
-                                "Image_URL": st.column_config.LinkColumn(
-                                    "Plan trade", 
-                                    help="คลิกเพื่อดูรูปภาพแผนการเทรด",
-                                    display_text="ดูรูปแผนเทรด" # นี่คือข้อความที่จะแสดงแทน URL
-                                ),
-                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
-                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
-                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
-                            },
-                            use_container_width=True,
-                            key="editable_plan_table"
+                        # 2. แก้ไขเรื่องค่า Stop_Loss เริ่มต้น 5%
+                        plan_df['Stop_Loss'] = plan_df.apply(
+                            lambda row: float(row['Entry_Price']) * 0.95 if float(row['Stop_Loss']) == 0 else float(row['Stop_Loss']), 
+                            axis=1
                         )
                     
+                        # 3. บังคับ Format ข้อมูลให้เป็นตัวเลข
+                        cols_to_fix = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
+                        for col in cols_to_fix:
+                            plan_df[col] = pd.to_numeric(plan_df[col], errors='coerce').fillna(0.0)
+                    
+                        # 4. คำนวณสถานะและห่างจาก SL
+                        plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
+                            lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) if x['ราคาตลาด'] > 0 else 0.0, axis=1
+                        ).round(2)
+                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
+                    
+                        # 5. เตรียมตารางที่จะแสดง (เลือกเฉพาะที่อยากให้แก้ + ลำดับให้ตรง)
+                        columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']
+
+                        # ดึงเฉพาะคอลัมน์ที่ต้องการและบังคับเรียงลำดับ
+                        show_df = plan_df[columns_to_show].copy()
+                        
+                        edited_df = st.data_editor(
+                            show_df,
+                            column_config={
+                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
+                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
+                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
+                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
+                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
+                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
+                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
+                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด"),
+                            },
+                            use_container_width=True,
+                            key="unique_plan_editor_v1",
+                            num_rows="dynamic"
+)           
+                        # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
+                        # 6. ปุ่มบันทึก - วิธีที่ตายตัวที่สุด (เอาโครงสร้างจาก Sheet เป็นที่ตั้ง)
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            save_data(edited_df, "TradingPlan")
-                            st.success("อัปเดตข้อมูลเรียบร้อย!")
+                            
+                            # 1. รับค่าที่แก้จากหน้าจอมา
+                            temp_df = edited_df.copy()
+                            
+                            # 2. นำข้อมูลจากตารางที่แก้แล้ว ไปรวมกับ Timestamp (ถ้ามี)
+                            # เราจะสร้าง dataframe ใหม่โดยเอา Header เป็นตัวตั้ง
+                            final_df = pd.DataFrame(columns=['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL'])
+                            
+                            # 3. นำข้อมูลจาก temp_df มาใส่ทีละคอลัมน์ตามชื่อ Header เป๊ะๆ
+                            for col in final_df.columns:
+                                if col in temp_df.columns:
+                                    final_df[col] = temp_df[col]
+                                else:
+                                    # ถ้าเป็น Timestamp ที่ไม่มีในตาราง ให้เอาจาก plan_df เดิมมาแปะ
+                                    if col in plan_df.columns:
+                                        final_df[col] = plan_df[col]
+                            
+                            # 4. บันทึกทับไปเลย
+                            save_data(final_df, "TradingPlan")
+                            
+                            st.success("อัปเดตข้อมูลและลบแถวเรียบร้อย!")
                             st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
