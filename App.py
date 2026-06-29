@@ -2024,8 +2024,18 @@ def main():
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
                                 "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
+                                # เพิ่มส่วนนี้ครับ:
+                                "Image_URL": st.column_config.LinkColumn(
+                                    "Plan trade", 
+                                    help="คลิกเพื่อดูรูปภาพแผนการเทรด",
+                                    display_text="ดูรูปแผนเทรด" # นี่คือข้อความที่จะแสดงแทน URL
+                                ),
+                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
+                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
+                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
                             },
-                            use_container_width=True
+                            use_container_width=True,
+                            key="editable_plan_table"
                         )
                     
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
