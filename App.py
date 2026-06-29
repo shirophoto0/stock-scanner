@@ -359,24 +359,24 @@ def append_to_gsheet(data_dict, sheet_name):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
         return False
         
-@st.cache_data(ttl=600) # ดึงราคาใหม่ทุก 10 นาที
 def get_latest_prices(tickers):
     prices = {}
     for t in tickers:
-        # ลบช่องว่างและตรวจสอบฟอร์แมต .BK
-        symbol = t.strip()
-        if not symbol.endswith(".BK"):
-            symbol += ".BK"
-            
+        # ตัดช่องว่างทั้งหมด และบังคับให้เป็นตัวพิมพ์ใหญ่
+        clean_t = t.strip().upper() 
+        symbol = f"{clean_t}.BK" if not clean_t.endswith(".BK") else clean_t
+        
         try:
-            df = yf.download(symbol, period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
-            if not df.empty:
-                prices[t.strip()] = float(df['Close'].iloc[-1])
+            # เพิ่ม timeout เพื่อป้องกันการค้าง
+            df = yf.download(symbol, period="1d", progress=False, timeout=10, headers={'User-Agent': 'Mozilla/5.0'})
+            if not df.empty and 'Close' in df.columns:
+                prices[clean_t] = float(df['Close'].iloc[-1])
             else:
-                prices[t.strip()] = 0.0
-        except:
-            prices[t.strip()] = 0.0
-    return prices        
+                prices[clean_t] = 0.0
+        except Exception as e:
+            prices[clean_t] = 0.0
+    return prices
+    
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
@@ -1985,7 +1985,7 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
+                        plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip().str.upper())
                     
                         # 2. ฟังก์ชันดึงราคาตลาดพร้อม Cache (ลดการโดนบล็อก)
                         @st.cache_data(ttl=600)
@@ -2002,11 +2002,8 @@ def main():
                             return prices
                     
                         # ดึงราคา
-                        unique_tickers = plan_df['Ticker'].unique().tolist()
-                        price_map = fetch_market_prices(unique_tickers)
-                        
-                        # นำราคาไป Map เข้าตาราง
-                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)
+                        price_map = get_latest_prices(plan_df['Ticker'].unique().tolist())
+                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)        
                         
                         # 3. คำนวณสถานะและข้อมูลเสริม
                         plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
@@ -2055,6 +2052,7 @@ def main():
                     
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
+                        st.write("ชื่อ Column ในตาราง:", plan_df.columns.tolist())
 if __name__ == "__main__":
     main()
 
