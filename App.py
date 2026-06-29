@@ -75,6 +75,21 @@ def save_trading_plan_exclusive(df):
     # เขียนใหม่
     sheet.update('A1', [final_df.columns.tolist()] + final_df.fillna("").values.tolist())
     
+def save_trading_plan_properly(df):
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet("TradingPlan")
+    
+    # 1. เขียน Header ไว้บรรทัดแรก (แถวที่ 1)
+    header = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+    
+    # 2. เตรียมข้อมูล (แปลง DataFrame เป็น List)
+    data = df.values.tolist()
+    
+    # 3. สั่งบันทึกทั้งตาราง (Clear ทั้งหมดแล้ววางใหม่)
+    # วิธีนี้ชัวร์ที่สุด เพราะจะไม่มีแถวเก่ามาค้าง
+    sheet.clear()
+    sheet.update('A1', [header] + data)
+    
 def get_gsheet_client():
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -2023,21 +2038,27 @@ def main():
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
                     plan_df = load_data("TradingPlan") 
                     
-                    if 'Ticker' in plan_df.columns:
-                    # ... (โค้ดแสดงตารางเดิมของคุณ)
+                    # 1. ทำความสะอาดชื่อคอลัมน์ก่อนเลย (แก้ปัญหาช่องว่างที่มองไม่เห็น)
+                    if not plan_df.empty:
+                        plan_df.columns = plan_df.columns.str.strip()
                     
-                        # 0. กำหนดลำดับคอลัมน์มาตรฐานที่ตรงกับ Google Sheet ของพี่อ้ำ
+                    # 2. เช็คอีกทีว่ามี Ticker ไหม
+                    if 'Ticker' in plan_df.columns:
+                        # 3. จัดลำดับคอลัมน์ให้ครบและเรียงกัน
                         col_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
                         
-                        # 1. จัดการเรื่องราคาตลาด
-                        prices = []
-                        for ticker in plan_df['Ticker']:
-                            try:
-                                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
-                                prices.append(float(m_price))
-                            except:
-                                prices.append(0.0)
-                        plan_df['ราคาตลาด'] = prices
+                        # เติมคอลัมน์ที่ขาดไป (ถ้าใน Google Sheet ไม่มีคอลัมน์ไหน ให้สร้างขึ้นมาเป็นค่าว่าง)
+                        for col in col_order:
+                            if col not in plan_df.columns:
+                                plan_df[col] = ""
+                                
+                        # เรียงลำดับคอลัมน์
+                        plan_df = plan_df[col_order]
+                        
+                        # ... (ส่วนคำนวณราคา และโค้ด st.data_editor เดิมของพี่อ้ำ)
+                    else:
+                        st.info("ยังไม่มีข้อมูลแผนการเทรด (หรือโครงสร้างคอลัมน์ใน Google Sheet ไม่ตรงกัน)")
+                        st.write("คอลัมน์ที่พบใน Sheet:", plan_df.columns.tolist()) # บรรทัดนี้ช่วยให้พี่อ้ำรู้ว่า Sheet ส่งชื่ออะไรมา
                     
                         # 2. แก้ไขเรื่องค่า Stop_Loss เริ่มต้น 5%
                         plan_df['Stop_Loss'] = plan_df.apply(
