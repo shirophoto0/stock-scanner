@@ -1980,37 +1980,28 @@ def main():
                     # --- ตารางแสดงแผนการเทรด ---
                     st.divider()
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
-                    
-                    # 1. โหลดข้อมูลแผนการเทรด
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
+                        # 1. ทำความสะอาดชื่อหุ้นให้เป็นมาตรฐานเดียวกันก่อน
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip().str.upper()
                     
-                        # 2. ฟังก์ชันดึงราคาตลาดพร้อม Cache (ลดการโดนบล็อก)
-                        @st.cache_data(ttl=600)
-                        def fetch_market_prices(tickers):
-                            prices = {}
-                            for t in tickers:
-                                # เพิ่ม .BK ให้หุ้นไทย
-                                symbol = f"{t}.BK" if not t.endswith(".BK") else t
-                                try:
-                                    df = yf.download(symbol, period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
-                                    prices[t] = float(df['Close'].iloc[-1]) if not df.empty else 0.0
-                                except:
-                                    prices[t] = 0.0
-                            return prices
+                        # 2. ฟังก์ชันดึงราคา (ดึงออกมาไว้ข้างนอกเพื่อความปลอดภัย)
+                        # เรียกใช้ get_latest_prices ที่คุณมีไว้ด้านบนสุดของ App
+                        unique_tickers = plan_df['Ticker'].unique().tolist()
+                        price_map = get_latest_prices(unique_tickers)
                     
-                        # ดึงราคา
-                        price_map = get_latest_prices(plan_df['Ticker'].unique().tolist())
-                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)        
-                        
-                        # 3. คำนวณสถานะและข้อมูลเสริม
+                        # 3. ใส่ราคาเข้าไปใน DataFrame
+                        # เปลี่ยนจากการใช้ map เป็นการ assign ค่าทีละตัวเพื่อความปลอดภัย
+                        plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(lambda x: price_map.get(x, 0.0))
+                    
+                        # 4. คำนวณห่างจาก SL (เช็คไม่ให้หารด้วย 0)
                         plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
                             lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
                             if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
                     
+                        # 5. ฟังก์ชันสถานะ
                         def check_alerts(row):
                             price = row['ราคาตลาด']
                             entry = row['Entry_Price']
@@ -2024,39 +2015,24 @@ def main():
                     
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                     
-                        # 4. จัดเรียงคอลัมน์
-                        column_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-                        plan_df = plan_df[[c for c in column_order if c in plan_df.columns]]
-                    
-                        # 5. แสดงผลตารางแก้ไขได้
+                        # 6. แสดงผล
                         edited_df = st.data_editor(
-                            plan_df,
+                            plan_df[['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']],
                             column_config={
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
                                 "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
-                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
-                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
-                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
                             },
-                            use_container_width=True,
-                            key="editable_plan_table"
+                            use_container_width=True
                         )
                     
-                        # 6. ปุ่มบันทึก
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
                             save_data(edited_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
-                    
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
-                        # --- ส่วน Debug เพื่อหาสาเหตุ ---
-                        st.write("--- Debugging ---")
-                        st.write("รายการหุ้นในตาราง (Ticker):", plan_df['Ticker'].tolist())
-                        st.write("ผลลัพธ์จาก price_map:", price_map)
-                        st.write("ราคาตลาดในตาราง (หลัง Map):", plan_df['ราคาตลาด'].tolist())
 # ------------------------------
 if __name__ == "__main__":
     main()
