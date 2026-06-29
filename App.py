@@ -56,24 +56,34 @@ def clear_and_save_data(df, sheet_name):
     sheet.update('A1', data_to_save)
     return True
     
-def save_trading_plan_exclusive(df):
-    """ฟังก์ชันนี้ใช้สำหรับ TradingPlan โดยเฉพาะ (บังคับเรียง 9 คอลัมน์)"""
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet("TradingPlan")
-    
-    # ล้างเก่า
-    sheet.clear()
-    
-    # บังคับเรียงลำดับคอลัมน์ให้ถูกต้องสำหรับ TradingPlan เท่านั้น
-    cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-    # เติมคอลัมน์ที่ขาดด้วยค่าว่าง
-    for c in cols:
-        if c not in df.columns: df[c] = ""
-    
-    final_df = df[cols]
-    
-    # เขียนใหม่
-    sheet.update('A1', [final_df.columns.tolist()] + final_df.fillna("").values.tolist())
+def save_trading_plan_exclusive(new_df):
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet("TradingPlan")
+        
+        # 1. ดึงข้อมูลที่มีอยู่ในปัจจุบันออกมาทั้งหมดก่อน
+        existing_data = sheet.get_all_records()
+        
+        # 2. ถ้ามีข้อมูลเก่าอยู่ ให้รวมกับตัวใหม่
+        if existing_data:
+            existing_df = pd.DataFrame(existing_data)
+            # รวม DataFrame เก่า กับอันใหม่
+            final_df = pd.concat([existing_df, new_df], ignore_index=True)
+        else:
+            final_df = new_df
+            
+        # 3. ล้างชีตแล้วบันทึกใหม่ทั้งหมดทีเดียว
+        sheet.clear()
+        
+        # บันทึก Header + ข้อมูล
+        # รวมข้อมูลทุกอย่างเป็น list เพื่อเขียนลง A1
+        data_to_save = [final_df.columns.tolist()] + final_df.values.tolist()
+        sheet.update('A1', data_to_save)
+        
+        return True
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
+        return False
     
 def save_trading_plan_properly(df):
     client = get_gsheet_client()
