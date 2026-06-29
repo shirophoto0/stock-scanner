@@ -2023,7 +2023,9 @@ def main():
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
                     plan_df = load_data("TradingPlan") 
                     
-                    if not plan_df.empty:
+                    if 'Ticker' in plan_df.columns:
+                    # ... (โค้ดแสดงตารางเดิมของคุณ)
+                    
                         # 0. กำหนดลำดับคอลัมน์มาตรฐานที่ตรงกับ Google Sheet ของพี่อ้ำ
                         col_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
                         
@@ -2073,6 +2075,8 @@ def main():
                             key="fixed_plan_editor_v2", # เปลี่ยน Key ใหม่
                             num_rows="dynamic"
                         )
+                    else:
+                        st.warning("ไม่พบข้อมูล Ticker ในตาราง หรือตารางยังไม่มี Header ครับ")
                         
                         # 6. ปุ่มบันทึกที่ถูกต้องที่สุด
                         # แก้ในปุ่มบันทึก:
