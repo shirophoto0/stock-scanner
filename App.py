@@ -2026,10 +2026,10 @@ def main():
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                     
                         # 5. เตรียมตารางที่จะแสดง (เลือกเฉพาะที่อยากให้แก้ + ลำดับให้ตรง)
-                        show_df = plan_df[['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']]
+                        columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']
 
                         edited_df = st.data_editor(
-                            show_df,
+                            plan_df[columns_to_show], # บังคับให้แสดงลำดับนี้เท่านั้น
                             column_config={
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
@@ -2043,19 +2043,19 @@ def main():
                             use_container_width=True,
                             key="unique_plan_editor_v1",
                             num_rows="dynamic"
-                        )
-                    
+                        )                    
                         # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # ใช้การอัปเดตแค่คอลัมน์ที่อนุญาตให้แก้ในตารางเท่านั้น
-                            # วิธีนี้จะทำให้ค่าอื่นๆ ใน Sheet (เช่น Timestamp หรือคอลัมน์แปลกๆ) ไม่หายไป
-                            for col in edited_df.columns:
-                                plan_df[col] = edited_df[col]
-                                
-                            # บันทึก plan_df ทั้งก้อนกลับไปที่ Sheet 
-                            # (save_data จะเขียนตามลำดับที่มันมีอยู่แล้วใน plan_df)
-                            save_data(plan_df, "TradingPlan")
+                            # สร้าง DataFrame ใหม่ที่เลียนแบบโครงสร้างเดิมของ plan_df
+                            updated_plan_df = plan_df.copy()
                             
+                            # อัปเดตเฉพาะคอลัมน์ที่เราให้แก้ไขจากตาราง
+                            for col in columns_to_show:
+                                if col in edited_df.columns:
+                                    updated_plan_df[col] = edited_df[col]
+                            
+                            # บันทึกข้อมูลที่อัปเดตแล้ว
+                            save_data(updated_plan_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
