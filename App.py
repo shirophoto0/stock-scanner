@@ -54,6 +54,15 @@ def append_to_gsheet(data_dict, sheet_name):
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
         return False
+        
+def clear_and_save_data(df, sheet_name):
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet(sheet_name)
+    sheet.clear()
+    # ส่งเฉพาะข้อมูล (ไม่ส่ง Header ซ้ำ ถ้าไฟล์มี Header อยู่แล้ว) 
+    # หรือส่ง Header + ข้อมูล ตามลำดับที่ถูกต้อง 100%
+    data_to_save = [df.columns.values.tolist()] + df.values.tolist()
+    sheet.update('A1', data_to_save)
     
 def get_gsheet_client():
     scope = [
@@ -2092,7 +2101,10 @@ def main():
                             
                             # 3. จัดเรียงคอลัมน์ให้ตรงเป๊ะกับ Excel 
                             cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-                            final_df = final_df.reindex(columns=cols)
+                            for c in cols:
+                                if c not in final_df.columns:
+                                    final_df[c] = "" # หรือค่าเริ่มต้นที่เหมาะสม
+                            final_df = final_df[cols]
                             
                             # 4. ส่งไปบันทึกแบบ "เขียนทับทั้ง Sheet" (Overwrite)
                             # ฟังก์ชัน save_data ของพี่อ้ำต้องเปลี่ยนเป็นโหมด .clear() + .update()
