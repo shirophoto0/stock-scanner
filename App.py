@@ -2015,52 +2015,43 @@ def main():
                             if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
                             if tp > 0 and price >= tp: return "💰 ถึงเป้า TP!"
                             return "ปกติ"
-                        # แปลงคอลัมน์ทั้งหมดที่เกี่ยวข้องให้เป็นตัวเลข
+                        # 1. ทำความสะอาดข้อมูลทั้งหมดก่อนแสดงผล
                         cols_to_fix = ['ราคาตลาด', 'Entry_Price', 'Stop_Loss', 'Take_Profit']
                         for col in cols_to_fix:
                             plan_df[col] = pd.to_numeric(plan_df[col], errors='coerce').fillna(0.0)
+                        
+                        # 2. คำนวณสถานะ (ต้องทำหลังแปลงข้อมูลเป็นตัวเลขแล้ว)
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                    
-                        # 6. แสดงผล
-                        # 6. แสดงผลตารางที่ปรับให้แก้ไขได้ตามต้องการ
-                        plan_df['Take_Profit'] = pd.to_numeric(plan_df['Take_Profit'], errors='coerce').fillna(0.0)
+                        
+                        # 3. แสดงผลตาราง (ใช้ data_editor ครั้งเดียวพอครับ)
+                        # เลือกเฉพาะคอลัมน์ที่จะให้แก้ไขได้
+                        columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']
+                        
                         edited_df = st.data_editor(
-                            plan_df[['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']],
+                            plan_df[columns_to_show],
                             column_config={
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
                                 "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
-                                "Timestamp": None,
-                                "Image_URL": st.column_config.LinkColumn(
-                                    "Plan trade", 
-                                    help="คลิกเพื่อดูรูปภาพแผนการเทรด",
-                                    display_text="ดูรูปแผนเทรด"
-                                ),
+                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด"),
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", disabled=False),
                                 "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f", disabled=False),
                                 "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f", disabled=False),
                             },
                             use_container_width=True,
-                            key="editable_plan_table",
-                            num_rows="dynamic" # <--- เพิ่มบรรทัดนี้ครับ! ทำให้ลบแถว (และเพิ่มแถว) ได้
+                            key="unique_plan_editor_v1", # ตั้งชื่อ Key ใหม่ไม่ให้ซ้ำเดิม
+                            num_rows="dynamic"
                         )
                         
-                        # 7. ปุ่มบันทึก (ระบบจะรับข้อมูลจากตารางที่ลบแถวไปแล้วโดยอัตโนมัติ)
-                        # 6. แสดงผลตาราง
-                        edited_df = st.data_editor(
-                            plan_df, # ใช้ DataFrame ต้นฉบับ
-                            # ... (column_config เหมือนเดิม)
-                            key="editable_plan_table"
-                        )
-                        
-                        # 7. ปุ่มบันทึก - เช็คก่อนบันทึก
+                        # 4. ปุ่มบันทึก (รับค่าจาก edited_df ตัวเดียวที่ได้จากตารางด้านบน)
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # แปลงค่าให้เป็นตัวเลขทั้งหมดอีกรอบเพื่อความชัวร์ก่อนบันทึก
-                            save_df = edited_df.copy()
-                            save_df['Stop_Loss'] = pd.to_numeric(save_df['Stop_Loss'], errors='coerce')
+                            # นำค่าที่แก้จากตารางไปรวมกับข้อมูลเดิม (เผื่อคอลัมน์ที่ไม่ได้โชว์ในตารางหายไป)
+                            updated_plan_df = plan_df.copy()
+                            updated_plan_df.update(edited_df)
                             
-                            save_data(save_df, "TradingPlan")
+                            # บันทึกข้อมูล
+                            save_data(updated_plan_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
