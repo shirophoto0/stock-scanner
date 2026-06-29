@@ -359,6 +359,24 @@ def append_to_gsheet(data_dict, sheet_name):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
         return False
         
+@st.cache_data(ttl=600) # ดึงราคาใหม่ทุก 10 นาที
+def get_latest_prices(tickers):
+    prices = {}
+    for t in tickers:
+        # ลบช่องว่างและตรวจสอบฟอร์แมต .BK
+        symbol = t.strip()
+        if not symbol.endswith(".BK"):
+            symbol += ".BK"
+            
+        try:
+            df = yf.download(symbol, period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
+            if not df.empty:
+                prices[t.strip()] = float(df['Close'].iloc[-1])
+            else:
+                prices[t.strip()] = 0.0
+        except:
+            prices[t.strip()] = 0.0
+    return prices        
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
@@ -1962,58 +1980,58 @@ def main():
                     # --- ตารางแสดงแผนการเทรด ---
                     st.divider()
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
+                    
+                    # 1. โหลดข้อมูลแผนการเทรด
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
                     
-                        # 1. ดึงข้อมูลราคาล่าสุดจาก Yahoo Finance
-                        # สร้าง list ของ Ticker ที่มี .BK ต่อท้ายให้ครบ
-                        ticker_list = plan_df['Ticker'].astype(str).str.strip()
-                        tickers_to_fetch = [f"{t}.BK" if not t.endswith(".BK") else t for t in ticker_list]
+                        # 2. ฟังก์ชันดึงราคาตลาดพร้อม Cache (ลดการโดนบล็อก)
+                        @st.cache_data(ttl=600)
+                        def fetch_market_prices(tickers):
+                            prices = {}
+                            for t in tickers:
+                                # เพิ่ม .BK ให้หุ้นไทย
+                                symbol = f"{t}.BK" if not t.endswith(".BK") else t
+                                try:
+                                    df = yf.download(symbol, period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
+                                    prices[t] = float(df['Close'].iloc[-1]) if not df.empty else 0.0
+                                except:
+                                    prices[t] = 0.0
+                            return prices
+                    
+                        # ดึงราคา
+                        unique_tickers = plan_df['Ticker'].unique().tolist()
+                        price_map = fetch_market_prices(unique_tickers)
                         
-                        price_data = {}
-                        for t_raw, t_full in zip(ticker_list, tickers_to_fetch):
-                            try:
-                                df = yf.download(t_full, period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
-                                if not df.empty:
-                                    price_data[t_raw] = float(df['Close'].iloc[-1])
-                                else:
-                                    price_data[t_raw] = 0.0
-                            except:
-                                price_data[t_raw] = 0.0
+                        # นำราคาไป Map เข้าตาราง
+                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_map)
                         
-                        # 2. นำราคาที่ได้ไปใส่ในตาราง
-                        # ใช้ t_raw (ชื่อหุ้นที่ไม่มี .BK) เป็น Key ในการ Map
-                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_data)
-                        
-                        # 3. คำนวณ % ห่างจาก SL
+                        # 3. คำนวณสถานะและข้อมูลเสริม
                         plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
                             lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
                             if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
                     
-                        # 4. นิยามฟังก์ชันเช็คสถานะ
                         def check_alerts(row):
                             price = row['ราคาตลาด']
                             entry = row['Entry_Price']
                             sl = row['Stop_Loss']
                             tp = row['Take_Profit']
-                            
                             if price <= 0: return "ไม่มีราคา"
                             if abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
                             if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
                             if price >= tp: return "💰 ถึงเป้า TP!"
                             return "ปกติ"
                     
-                        # 5. สั่ง Apply เพื่อสร้างคอลัมน์ 'สถานะ'
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                     
-                        # 6. จัดเรียง Column
+                        # 4. จัดเรียงคอลัมน์
                         column_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
                         plan_df = plan_df[[c for c in column_order if c in plan_df.columns]]
                     
-                        # 7. แสดงตาราง
+                        # 5. แสดงผลตารางแก้ไขได้
                         edited_df = st.data_editor(
                             plan_df,
                             column_config={
@@ -2029,16 +2047,14 @@ def main():
                             key="editable_plan_table"
                         )
                     
-                        # 8. ปุ่มบันทึก
+                        # 6. ปุ่มบันทึก
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
                             save_data(edited_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     
-                    # บรรทัดนี้คือส่วนที่แก้ SyntaxError โดยจัดให้ตรงกับ if บรรทัดแรกสุด
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
-
 if __name__ == "__main__":
     main()
 
