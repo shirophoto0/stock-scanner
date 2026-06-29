@@ -1983,17 +1983,18 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        # 1. ทำความสะอาดชื่อหุ้นให้เป็นมาตรฐานเดียวกันก่อน
-                        plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip().str.upper()
-                    
-                        # 2. ฟังก์ชันดึงราคา (ดึงออกมาไว้ข้างนอกเพื่อความปลอดภัย)
-                        # เรียกใช้ get_latest_prices ที่คุณมีไว้ด้านบนสุดของ App
-                        unique_tickers = plan_df['Ticker'].unique().tolist()
-                        price_map = get_latest_prices(unique_tickers)
-                    
-                        # 3. ใส่ราคาเข้าไปใน DataFrame
-                        # เปลี่ยนจากการใช้ map เป็นการ assign ค่าทีละตัวเพื่อความปลอดภัย
-                        plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(lambda x: price_map.get(x, 0.0))
+                        prices = [] # สร้าง List เก็บราคา
+                        for ticker in plan_df['Ticker']:
+                            symbol = f"{ticker}.BK"
+                            try:
+                                # ดึงราคาแบบเดียวกับพอร์ต
+                                m_price = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
+                                prices.append(float(m_price))
+                            except:
+                                prices.append(0.0) # ถ้าดึงไม่ได้ให้เป็น 0
+                                
+                        # เอา List ราคาที่ได้ใส่กลับเข้าไปใน DataFrame โดยตรง
+                        plan_df['ราคาตลาด'] = prices
                     
                         # 4. คำนวณห่างจาก SL (เช็คไม่ให้หารด้วย 0)
                         plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
