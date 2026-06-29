@@ -2031,18 +2031,20 @@ def main():
                                     help="คลิกเพื่อดูรูปภาพแผนการเทรด",
                                     display_text="ดูรูปแผนเทรด"
                                 ),
-                                # ตั้งค่าให้แก้ไขได้ทั้งหมดตรงนี้ที่เดียวครับ
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", disabled=False),
                                 "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f", disabled=False),
                                 "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f", disabled=False),
                             },
                             use_container_width=True,
-                            key="editable_plan_table"
+                            key="editable_plan_table",
+                            num_rows="dynamic" # <--- เพิ่มบรรทัดนี้ครับ! ทำให้ลบแถว (และเพิ่มแถว) ได้
                         )
-                    
+                        
+                        # 7. ปุ่มบันทึก (ระบบจะรับข้อมูลจากตารางที่ลบแถวไปแล้วโดยอัตโนมัติ)
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
+                            # ตัดคอลัมน์ที่ไม่จำเป็นหรือคำนวณใหม่ก่อนเซฟ (ถ้าจำเป็น)
                             save_data(edited_df, "TradingPlan")
-                            st.success("อัปเดตข้อมูลเรียบร้อย!")
+                            st.success("อัปเดตข้อมูลและลบแถวเรียบร้อย!")
                             st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
