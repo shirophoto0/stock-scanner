@@ -2008,11 +2008,15 @@ def main():
                                 'Image_URL': image_url
                             }
                             
-                            if append_to_gsheet(new_data, "TradingPlan"):
-                                st.success(f"บันทึกแผน {ticker} เรียบร้อย!")
+                            # แปลง dict เป็น dataframe ก่อนส่ง
+                            new_df = pd.DataFrame([new_data])
+                            
+                            # เรียกใช้ฟังก์ชันใหม่ที่จัดการเรื่องคอลัมน์และ overwrite ให้เราแล้ว
+                            if save_trading_plan_exclusive(new_df):
+                                st.success("บันทึกแผนเรียบร้อย!")
                                 st.cache_data.clear()
                                 st.rerun()
-                
+                                            
                     # --- ตารางแสดงแผนการเทรด ---
                     # --- ตารางแสดงแผนการเทรด ---
                     st.divider()
