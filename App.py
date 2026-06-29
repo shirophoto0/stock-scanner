@@ -2028,8 +2028,11 @@ def main():
                         # 5. เตรียมตารางที่จะแสดง (เลือกเฉพาะที่อยากให้แก้ + ลำดับให้ตรง)
                         columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']
 
+                        # ดึงเฉพาะคอลัมน์ที่ต้องการและบังคับเรียงลำดับ
+                        show_df = plan_df[columns_to_show].copy()
+                        
                         edited_df = st.data_editor(
-                            plan_df[columns_to_show], # บังคับให้แสดงลำดับนี้เท่านั้น
+                            show_df,
                             column_config={
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
@@ -2043,19 +2046,25 @@ def main():
                             use_container_width=True,
                             key="unique_plan_editor_v1",
                             num_rows="dynamic"
-                        )                    
+)           
                         # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
                         # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # อัปเดตเฉพาะคอลัมน์ที่มีอยู่และมีการแก้ไข
-                            # เราใช้การ Join ข้อมูลเพื่อรักษา Timestamp ของแถวเดิมไว้
+                            # คัดลอกข้อมูลต้นฉบับ
+                            updated_plan_df = plan_df.copy()
                             
-                            # ดึงค่าจาก edited_df ไปแปะทับใน plan_df ตาม index (แถว)
-                            for col in edited_df.columns:
-                                plan_df.loc[edited_df.index, col] = edited_df[col]
+                            # อัปเดตข้อมูลจากตารางที่แก้แล้ว (edited_df) กลับเข้าไปใน plan_df
+                            # โดยอ้างอิงจาก 'Ticker' เป็นหลัก เพื่อป้องกันข้อมูลสลับบรรทัดหรือสลับช่อง
+                            for i, row in edited_df.iterrows():
+                                ticker = row['Ticker']
+                                # ค้นหาแถวที่ Ticker ตรงกันในข้อมูลต้นฉบับ
+                                mask = updated_plan_df['Ticker'] == ticker
+                                if mask.any():
+                                    for col in columns_to_show:
+                                        updated_plan_df.loc[mask, col] = row[col]
                             
-                            # บันทึก plan_df ที่ถูกอัปเดตแล้วทั้งหมด
-                            save_data(plan_df, "TradingPlan")
+                            # บันทึกข้อมูลที่อัปเดตแล้ว (โดยยังคงลำดับคอลัมน์เดิมของไฟล์ไว้)
+                            save_data(updated_plan_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
