@@ -2096,9 +2096,6 @@ def main():
                             key="fixed_plan_editor_v2", # เปลี่ยน Key ใหม่
                             num_rows="dynamic"
                         )
-                else:
-                    st.warning("ไม่พบข้อมูล Ticker ในตาราง หรือตารางยังไม่มี Header ครับ")
-                        
                         # 6. ปุ่มบันทึกที่ถูกต้องที่สุด
                         # แก้ในปุ่มบันทึก:
                         # ค้นหาจุดนี้ใน main()
