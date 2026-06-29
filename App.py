@@ -1990,34 +1990,38 @@ def main():
                         col1, col2 = st.columns(2)
                         with col1:
                             ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
-                            entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f")
-                            stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95), format="%.2f")
+                            entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
+                            # เปลี่ยนวิธีคำนวณ SL เล็กน้อยเพื่อกันค่า Error
+                            stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
                         with col2:
-                            take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f")
+                            take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
                             image_url = st.text_input("วาง Link รูปภาพ (URL):")
                         
                         submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
-                
+                    
                     if submit_button:
-                        from datetime import datetime
-                        # เรียงลำดับ Key ให้ครบ 9 คอลัมน์ตาม Header ใน Excel เป๊ะๆ
-                        new_data = {
-                            'Ticker': ticker,
-                            'Entry_Price': entry,
-                            'ราคาตลาด': 0.0,
-                            'Stop_Loss': stop_loss,
-                            'ห่างจาก_SL(%)': 0.0,
-                            'Take_Profit': take_profit,
-                            'สถานะ': 'ปกติ',
-                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                            'Image_URL': image_url
-                        }
-                        
-                        # ส่งข้อมูลแบบ Dictionary ไปให้ฟังก์ชันเดิมที่พี่อ้ำมีอยู่
-                        if append_to_gsheet(new_data, "TradingPlan"):
-                            st.success("บันทึกแผนเรียบร้อย!")
-                            st.cache_data.clear()
-                            st.rerun()
+                        # ตรวจสอบว่ากรอก Ticker หรือยัง
+                        if not ticker:
+                            st.error("กรุณาระบุชื่อหุ้นครับ!")
+                        else:
+                            from datetime import datetime
+                            # ส่งค่าให้ครบ 9 คอลัมน์ตาม Header ใน Google Sheet
+                            new_data = {
+                                'Ticker': ticker,
+                                'Entry_Price': entry,
+                                'ราคาตลาด': 0.0,
+                                'Stop_Loss': stop_loss,
+                                'ห่างจาก_SL(%)': 0.0,
+                                'Take_Profit': take_profit,
+                                'สถานะ': 'ปกติ',
+                                'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                'Image_URL': image_url
+                            }
+                            
+                            if append_to_gsheet(new_data, "TradingPlan"):
+                                st.success(f"บันทึกแผน {ticker} เรียบร้อย!")
+                                st.cache_data.clear()
+            st.rerun()
                 
                     # --- ตารางแสดงแผนการเทรด ---
                     # --- ตารางแสดงแผนการเทรด ---
