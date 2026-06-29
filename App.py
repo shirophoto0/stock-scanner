@@ -1983,7 +1983,10 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        # 1. จัดการเรื่องราคาตลาด (ทำก่อนคำนวณ)
+                        # 0. กำหนดลำดับคอลัมน์มาตรฐานที่ตรงกับ Google Sheet ของพี่อ้ำ
+                        col_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+                        
+                        # 1. จัดการเรื่องราคาตลาด
                         prices = []
                         for ticker in plan_df['Ticker']:
                             try:
@@ -1993,14 +1996,13 @@ def main():
                                 prices.append(0.0)
                         plan_df['ราคาตลาด'] = prices
                     
-                        # 2. แก้ไขเรื่องค่า Stop_Loss เริ่มต้น 5% (เฉพาะแถวที่ค่าเป็น 0)
-                        # เช็คว่าถ้า Stop_Loss เป็น 0 ให้คำนวณจาก Entry_Price * 0.95
+                        # 2. แก้ไขเรื่องค่า Stop_Loss เริ่มต้น 5%
                         plan_df['Stop_Loss'] = plan_df.apply(
                             lambda row: float(row['Entry_Price']) * 0.95 if float(row['Stop_Loss']) == 0 else float(row['Stop_Loss']), 
                             axis=1
                         )
                     
-                        # 3. บังคับ Format ข้อมูลให้เป็นตัวเลขทั้งหมดเพื่อกัน Error
+                        # 3. บังคับ Format ข้อมูลให้เป็นตัวเลข
                         cols_to_fix = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
                         for col in cols_to_fix:
                             plan_df[col] = pd.to_numeric(plan_df[col], errors='coerce').fillna(0.0)
@@ -2009,11 +2011,9 @@ def main():
                         plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
                             lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
-                        
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                     
-                        # 5. แสดงตาราง (ระบุลำดับคอลัมน์ให้ชัดเจน)
-                        # เรียงลำดับให้ถูก: Ticker, Entry, ราคาตลาด, Stop_Loss, SL(%), Take_Profit, สถานะ, Image
+                        # 5. เตรียมตารางที่จะแสดง (เลือกเฉพาะที่อยากให้แก้ + ลำดับให้ตรง)
                         show_df = plan_df[['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']]
                     
                         edited_df = st.data_editor(
@@ -2033,12 +2033,21 @@ def main():
                             num_rows="dynamic"
                         )
                     
+                        # 6. ปุ่มบันทึก (จัดลำดับคอลัมน์ให้กลับไปตรงกับ Sheet ก่อนบันทึก)
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            save_data(edited_df, "TradingPlan")
+                            # รวมข้อมูลที่แก้แล้วกลับเข้า DataFrame หลัก
+                            # ในที่นี้ edited_df มีคอลัมน์เท่ากับ show_df เราต้องเอาไปอัปเดตให้ครบ
+                            for col in show_df.columns:
+                                plan_df[col] = edited_df[col]
+                                
+                            # บังคับเรียงลำดับคอลัมน์ให้เหมือนตอนโหลดมาเป๊ะๆ ก่อนบันทึก
+                            final_df = plan_df.reindex(columns=col_order)
+                            
+                            save_data(final_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
-                                st.info("ยังไม่มีข้อมูลแผนการเทรด")
+                        st.info("ยังไม่มีข้อมูลแผนการเทรด")
 # ------------------------------
 if __name__ == "__main__":
     main()
