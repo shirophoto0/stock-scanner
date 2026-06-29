@@ -2015,7 +2015,7 @@ def main():
                     
                         # 5. เตรียมตารางที่จะแสดง (เลือกเฉพาะที่อยากให้แก้ + ลำดับให้ตรง)
                         show_df = plan_df[['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']]
-                    
+
                         edited_df = st.data_editor(
                             show_df,
                             column_config={
@@ -2033,17 +2033,17 @@ def main():
                             num_rows="dynamic"
                         )
                     
-                        # 6. ปุ่มบันทึก (จัดลำดับคอลัมน์ให้กลับไปตรงกับ Sheet ก่อนบันทึก)
+                        # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # รวมข้อมูลที่แก้แล้วกลับเข้า DataFrame หลัก
-                            # ในที่นี้ edited_df มีคอลัมน์เท่ากับ show_df เราต้องเอาไปอัปเดตให้ครบ
-                            for col in show_df.columns:
+                            # ใช้การอัปเดตแค่คอลัมน์ที่อนุญาตให้แก้ในตารางเท่านั้น
+                            # วิธีนี้จะทำให้ค่าอื่นๆ ใน Sheet (เช่น Timestamp หรือคอลัมน์แปลกๆ) ไม่หายไป
+                            for col in edited_df.columns:
                                 plan_df[col] = edited_df[col]
                                 
-                            # บังคับเรียงลำดับคอลัมน์ให้เหมือนตอนโหลดมาเป๊ะๆ ก่อนบันทึก
-                            final_df = plan_df.reindex(columns=col_order)
+                            # บันทึก plan_df ทั้งก้อนกลับไปที่ Sheet 
+                            # (save_data จะเขียนตามลำดับที่มันมีอยู่แล้วใน plan_df)
+                            save_data(plan_df, "TradingPlan")
                             
-                            save_data(final_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
