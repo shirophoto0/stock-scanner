@@ -31,6 +31,23 @@ def send_line_notify(message, token):
 # ใส่ Token ของพี่อ้ำตรงนี้ครับ
 LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
 
+def append_to_gsheet(data, sheet_name):
+    # เชื่อมต่อกับ Sheet
+    worksheet = sh.worksheet(sheet_name)
+    
+    # ถ้าข้อมูลเป็น List ให้เขียนลงไปตรงๆ
+    if isinstance(data, list):
+        worksheet.append_row(data)
+    
+    # ถ้าข้อมูลเป็น Dictionary (แบบเดิมที่พี่อ้ำเคยใช้)
+    elif isinstance(data, dict):
+        # สร้าง List โดยดึงค่าจาก Dict ตามลำดับ Header ที่เรากำหนดไว้
+        headers = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+        row_to_append = [data.get(h, "") for h in headers]
+        worksheet.append_row(row_to_append)
+        
+    return True
+    
 def get_gsheet_client():
     scope = [
         "https://spreadsheets.google.com/feeds",
