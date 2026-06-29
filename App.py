@@ -31,7 +31,7 @@ def send_line_notify(message, token):
 # ใส่ Token ของพี่อ้ำตรงนี้ครับ
 LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
         
-def clear_and_, sheet_name):
+def clear_and_ave_data, sheet_name):
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('TradingPlan')
