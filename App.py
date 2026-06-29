@@ -1976,11 +1976,15 @@ def main():
                 
                     if submit_button:
                         from datetime import datetime
+                        # เรียงลำดับและใส่ข้อมูลให้ครบตาม Header Excel เป๊ะๆ
                         new_data = {
                             'Ticker': ticker,
                             'Entry_Price': entry,
+                            'ราคาตลาด': 0.0,             # เพิ่มให้ตรงช่อง C
                             'Stop_Loss': stop_loss,
+                            'ห่างจาก_SL(%)': 0.0,        # เพิ่มให้ตรงช่อง E
                             'Take_Profit': take_profit,
+                            'สถานะ': 'ปกติ',              # เพิ่มให้ตรงช่อง G
                             'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'Image_URL': image_url
                         }
