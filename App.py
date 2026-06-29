@@ -2004,16 +2004,21 @@ def main():
                     
                         # 5. ฟังก์ชันสถานะ
                         def check_alerts(row):
-                            price = row['ราคาตลาด']
-                            entry = row['Entry_Price']
-                            sl = row['Stop_Loss']
-                            tp = row['Take_Profit']
+                            # บังคับแปลงค่าให้เป็นตัวเลขเสมอ ถ้าแปลงไม่ได้ให้เป็น 0.0
+                            price = float(row['ราคาตลาด']) if row['ราคาตลาด'] is not None else 0.0
+                            entry = float(row['Entry_Price']) if row['Entry_Price'] is not None else 0.0
+                            sl = float(row['Stop_Loss']) if row['Stop_Loss'] is not None else 0.0
+                            tp = float(row['Take_Profit']) if row['Take_Profit'] is not None else 0.0
+                            
                             if price <= 0: return "ไม่มีราคา"
-                            if abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
+                            if entry > 0 and abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
                             if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
-                            if price >= tp: return "💰 ถึงเป้า TP!"
+                            if tp > 0 and price >= tp: return "💰 ถึงเป้า TP!"
                             return "ปกติ"
-                    
+                        # แปลงคอลัมน์ทั้งหมดที่เกี่ยวข้องให้เป็นตัวเลข
+                        cols_to_fix = ['ราคาตลาด', 'Entry_Price', 'Stop_Loss', 'Take_Profit']
+                        for col in cols_to_fix:
+                            plan_df[col] = pd.to_numeric(plan_df[col], errors='coerce').fillna(0.0)
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                     
                         # 6. แสดงผล
