@@ -2037,16 +2037,17 @@ def main():
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
-                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
+                                # ใช้ชื่อเดิมที่เป็นคอลัมน์ แต่เปลี่ยนชื่อ Label ใน UI ตรงนี้ครับ
+                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f"), 
+                                "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
-                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
                                 "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
                                 "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด"),
                             },
                             use_container_width=True,
                             key="unique_plan_editor_v1",
                             num_rows="dynamic"
-)           
+                        )
                         # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
                         # 6. ปุ่มบันทึก - วิธีที่ตายตัวที่สุด (เอาโครงสร้างจาก Sheet เป็นที่ตั้ง)
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
