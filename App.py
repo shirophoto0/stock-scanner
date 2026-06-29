@@ -2047,10 +2047,21 @@ def main():
                         )
                         
                         # 7. ปุ่มบันทึก (ระบบจะรับข้อมูลจากตารางที่ลบแถวไปแล้วโดยอัตโนมัติ)
+                        # 6. แสดงผลตาราง
+                        edited_df = st.data_editor(
+                            plan_df, # ใช้ DataFrame ต้นฉบับ
+                            # ... (column_config เหมือนเดิม)
+                            key="editable_plan_table"
+                        )
+                        
+                        # 7. ปุ่มบันทึก - เช็คก่อนบันทึก
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # ตัดคอลัมน์ที่ไม่จำเป็นหรือคำนวณใหม่ก่อนเซฟ (ถ้าจำเป็น)
-                            save_data(edited_df, "TradingPlan")
-                            st.success("อัปเดตข้อมูลและลบแถวเรียบร้อย!")
+                            # แปลงค่าให้เป็นตัวเลขทั้งหมดอีกรอบเพื่อความชัวร์ก่อนบันทึก
+                            save_df = edited_df.copy()
+                            save_df['Stop_Loss'] = pd.to_numeric(save_df['Stop_Loss'], errors='coerce')
+                            
+                            save_data(save_df, "TradingPlan")
+                            st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
