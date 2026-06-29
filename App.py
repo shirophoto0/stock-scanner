@@ -31,6 +31,31 @@ def send_line_notify(message, token):
 # ใส่ Token ของพี่อ้ำตรงนี้ครับ
 LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
 
+@st.cache_data(ttl=600)
+def load_data(sheet_name):
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet('TradingPlan')
+        data = sheet.get_all_records()
+        return pd.DataFrame(data)
+    except Exception as e:
+        st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {e}")
+        return pd.DataFrame() # ส่ง DataFrame ว่างกลับไปกัน Error
+        
+def clear_and_save_data(df, sheet_name):
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet('TradingPlan')
+    
+    # ต้องสั่ง clear() ก่อนเสมอ เพื่อลบข้อมูลเก่าทั้งหมดทิ้ง (แถวที่ลบไปจะหายไป)
+    sheet.clear()
+    
+    # ส่ง Header + ข้อมูล
+    data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
+    
+    # ระบุ 'A1' เพื่อให้เริ่มวางที่หัวตาราง
+    sheet.update('A1', data_to_save)
+    return True
+    
 def save_trading_plan_exclusive(df):
     """ฟังก์ชันนี้ใช้สำหรับ TradingPlan โดยเฉพาะ (บังคับเรียง 9 คอลัมน์)"""
     client = get_gsheet_client()
