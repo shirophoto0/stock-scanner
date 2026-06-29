@@ -2056,7 +2056,7 @@ def main():
                         st.write("--- Debugging ---")
                         st.write("รายการหุ้นในตาราง (Ticker):", plan_df['Ticker'].tolist())
                         st.write("ผลลัพธ์จาก price_map:", price_map)
-st.write("ราคาตลาดในตาราง (หลัง Map):", plan_df['ราคาตลาด'].tolist())
+                        st.write("ราคาตลาดในตาราง (หลัง Map):", plan_df['ราคาตลาด'].tolist())
 # ------------------------------
 if __name__ == "__main__":
     main()
