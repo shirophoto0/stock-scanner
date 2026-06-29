@@ -55,9 +55,9 @@ def append_to_gsheet(data_dict, sheet_name):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
         return False
         
-def clear_and_save_data(df, sheet_name):
+def clear_and_save_data(df, 'TradingPlan'):
     client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet(sheet_name)
+    sheet = client.open('MyStockData').worksheet('TradingPlan')
     sheet.clear()
     # ส่งเฉพาะข้อมูล (ไม่ส่ง Header ซ้ำ ถ้าไฟล์มี Header อยู่แล้ว) 
     # หรือส่ง Header + ข้อมูล ตามลำดับที่ถูกต้อง 100%
