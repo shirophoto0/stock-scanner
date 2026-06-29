@@ -2026,7 +2026,7 @@ def main():
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
                         
                         # 5. เตรียมตารางที่จะแสดง (เอาเฉพาะคอลัมน์ที่แก้ไขได้)
-                        columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']
+                        columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
                         
                         edited_df = st.data_editor(
                             plan_df[columns_to_show],
