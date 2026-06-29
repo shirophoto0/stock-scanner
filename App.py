@@ -1985,7 +1985,7 @@ def main():
                     plan_df = load_data("TradingPlan") 
                     
                     if not plan_df.empty:
-                        plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip().str.upper())
+                        plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip().str.upper()
                     
                         # 2. ฟังก์ชันดึงราคาตลาดพร้อม Cache (ลดการโดนบล็อก)
                         @st.cache_data(ttl=600)
