@@ -2018,6 +2018,7 @@ def main():
                     
                         # 6. แสดงผล
                         # 6. แสดงผลตารางที่ปรับให้แก้ไขได้ตามต้องการ
+                        plan_df['Take_Profit'] = pd.to_numeric(plan_df['Take_Profit'], errors='coerce').fillna(0.0)
                         edited_df = st.data_editor(
                             plan_df[['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']],
                             column_config={
