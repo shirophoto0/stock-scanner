@@ -2046,27 +2046,27 @@ def main():
                         )
                         
                         # 6. ปุ่มบันทึกที่ถูกต้องที่สุด
-                        if st.button("💾 บันทึกการแก้ไข", key="btn_save_fixed"):
-                            # ทำการ Merge ข้อมูลที่แก้ไขเข้ากับ plan_df เดิม โดยใช้ Ticker เป็นตัวหลัก
-                            # เพื่อรักษา Timestamp และข้อมูลที่ไม่ได้แสดงใน UI เอาไว้
-                            updated_df = plan_df.set_index('Ticker')
-                            updates = edited_df.set_index('Ticker')
+                        # แก้ในปุ่มบันทึก:
+                        if st.button("💾 บันทึกการแก้ไข", key="btn_save_final"):
+                            # 1. เอาตารางจากหน้าจอ (edited_df) มาเป็นตัวตั้ง
+                            final_df = edited_df.copy()
                             
-                            # อัปเดตเฉพาะคอลัมน์ที่แสดงใน UI
-                            for col in columns_to_show:
-                                if col in updates.columns:
-                                    updated_df.loc[updates.index, col] = updates[col]
+                            # 2. ถ้าใน Sheet มีคอลัมน์ที่ไม่แสดงในตาราง (เช่น Timestamp) 
+                            # เราจะเติมค่าว่างไว้ก่อน เพื่อให้โครงสร้างคอลัมน์ครบ 9 อัน
+                            final_df['Timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                             
-                            # รีเซ็ต Index และเรียงคอลัมน์ให้ตรงกับ Excel เป๊ะๆ ก่อน Save
-                            updated_df = updated_df.reset_index()
-                            final_header = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-                            updated_df = updated_df[final_header]
+                            # 3. จัดเรียงคอลัมน์ให้ตรงเป๊ะกับ Excel 
+                            cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+                            final_df = final_df.reindex(columns=cols)
                             
-                            # บันทึก
-                            save_data(updated_df, "TradingPlan")
-                            st.success("บันทึกข้อมูลเรียบร้อย!")
+                            # 4. ส่งไปบันทึกแบบ "เขียนทับทั้ง Sheet" (Overwrite)
+                            # ฟังก์ชัน save_data ของพี่อ้ำต้องเปลี่ยนเป็นโหมด .clear() + .update()
+                            # ถ้ายังใช้แบบเดิม ข้อมูลจะยิ่งเพี้ยนครับ
+                            clear_and_save_data(final_df, "TradingPlan")
+                            
+                            st.success("บันทึกทับข้อมูลเก่าเรียบร้อย!")
                             st.rerun()
-                    else:
+                                            else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
 # ------------------------------
 if __name__ == "__main__":
