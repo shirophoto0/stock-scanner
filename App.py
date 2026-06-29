@@ -2024,54 +2024,47 @@ def main():
                             lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) if x['ราคาตลาด'] > 0 else 0.0, axis=1
                         ).round(2)
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                    
-                        # 5. เตรียมตารางที่จะแสดง (เลือกเฉพาะที่อยากให้แก้ + ลำดับให้ตรง)
+                        
+                        # 5. เตรียมตารางที่จะแสดง (เอาเฉพาะคอลัมน์ที่แก้ไขได้)
                         columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Image_URL']
-
-                        # ดึงเฉพาะคอลัมน์ที่ต้องการและบังคับเรียงลำดับ
-                        show_df = plan_df[columns_to_show].copy()
                         
                         edited_df = st.data_editor(
-                            show_df,
+                            plan_df[columns_to_show],
                             column_config={
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
-                                # ใช้ชื่อเดิมที่เป็นคอลัมน์ แต่เปลี่ยนชื่อ Label ใน UI ตรงนี้ครับ
-                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f"), 
+                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f"),
                                 "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
                                 "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
                                 "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด"),
                             },
                             use_container_width=True,
-                            key="unique_plan_editor_v1",
+                            key="fixed_plan_editor_v2", # เปลี่ยน Key ใหม่
                             num_rows="dynamic"
                         )
-                        # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
-                        # 6. ปุ่มบันทึก - วิธีที่ตายตัวที่สุด (เอาโครงสร้างจาก Sheet เป็นที่ตั้ง)
-                        if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
+                        
+                        # 6. ปุ่มบันทึกที่ถูกต้องที่สุด
+                        if st.button("💾 บันทึกการแก้ไข", key="btn_save_fixed"):
+                            # ทำการ Merge ข้อมูลที่แก้ไขเข้ากับ plan_df เดิม โดยใช้ Ticker เป็นตัวหลัก
+                            # เพื่อรักษา Timestamp และข้อมูลที่ไม่ได้แสดงใน UI เอาไว้
+                            updated_df = plan_df.set_index('Ticker')
+                            updates = edited_df.set_index('Ticker')
                             
-                            # 1. รับค่าที่แก้จากหน้าจอมา
-                            temp_df = edited_df.copy()
+                            # อัปเดตเฉพาะคอลัมน์ที่แสดงใน UI
+                            for col in columns_to_show:
+                                if col in updates.columns:
+                                    updated_df.loc[updates.index, col] = updates[col]
                             
-                            # 2. นำข้อมูลจากตารางที่แก้แล้ว ไปรวมกับ Timestamp (ถ้ามี)
-                            # เราจะสร้าง dataframe ใหม่โดยเอา Header เป็นตัวตั้ง
-                            final_df = pd.DataFrame(columns=['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL'])
+                            # รีเซ็ต Index และเรียงคอลัมน์ให้ตรงกับ Excel เป๊ะๆ ก่อน Save
+                            updated_df = updated_df.reset_index()
+                            final_header = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+                            updated_df = updated_df[final_header]
                             
-                            # 3. นำข้อมูลจาก temp_df มาใส่ทีละคอลัมน์ตามชื่อ Header เป๊ะๆ
-                            for col in final_df.columns:
-                                if col in temp_df.columns:
-                                    final_df[col] = temp_df[col]
-                                else:
-                                    # ถ้าเป็น Timestamp ที่ไม่มีในตาราง ให้เอาจาก plan_df เดิมมาแปะ
-                                    if col in plan_df.columns:
-                                        final_df[col] = plan_df[col]
-                            
-                            # 4. บันทึกทับไปเลย
-                            save_data(final_df, "TradingPlan")
-                            
-                            st.success("อัปเดตข้อมูลและลบแถวเรียบร้อย!")
+                            # บันทึก
+                            save_data(updated_df, "TradingPlan")
+                            st.success("บันทึกข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
