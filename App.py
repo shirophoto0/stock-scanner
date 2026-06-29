@@ -2024,6 +2024,7 @@ def main():
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
+                                "Take Profit": st.column_config.NumberColumn("Take Profit", format="%.2f%%", disabled=True),
                                 "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
                                 "Timestamp": None, # ซ่อนถ้าไม่จำเป็นต้องแก้ไข
                                 "Image_URL": st.column_config.LinkColumn(
