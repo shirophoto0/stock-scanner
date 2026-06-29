@@ -2024,15 +2024,14 @@ def main():
                                 "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                                 "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
-                                "Take_Profit": st.column_config.NumberColumn("Take_Profit", format="%.2f%%", disabled=True),
                                 "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
-                                "Timestamp": None, # ซ่อนถ้าไม่จำเป็นต้องแก้ไข
+                                "Timestamp": None,
                                 "Image_URL": st.column_config.LinkColumn(
                                     "Plan trade", 
                                     help="คลิกเพื่อดูรูปภาพแผนการเทรด",
                                     display_text="ดูรูปแผนเทรด"
                                 ),
-                                # ตั้งค่าคอลัมน์ที่ต้องการให้แก้ไขได้เป็น disabled=False
+                                # ตั้งค่าให้แก้ไขได้ทั้งหมดตรงนี้ที่เดียวครับ
                                 "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", disabled=False),
                                 "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f", disabled=False),
                                 "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f", disabled=False),
