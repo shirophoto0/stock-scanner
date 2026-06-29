@@ -1968,19 +1968,23 @@ def main():
                         plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
                     
                         # 1. ดึงข้อมูลราคาล่าสุดจาก Yahoo Finance
-                        tickers = plan_df['Ticker'].unique().tolist()
+                        # สร้าง list ของ Ticker ที่มี .BK ต่อท้ายให้ครบ
+                        ticker_list = plan_df['Ticker'].astype(str).str.strip()
+                        tickers_to_fetch = [f"{t}.BK" if not t.endswith(".BK") else t for t in ticker_list]
+                        
                         price_data = {}
-                        for t in tickers:
+                        for t_raw, t_full in zip(ticker_list, tickers_to_fetch):
                             try:
-                                df = yf.download(f"{t}.BK", period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
+                                df = yf.download(t_full, period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
                                 if not df.empty:
-                                    price_data[t] = float(df['Close'].iloc[-1])
+                                    price_data[t_raw] = float(df['Close'].iloc[-1])
                                 else:
-                                    price_data[t] = 0.0
+                                    price_data[t_raw] = 0.0
                             except:
-                                price_data[t] = 0.0
+                                price_data[t_raw] = 0.0
                         
                         # 2. นำราคาที่ได้ไปใส่ในตาราง
+                        # ใช้ t_raw (ชื่อหุ้นที่ไม่มี .BK) เป็น Key ในการ Map
                         plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_data)
                         
                         # 3. คำนวณ % ห่างจาก SL
