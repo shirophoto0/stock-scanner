@@ -1980,8 +1980,8 @@ def main():
                             'Entry_Price': entry,
                             'Stop_Loss': stop_loss,
                             'Take_Profit': take_profit,
-                            'Image_URL': image_url,
-                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'Image_URL': image_url
                         }
                         if append_to_gsheet(new_data, "TradingPlan"):
                             st.success("บันทึกแผนเรียบร้อย!")
