@@ -2073,7 +2073,7 @@ def main():
                             "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
                             "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
                             "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
-                            "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด"),
+                            "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True),
                         },
                         use_container_width=True, key="fixed_plan_editor_v2", num_rows="dynamic"
                     )
