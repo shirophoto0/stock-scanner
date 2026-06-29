@@ -55,7 +55,7 @@ def append_to_gsheet(data_dict, sheet_name):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
         return False
         
-def clear_and_save_data(df, 'TradingPlan'):
+def clear_and_save_data(df, 'sheet_name'):
     client = get_gsheet_client()
     sheet = client.open('MyStockData').worksheet('TradingPlan')
     sheet.clear()
