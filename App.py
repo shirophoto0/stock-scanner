@@ -1963,77 +1963,77 @@ def main():
                     st.divider()
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
                     plan_df = load_data("TradingPlan") 
-
-                    # 1. ดึงข้อมูลราคาล่าสุดจาก Yahoo Finance (แบบปลอดภัย)
-                    tickers = plan_df['Ticker'].unique().tolist()
-                    # สมมติว่าพี่อ้ำมีฟังก์ชันดึงราคาอยู่แล้ว หรือใช้โค้ดนี้:
-                    price_data = {}
-                    for t in tickers:
-                        try:
-                            # ใช้ headers ป้องกัน RateLimitError
-                            df = yf.download(f"{t}.BK", period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
-                            if not df.empty:
-                                price_data[t] = df['Close'].iloc[-1]
-                            else:
+                    
+                    if not plan_df.empty:
+                        plan_df['Ticker'] = plan_df['Ticker'].astype(str).str.strip()
+                    
+                        # 1. ดึงข้อมูลราคาล่าสุดจาก Yahoo Finance
+                        tickers = plan_df['Ticker'].unique().tolist()
+                        price_data = {}
+                        for t in tickers:
+                            try:
+                                df = yf.download(f"{t}.BK", period="1d", progress=False, headers={'User-Agent': 'Mozilla/5.0'})
+                                if not df.empty:
+                                    price_data[t] = float(df['Close'].iloc[-1])
+                                else:
+                                    price_data[t] = 0.0
+                            except:
                                 price_data[t] = 0.0
-                        except:
-                            price_data[t] = 0.0
-                    
-                    # 2. นำราคาที่ได้ไปใส่ในตาราง plan_df (สร้างคอลัมน์ 'ราคาตลาด')
-                    plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_data)
-                    
-                    # 3. ตอนนี้ค่อยสั่งคำนวณ % ห่างจาก SL (โค้ดของพี่อ้ำจะทำงานได้แล้ว)
-                    plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
-                        lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
-                        if x['ราคาตลาด'] > 0 else 0.0, axis=1
-                    ).round(2)
-                    
-                    
-                    # 1. นิยามฟังก์ชันเช็คสถานะ (ไว้นอกสุด)
-                    def check_alerts(row):
-                        price = row['ราคาตลาด']
-                        entry = row['Entry_Price']
-                        sl = row['Stop_Loss']
-                        tp = row['Take_Profit']
                         
-                        if price <= 0: return "ไม่มีราคา"
+                        # 2. นำราคาที่ได้ไปใส่ในตาราง
+                        plan_df['ราคาตลาด'] = plan_df['Ticker'].map(price_data)
                         
-                        if abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
-                        if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
-                        if price >= tp: return "💰 ถึงเป้า TP!"
-                        
-                        return "ปกติ"
-                
-                    # 2. สั่ง Apply เพื่อสร้างคอลัมน์ 'สถานะ' (ต้องอยู่หลังฟังก์ชันและนอกฟังก์ชัน)
-                    plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                
-                    # 3. จัดเรียง Column
-                    column_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-                    plan_df = plan_df[[c for c in column_order if c in plan_df.columns]]
-                
-                    # 4. แสดงตาราง
-                    edited_df = st.data_editor(
-                        plan_df,
-                        column_config={
-                            "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
-                            "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
-                            "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
-                            "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
-                            "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
-                            "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
-                            "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
-                        },
-                        use_container_width=True,
-                        key="editable_plan_table"
-                    )
-                
-                    # 5. ปุ่มบันทึก
-                    if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                        save_data(edited_df, "TradingPlan")
-                        st.success("อัปเดตข้อมูลเรียบร้อย!")
-                        st.rerun()
-                else:
-                    st.info("ยังไม่มีข้อมูลแผนการเทรด")
+                        # 3. คำนวณ % ห่างจาก SL
+                        plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
+                            lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) 
+                            if x['ราคาตลาด'] > 0 else 0.0, axis=1
+                        ).round(2)
+                    
+                        # 4. นิยามฟังก์ชันเช็คสถานะ
+                        def check_alerts(row):
+                            price = row['ราคาตลาด']
+                            entry = row['Entry_Price']
+                            sl = row['Stop_Loss']
+                            tp = row['Take_Profit']
+                            
+                            if price <= 0: return "ไม่มีราคา"
+                            if abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
+                            if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
+                            if price >= tp: return "💰 ถึงเป้า TP!"
+                            return "ปกติ"
+                    
+                        # 5. สั่ง Apply เพื่อสร้างคอลัมน์ 'สถานะ'
+                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
+                    
+                        # 6. จัดเรียง Column
+                        column_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+                        plan_df = plan_df[[c for c in column_order if c in plan_df.columns]]
+                    
+                        # 7. แสดงตาราง
+                        edited_df = st.data_editor(
+                            plan_df,
+                            column_config={
+                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
+                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
+                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
+                                "สถานะ": st.column_config.TextColumn("สถานะการแจ้งเตือน", disabled=True),
+                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
+                                "Stop_Loss": st.column_config.NumberColumn("Stop Loss", format="%.2f"),
+                                "Take_Profit": st.column_config.NumberColumn("Take Profit", format="%.2f"),
+                            },
+                            use_container_width=True,
+                            key="editable_plan_table"
+                        )
+                    
+                        # 8. ปุ่มบันทึก
+                        if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
+                            save_data(edited_df, "TradingPlan")
+                            st.success("อัปเดตข้อมูลเรียบร้อย!")
+                            st.rerun()
+                    
+                    # บรรทัดนี้คือส่วนที่แก้ SyntaxError โดยจัดให้ตรงกับ if บรรทัดแรกสุด
+                    else:
+                        st.info("ยังไม่มีข้อมูลแผนการเทรด")
 
 if __name__ == "__main__":
     main()
