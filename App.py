@@ -31,22 +31,29 @@ def send_line_notify(message, token):
 # ใส่ Token ของพี่อ้ำตรงนี้ครับ
 LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
 
-def append_to_gsheet(data, sheet_name):
-    # เชื่อมต่อกับ Sheet
-    worksheet = sh.worksheet(sheet_name)
-    
-    # ถ้าข้อมูลเป็น List ให้เขียนลงไปตรงๆ
-    if isinstance(data, list):
-        worksheet.append_row(data)
-    
-    # ถ้าข้อมูลเป็น Dictionary (แบบเดิมที่พี่อ้ำเคยใช้)
-    elif isinstance(data, dict):
-        # สร้าง List โดยดึงค่าจาก Dict ตามลำดับ Header ที่เรากำหนดไว้
-        headers = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-        row_to_append = [data.get(h, "") for h in headers]
-        worksheet.append_row(row_to_append)
+def append_to_gsheet(data_dict, sheet_name):
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet("TradingPlan")
         
-    return True
+        # จัดเรียงให้ครบ 9 คอลัมน์ ตามลำดับ A ถึง I ใน Excel ของพี่อ้ำ
+        row_values = [
+            data_dict.get('Ticker'),          # A
+            data_dict.get('Entry_Price'),     # B
+            data_dict.get('ราคาตลาด', 0),      # C
+            data_dict.get('Stop_Loss'),       # D
+            data_dict.get('ห่างจาก_SL(%)', 0), # E
+            data_dict.get('Take_Profit'),     # F
+            data_dict.get('สถานะ', 'ปกติ'),     # G
+            data_dict.get('Timestamp'),       # H
+            data_dict.get('Image_URL')        # I
+        ]
+        
+        sheet.append_row(row_values)
+        return True
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
+        return False
     
 def get_gsheet_client():
     scope = [
