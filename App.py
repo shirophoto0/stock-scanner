@@ -2021,7 +2021,7 @@ def main():
                             if append_to_gsheet(new_data, "TradingPlan"):
                                 st.success(f"บันทึกแผน {ticker} เรียบร้อย!")
                                 st.cache_data.clear()
-            st.rerun()
+                                st.rerun()
                 
                     # --- ตารางแสดงแผนการเทรด ---
                     # --- ตารางแสดงแผนการเทรด ---
