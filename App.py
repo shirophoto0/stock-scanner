@@ -1993,22 +1993,21 @@ def main():
                 
                     if submit_button:
                         from datetime import datetime
+                        # เรียงลำดับ Key ให้ครบ 9 คอลัมน์ตาม Header ใน Excel เป๊ะๆ
+                        new_data = {
+                            'Ticker': ticker,
+                            'Entry_Price': entry,
+                            'ราคาตลาด': 0.0,
+                            'Stop_Loss': stop_loss,
+                            'ห่างจาก_SL(%)': 0.0,
+                            'Take_Profit': take_profit,
+                            'สถานะ': 'ปกติ',
+                            'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'Image_URL': image_url
+                        }
                         
-                        # เรียงลำดับข้อมูลให้ตรงกับ Column A-I ของพี่อ้ำเป๊ะๆ
-                        data_list = [
-                            ticker,                 # A: Ticker
-                            entry,                  # B: Entry_Price
-                            0.0,                    # C: ราคาตลาด
-                            stop_loss,              # D: Stop_Loss
-                            0.0,                    # E: ห่างจาก_SL(%)
-                            take_profit,            # F: Take_Profit
-                            "ปกติ",                 # G: สถานะ
-                            datetime.now().strftime("%Y-%m-%d %H:%M:%S"), # H: Timestamp
-                            image_url               # I: Image_URL
-                        ]
-                        
-                        # ส่งเป็น List แทน Dictionary
-                        if append_to_gsheet(data_list, "TradingPlan"):
+                        # ส่งข้อมูลแบบ Dictionary ไปให้ฟังก์ชันเดิมที่พี่อ้ำมีอยู่
+                        if append_to_gsheet(new_data, "TradingPlan"):
                             st.success("บันทึกแผนเรียบร้อย!")
                             st.cache_data.clear()
                             st.rerun()
