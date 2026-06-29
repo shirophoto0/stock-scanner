@@ -2046,13 +2046,13 @@ def main():
                         
                         # 4. ปุ่มบันทึก (รับค่าจาก edited_df ตัวเดียวที่ได้จากตารางด้านบน)
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # นำค่าที่แก้จากตารางไปรวมกับข้อมูลเดิม (เผื่อคอลัมน์ที่ไม่ได้โชว์ในตารางหายไป)
-                            updated_plan_df = plan_df.copy()
-                            updated_plan_df.update(edited_df)
+                            # 1. edited_df คือตารางที่พี่อ้ำลบแถวออกไปแล้ว
+                            # 2. ส่ง edited_df นี้ไปบันทึกแทนที่ Sheet เดิมได้เลย
+                            # (ไม่ต้อง update กับ plan_df ตัวเก่า เพราะเราต้องการให้สิ่งที่เหลือในหน้าจอคือสิ่งที่ไปอยู่ใน Sheet)
                             
-                            # บันทึกข้อมูล
-                            save_data(updated_plan_df, "TradingPlan")
-                            st.success("อัปเดตข้อมูลเรียบร้อย!")
+                            save_data(edited_df, "TradingPlan")
+                            
+                            st.success("อัปเดตข้อมูลและลบแถวเรียบร้อยแล้วครับ!")
                             st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
