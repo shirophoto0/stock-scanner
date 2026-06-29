@@ -56,13 +56,24 @@ def append_to_gsheet(data_dict, sheet_name):
         return False
         
 def clear_and_save_data(df, sheet_name):
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('TradingPlan')
-    sheet.clear()
-    # ส่งเฉพาะข้อมูล (ไม่ส่ง Header ซ้ำ ถ้าไฟล์มี Header อยู่แล้ว) 
-    # หรือส่ง Header + ข้อมูล ตามลำดับที่ถูกต้อง 100%
-    data_to_save = [df.columns.values.tolist()] + df.values.tolist()
-    sheet.update('A1', data_to_save)
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet(sheet_name)
+        
+        # 1. ล้างข้อมูลทั้งหมด
+        sheet.clear()
+        
+        # 2. เตรียม Header + ข้อมูล โดยเน้นการดึงค่าจาก df.values
+        # ตรวจสอบให้แน่ใจว่า df ได้รับการ reindex/เรียงคอลัมน์มาแล้วจากด้านบน
+        header = df.columns.tolist()
+        data = df.fillna("").values.tolist()
+        
+        # 3. บันทึกรวดเดียว
+        sheet.update('A1', [header] + data)
+        return True
+    except Exception as e:
+        st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
+        return False
     
 def get_gsheet_client():
     scope = [
@@ -2091,28 +2102,28 @@ def main():
                         
                         # 6. ปุ่มบันทึกที่ถูกต้องที่สุด
                         # แก้ในปุ่มบันทึก:
-                        if st.button("💾 บันทึกการแก้ไข", key="btn_save_final"):
-                            # 1. เอาตารางจากหน้าจอ (edited_df) มาเป็นตัวตั้ง
+                        # ค้นหาจุดนี้ใน main()
+                        if st.button("💾 บันทึกการแก้ไข"):
+                            # 1. edited_df คือตารางที่ user แก้ไข/ลบแถวแล้ว
+                            # 2. เติมคอลัมน์ที่ขาดไป (ถ้ามี)
                             final_df = edited_df.copy()
                             
-                            # 2. ถ้าใน Sheet มีคอลัมน์ที่ไม่แสดงในตาราง (เช่น Timestamp) 
-                            # เราจะเติมค่าว่างไว้ก่อน เพื่อให้โครงสร้างคอลัมน์ครบ 9 อัน
-                            final_df['Timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            
-                            # 3. จัดเรียงคอลัมน์ให้ตรงเป๊ะกับ Excel 
+                            # บังคับคอลัมน์ให้ครบ 9 ตัวตาม Excel
                             cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+                            
+                            # เติมคอลัมน์ที่ไม่มีค่า
                             for c in cols:
                                 if c not in final_df.columns:
-                                    final_df[c] = "" # หรือค่าเริ่มต้นที่เหมาะสม
+                                    final_df[c] = ""
+                                    
+                            # เรียงลำดับคอลัมน์ให้ตรงเป๊ะ
                             final_df = final_df[cols]
                             
-                            # 4. ส่งไปบันทึกแบบ "เขียนทับทั้ง Sheet" (Overwrite)
-                            # ฟังก์ชัน save_data ของพี่อ้ำต้องเปลี่ยนเป็นโหมด .clear() + .update()
-                            # ถ้ายังใช้แบบเดิม ข้อมูลจะยิ่งเพี้ยนครับ
-                            clear_and_save_data(final_df, "TradingPlan")
-                            
-                            st.success("บันทึกทับข้อมูลเก่าเรียบร้อย!")
-                            st.rerun()
+                            # 3. บันทึกทับ (ส่งค่าไปฟังก์ชันที่เราแก้ไว้ในข้อ 1)
+                            if clear_and_save_data(final_df, "TradingPlan"):
+                                st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
+                                st.cache_data.clear() # ล้าง Cache เพื่อให้โหลดข้อมูลใหม่ทันที
+                                st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
 # ------------------------------
