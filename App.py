@@ -2045,17 +2045,17 @@ def main():
                             num_rows="dynamic"
                         )                    
                         # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
+                        # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # สร้าง DataFrame ใหม่ที่เลียนแบบโครงสร้างเดิมของ plan_df
-                            updated_plan_df = plan_df.copy()
+                            # 1. นำข้อมูลจาก edited_df (ที่แก้ไข/ลบแถวแล้ว) มาเป็นตัวตั้งต้น
+                            # สิ่งที่อยู่ใน edited_df คือตารางที่ถูกต้องตามหน้าจอ
+                            final_df = edited_df.copy()
                             
-                            # อัปเดตเฉพาะคอลัมน์ที่เราให้แก้ไขจากตาราง
-                            for col in columns_to_show:
-                                if col in edited_df.columns:
-                                    updated_plan_df[col] = edited_df[col]
+                            # 2. ถ้าใน Sheet เดิมมีคอลัมน์อื่นที่ไม่ได้แสดงในตาราง (เช่น Timestamp) 
+                            # เราต้องพยายามรักษาไว้ แต่ถ้าลบแถวไปแล้ว คอลัมน์ที่เหลือควรจะตรงกัน
+                            # ถ้ามั่นใจว่า edited_df มีคอลัมน์ครบตามที่ Sheet ต้องการ ให้บันทึกเลย:
                             
-                            # บันทึกข้อมูลที่อัปเดตแล้ว
-                            save_data(updated_plan_df, "TradingPlan")
+                            save_data(final_df, "TradingPlan")
                             st.success("อัปเดตข้อมูลเรียบร้อย!")
                             st.rerun()
                     else:
