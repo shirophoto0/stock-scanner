@@ -2052,7 +2052,12 @@ def main():
                     
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
-                        st.write("ชื่อ Column ในตาราง:", plan_df.columns.tolist())
+                        # --- ส่วน Debug เพื่อหาสาเหตุ ---
+                        st.write("--- Debugging ---")
+                        st.write("รายการหุ้นในตาราง (Ticker):", plan_df['Ticker'].tolist())
+                        st.write("ผลลัพธ์จาก price_map:", price_map)
+st.write("ราคาตลาดในตาราง (หลัง Map):", plan_df['ราคาตลาด'].tolist())
+# ------------------------------
 if __name__ == "__main__":
     main()
 
