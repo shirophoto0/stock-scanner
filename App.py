@@ -2048,24 +2048,29 @@ def main():
                             num_rows="dynamic"
 )           
                         # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
-                        # 3. ปุ่มบันทึกที่ปลอดภัยที่สุด
+                        # 6. ปุ่มบันทึก - วิธีที่ตายตัวที่สุด (เอาโครงสร้างจาก Sheet เป็นที่ตั้ง)
                         if st.button("💾 บันทึกการแก้ไข", key="btn_update_plan"):
-                            # คัดลอกข้อมูลต้นฉบับ
-                            updated_plan_df = plan_df.copy()
                             
-                            # อัปเดตข้อมูลจากตารางที่แก้แล้ว (edited_df) กลับเข้าไปใน plan_df
-                            # โดยอ้างอิงจาก 'Ticker' เป็นหลัก เพื่อป้องกันข้อมูลสลับบรรทัดหรือสลับช่อง
-                            for i, row in edited_df.iterrows():
-                                ticker = row['Ticker']
-                                # ค้นหาแถวที่ Ticker ตรงกันในข้อมูลต้นฉบับ
-                                mask = updated_plan_df['Ticker'] == ticker
-                                if mask.any():
-                                    for col in columns_to_show:
-                                        updated_plan_df.loc[mask, col] = row[col]
+                            # 1. รับค่าที่แก้จากหน้าจอมา
+                            temp_df = edited_df.copy()
                             
-                            # บันทึกข้อมูลที่อัปเดตแล้ว (โดยยังคงลำดับคอลัมน์เดิมของไฟล์ไว้)
-                            save_data(updated_plan_df, "TradingPlan")
-                            st.success("อัปเดตข้อมูลเรียบร้อย!")
+                            # 2. นำข้อมูลจากตารางที่แก้แล้ว ไปรวมกับ Timestamp (ถ้ามี)
+                            # เราจะสร้าง dataframe ใหม่โดยเอา Header เป็นตัวตั้ง
+                            final_df = pd.DataFrame(columns=['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL'])
+                            
+                            # 3. นำข้อมูลจาก temp_df มาใส่ทีละคอลัมน์ตามชื่อ Header เป๊ะๆ
+                            for col in final_df.columns:
+                                if col in temp_df.columns:
+                                    final_df[col] = temp_df[col]
+                                else:
+                                    # ถ้าเป็น Timestamp ที่ไม่มีในตาราง ให้เอาจาก plan_df เดิมมาแปะ
+                                    if col in plan_df.columns:
+                                        final_df[col] = plan_df[col]
+                            
+                            # 4. บันทึกทับไปเลย
+                            save_data(final_df, "TradingPlan")
+                            
+                            st.success("อัปเดตข้อมูลและลบแถวเรียบร้อย!")
                             st.rerun()
                     else:
                         st.info("ยังไม่มีข้อมูลแผนการเทรด")
