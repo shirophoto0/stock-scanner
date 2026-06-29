@@ -376,7 +376,19 @@ def get_latest_prices(tickers):
         except Exception as e:
             prices[clean_t] = 0.0
     return prices
+
+def check_alerts(row):
+    # (โค้ดฟังก์ชัน check_alerts ของพี่อ้ำ)
+    price = float(row['ราคาตลาด']) if row['ราคาตลาด'] is not None else 0.0
+    entry = float(row['Entry_Price']) if row['Entry_Price'] is not None else 0.0
+    sl = float(row['Stop_Loss']) if row['Stop_Loss'] is not None else 0.0
+    tp = float(row['Take_Profit']) if row['Take_Profit'] is not None else 0.0
     
+    if price <= 0: return "ไม่มีราคา"
+    if entry > 0 and abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
+    if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
+    if tp > 0 and price >= tp: return "💰 ถึงเป้า TP!"
+    return "ปกติ"
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
