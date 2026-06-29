@@ -30,35 +30,11 @@ def send_line_notify(message, token):
 
 # ใส่ Token ของพี่อ้ำตรงนี้ครับ
 LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
-
-def append_to_gsheet(data_dict, sheet_name):
+        
+def clear_and_, sheet_name):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet("TradingPlan")
-        
-        # จัดเรียงให้ครบ 9 คอลัมน์ ตามลำดับ A ถึง I ใน Excel ของพี่อ้ำ
-        row_values = [
-            data_dict.get('Ticker'),          # A
-            data_dict.get('Entry_Price'),     # B
-            data_dict.get('ราคาตลาด', 0),      # C
-            data_dict.get('Stop_Loss'),       # D
-            data_dict.get('ห่างจาก_SL(%)', 0), # E
-            data_dict.get('Take_Profit'),     # F
-            data_dict.get('สถานะ', 'ปกติ'),     # G
-            data_dict.get('Timestamp'),       # H
-            data_dict.get('Image_URL')        # I
-        ]
-        
-        sheet.append_row(row_values)
-        return True
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
-        return False
-        
-def clear_and_save_data(df, sheet_name):
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet(sheet_name)
+        sheet = client.open('MyStockData').worksheet('TradingPlan')
         
         # 1. ล้างข้อมูลทั้งหมด
         sheet.clear()
@@ -204,19 +180,7 @@ def save_to_gsheet(df):
     
     print("DEBUG: บันทึกข้อมูลเสร็จสิ้น!")
 # 2. ฟังก์ชันอเนกประสงค์ (เอามาแทรกตรงนี้)
-@st.cache_data(ttl=600)
-def load_data(sheet_name):
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet(sheet_name)
-    data = sheet.get_all_records()
-    return pd.DataFrame(data)
-
-def save_data(df, sheet_name):
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet(sheet_name)
-    sheet.clear()
-    sheet.update([df.columns.values.tolist()] + df.values.tolist())
-    
+@st.cache_data(ttl=600)  
 def save_cash_balance(amount):
     try:
         client = get_gsheet_client()
