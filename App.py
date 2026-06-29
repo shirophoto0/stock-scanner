@@ -1988,15 +1988,16 @@ def main():
                     
                     st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
                 #################################################
+                # --- ตารางแสดงแผนการเทรด ---
                 with tab_plan:
                     st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
                     
+                    # 1. ส่วนฟอร์มเพิ่มหุ้นใหม่
                     with st.form("trading_plan_form", clear_on_submit=True):
                         col1, col2 = st.columns(2)
                         with col1:
                             ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
                             entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
-                            # เปลี่ยนวิธีคำนวณ SL เล็กน้อยเพื่อกันค่า Error
                             stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
                         with col2:
                             take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
@@ -2005,123 +2006,77 @@ def main():
                         submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
                     
                     if submit_button:
-                        # ตรวจสอบว่ากรอก Ticker หรือยัง
                         if not ticker:
                             st.error("กรุณาระบุชื่อหุ้นครับ!")
                         else:
                             from datetime import datetime
-                            # ส่งค่าให้ครบ 9 คอลัมน์ตาม Header ใน Google Sheet
                             new_data = {
-                                'Ticker': ticker,
-                                'Entry_Price': entry,
-                                'ราคาตลาด': 0.0,
-                                'Stop_Loss': stop_loss,
-                                'ห่างจาก_SL(%)': 0.0,
-                                'Take_Profit': take_profit,
-                                'สถานะ': 'ปกติ',
-                                'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
+                                'Stop_Loss': stop_loss, 'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
+                                'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 'Image_URL': image_url
                             }
-                            
-                            # แปลง dict เป็น dataframe ก่อนส่ง
-                            new_df = pd.DataFrame([new_data])
-                            
-                            # เรียกใช้ฟังก์ชันใหม่ที่จัดการเรื่องคอลัมน์และ overwrite ให้เราแล้ว
-                            if save_trading_plan_exclusive(new_df):
+                            if save_trading_plan_exclusive(pd.DataFrame([new_data])):
                                 st.success("บันทึกแผนเรียบร้อย!")
                                 st.cache_data.clear()
                                 st.rerun()
-                                            
-                    # --- ตารางแสดงแผนการเทรด ---
-                    # --- ตารางแสดงแผนการเทรด ---
+                
+                    # 2. ส่วนตารางแสดงผล (แยกออกมาเป็นอิสระ)
                     st.divider()
                     st.subheader("📊 ตารางแผนการเทรดของฉัน")
-                    plan_df = load_data("TradingPlan") 
+                    plan_df = load_data("TradingPlan")
                     
-                    # 1. ทำความสะอาดชื่อคอลัมน์ก่อนเลย (แก้ปัญหาช่องว่างที่มองไม่เห็น)
-                    if not plan_df.empty:
-                        plan_df.columns = plan_df.columns.str.strip()
+                    # กำหนดคอลัมน์มาตรฐาน
+                    cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
                     
-                    # 2. เช็คอีกทีว่ามี Ticker ไหม
-                    if 'Ticker' in plan_df.columns:
-                        # 3. จัดลำดับคอลัมน์ให้ครบและเรียงกัน
-                        col_order = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-                        
-                        # เติมคอลัมน์ที่ขาดไป (ถ้าใน Google Sheet ไม่มีคอลัมน์ไหน ให้สร้างขึ้นมาเป็นค่าว่าง)
-                        for col in col_order:
-                            if col not in plan_df.columns:
-                                plan_df[col] = ""
-                                
-                        # เรียงลำดับคอลัมน์
-                        plan_df = plan_df[col_order]
-                        
-                        # ... (ส่วนคำนวณราคา และโค้ด st.data_editor เดิมของพี่อ้ำ)
+                    # ถ้าดึงมาแล้วว่าง ให้สร้างตารางเปล่า
+                    if plan_df.empty or 'Ticker' not in plan_df.columns:
+                        plan_df = pd.DataFrame(columns=cols)
                     else:
-                        st.info("ยังไม่มีข้อมูลแผนการเทรด (หรือโครงสร้างคอลัมน์ใน Google Sheet ไม่ตรงกัน)")
-                        st.write("คอลัมน์ที่พบใน Sheet:", plan_df.columns.tolist()) # บรรทัดนี้ช่วยให้พี่อ้ำรู้ว่า Sheet ส่งชื่ออะไรมา
-                    
-                        # 2. แก้ไขเรื่องค่า Stop_Loss เริ่มต้น 5%
-                        plan_df['Stop_Loss'] = plan_df.apply(
-                            lambda row: float(row['Entry_Price']) * 0.95 if float(row['Stop_Loss']) == 0 else float(row['Stop_Loss']), 
-                            axis=1
-                        )
-                    
-                        # 3. บังคับ Format ข้อมูลให้เป็นตัวเลข
-                        cols_to_fix = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
-                        for col in cols_to_fix:
-                            plan_df[col] = pd.to_numeric(plan_df[col], errors='coerce').fillna(0.0)
-                    
-                        # 4. คำนวณสถานะและห่างจาก SL
-                        plan_df['ห่างจาก_SL(%)'] = plan_df.apply(
-                            lambda x: ((x['ราคาตลาด'] - x['Stop_Loss']) / x['ราคาตลาด'] * 100) if x['ราคาตลาด'] > 0 else 0.0, axis=1
-                        ).round(2)
+                        plan_df.columns = plan_df.columns.str.strip()
+                
+                    # คำนวณข้อมูล (ให้ทำงานถ้ามีหุ้นในตาราง)
+                    if not plan_df.empty and 'Ticker' in plan_df.columns:
+                        # คำนวณราคาและสถานะ
+                        prices = []
+                        for t in plan_df['Ticker']:
+                            try:
+                                prices.append(float(yf.Ticker(f"{t}.BK").history(period="1d")['Close'].iloc[-1]))
+                            except:
+                                prices.append(0.0)
+                        plan_df['ราคาตลาด'] = prices
+                        
+                        for c in ['Entry_Price', 'Stop_Loss', 'Take_Profit']:
+                            plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
+                            
+                        plan_df['ห่างจาก_SL(%)'] = ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100).fillna(0).round(2)
                         plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
+                
+                    # 3. แสดงตารางและปุ่มบันทึกแก้ไข
+                    edited_df = st.data_editor(
+                        plan_df[cols],
+                        column_config={
+                            "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
+                            "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
+                            "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
+                            "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f"),
+                            "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
+                            "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
+                            "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
+                            "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด"),
+                        },
+                        use_container_width=True, key="fixed_plan_editor_v2", num_rows="dynamic"
+                    )
+                    
+                    if st.button("💾 บันทึกการแก้ไข"):
+                        final_df = edited_df.copy()
+                        for c in cols:
+                            if c not in final_df.columns: final_df[c] = ""
                         
-                        # 5. เตรียมตารางที่จะแสดง (เอาเฉพาะคอลัมน์ที่แก้ไขได้)
-                        columns_to_show = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-                        
-                        edited_df = st.data_editor(
-                            plan_df[columns_to_show],
-                            column_config={
-                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
-                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
-                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
-                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f"),
-                                "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
-                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
-                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
-                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด"),
-                            },
-                            use_container_width=True,
-                            key="fixed_plan_editor_v2", # เปลี่ยน Key ใหม่
-                            num_rows="dynamic"
-                        )
-                        # 6. ปุ่มบันทึกที่ถูกต้องที่สุด
-                        # แก้ในปุ่มบันทึก:
-                        # ค้นหาจุดนี้ใน main()
-                        if st.button("💾 บันทึกการแก้ไข"):
-                            # 1. edited_df คือตารางที่ user แก้ไข/ลบแถวแล้ว
-                            # 2. เติมคอลัมน์ที่ขาดไป (ถ้ามี)
-                            final_df = edited_df.copy()
-                            
-                            # บังคับคอลัมน์ให้ครบ 9 ตัวตาม Excel
-                            cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-                            
-                            # เติมคอลัมน์ที่ไม่มีค่า
-                            for c in cols:
-                                if c not in final_df.columns:
-                                    final_df[c] = ""
-                                    
-                            # เรียงลำดับคอลัมน์ให้ตรงเป๊ะ
-                            final_df = final_df[cols]
-                            
-                            # 3. บันทึกทับ (ส่งค่าไปฟังก์ชันที่เราแก้ไว้ในข้อ 1)
-                            if clear_and_save_data(final_df, "TradingPlan"):
-                                st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
-                                st.cache_data.clear() # ล้าง Cache เพื่อให้โหลดข้อมูลใหม่ทันที
-                                st.rerun()
-                        else:
-                            st.info("ยังไม่มีข้อมูลแผนการเทรด")
+                        if clear_and_save_data(final_df[cols], "TradingPlan"):
+                            st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
+                            st.cache_data.clear()
+                            st.rerun()
 # ------------------------------
 if __name__ == "__main__":
     main()
