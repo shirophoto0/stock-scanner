@@ -2019,7 +2019,9 @@ def main():
                             ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
                             entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
                             stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
+                            support = st.number_input("แนวรับ:", min_value=0.0, format="%.2f", value=0.0)
                         with col2:
+                            resistance = st.number_input("แนวต้าน:", min_value=0.0, format="%.2f", value=0.0)
                             take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
                             image_url = st.text_input("วาง Link รูปภาพ (URL):")
                         
@@ -2032,7 +2034,8 @@ def main():
                             from datetime import datetime
                             new_data = {
                                 'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
-                                'Stop_Loss': stop_loss, 'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
+                                'Stop_Loss': stop_loss, 'แนวรับ': support, 'แนวต้าน': resistance, 
+                                'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
                                 'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 'Image_URL': image_url
                             }
@@ -2047,7 +2050,7 @@ def main():
                     plan_df = load_data("TradingPlan")
                     
                     # กำหนดคอลัมน์มาตรฐาน
-                    cols = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
+                    cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
                     
                     # ถ้าดึงมาแล้วว่าง ให้สร้างตารางเปล่า
                     if plan_df.empty or 'Ticker' not in plan_df.columns:
@@ -2078,6 +2081,8 @@ def main():
                         column_config={
                             "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
                             "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
+                            "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f"),     
+                            "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f"),
                             "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
                             "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f"),
                             "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
