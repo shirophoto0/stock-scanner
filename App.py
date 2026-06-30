@@ -75,12 +75,13 @@ def save_data_to_sheet(df, sheet_name):
 def load_data(sheet_name):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('TradingPlan')
+        # เปลี่ยนจาก 'TradingPlan' เป็นตัวแปร sheet_name ที่รับเข้ามา
+        sheet = client.open('MyStockData').worksheet(sheet_name) 
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
         st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {e}")
-        return pd.DataFrame() # ส่ง DataFrame ว่างกลับไปกัน Error
+        return pd.DataFrame()
         
 @st.cache_data(ttl=3600) # จำข้อมูลไว้ 1 ชม. ค่อยดึงใหม่
 def get_cached_stock_info(ticker):
@@ -2227,29 +2228,31 @@ with tab_tfex:
     with sub_tfex_history:
         st.subheader("📜 ประวัติการเทรด TFEX")
         
-        # 1. โหลดข้อมูล
-        tfex_df = load_data("TFEX_History") # ฟังก์ชันโหลดข้อมูลเดิมของพี่อ้ำ
+        # โหลดข้อมูล
+        tfex_df = load_data("TFEX_History") 
         
+        # --- เพิ่มส่วนเช็คชื่อคอลัมน์แบบเข้มข้น ---
         if not tfex_df.empty:
-            st.write(tfex_df.columns)
-            required_cols = ['Net_Profit', 'Win_Lose']
-            for col in required_cols:
-                if col not in tfex_df.columns:
-                    tfex_df[col] = 0.0 # ถ้าไม่มีให้เติมเป็น 0 ไปก่อน
-            # 2. คำนวณ Cumulative Profit
-            tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
-            
-            # 3. แสดง Metric สรุป
-            total_pnl = tfex_df['Net_Profit'].sum()
-            win_rate = (len(tfex_df[tfex_df['Win_Lose'] == 'Win']) / len(tfex_df)) * 100
-            
-            m1, m2, m3 = st.columns(3)
-            m1.metric("กำไรรวมสุทธิ", f"{total_pnl:,.2f} บาท")
-            m2.metric("Win Rate", f"{win_rate:.1f} %")
-            m3.metric("จำนวนครั้งที่เทรด", len(tfex_df))
-            
-            # 4. แสดงตาราง
-            st.dataframe(tfex_df, use_container_width=True)
+            # ถ้าชื่อคอลัมน์ไม่มี 'Net_Profit' ให้เตือนแทนที่จะ Crash
+            if 'Net_Profit' not in tfex_df.columns:
+                st.error(f"⚠️ ตาราง 'TFEX_History' ที่ดึงมาไม่มีคอลัมน์ 'Net_Profit'")
+                st.write("ตารางที่ดึงมามีคอลัมน์ดังนี้:", tfex_df.columns.tolist())
+                st.write("ข้อมูลตัวอย่างที่ดึงมา:", tfex_df.head(2))
+            else:
+                # ถ้ามีคอลัมน์ครบ ค่อยคำนวณ
+                tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
+                
+                # คำนวณสรุป
+                total_pnl = tfex_df['Net_Profit'].sum()
+                win_count = len(tfex_df[tfex_df['Win_Lose'].astype(str).str.lower() == 'win'])
+                win_rate = (win_count / len(tfex_df)) * 100
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric("กำไรรวมสุทธิ", f"{total_pnl:,.2f} บาท")
+                m2.metric("Win Rate", f"{win_rate:.1f} %")
+                m3.metric("จำนวนครั้งที่เทรด", len(tfex_df))
+                
+                st.dataframe(tfex_df, use_container_width=True)
         else:
-            st.info("ยังไม่มีข้อมูลการเทรดครับ")
+            st.info("ยังไม่มีข้อมูลใน Sheet 'TFEX_History' ครับ")
 
