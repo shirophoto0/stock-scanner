@@ -2233,9 +2233,9 @@ with tab_tfex:
         if not tfex_df.empty:
             st.write(tfex_df.columns)
             required_cols = ['Net_Profit', 'Win_Lose']
-                for col in required_cols:
-                    if col not in tfex_df.columns:
-                        tfex_df[col] = 0.0 # ถ้าไม่มีให้เติมเป็น 0 ไปก่อน
+            for col in required_cols:
+                if col not in tfex_df.columns:
+                    tfex_df[col] = 0.0 # ถ้าไม่มีให้เติมเป็น 0 ไปก่อน
             # 2. คำนวณ Cumulative Profit
             tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
             
