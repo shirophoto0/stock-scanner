@@ -42,6 +42,11 @@ def load_data(sheet_name):
         st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {e}")
         return pd.DataFrame() # ส่ง DataFrame ว่างกลับไปกัน Error
         
+@st.cache_data(ttl=3600) # จำข้อมูลไว้ 1 ชม. ค่อยดึงใหม่
+def get_cached_stock_info(ticker):
+    stock = yf.Ticker(ticker)
+    return stock.info  
+    
 def clear_and_save_data(df, sheet_name):
     client = get_gsheet_client()
     sheet = client.open('MyStockData').worksheet('TradingPlan')
@@ -845,8 +850,8 @@ def main():
             
             ticker = f"{st.session_state.selected_ticker}.BK"
         
-        selected_ticker = st.session_state.selected_ticker 
-        ticker = f"{selected_ticker}.BK"
+        info = get_cached_stock_info(ticker)
+        
         stock_data = yf.Ticker(ticker)
         info = stock_data.info # ดึง info มาที่นี่เพื่อให้ Fundamental ใช้ได้   
             
