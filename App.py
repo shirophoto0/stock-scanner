@@ -850,10 +850,15 @@ def main():
             
             ticker = f"{st.session_state.selected_ticker}.BK"
         
-        info = get_cached_stock_info(ticker)
+        selected_ticker = st.session_state.selected_ticker 
+        ticker = f"{selected_ticker}.BK"
         
-        stock_data = yf.Ticker(ticker)
-        info = stock_data.info # ดึง info มาที่นี่เพื่อให้ Fundamental ใช้ได้   
+        # ใช้ฟังก์ชัน Cache ดึงข้อมูลแทนการดึงตรงจาก Ticker object
+        info = get_cached_stock_info(ticker) 
+        
+        # ถ้าพี่อ้ำยังต้องใช้ stock_data เพื่อดึงข้อมูลกราฟ หรืออย่างอื่น
+        # ก็ให้ประกาศ stock_data ไว้เหมือนเดิมได้ แต่ไม่ต้องดึง .info แล้วครับ
+        stock_data = yf.Ticker(ticker) 
             
         ##### link web set and trading view ########
         # สร้างคอลัมน์ 2 ช่อง (ขนาดเท่ากัน)
@@ -959,7 +964,7 @@ def main():
             ticker = f"{st.session_state.selected_ticker}.BK"
             stock_data = yf.Ticker(ticker)
             set_market = yf.Ticker("^SET.BK")
-            info = stock_data.info
+            info = get_cached_stock_info(ticker)
             
             
             # 3.1 กำหนดช่วงเวลา 
