@@ -31,6 +31,46 @@ def send_line_notify(message, token):
 # ใส่ Token ของพี่อ้ำตรงนี้ครับ
 LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
 
+###################
+# Def TEFEX #
+###################
+def calculate_tfex_result(entry, close, size, comm, side):
+    # Multiplier ของ S50 ปกติคือ 200
+    multiplier = 200
+    
+    # คำนวณจุดที่ได้ (Points)
+    points = (close - entry) if side == "Long" else (entry - close)
+    
+    # คำนวณกำไร/ขาดทุนก่อนหักคอม
+    realized = points * size * multiplier
+    
+    # กำไรสุทธิ
+    net_profit = realized - comm
+    
+    # สถานะ Win/Lose
+    win_lose = "Win" if net_profit > 0 else "Lose"
+    
+    return {
+        "Realized": round(realized, 2),
+        "Net_Profit": round(net_profit, 2),
+        "Win_Lose": win_lose,
+        "Points": round(points, 2)
+    }
+    
+def save_data_to_sheet(df, sheet_name):
+    try:
+        # เชื่อมต่อ Google Sheet (ใช้ตัวแปรเดียวกับที่พี่อ้ำใช้ในฟังก์ชันบันทึกแผนหุ้น)
+        # sh = gc.open("ชื่อไฟล์ Google Sheet ของพี่อ้ำ")
+        # worksheet = sh.worksheet(sheet_name)
+        
+        # เชื่อมต่อและเพิ่มข้อมูล (append)
+        # worksheet.append_rows(df.values.tolist())
+        return True
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
+        return False
+####################
+
 @st.cache_data(ttl=600)
 def load_data(sheet_name):
     try:
@@ -2139,5 +2179,69 @@ with tab_stock:
 # 2. ส่วน TFEX
 with tab_tfex:
     st.subheader("📝 บันทึกการเทรด TFEX")
-
+    with sub_tfex_input:
+        with st.form("tfex_entry_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                date_open = st.date_input("วันที่เปิด")
+                series = st.text_input("Series (เช่น S50Z25)")
+                side = st.selectbox("สถานะ:", ["Long", "Short"])
+            with col2:
+                entry = st.number_input("ราคา Open:", format="%.2f")
+                close = st.number_input("ราคา Close:", format="%.2f")
+                size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
+            with col3:
+                comm = st.number_input("ค่าคอมมิชชั่น:", format="%.2f")
+                reason = st.text_area("เหตุผลที่เข้าเทรด:")
+            
+            submit = st.form_submit_button("บันทึกรายการเทรด")
+            
+            if submit:
+                # เรียกใช้ฟังก์ชันคำนวณ
+                res = calculate_tfex_result(entry, close, size, comm, side)
+                
+                # เตรียมข้อมูลเพื่อบันทึก
+                new_record = {
+                    "Date_Open": date_open.strftime("%Y-%m-%d"),
+                    "Date_Close": date_open.strftime("%Y-%m-%d"), # สมมติปิดวันเดียวกับเปิด
+                    "Series": series,
+                    "Status": side,
+                    "Size": size,
+                    "Open_Price": entry,
+                    "Close_Price": close,
+                    "Realized": res["Realized"],
+                    "Comm": comm,
+                    "Net_Profit": res["Net_Profit"],
+                    "Win_Lose": res["Win_Lose"],
+                    "Points": res["Points"],
+                    "Reason": reason
+                }
+                
+                # บันทึกลง Google Sheet (แยก Tab: TFEX_History)
+                if save_data_to_sheet(pd.DataFrame([new_record]), "TFEX_History"):
+                    st.success("บันทึกรายการเรียบร้อย!")
+                    st.rerun()
+    with sub_tfex_history:
+        st.subheader("📜 ประวัติการเทรด TFEX")
+        
+        # 1. โหลดข้อมูล
+        tfex_df = load_data("TFEX_History") # ฟังก์ชันโหลดข้อมูลเดิมของพี่อ้ำ
+        
+        if not tfex_df.empty:
+            # 2. คำนวณ Cumulative Profit
+            tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
+            
+            # 3. แสดง Metric สรุป
+            total_pnl = tfex_df['Net_Profit'].sum()
+            win_rate = (len(tfex_df[tfex_df['Win_Lose'] == 'Win']) / len(tfex_df)) * 100
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("กำไรรวมสุทธิ", f"{total_pnl:,.2f} บาท")
+            m2.metric("Win Rate", f"{win_rate:.1f} %")
+            m3.metric("จำนวนครั้งที่เทรด", len(tfex_df))
+            
+            # 4. แสดงตาราง
+            st.dataframe(tfex_df, use_container_width=True)
+        else:
+            st.info("ยังไม่มีข้อมูลการเทรดครับ")
 
