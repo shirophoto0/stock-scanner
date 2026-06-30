@@ -422,18 +422,40 @@ def get_latest_prices(tickers):
             prices[clean_t] = 0.0
     return prices
 
+from datetime import datetime
+
 def check_alerts(row):
-    # (โค้ดฟังก์ชัน check_alerts ของพี่อ้ำ)
-    price = float(row['ราคาตลาด']) if row['ราคาตลาด'] is not None else 0.0
-    entry = float(row['Entry_Price']) if row['Entry_Price'] is not None else 0.0
-    sl = float(row['Stop_Loss']) if row['Stop_Loss'] is not None else 0.0
-    tp = float(row['Take_Profit']) if row['Take_Profit'] is not None else 0.0
+    today = datetime.now().strftime("%Y-%m-%d")
+    last_alert = str(row.get('Alert_Date', ''))
     
-    if price <= 0: return "ไม่มีราคา"
-    if entry > 0 and abs(price - entry) / entry <= 0.01: return "⚠️ ใกล้จุดซื้อ"
-    if sl > 0 and (price - sl) / sl <= 0.01 and price > sl: return "🚨 ใกล้จุด SL (ระวัง!)"
-    if tp > 0 and price >= tp: return "💰 ถึงเป้า TP!"
-    return "ปกติ"
+    # ถ้าวันนี้เตือนไปแล้ว (ไม่ว่าจะรับ/ต้าน/SL/TP) ให้ข้ามไปเลย
+    if last_alert == today:
+        return "แจ้งเตือนวันนี้แล้ว"
+
+    price = float(row['ราคาตลาด'])
+    sl = float(row['Stop_Loss'])
+    tp = float(row['Take_Profit'])
+    support = float(row['แนวรับ']) if str(row['แนวรับ']).replace('.','',1).isdigit() else 0.0
+    resistance = float(row['แนวต้าน']) if str(row['แนวต้าน']).replace('.','',1).isdigit() else 0.0
+    
+    msg = ""
+    
+    # เงื่อนไขเช็คระยะ 1% (ใกล้แนวรับ/ต้าน)
+    if support > 0 and abs(price - support) / support <= 0.01:
+        msg = f"🔔 หุ้น {row['Ticker']} กำลังเข้าใกล้แนวรับที่ {support} ครับ"
+    elif resistance > 0 and abs(price - resistance) / resistance <= 0.01:
+        msg = f"🔔 หุ้น {row['Ticker']} กำลังเข้าใกล้แนวต้านที่ {resistance} ครับ"
+    # เงื่อนไข SL/TP
+    elif sl > 0 and price <= sl:
+        msg = f"⚠️ หุ้น {row['Ticker']} ถึงจุด Stop Loss ที่ {sl} แล้วครับ!"
+    elif tp > 0 and price >= tp:
+        msg = f"🎉 หุ้น {row['Ticker']} ถึงจุด Take Profit ที่ {tp} แล้วครับ!"
+    
+    if msg:
+        send_line_notify(msg) # หรือฟังก์ชันส่ง Telegram
+        return today # บันทึกว่าวันนี้แจ้งเตือนไปแล้ว
+    
+    return row.get('สถานะ', 'ปกติ')
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
@@ -2050,8 +2072,7 @@ def main():
                     plan_df = load_data("TradingPlan")
                     
                     # กำหนดคอลัมน์มาตรฐาน
-                    cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
-                    
+                    cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Alert_Date', 'Timestamp', 'Image_URL']
                     # ถ้าดึงมาแล้วว่าง ให้สร้างตารางเปล่า
                     if plan_df.empty or 'Ticker' not in plan_df.columns:
                         plan_df = pd.DataFrame(columns=cols)
@@ -2088,6 +2109,7 @@ def main():
                             "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
                             "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
                             "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
+                            "Alert_Date": st.column_config.TextColumn("วันที่เตือนล่าสุด", disabled=True),
                             "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True),
                         },
                         use_container_width=True, key="fixed_plan_editor_v2", num_rows="dynamic"
