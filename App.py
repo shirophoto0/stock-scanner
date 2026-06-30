@@ -2179,6 +2179,9 @@ with tab_stock:
 # 2. ส่วน TFEX
 with tab_tfex:
     st.subheader("📝 บันทึกการเทรด TFEX")
+    
+    sub_tfex_input, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "📜 ประวัติและ Portfolio"])
+    
     with sub_tfex_input:
         with st.form("tfex_entry_form"):
             col1, col2, col3 = st.columns(3)
