@@ -19,17 +19,6 @@ from datetime import datetime
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
-def send_line_notify(message, token):
-    url = "https://notify-api.line.me/api/notify"
-    headers = {"Authorization": f"Bearer {token}"}
-    payload = {"message": message}
-    try:
-        requests.post(url, headers=headers, data=payload)
-    except Exception as e:
-        print(f"Error sending Line Notify: {e}")
-
-# ใส่ Token ของพี่อ้ำตรงนี้ครับ
-LINE_TOKEN = "ใส่_TOKEN_ที่ก๊อปปี้มาไว้ตรงนี้"
 
 ###################
 # Def TEFEX #
