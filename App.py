@@ -2252,7 +2252,7 @@ with tab_tfex:
         
         c1, c2 = st.columns(2)
         risk_amount = c1.number_input("เงินที่ยอมขาดทุนได้ (บาท)", value=2000)
-        stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=5.0)
+        stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=2.0)
         
         # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
         im_per_contract = IM_PER_CONTRACT 
