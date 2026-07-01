@@ -107,6 +107,14 @@ def get_cached_stock_info(ticker):
     # ระบุ 'A1' เพื่อให้เริ่มวางที่หัวตาราง
     #sheet.update('A1', data_to_save)
     #return True
+
+def save_to_gsheet(df, sheet_name='StockData'):
+    client = get_gsheet_client()
+    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+    sheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+    data_to_write = [df.columns.tolist()] + df.values.tolist()
+    sheet.update('A1', data_to_write)
+    print(f"บันทึกข้อมูลลง {sheet_name} สำเร็จ!")
     
 def get_gsheet_client():
     scope = [
