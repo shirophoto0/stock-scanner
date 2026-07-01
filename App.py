@@ -2185,7 +2185,7 @@ with tab_tfex:
     c3.metric("การเติบโต", f"{growth_pct:.2f} %")
     st.divider()
 
-    # 3. สร้าง 3 Tabs (เพิ่ม sub_tfex_cash)
+    # 3. สร้าง 3 Tabs
     sub_tfex_input, sub_tfex_cash, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "➕ บันทึกเติม/ถอนเงิน", "📜 ประวัติและ Portfolio"])
     
     with sub_tfex_input:
@@ -2203,13 +2203,8 @@ with tab_tfex:
                 comm = st.number_input("ค่าคอมมิชชั่น:", format="%.2f")
                 reason = st.text_area("เหตุผลที่เข้าเทรด:")
             
-            submit = st.form_submit_button("บันทึกรายการเทรด")
-            
-            if submit:
-                # คำนวณผลลัพธ์
+            if st.form_submit_button("บันทึกรายการเทรด"):
                 res = calculate_tfex_result(entry, close, size, comm, side)
-                
-                # เตรียมข้อมูล
                 new_record = {
                     "Date_Open": date_open.strftime("%Y-%m-%d"),
                     "Date_Close": date_open.strftime("%Y-%m-%d"),
@@ -2225,30 +2220,27 @@ with tab_tfex:
                     "Points": res["Points"],
                     "Reason": reason
                 }
-                
-                # บันทึก
                 if save_data_to_sheet(pd.DataFrame([new_record]), "TFEX_History"):
                     st.success("บันทึกรายการเรียบร้อย!")
                     st.rerun()
 
-    with st.expander("➕ บันทึกเติม/ถอนเงิน"):
-        with sub_tfex_cash:
-            with st.form("cash_flow_entry"):
-                c1, c2 = st.columns(2)
-                c_date = c1.date_input("วันที่")
-                c_type = c2.selectbox("ประเภท", ["Deposit", "Withdraw"])
-                c_amount = st.number_input("จำนวนเงิน:", min_value=0.0)
-                if st.form_submit_button("บันทึก"):
-                    new_cash = pd.DataFrame([{"Date": str(c_date), "Type": c_type, "Amount": c_amount}])
-                    save_data_to_sheet(new_cash, "Cash_Flow")
-                    st.success("บันทึกสำเร็จ!")
-                    st.rerun()
+    with sub_tfex_cash:
+        # ใช้ form_key ใหม่ เพื่อไม่ให้ซ้ำกับอันอื่น
+        with st.form("cash_flow_entry_form"):
+            c1, c2 = st.columns(2)
+            c_date = c1.date_input("วันที่")
+            c_type = c2.selectbox("ประเภท", ["Deposit", "Withdraw"])
+            c_amount = st.number_input("จำนวนเงิน:", min_value=0.0)
+            if st.form_submit_button("บันทึกเงินสด"):
+                new_cash = pd.DataFrame([{"Date": str(c_date), "Type": c_type, "Amount": c_amount}])
+                save_data_to_sheet(new_cash, "Cash_Flow")
+                st.success("บันทึกสำเร็จ!")
+                st.rerun()
+
     with sub_tfex_history:
         st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
         if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
-            # เพิ่มคอลัมน์กำไรสะสม
             tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
             st.dataframe(tfex_df, use_container_width=True)
         else:
             st.warning("ยังไม่มีข้อมูลใน Sheet 'TFEX_History' ครับ")
-
