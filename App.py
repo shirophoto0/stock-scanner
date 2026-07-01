@@ -58,13 +58,19 @@ def calculate_tfex_result(entry, close, size, comm, side):
     }
     
 def save_data_to_sheet(df, sheet_name):
-    try:
-        # เชื่อมต่อ Google Sheet (ใช้ตัวแปรเดียวกับที่พี่อ้ำใช้ในฟังก์ชันบันทึกแผนหุ้น)
-        # sh = gc.open("ชื่อไฟล์ Google Sheet ของพี่อ้ำ")
-        # worksheet = sh.worksheet(sheet_name)
+    # ป้องกันการบันทึกถ้า df ว่างเปล่า เพื่อไม่ให้ข้อมูลหาย
+    if df.empty:
+        st.warning("ไม่มีข้อมูลที่จะบันทึก")
+        return False
         
-        # เชื่อมต่อและเพิ่มข้อมูล (append)
-        # worksheet.append_rows(df.values.tolist())
+    try:
+        client = get_gsheet_client() # ใช้ Client เดิมของพี่อ้ำ
+        sheet = client.open('MyStockData').worksheet(sheet_name)
+        
+        # เพิ่มข้อมูลต่อท้าย (Append) เท่านั้น ห้าม update ห้าม clear
+        # วิธีนี้ปลอดภัยที่สุด ข้อมูลเดิมจะอยู่ครบ
+        sheet.append_rows(df.values.tolist())
+        
         return True
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
@@ -88,63 +94,19 @@ def get_cached_stock_info(ticker):
     stock = yf.Ticker(ticker)
     return stock.info  
     
-def clear_and_save_data(df, sheet_name):
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('TradingPlan')
+#def clear_and_save_data(df, sheet_name):
+   # client = get_gsheet_client()
+   # sheet = client.open('MyStockData').worksheet('TradingPlan')
     
     # ต้องสั่ง clear() ก่อนเสมอ เพื่อลบข้อมูลเก่าทั้งหมดทิ้ง (แถวที่ลบไปจะหายไป)
-    sheet.clear()
+    #sheet.clear()
     
     # ส่ง Header + ข้อมูล
-    data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
+   # data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
     
     # ระบุ 'A1' เพื่อให้เริ่มวางที่หัวตาราง
-    sheet.update('A1', data_to_save)
-    return True
-    
-def save_trading_plan_exclusive(new_df):
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet("TradingPlan")
-        
-        # 1. ดึงข้อมูลที่มีอยู่ในปัจจุบันออกมาทั้งหมดก่อน
-        existing_data = sheet.get_all_records()
-        
-        # 2. ถ้ามีข้อมูลเก่าอยู่ ให้รวมกับตัวใหม่
-        if existing_data:
-            existing_df = pd.DataFrame(existing_data)
-            # รวม DataFrame เก่า กับอันใหม่
-            final_df = pd.concat([existing_df, new_df], ignore_index=True)
-        else:
-            final_df = new_df
-            
-        # 3. ล้างชีตแล้วบันทึกใหม่ทั้งหมดทีเดียว
-        sheet.clear()
-        
-        # บันทึก Header + ข้อมูล
-        # รวมข้อมูลทุกอย่างเป็น list เพื่อเขียนลง A1
-        data_to_save = [final_df.columns.tolist()] + final_df.values.tolist()
-        sheet.update('A1', data_to_save)
-        
-        return True
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
-        return False
-    
-def save_trading_plan_properly(df):
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet("TradingPlan")
-    
-    # 1. เขียน Header ไว้บรรทัดแรก (แถวที่ 1)
-    header = ['Ticker', 'Entry_Price', 'ราคาตลาด', 'Stop_Loss', 'ห่างจาก_SL(%)', 'Take_Profit', 'สถานะ', 'Timestamp', 'Image_URL']
-    
-    # 2. เตรียมข้อมูล (แปลง DataFrame เป็น List)
-    data = df.values.tolist()
-    
-    # 3. สั่งบันทึกทั้งตาราง (Clear ทั้งหมดแล้ววางใหม่)
-    # วิธีนี้ชัวร์ที่สุด เพราะจะไม่มีแถวเก่ามาค้าง
-    sheet.clear()
-    sheet.update('A1', [header] + data)
+    #sheet.update('A1', data_to_save)
+    #return True
     
 def get_gsheet_client():
     scope = [
@@ -250,30 +212,21 @@ def get_current_portfolio_value():
         total_market_value += (shares * m_price)
     return total_market_value
 
-def save_to_gsheet(df):
-    print("DEBUG: กำลังเชื่อมต่อ Google Sheets...")
+def update_stock_data(df):
     client = get_gsheet_client()
-    
-    # 1. ใช้ Key (ID) แทนชื่อไฟล์ เพื่อป้องกันความผิดพลาดกรณีเปลี่ยนชื่อไฟล์
-    # ให้เอาตัวอักษรยาวๆ ใน URL ของ Google Sheets มาใส่แทนตรงนี้ครับ
     spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-    
-    print("DEBUG: กำลังเข้าถึง Worksheet...")
     sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
     
-    # 2. ล้างข้อมูลเก่า
-    print("DEBUG: ล้างข้อมูลเดิม...")
-    sheet.clear()
+    # 1. เตรียมข้อมูล: แปลง Header และข้อมูลเป็น list
+    data_to_update = [df.columns.values.tolist()] + df.values.tolist()
     
-    # 3. เตรียมข้อมูล (Header + ข้อมูล)
-    data_to_write = [df.columns.values.tolist()] + df.values.tolist()
+    # 2. ใช้ update แทน clear() 
+    # วิธีนี้จะเขียนทับตั้งแต่เซลล์ A1 ยาวไปจนจบข้อมูลใหม่ 
+    # ข้อมูลเดิมจะถูกเขียนทับด้วยค่าใหม่ทันที โดยไม่ลบโครงสร้าง Sheet ทิ้ง
+    sheet.update('A1', data_to_update)
     
-    # 4. เขียนข้อมูลใหม่โดยระบุตำแหน่งเริ่มที่ A1
-    # คำสั่ง update ใน gspread รุ่นใหม่ต้องใส่ 'A1' บอกจุดเริ่มด้วยครับ
-    print("DEBUG: กำลังเขียนข้อมูลลง Sheet...")
-    sheet.update('A1', data_to_write)
+    print("DEBUG: อัปเดตข้อมูลหุ้นเรียบร้อย!")
     
-    print("DEBUG: บันทึกข้อมูลเสร็จสิ้น!")
 # 2. ฟังก์ชันอเนกประสงค์ (เอามาแทรกตรงนี้)
 @st.cache_data(ttl=600)  
 def save_cash_balance(amount):
