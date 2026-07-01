@@ -111,7 +111,7 @@ def get_cached_stock_info(ticker):
 def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
     spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-    sheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+    sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
     
     # --- จุดแก้ไขสำคัญ: ล้างข้อมูลก่อนส่ง ---
     # 1. แทนที่ค่าที่เป็น NaN หรือ None ให้เป็นค่าว่าง ""
