@@ -1149,13 +1149,21 @@ with tab_stock:
             # =============================================================
             
             # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
-            if 'df_all_stocks' not in locals():
-                # สร้าง DataFrame เปล่าที่มี Header เหมือนที่ควรจะเป็น เพื่อกัน Error
-                columns = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%', 'Is_RS_Above_0', 
-                           'ตัดเส้น0ขึ้นมาแล้ว(วัน)', 'อยู่ใต้เส้น0มาแล้ว(วัน)', 'Is_3M_High', 'Is_6M_High', 
-                           'Is_52W_High', 'New_High_3M_มาแล้ว(วัน)', 'New_High_6M_มาแล้ว(วัน)', 'New_High_52W_มาแล้ว(วัน)']
-                df_all_stocks = pd.DataFrame(columns=columns)
-                st.warning("ระบบกำลังโหลดข้อมูลหุ้น กรุณารอสักครู่...")
+            # แก้ไขบรรทัดที่ 1152 เป็นแบบนี้ครับ
+            try:
+                # พยายามใช้ filtered_df ถ้ามี และมีค่า
+                if 'filtered_df' in locals() and filtered_df is not None:
+                    df_scan = filtered_df.copy()
+                # ถ้าไม่มี ให้ใช้ df_all_stocks แต่ต้องเช็คว่ามีอยู่จริงด้วย
+                elif 'df_all_stocks' in locals() and df_all_stocks is not None:
+                    df_scan = df_all_stocks.copy()
+                else:
+                    # กรณีแย่ที่สุด คือไม่มีข้อมูลเลย ให้สร้าง DataFrame เปล่าขึ้นมา
+                    df_scan = pd.DataFrame()
+                    st.error("ไม่พบข้อมูลหุ้นในระบบ กรุณาตรวจสอบการโหลดข้อมูล")
+            except Exception as e:
+                df_scan = pd.DataFrame()
+                st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
 
             df_scan = filtered_df.copy() if 'filtered_df' in locals() else df_all_stocks.copy()
             
