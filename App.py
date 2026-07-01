@@ -2176,7 +2176,9 @@ with tab_tfex:
     # 1. โหลดข้อมูลแยกไฟล์/แยก Sheet อย่างชัดเจน
     tfex_df = load_data("TFEX_History") 
     cash_df = load_data("Cash_Flow")
-    
+    st.write(f"DEBUG: กำไรที่ดึงได้จาก TFEX_History คือ {total_pnl}")
+    st.write(f"DEBUG: จำนวนแถวใน TFEX_History = {len(tfex_df)}")
+    st.write(f"DEBUG: จำนวนแถวใน Cash_Flow = {len(cash_df)}")
     # 2. กรองข้อมูลให้ชัวร์ (ตรวจสอบว่าแต่ละตัวแปรดึงมาถูกที่)
     # เช็คกำไรเฉพาะจาก TFEX_History เท่านั้น
     total_pnl = tfex_df['Net_Profit'].sum() if not tfex_df.empty and 'Net_Profit' in tfex_df.columns else 0
