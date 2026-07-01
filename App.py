@@ -112,8 +112,17 @@ def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
     spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
     sheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name)
+    
+    # --- จุดแก้ไขสำคัญ: ล้างข้อมูลก่อนส่ง ---
+    # 1. แทนที่ค่าที่เป็น NaN หรือ None ให้เป็นค่าว่าง ""
+    # 2. แทนที่ค่า Infinity (inf) ให้เป็น 0
+    df = df.replace([np.inf, -np.inf], 0).fillna("")
+    
+    # รวม Header และ ข้อมูล
     data_to_write = [df.columns.tolist()] + df.values.tolist()
-    sheet.update('A1', data_to_write)
+    
+    # ใช้ชื่อพารามิเตอร์เพื่อให้เป็นไปตามกฎใหม่ของ gspread
+    sheet.update(range_name='A1', values=data_to_write)
     print(f"บันทึกข้อมูลลง {sheet_name} สำเร็จ!")
     
 def get_gsheet_client():
