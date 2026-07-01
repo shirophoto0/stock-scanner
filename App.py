@@ -2315,7 +2315,12 @@ with tab_tfex:
             st.divider()
             st.subheader("📊 Performance Monitor")
             period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
-            selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
+            selected_period = st.radio(
+                "เลือกช่วงเวลา:", 
+                list(period_options.keys()), 
+                horizontal=True, 
+                key="tfex_perf_period_selector" # <--- แก้ตรงนี้ครับ
+            )
             
             perf_df = closed_trades.copy()
             days_ago = period_options[selected_period]
