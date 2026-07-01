@@ -699,16 +699,6 @@ with tab_stock:
     ###################################################################
     # # --- ฟังก์ชัน Main ---
     ###################################################################
-    def save_to_gsheet(df):
-        client = get_gsheet_client()
-        # ใช้ ID แทนชื่อไฟล์เพื่อความชัวร์ (เปลี่ยนเลข ID เป็นของพี่อ้ำนะครับ)
-        sheet = client.open_by_key('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU').worksheet('StockData')
-        
-        sheet.clear()
-        # เขียนข้อมูลโดยระบุตำแหน่ง A1
-        data_to_write = [df.columns.values.tolist()] + df.values.tolist()
-        sheet.update('A1', data_to_write)
-        print("GitHub Actions: บันทึกข้อมูลลง Google Sheet สำเร็จ!")
     
     def highlight_rsi_zones(row):
         if row['RSI_14'] >= 65.0:
