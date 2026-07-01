@@ -2195,6 +2195,19 @@ with tab_tfex:
     sub_tfex_input, sub_tfex_cash, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "➕ บันทึกเติม/ถอนเงิน", "📜 ประวัติและ Portfolio"])
     
     with sub_tfex_input:
+        # 1. แสดงรายการที่ถืออยู่ (Open Positions)
+        st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
+        # สมมติว่าในตาราง History ของพี่อ้ำมีคอลัมน์ 'Close_Price' ที่เป็น 0 หรือว่าง สำหรับรายการที่ยังไม่ปิด
+        # ตรงนี้ต้องปรับให้ตรงกับคอลัมน์ใน Google Sheet ของพี่อ้ำนะครับ
+        open_positions = tfex_df[tfex_df['Close_Price'] == 0] 
+        
+        if not open_positions.empty:
+            st.dataframe(open_positions[['Date_Open', 'Series', 'Status', 'Size', 'Open_Price']], use_container_width=True)
+        else:
+            st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
+
+        st.divider()
+        
         with st.form("tfex_entry_form"):
             col1, col2, col3 = st.columns(3)
             with col1:
