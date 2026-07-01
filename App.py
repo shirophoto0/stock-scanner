@@ -729,14 +729,34 @@ with tab_stock:
     ######################################
     st.set_page_config(layout="wide")
     def main():
-        # --- กรณีรันผ่าน GitHub Actions ---
+        
+        df_all_stocks = pd.DataFrame() 
+        filtered_df = None
+        
+        # 2. กรณีรันผ่าน GitHub Actions (สแกนหุ้นใหม่แล้วบันทึก)
         if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
             print("GitHub Mode: กำลังเริ่มสแกน...")
             df_new = load_and_calculate_stock_data()
             save_to_gsheet(df_new)
             print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
-            return # จบการทำงาน ไม่ต้องแสดง UI
+            return 
     
+        # 3. กรณีรันโหมดปกติบน Streamlit Cloud (ดึงข้อมูลจาก Sheet มาแสดง)
+        else:
+            try:
+                # ดึงข้อมูลจาก Sheet ที่เราบันทึกไว้ในโหมด GitHub
+                client = get_gsheet_client()
+                spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+                sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
+                data = sheet.get_all_records()
+                
+                if data:
+                    df_all_stocks = pd.DataFrame(data)
+                else:
+                    st.warning("ยังไม่มีข้อมูลใน Google Sheet")
+            except Exception as e:
+                st.error(f"ไม่สามารถดึงข้อมูลจาก Google Sheet ได้: {e}")
+        
         # --- กรณีรันผ่านหน้าเว็บ Streamlit ---
         st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
         
@@ -1165,7 +1185,7 @@ with tab_stock:
                 df_scan = pd.DataFrame()
                 st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
 
-            df_scan = filtered_df.copy() if 'filtered_df' in locals() else df_all_stocks.copy()
+            df_scan = filtered_df.copy() if filtered_df is not None else df_all_stocks.copy()
             
             # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
             if strategy_option == "3 Month High":
