@@ -2183,20 +2183,28 @@ with tab_tfex:
     # 2. ส่วนสรุปผล (Dashboard) - อยู่บนสุดเสมอ
     if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
         total_pnl = tfex_df['Net_Profit'].sum()
-        # คำนวณ Win Rate จากคอลัมน์ Win_Lose
-        win_count = len(tfex_df[tfex_df['Win_Lose'].astype(str).str.lower() == 'win'])
-        win_rate = (win_count / len(tfex_df)) * 100
+        # โหลดข้อมูล Cash Flow
+        cash_df = load_data("Cash_Flow")
+        total_deposit = cash_df[cash_df['Type'] == 'Deposit']['Amount'].sum() if not cash_df.empty else 0
+        total_withdraw = cash_df[cash_df['Type'] == 'Withdraw']['Amount'].sum() if not cash_df.empty else 0
+        net_capital = total_deposit - total_withdraw
         
-        m1, m2, m3 = st.columns(3)
-        m1.metric("กำไรรวมสุทธิ", f"{total_pnl:,.2f} บาท")
-        m2.metric("Win Rate", f"{win_rate:.1f} %")
-        m3.metric("จำนวนครั้งที่เทรด", len(tfex_df))
+        # คำนวณเพิ่ม
+        net_worth = net_capital + total_pnl
+        growth_pct = (total_pnl / net_capital * 100) if net_capital != 0 else 0
+        
+        # แสดง Dashboard ชุดที่ 2 (Portfolio)
+        st.markdown("### 💰 สรุปพอร์ตลงทุน")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("มูลค่าพอร์ตสุทธิ", f"{net_worth:,.2f} บาท")
+        c2.metric("เงินต้นสุทธิ", f"{net_capital:,.2f} บาท")
+        c3.metric("การเติบโตของพอร์ต", f"{growth_pct:.2f} %")
         st.divider() # ขีดคั่นระหว่างส่วนสรุปกับ Tabs
     else:
         st.info("ยังไม่มีประวัติการเทรด (ระบบกำลังรอข้อมูลจาก Google Sheet)")
     
     # 3. แยก Tab บันทึก และ ประวัติ
-    sub_tfex_input, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "📜 ประวัติและ Portfolio"])
+    sub_tfex_input, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่","➕ บันทึกเติม/ถอนเงิน", "📜 ประวัติและ Portfolio"])
     
     with sub_tfex_input:
         with st.form("tfex_entry_form"):
@@ -2241,6 +2249,18 @@ with tab_tfex:
                     st.success("บันทึกรายการเรียบร้อย!")
                     st.rerun()
 
+    with st.expander("➕ บันทึกเติม/ถอนเงิน"):
+        with st.form("cash_flow_form"):
+            c1, c2 = st.columns(2)
+            c_date = c1.date_input("วันที่")
+            c_type = c2.selectbox("ประเภท", ["Deposit", "Withdraw"])
+            c_amount = st.number_input("จำนวนเงิน:", min_value=0.0)
+            
+            if st.form_submit_button("บันทึก"):
+                new_cash = pd.DataFrame([{"Date": c_date, "Type": c_type, "Amount": c_amount}])
+                save_data_to_sheet(new_cash, "Cash_Flow")
+                st.success("บันทึกสำเร็จ!")
+                st.rerun()
     with sub_tfex_history:
         st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
         if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
