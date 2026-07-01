@@ -2173,23 +2173,29 @@ with tab_tfex:
     st.subheader("📝 ระบบเทรด TFEX")
     
     # 1. โหลดข้อมูล
-    # 1. โหลดข้อมูลแยกไฟล์/แยก Sheet อย่างชัดเจน
     tfex_df = load_data("TFEX_History") 
     cash_df = load_data("Cash_Flow")
-    # 2. กรองข้อมูลให้ชัวร์ (ตรวจสอบว่าแต่ละตัวแปรดึงมาถูกที่)
-    # เช็คกำไรเฉพาะจาก TFEX_History เท่านั้น
-    total_pnl = tfex_df['Net_Profit'].sum() if not tfex_df.empty and 'Net_Profit' in tfex_df.columns else 0
-    total_deposit = cash_df[cash_df['Type'] == 'Deposit']['Amount'].sum() if not cash_df.empty else 0
-    total_withdraw = cash_df[cash_df['Type'] == 'Withdraw']['Amount'].sum() if not cash_df.empty else 0
     
+    # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
+    # สมมติว่าถ้ายังไม่ปิด Close_Price จะเป็น 0 หรือเป็นค่าว่าง
+    # หากคอลัมน์พี่อ้ำชื่ออื่น (เช่น 'Status' ที่บอกว่า 'Open') ให้เปลี่ยนในบรรทัดถัดไปครับ
+    closed_trades = tfex_df[tfex_df['Close_Price'] > 0] if not tfex_df.empty and 'Close_Price' in tfex_df.columns else tfex_df
+    total_pnl = closed_trades['Net_Profit'].sum() if not closed_trades.empty and 'Net_Profit' in closed_trades.columns else 0
+    
+    # 3. คำนวณเงินต้นสุทธิ
+    # ใช้ .astype(str).str.lower() เพื่อป้องกันปัญหาตัวอักษรพิมพ์เล็ก/ใหญ่
+    total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum() if not cash_df.empty else 0
+    total_withdraw = cash_df[cash_df['Type'].astype(str).str.lower() == 'withdraw']['Amount'].sum() if not cash_df.empty else 0
     net_capital = total_deposit - total_withdraw
+    
+    # 4. คำนวณพอร์ต (ใช้ Realized PnL)
     net_worth = net_capital + total_pnl
-    growth_pct = (total_pnl / net_capital * 100) if net_capital != 0 else 0
+    growth_pct = (total_pnl / net_capital * 100) if net_capital > 0 else 0
     
     # แสดง Dashboard
     c1, c2, c3 = st.columns(3)
-    c1.metric("มูลค่าพอร์ตสุทธิ", f"{net_worth:,.2f} บาท")
-    c2.metric("กำไรรวมสุทธิ", f"{total_pnl:,.2f} บาท")
+    c1.metric("มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท")
+    c2.metric("กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท")
     c3.metric("การเติบโต", f"{growth_pct:.2f} %")
     st.divider()
 
