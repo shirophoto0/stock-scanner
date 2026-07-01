@@ -2244,7 +2244,7 @@ with tab_tfex:
 
     with st.expander("➕ บันทึกเติม/ถอนเงิน"):
         with sub_tfex_cash:
-            with st.form("cash_flow_form"):
+            with st.form("cash_flow_entry"):
                 c1, c2 = st.columns(2)
                 c_date = c1.date_input("วันที่")
                 c_type = c2.selectbox("ประเภท", ["Deposit", "Withdraw"])
