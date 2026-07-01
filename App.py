@@ -2175,9 +2175,28 @@ with tab_stock:
     ###################################################################
 # 2. ส่วน TFEX
 with tab_tfex:
-    st.subheader("📝 บันทึกการเทรด TFEX")
-
-     
+    st.subheader("📝 ระบบเทรด TFEX")
+    
+    # 1. โหลดข้อมูล TFEX History
+    tfex_df = load_data("TFEX_History") 
+    
+    # 2. ส่วนสรุปผล (Dashboard) - อยู่บนสุดเสมอ
+    if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
+        total_pnl = tfex_df['Net_Profit'].sum()
+        # คำนวณ Win Rate จากคอลัมน์ Win_Lose
+        win_count = len(tfex_df[tfex_df['Win_Lose'].astype(str).str.lower() == 'win'])
+        win_rate = (win_count / len(tfex_df)) * 100
+        
+        m1, m2, m3 = st.columns(3)
+        m1.metric("กำไรรวมสุทธิ", f"{total_pnl:,.2f} บาท")
+        m2.metric("Win Rate", f"{win_rate:.1f} %")
+        m3.metric("จำนวนครั้งที่เทรด", len(tfex_df))
+        st.divider() # ขีดคั่นระหว่างส่วนสรุปกับ Tabs
+    else:
+        st.info("ยังไม่มีประวัติการเทรด (ระบบกำลังรอข้อมูลจาก Google Sheet)")
+    
+    # 3. แยก Tab บันทึก และ ประวัติ
+    sub_tfex_input, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "📜 ประวัติและ Portfolio"])
     
     with sub_tfex_input:
         with st.form("tfex_entry_form"):
@@ -2197,13 +2216,13 @@ with tab_tfex:
             submit = st.form_submit_button("บันทึกรายการเทรด")
             
             if submit:
-                # เรียกใช้ฟังก์ชันคำนวณ
+                # คำนวณผลลัพธ์
                 res = calculate_tfex_result(entry, close, size, comm, side)
                 
-                # เตรียมข้อมูลเพื่อบันทึก
+                # เตรียมข้อมูล
                 new_record = {
                     "Date_Open": date_open.strftime("%Y-%m-%d"),
-                    "Date_Close": date_open.strftime("%Y-%m-%d"), # สมมติปิดวันเดียวกับเปิด
+                    "Date_Close": date_open.strftime("%Y-%m-%d"),
                     "Series": series,
                     "Status": side,
                     "Size": size,
@@ -2217,40 +2236,17 @@ with tab_tfex:
                     "Reason": reason
                 }
                 
-                # บันทึกลง Google Sheet (แยก Tab: TFEX_History)
+                # บันทึก
                 if save_data_to_sheet(pd.DataFrame([new_record]), "TFEX_History"):
                     st.success("บันทึกรายการเรียบร้อย!")
                     st.rerun()
+
     with sub_tfex_history:
-        st.subheader("📜 ประวัติการเทรด TFEX")
-        
-        # โหลดข้อมูล
-        tfex_df = load_data("TFEX_History") 
-        
-        # --- เพิ่มส่วนเช็คชื่อคอลัมน์แบบเข้มข้น ---
-        if not tfex_df.empty:
-            # ถ้าชื่อคอลัมน์ไม่มี 'Net_Profit' ให้เตือนแทนที่จะ Crash
-            if 'Net_Profit' not in tfex_df.columns:
-                st.error(f"⚠️ ตาราง 'TFEX_History' ที่ดึงมาไม่มีคอลัมน์ 'Net_Profit'")
-                st.write("ตารางที่ดึงมามีคอลัมน์ดังนี้:", tfex_df.columns.tolist())
-                st.write("ข้อมูลตัวอย่างที่ดึงมา:", tfex_df.head(2))
-            else:
-                # ถ้ามีคอลัมน์ครบ ค่อยคำนวณ
-                tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
-                
-                # คำนวณสรุป
-                total_pnl = tfex_df['Net_Profit'].sum()
-                win_count = len(tfex_df[tfex_df['Win_Lose'].astype(str).str.lower() == 'win'])
-                win_rate = (win_count / len(tfex_df)) * 100
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric("กำไรรวมสุทธิ", f"{total_pnl:,.2f} บาท")
-                m2.metric("Win Rate", f"{win_rate:.1f} %")
-                m3.metric("จำนวนครั้งที่เทรด", len(tfex_df))
-                
-                st.dataframe(tfex_df, use_container_width=True)
+        st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
+        if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
+            # เพิ่มคอลัมน์กำไรสะสม
+            tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
+            st.dataframe(tfex_df, use_container_width=True)
         else:
-            st.info("ยังไม่มีข้อมูลใน Sheet 'TFEX_History' ครับ")
-    
-    sub_tfex_input, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "📜 ประวัติและ Portfolio"])
+            st.warning("ยังไม่มีข้อมูลใน Sheet 'TFEX_History' ครับ")
 
