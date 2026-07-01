@@ -2173,13 +2173,16 @@ with tab_tfex:
     st.subheader("📝 ระบบเทรด TFEX")
     
     # 1. โหลดข้อมูล
+    # 1. โหลดข้อมูลแยกไฟล์/แยก Sheet อย่างชัดเจน
     tfex_df = load_data("TFEX_History") 
     cash_df = load_data("Cash_Flow")
     
-    # 2. คำนวณสรุปผล Dashboard
+    # 2. กรองข้อมูลให้ชัวร์ (ตรวจสอบว่าแต่ละตัวแปรดึงมาถูกที่)
+    # เช็คกำไรเฉพาะจาก TFEX_History เท่านั้น
     total_pnl = tfex_df['Net_Profit'].sum() if not tfex_df.empty and 'Net_Profit' in tfex_df.columns else 0
     total_deposit = cash_df[cash_df['Type'] == 'Deposit']['Amount'].sum() if not cash_df.empty else 0
     total_withdraw = cash_df[cash_df['Type'] == 'Withdraw']['Amount'].sum() if not cash_df.empty else 0
+    
     net_capital = total_deposit - total_withdraw
     net_worth = net_capital + total_pnl
     growth_pct = (total_pnl / net_capital * 100) if net_capital != 0 else 0
