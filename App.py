@@ -2199,6 +2199,45 @@ with tab_tfex:
     c3.metric("การเติบโต", f"{growth_pct:.2f} %")
     st.divider()
 
+    # --- เริ่มแถวที่ 2: Performance Metrics ---
+    st.subheader("📊 Performance Monitor")
+    
+    # 1. สร้าง Filter ช่วงเวลา
+    period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
+    selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
+    
+    # 2. กรองข้อมูลเฉพาะแถวที่ปิดสถานะแล้ว และตามช่วงเวลาที่เลือก
+    # แปลง Date_Close เป็น datetime เพื่อคำนวณระยะเวลา
+    perf_df = closed_trades.copy() # ใช้ closed_trades ที่เรากรองไว้แล้วก่อนหน้านี้
+    perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
+    
+    days_ago = period_options[selected_period]
+    if days_ago != 9999:
+        cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
+        perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
+
+    # 3. คำนวณค่าต่างๆ
+    total_trades = len(perf_df)
+    win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
+    win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
+    
+    avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
+    avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if (total_trades - win_trades) > 0 else 0
+    rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
+    
+    gross_profit = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum()
+    gross_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()
+    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
+    
+    expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
+
+    # 4. แสดงผล
+    p1, p2, p3, p4 = st.columns(4)
+    p1.metric("Win Rate", f"{win_rate:.1f}%")
+    p2.metric("R:R Ratio", f"{rr_ratio:.2f}")
+    p3.metric("Profit Factor", f"{profit_factor:.2f}")
+    p4.metric("Expectancy", f"{expectancy:,.0f}")
+    
     # 3. สร้าง 3 Tabs
     sub_tfex_input, sub_tfex_cash, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "➕ บันทึกเติม/ถอนเงิน", "📜 ประวัติและ Portfolio"])
     
