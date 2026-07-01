@@ -2242,23 +2242,33 @@ with tab_tfex:
     sub_tfex_input, sub_tfex_cash, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "➕ บันทึกเติม/ถอนเงิน", "📜 ประวัติและ Portfolio"])
     
     with sub_tfex_input:
-
         st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
         
-        # ช่องกรอกข้อมูลความเสี่ยง
+        # 1. รับค่าความเสี่ยง
         c1, c2 = st.columns(2)
         risk_amount = c1.number_input("เงินที่ยอมขาดทุนได้ (บาท)", value=2000)
         stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=5.0)
         
-        # คำนวณสัญญา
-        # TFEX 1 จุด = 200 บาท
-        contract_value_per_point = 200
-        contract_needed = risk_amount / (stop_loss_points * contract_value_per_point)
+        # 2. คำนวณ Margin (ตัวเลข IM ปัจจุบัน)
+        im_per_contract = 13300 
         
-        # แสดงผลลัพธ์
-        st.info(f"💡 คุณควรเปิดสถานะไม่เกิน: **{int(contract_needed)} สัญญา** (เพื่อให้ขาดทุนไม่เกิน {risk_amount} บาท ตามระยะ SL ที่กำหนด)")
+        # คำนวณสัญญาจากความเสี่ยง (Risk-based)
+        contract_by_risk = risk_amount / (stop_loss_points * 200)
         
-        st.divider()
+        # คำนวณสัญญาจากเงินต้นที่เหลือ (Margin-based)
+        # ใช้ net_worth (เงินสด + กำไร) มาคำนวณ
+        available_cash = net_worth # หรือพี่อ้ำอาจใช้ยอดเงินสดคงเหลือจริงๆ
+        contract_by_margin = available_cash / im_per_contract
+        
+        # เลือกค่าที่น้อยที่สุด (เพื่อความปลอดภัย)
+        max_contracts = min(int(contract_by_risk), int(contract_by_margin))
+        
+        # แสดงผล
+        st.info(f"💰 เงินสดในพอร์ตปัจจุบัน: {available_cash:,.0f} บาท")
+        st.write(f"• ตามความเสี่ยงเปิดได้สูงสุด: {int(contract_by_risk)} สัญญา")
+        st.write(f"• ตามหลักประกัน (IM {im_per_contract:,.0f} บ.) เปิดได้สูงสุด: {int(contract_by_margin)} สัญญา")
+        st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
+        
         # 1. แสดงรายการที่ถืออยู่ (Open Positions)
         st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
         # สมมติว่าในตาราง History ของพี่อ้ำมีคอลัมน์ 'Close_Price' ที่เป็น 0 หรือว่าง สำหรับรายการที่ยังไม่ปิด
