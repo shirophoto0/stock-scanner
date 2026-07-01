@@ -425,36 +425,42 @@ def get_latest_prices(tickers):
 from datetime import datetime
 
 def check_alerts(row):
+    from datetime import datetime
     today = datetime.now().strftime("%Y-%m-%d")
     last_alert = str(row.get('Alert_Date', ''))
     
-    # ถ้าวันนี้เตือนไปแล้ว (ไม่ว่าจะรับ/ต้าน/SL/TP) ให้ข้ามไปเลย
+    # ถ้าวันนี้แจ้งเตือนไปแล้ว ให้คืนค่าสถานะเดิมหรือข้อความเดิม
     if last_alert == today:
-        return "แจ้งเตือนวันนี้แล้ว"
+        return row.get('สถานะ', 'แจ้งเตือนวันนี้แล้ว')
 
-    price = float(row['ราคาตลาด'])
-    sl = float(row['Stop_Loss'])
-    tp = float(row['Take_Profit'])
-    support = float(row['แนวรับ']) if str(row['แนวรับ']).replace('.','',1).isdigit() else 0.0
-    resistance = float(row['แนวต้าน']) if str(row['แนวต้าน']).replace('.','',1).isdigit() else 0.0
+    # จัดการเรื่องค่าว่างหรือข้อมูลที่ไม่ใช่ตัวเลข
+    try:
+        price = float(row['ราคาตลาด'])
+        sl = float(row['Stop_Loss']) if row['Stop_Loss'] else 0.0
+        tp = float(row['Take_Profit']) if row['Take_Profit'] else 0.0
+        support = float(row['แนวรับ']) if str(row['แนวรับ']).replace('.','',1).replace('-','').isdigit() else 0.0
+        resistance = float(row['แนวต้าน']) if str(row['แนวต้าน']).replace('.','',1).replace('-','').isdigit() else 0.0
+    except:
+        return "ปกติ"
     
     msg = ""
     
     # เงื่อนไขเช็คระยะ 1% (ใกล้แนวรับ/ต้าน)
     if support > 0 and abs(price - support) / support <= 0.01:
-        msg = f"🔔 หุ้น {row['Ticker']} กำลังเข้าใกล้แนวรับที่ {support} ครับ"
+        msg = f"🔔 ใกล้แนวรับ {support}"
     elif resistance > 0 and abs(price - resistance) / resistance <= 0.01:
-        msg = f"🔔 หุ้น {row['Ticker']} กำลังเข้าใกล้แนวต้านที่ {resistance} ครับ"
+        msg = f"🔔 ใกล้แนวต้าน {resistance}"
     # เงื่อนไข SL/TP
     elif sl > 0 and price <= sl:
-        msg = f"⚠️ หุ้น {row['Ticker']} ถึงจุด Stop Loss ที่ {sl} แล้วครับ!"
+        msg = f"⚠️ ถึงจุด Stop Loss {sl}"
     elif tp > 0 and price >= tp:
-        msg = f"🎉 หุ้น {row['Ticker']} ถึงจุด Take Profit ที่ {tp} แล้วครับ!"
+        msg = f"🎉 ถึงจุด Take Profit {tp}"
     
+    # ถ้ามี msg แสดงว่าเข้าเงื่อนไข ให้คืนค่า msg ออกไปโชว์ในตาราง
     if msg:
-        send_line_notify(msg) # หรือฟังก์ชันส่ง Telegram
-        return today # บันทึกว่าวันนี้แจ้งเตือนไปแล้ว
+        return msg
     
+    # ถ้าไม่มีอะไรผิดปกติ ให้คืนค่าเดิมหรือสถานะปกติ
     return row.get('สถานะ', 'ปกติ')
 # =============================================================
 # ส่วนเร่ิมต้นของ file
