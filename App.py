@@ -23,6 +23,12 @@ from datetime import datetime
 ###################
 # Def TEFEX #
 ###################
+# --- CONFIGURATION ---
+# ค่า IM ของ SET50 Index Futures ต่อ 1 สัญญา (อัปเดต 1 กรกฎาคม 2026)
+# พี่อ้ำสามารถปรับเปลี่ยนค่านี้ได้ตามประกาศจาก TFO/TCH
+IM_PER_CONTRACT = 13300 
+# ---------------------
+
 def calculate_tfex_result(entry, close, size, comm, side):
     # Multiplier ของ S50 ปกติคือ 200
     multiplier = 200
@@ -2244,30 +2250,28 @@ with tab_tfex:
     with sub_tfex_input:
         st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
         
-        # 1. รับค่าความเสี่ยง
         c1, c2 = st.columns(2)
         risk_amount = c1.number_input("เงินที่ยอมขาดทุนได้ (บาท)", value=2000)
         stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=5.0)
         
-        # 2. คำนวณ Margin (ตัวเลข IM ปัจจุบัน)
-        im_per_contract = 13300 
+        # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
+        im_per_contract = IM_PER_CONTRACT 
         
-        # คำนวณสัญญาจากความเสี่ยง (Risk-based)
+        # คำนวณสัญญา
         contract_by_risk = risk_amount / (stop_loss_points * 200)
+        contract_by_margin = net_worth / im_per_contract # net_worth ดึงมาจาก Dashboard
         
-        # คำนวณสัญญาจากเงินต้นที่เหลือ (Margin-based)
-        # ใช้ net_worth (เงินสด + กำไร) มาคำนวณ
-        available_cash = net_worth # หรือพี่อ้ำอาจใช้ยอดเงินสดคงเหลือจริงๆ
-        contract_by_margin = available_cash / im_per_contract
-        
-        # เลือกค่าที่น้อยที่สุด (เพื่อความปลอดภัย)
         max_contracts = min(int(contract_by_risk), int(contract_by_margin))
         
-        # แสดงผล
-        st.info(f"💰 เงินสดในพอร์ตปัจจุบัน: {available_cash:,.0f} บาท")
-        st.write(f"• ตามความเสี่ยงเปิดได้สูงสุด: {int(contract_by_risk)} สัญญา")
-        st.write(f"• ตามหลักประกัน (IM {im_per_contract:,.0f} บ.) เปิดได้สูงสุด: {int(contract_by_margin)} สัญญา")
-        st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
+        # แสดงผลแบบมืออาชีพ
+        st.info(f"📋 ข้อมูลการคำนวณ:")
+        st.write(f"- ค่า IM ปัจจุบัน: {im_per_contract:,.0f} บาท/สัญญา")
+        st.write(f"- เงินต้นรวม (Net Worth): {net_worth:,.0f} บาท")
+        
+        if max_contracts <= 0:
+            st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
+        else:
+            st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
         
         # 1. แสดงรายการที่ถืออยู่ (Open Positions)
         st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
