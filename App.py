@@ -1149,8 +1149,16 @@ with tab_stock:
             # =============================================================
             
             # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
+            if 'df_all_stocks' not in locals():
+                # สร้าง DataFrame เปล่าที่มี Header เหมือนที่ควรจะเป็น เพื่อกัน Error
+                columns = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%', 'Is_RS_Above_0', 
+                           'ตัดเส้น0ขึ้นมาแล้ว(วัน)', 'อยู่ใต้เส้น0มาแล้ว(วัน)', 'Is_3M_High', 'Is_6M_High', 
+                           'Is_52W_High', 'New_High_3M_มาแล้ว(วัน)', 'New_High_6M_มาแล้ว(วัน)', 'New_High_52W_มาแล้ว(วัน)']
+                df_all_stocks = pd.DataFrame(columns=columns)
+                st.warning("ระบบกำลังโหลดข้อมูลหุ้น กรุณารอสักครู่...")
+
             df_scan = filtered_df.copy() if 'filtered_df' in locals() else df_all_stocks.copy()
-    
+            
             # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
             if strategy_option == "3 Month High":
                 final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
