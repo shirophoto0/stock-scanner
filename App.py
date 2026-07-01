@@ -66,7 +66,7 @@ def save_data_to_sheet(df, sheet_name):
         return False
 ####################
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=60)
 def load_data(sheet_name):
     try:
         client = get_gsheet_client()
