@@ -103,7 +103,7 @@ def save_data_to_sheet(df, sheet_name):
         
     try:
         client = get_gsheet_client() # ใช้ Client เดิมของพี่อ้ำ
-        sheet = client.open('MyStockData').worksheet(sheet_name)
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('JournalData')
         
         # เพิ่มข้อมูลต่อท้าย (Append) เท่านั้น ห้าม update ห้าม clear
         # วิธีนี้ปลอดภัยที่สุด ข้อมูลเดิมจะอยู่ครบ
@@ -114,13 +114,20 @@ def save_data_to_sheet(df, sheet_name):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
         return False
 ####################
+    
+def get_spreadsheet_id():
+    # ดึง ID ที่เลือกไว้ใน Sidebar มาใช้งาน
+    if 'current_sheet_id' in st.session_state:
+        return st.session_state.current_sheet_id
+    return '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' # Default
+
 
 @st.cache_data(ttl=60)
 def load_data(sheet_name):
     try:
         client = get_gsheet_client()
-        # เปลี่ยนจาก 'TradingPlan' เป็นตัวแปร sheet_name ที่รับเข้ามา
-        sheet = client.open('MyStockData').worksheet(sheet_name) 
+        # เปลี่ยนจาก .open('MyStockData') เป็น .open_by_key(get_spreadsheet_id())
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet(sheet_name) 
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
@@ -132,34 +139,22 @@ def get_cached_stock_info(ticker):
     stock = yf.Ticker(ticker)
     return stock.info  
     
-#def clear_and_save_data(df, sheet_name):
-   # client = get_gsheet_client()
-   # sheet = client.open('MyStockData').worksheet('TradingPlan')
-    
-    # ต้องสั่ง clear() ก่อนเสมอ เพื่อลบข้อมูลเก่าทั้งหมดทิ้ง (แถวที่ลบไปจะหายไป)
-    #sheet.clear()
-    
-    # ส่ง Header + ข้อมูล
-   # data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
-    
-    # ระบุ 'A1' เพื่อให้เริ่มวางที่หัวตาราง
-    #sheet.update('A1', data_to_save)
-    #return True
 
 def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
-    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-    sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
     
-    # --- จุดแก้ไขสำคัญ: ล้างข้อมูลก่อนส่ง ---
-    # 1. แทนที่ค่าที่เป็น NaN หรือ None ให้เป็นค่าว่าง ""
-    # 2. แทนที่ค่า Infinity (inf) ให้เป็น 0
+    # แก้ตรงนี้: เรียกใช้ฟังก์ชันดึง ID จาก Sidebar แทนค่าตายตัว
+    spreadsheet_id = get_spreadsheet_id() 
+    
+    sheet = client.open_by_key(spreadsheet_id).worksheet(sheet_name) # เปลี่ยนจากชื่อตายตัวเป็น sheet_name ที่รับเข้ามาด้วยครับ
+    
+    # ล้างค่า NaN และ Infinity
     df = df.replace([np.inf, -np.inf], 0).fillna("")
     
     # รวม Header และ ข้อมูล
     data_to_write = [df.columns.tolist()] + df.values.tolist()
     
-    # ใช้ชื่อพารามิเตอร์เพื่อให้เป็นไปตามกฎใหม่ของ gspread
+    # บันทึกข้อมูล
     sheet.update(range_name='A1', values=data_to_write)
     print(f"บันทึกข้อมูลลง {sheet_name} สำเร็จ!")
     
@@ -193,25 +188,22 @@ def get_gsheet_client():
 # ปรับฟังก์ชัน SAVE (บันทึกลง Google Sheets)
 def save_journal():
     df_temp = pd.DataFrame(st.session_state.journal_data)
-    
-    # แปลงวันที่เป็น String ก่อนบันทึก
     date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
     for col in date_cols:
         if col in df_temp.columns:
             df_temp[col] = pd.to_datetime(df_temp[col], errors='coerce').dt.strftime('%Y-%m-%d')
             
-    # บันทึกลง Google Sheet
     client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('JournalData')
+    # เปลี่ยนมาใช้ get_spreadsheet_id() แทนการระบุชื่อไฟล์ตรงๆ
+    sheet = client.open_by_key(get_spreadsheet_id()).worksheet('JournalData')
     
-    # ล้างข้อมูลเดิมและเขียนใหม่ (Header + Data)
     sheet.clear()
     sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
 
 def load_journal():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('JournalData')
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('JournalData')
         data = sheet.get_all_records()
         st.session_state.journal_data = data
     except Exception as e:
@@ -220,37 +212,23 @@ def load_journal():
         
 def save_portfolio():
     try:
-        if st.session_state.my_portfolio is None:
-            st.session_state.my_portfolio = []
-            
+        if st.session_state.my_portfolio is None: st.session_state.my_portfolio = []
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('PortfolioData')
-        
-        sheet.clear() # ล้างข้อมูลเก่า
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('PortfolioData')
+        sheet.clear()
         if st.session_state.my_portfolio:
             df = pd.DataFrame(st.session_state.my_portfolio)
-            # เขียน Header + ข้อมูล
             sheet.update([df.columns.values.tolist()] + df.fillna('').values.tolist())
-            st.toast("บันทึกข้อมูลพอร์ตเรียบร้อย!", icon="✅") # เพิ่มตัวช่วยแจ้งเตือน
-        else:
-            st.toast("ข้อมูลพอร์ตว่างเปล่า", icon="⚠️")
-            
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึกพอร์ต: {e}")
 
-# --- ฟังก์ชันโหลดพอร์ต (วางไว้คู่กัน) ---
 def load_portfolio():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('PortfolioData')
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('PortfolioData')
         data = sheet.get_all_records()
-        
-        # ใส่บรรทัดนี้ไว้เช็ค (รันแล้วลองดูว่ามันแสดงข้อมูลอะไรออกมาที่หน้าเว็บไหม)
-        # st.write("ข้อมูลที่ดึงมา:", data) 
-        
         st.session_state.my_portfolio = data if data else []
     except Exception as e:
-        st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
         
 def get_current_portfolio_value():
@@ -269,15 +247,16 @@ def get_current_portfolio_value():
 
 def update_stock_data(df):
     client = get_gsheet_client()
-    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+    
+    # แก้บรรทัดนี้: ให้เรียกฟังก์ชันดึง ID ตามผู้ใช้ที่เลือก
+    spreadsheet_id = get_spreadsheet_id() 
+    
     sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
     
     # 1. เตรียมข้อมูล: แปลง Header และข้อมูลเป็น list
     data_to_update = [df.columns.values.tolist()] + df.values.tolist()
     
     # 2. ใช้ update แทน clear() 
-    # วิธีนี้จะเขียนทับตั้งแต่เซลล์ A1 ยาวไปจนจบข้อมูลใหม่ 
-    # ข้อมูลเดิมจะถูกเขียนทับด้วยค่าใหม่ทันที โดยไม่ลบโครงสร้าง Sheet ทิ้ง
     sheet.update('A1', data_to_update)
     
     print("DEBUG: อัปเดตข้อมูลหุ้นเรียบร้อย!")
@@ -287,7 +266,7 @@ def update_stock_data(df):
 def save_cash_balance(amount):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('CashFlow')
         sheet.update('D2', [[amount]]) # เขียนเงินสดลงเซลล์ D2
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึกเงินสด: {e}")
@@ -295,7 +274,8 @@ def save_cash_balance(amount):
 def load_cash_balance():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
+        # เปลี่ยนเป็นใช้ get_spreadsheet_id()
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('CashFlow')
         val = sheet.acell('D2').value
         if val is None or val == "":
             st.warning("เซลล์ D2 ว่างเปล่า ระบบใช้ 100,000 เป็นค่าเริ่มต้น")
@@ -303,17 +283,15 @@ def load_cash_balance():
         return float(val)
     except Exception as e:
         st.error(f"โหลดเงินสดจาก Sheets ไม่ได้: {e}")
-        return 100000.0 # ถ้าพังจริงๆ ก็ใช้ 100,000 ไปก่อน
+        return 100000.0
         
 def log_cash_transaction(date, trans_type, amount, note):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
+        # เปลี่ยนเป็นใช้ get_spreadsheet_id()
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('CashFlow')
         
-        # เตรียมข้อมูลที่จะบันทึก (Date, Type, Amount, Note)
         row_data = [str(date), trans_type, amount, note]
-        
-        # เพิ่มแถวใหม่ต่อท้ายข้อมูลเดิม
         sheet.append_row(row_data)
         st.toast("บันทึกรายการเงินสดเรียบร้อย!", icon="💰")
     except Exception as e:
@@ -322,28 +300,35 @@ def log_cash_transaction(date, trans_type, amount, note):
 def load_total_cash_balance():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
+        # เปลี่ยนเป็นใช้ get_spreadsheet_id()
+        sheet = client.open_by_key(get_spreadsheet_id()).worksheet('CashFlow')
         df = pd.DataFrame(sheet.get_all_records())
         
-        if not df.empty:
+        if not df.empty and 'Amount' in df.columns:
             # รวมยอด Amount ทั้งหมด
             return float(df['Amount'].sum())
         return 69102.44 # ถ้าไม่มีข้อมูลให้ใช้ยอดเริ่มต้น
-    except:
+    except Exception as e:
+        # พิมพ์ Error ไว้ดูเวลาติดปัญหา
+        print(f"เกิดข้อผิดพลาดในการโหลดยอดเงินสดรวม: {e}")
         return 69102.44
         
-# ฟังก์ชัน Load ไฟล์ CSV/Excel (ยังคงใช้ได้เหมือนเดิม)
 def load_data_from_file(uploaded_file):
     if uploaded_file is not None:
         try:
+            # 1. อ่านไฟล์ที่อัปโหลด
             df = pd.read_csv(uploaded_file) if uploaded_file.name.endswith('.csv') else pd.read_excel(uploaded_file)
             
-            # แปลงวันที่เป็น String
+            # 2. แปลงวันที่เป็น String
             if 'วันที่' in df.columns:
                 df['วันที่'] = pd.to_datetime(df['วันที่']).dt.strftime('%Y-%m-%d')
             
+            # 3. เก็บลง session
             st.session_state.journal_data = df.to_dict('records')
-            save_journal() # เรียกฟังก์ชันบันทึกลง Google Sheets
+            
+            # 4. เรียกบันทึก (ฟังก์ชัน save_journal ที่เราแก้ไว้ก่อนหน้านี้จะดึง ID จาก session มาใช้เอง)
+            save_journal() 
+            
             st.success("นำเข้าข้อมูลสำเร็จ!")
             st.rerun()
         except Exception as e:
@@ -372,7 +357,7 @@ def get_equity_curve_data():
 
     # 2. เตรียมข้อมูล CashFlow
     client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('CashFlow')
+    sheet = client.open_by_key(get_spreadsheet_id()).worksheet('CashFlow')
     df_cash = pd.DataFrame(sheet.get_all_records())
     df_cash.columns = df_cash.columns.str.strip()
     df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
@@ -536,18 +521,18 @@ st.set_page_config(layout="wide")
 ###################################
 # เรียกใช้:
 config = get_user_config()
-CURRENT_SHEET_ID = config["id"]
-USER_MODE = config["mode"]
+st.session_state.current_sheet_id = config["id"]
+st.session_state.user_mode = config["mode"] # เก็บค่า mode ลง session
 
-if USER_MODE == "FULL":
+# แก้ตรงนี้: ใช้ st.session_state.user_mode แทน USER_MODE
+if st.session_state.user_mode == "FULL":
     tab1, tab2 = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
-    # กำหนดตัวแปรให้ตรงกับชื่อที่พี่อ้ำเคยเขียนไว้ใน Tab เก่าๆ
     tab_stock = tab1
     tab_tfex = tab2
 else:
     # โหมดแฟน: โชว์แค่หุ้น
     tab_stock = st.tabs(["📊 หุ้น (Stock)"])[0]
-    tab_tfex = None # ป้องกัน Error ถ้าโค้ดส่วนอื่นเผลอเรียกใช้งาน Tab TFEX
+    tab_tfex = None
 ##########################################################################
 
 
@@ -630,11 +615,12 @@ with tab_stock:
     # =============================================================
     # 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
     # ============================================================
-    @st.cache_data(ttl=3600)
+    @st.cache_data(ttl=3600) 
     def load_from_gsheet():
         try:
             client = get_gsheet_client()
-            sheet = client.open('MyStockData').worksheet('StockData')
+            # แก้ตรงนี้: ใช้ get_spreadsheet_id() เพื่อดึงข้อมูลหุ้นจากไฟล์ที่ถูกต้องของแต่ละคน
+            sheet = client.open_by_key(get_spreadsheet_id()).worksheet('StockData')
             data = sheet.get_all_records()
             
             if not data:
@@ -644,7 +630,7 @@ with tab_stock:
             # ดึงข้อมูลออกมาเป็น DataFrame
             df = pd.DataFrame(data)
             
-            # ล้างชื่อคอลัมน์ (เผื่อมีช่องว่างติดมา)
+            # ล้างชื่อคอลัมน์
             df.columns = df.columns.str.strip()
             
             # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ
@@ -654,11 +640,11 @@ with tab_stock:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
             
             return df
-    
+        
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
             return None
-            
+                
     def load_and_calculate_stock_data():
         stock_list = []
         progress_bar = st.progress(0)
