@@ -36,10 +36,6 @@ def get_user_config():
             "mode": "STOCK_ONLY"
         }
 
-# เรียกใช้:
-config = get_user_config()
-CURRENT_SHEET_ID = config["id"]
-USER_MODE = config["mode"]
 
 
 ###################
@@ -540,6 +536,11 @@ st.set_page_config(layout="wide")
 ####################################
 # เลือก User 
 ###################################
+# เรียกใช้:
+config = get_user_config()
+CURRENT_SHEET_ID = config["id"]
+USER_MODE = config["mode"]
+
 if USER_MODE == "FULL":
     tab1, tab2 = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
     # กำหนดตัวแปรให้ตรงกับชื่อที่พี่อ้ำเคยเขียนไว้ใน Tab เก่าๆ
