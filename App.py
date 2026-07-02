@@ -28,7 +28,34 @@ from datetime import datetime
 # พี่อ้ำสามารถปรับเปลี่ยนค่านี้ได้ตามประกาศจาก TFO/TCH
 IM_PER_CONTRACT = 13300 
 # ---------------------
-
+def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
+    client = get_gsheet_client()
+    sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
+    
+    # ดึงข้อมูลทั้งหมดมาค้นหา Row
+    records = sheet.get_all_records()
+    df = pd.DataFrame(records)
+    
+    # สมมติว่ามีคอลัมน์ 'Trade_ID' ที่เป็นตัวระบุแถว (พี่อ้ำต้องมี ID นี้ใน Sheet นะครับ)
+    row_index = df.index[df['Trade_ID'] == trade_id].tolist()[0] + 2 # +2 เพราะ GSheet เริ่มแถวที่ 1 และหัวตารางอยู่แถว 1
+    
+    # คำนวณกำไร
+    open_price = df.loc[row_index-2, 'Open_Price']
+    size = df.loc[row_index-2, 'Size']
+    side = df.loc[row_index-2, 'Side']
+    
+    if side.upper() == 'LONG':
+        net_profit = (close_price - open_price) * size * 200
+    else:
+        net_profit = (open_price - close_price) * size * 200
+        
+    # อัปเดตลง Google Sheet
+    sheet.update_cell(row_index, df.columns.get_loc('Close_Price') + 1, close_price)
+    sheet.update_cell(row_index, df.columns.get_loc('Date_Close') + 1, date_close)
+    sheet.update_cell(row_index, df.columns.get_loc('Net_Profit') + 1, net_profit)
+    
+    return True
+    
 def calculate_tfex_result(entry, close, size, comm, side):
     # Multiplier ของ S50 ปกติคือ 200
     multiplier = 200
@@ -2245,8 +2272,12 @@ with tab_tfex:
     p4.metric("Expectancy", f"{expectancy:,.0f}")
     
     # 3. สร้าง 3 Tabs
-    sub_tfex_input, sub_tfex_cash, sub_tfex_history = st.tabs(["➕ บันทึกเทรดใหม่", "➕ บันทึกเติม/ถอนเงิน", "📜 ประวัติและ Portfolio"])
-    
+    sub_tfex_input, sub_tfex_close, sub_tfex_cash, sub_tfex_history = st.tabs([
+    "➕ บันทึกเทรดใหม่", 
+    "🏁 ปิดสถานะเทรด", 
+    "➕ บันทึกเติม/ถอนเงิน", 
+    "📜 ประวัติและ Portfolio"
+    ])
     with sub_tfex_input:
         st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
         
@@ -2294,45 +2325,56 @@ with tab_tfex:
                 side = st.selectbox("สถานะ:", ["Long", "Short"])
             with col2:
                 entry = st.number_input("ราคา Open:", format="%.2f")
-                close = st.number_input("ราคา Close:", format="%.2f")
                 size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
+                # เพิ่มช่อง Trade_ID ให้พี่อ้ำกรอกเอง หรือจะให้ระบบรันเลขให้อัตโนมัติก็ได้ครับ
+                trade_id = st.text_input("Trade ID (ตั้งชื่อให้ไม่ซ้ำ):") 
             with col3:
-                comm = st.number_input("ค่าคอมมิชชั่น:", format="%.2f")
                 reason = st.text_area("เหตุผลที่เข้าเทรด:")
             
-            if st.form_submit_button("บันทึกรายการเทรด"):
-                res = calculate_tfex_result(entry, close, size, comm, side)
+            if st.form_submit_button("เปิดสถานะเทรด"):
                 new_record = {
+                    "Trade_ID": trade_id, # สำคัญมากสำหรับการอัปเดตภายหลัง
                     "Date_Open": date_open.strftime("%Y-%m-%d"),
-                    "Date_Close": date_open.strftime("%Y-%m-%d"),
                     "Series": series,
                     "Status": side,
                     "Size": size,
                     "Open_Price": entry,
-                    "Close_Price": close,
-                    "Realized": res["Realized"],
-                    "Comm": comm,
-                    "Net_Profit": res["Net_Profit"],
-                    "Win_Lose": res["Win_Lose"],
-                    "Points": res["Points"],
+                    "Close_Price": 0, # กำหนดเป็น 0 เพื่อบอกระบบว่ายังถืออยู่
+                    "Net_Profit": 0,  # ยังไม่มีกำไร
                     "Reason": reason
                 }
                 if save_data_to_sheet(pd.DataFrame([new_record]), "TFEX_History"):
-                    st.success("บันทึกรายการเรียบร้อย!")
+                    st.success("เปิดสถานะเรียบร้อย!")
                     st.rerun()
-
-    with sub_tfex_cash:
-        # ใช้ form_key ใหม่ เพื่อไม่ให้ซ้ำกับอันอื่น
-        with st.form("cash_flow_entry_form"):
-            c1, c2 = st.columns(2)
-            c_date = c1.date_input("วันที่")
-            c_type = c2.selectbox("ประเภท", ["Deposit", "Withdraw"])
-            c_amount = st.number_input("จำนวนเงิน:", min_value=0.0)
-            if st.form_submit_button("บันทึกเงินสด"):
-                new_cash = pd.DataFrame([{"Date": str(c_date), "Type": c_type, "Amount": c_amount}])
-                save_data_to_sheet(new_cash, "Cash_Flow")
-                st.success("บันทึกสำเร็จ!")
-                st.rerun()
+    with sub_tfex_close:
+        st.subheader("🏁 ปิดสถานะเทรด")
+        
+        # ดึงข้อมูลจากฟังก์ชัน load_data โดยตรง
+        tfex_df = load_data("TFEX_History")
+        
+        # กรองเฉพาะรายการที่ยังถืออยู่ (Open Position)
+        # หมายเหตุ: ต้องมั่นใจว่าใน Google Sheet รายการที่ยังถืออยู่มี Close_Price เป็น 0 หรือว่าง
+        open_trades = tfex_df[tfex_df['Close_Price'] == 0]
+        
+        if not open_trades.empty:
+            # ให้เลือก Trade_ID (พี่อ้ำต้องมี Column นี้ใน Sheet)
+            selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
+            
+            # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
+            trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
+            st.write(f"รายละเอียด: {trade_detail['Side']} {trade_detail['Size']} สัญญาที่ราคา {trade_detail['Open_Price']}")
+            
+            # ฟอร์มกรอกข้อมูลปิดสถานะ
+            close_price = st.number_input("ราคาปิด:", value=0.0, step=0.1)
+            close_date = st.date_input("วันที่ปิด:")
+            
+            if st.button("ยืนยันการปิดสถานะ"):
+                # เรียกใช้ฟังก์ชันที่เราเตรียมไว้
+                update_trade_close(CURRENT_SHEET_ID, selected_trade_id, close_price, str(close_date))
+                st.success("อัปเดตข้อมูลสำเร็จ! ระบบจะคำนวณกำไรให้ทันที")
+                st.rerun() # สั่งรีเฟรชหน้าจอเพื่อให้อัปเดตข้อมูล
+        else:
+            st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
 
     with sub_tfex_history:
         st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
