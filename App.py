@@ -531,9 +531,15 @@ st.set_page_config(layout="wide")
 # เลือก User 
 ###################################
 # 1. ส่วนตั้งค่า Tab (จากโค้ดด้านบนที่พี่อ้ำวาง)
+# ใน Sidebar ที่พี่อ้ำเลือก User
 config = get_user_config()
 st.session_state.current_sheet_id = config["id"]
 st.session_state.user_mode = config["mode"]
+
+# ใส่บรรทัดนี้ไว้เพื่อเช็ค
+st.sidebar.write(f"DEBUG: กำลังอ่านไฟล์ ID: {st.session_state.current_sheet_id}")
+config = get_user_config()
+
 
 if st.session_state.user_mode == "FULL":
     tab1, tab2 = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
