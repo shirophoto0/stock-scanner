@@ -23,7 +23,7 @@ from datetime import datetime
 
 def get_user_config():
     # สร้างเมนูใน Sidebar
-    user = st.sidebar.radio("เลือกผู้ใช้งาน:", ["พี่อ้ำ (หุ้น+TFEX)", "Nuji"])
+    user = st.sidebar.radio("เลือกผู้ใช้งาน:", ["พี่อ้ำ (หุ้น+TFEX)", "Nuji"], key="user_radio_select")
     
     if user == "พี่อ้ำ (หุ้น+TFEX)":
         return {
@@ -116,10 +116,12 @@ def save_data_to_sheet(df, sheet_name):
 ####################
     
 def get_spreadsheet_id():
-    # ดึง ID ที่เลือกไว้ใน Sidebar มาใช้งาน
-    if 'current_sheet_id' in st.session_state:
+    # ต้องดึงจาก session_state ที่เราอัปเดตตอนเลือก Sidebar
+    if "current_sheet_id" in st.session_state:
         return st.session_state.current_sheet_id
-    return '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' # Default
+    else:
+        # ถ้าไม่มีค่า ให้คืนค่าเริ่มต้น (ID พี่อ้ำ)
+        return '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
 
 
 @st.cache_data(ttl=60)
