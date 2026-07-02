@@ -386,8 +386,8 @@ def get_equity_curve_data():
     
     # เรียงลำดับวันที่ก่อนทำ cumsum สะสมต่อเนื่อง
     df_equity = df_equity.sort_values('Date')
-    df_equity['Cumulative_PnL'] = df_equity['Cumulative_PnL'].fillna(method='ffill').fillna(0)
-    df_equity['Net_Cash_In'] = df_equity['Net_Cash_In'].fillna(method='ffill').fillna(0)
+    df_equity['Cumulative_PnL'] = df_equity['Cumulative_PnL'].ffill().fillna(0)
+    df_equity['Net_Cash_In'] = df_equity['Net_Cash_In'].ffill().fillna(0)
     
     initial_balance = 69102.44 
     df_equity['Cash_Base'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
