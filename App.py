@@ -19,6 +19,8 @@ from datetime import datetime
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
+
+    
 # add user #
 def get_user_config():
     # ให้ฟังก์ชันนี้คืนค่า Config ตามชื่อที่เลือก ไม่ต้องสร้าง Widget ในนี้
@@ -518,6 +520,10 @@ if "my_portfolio" not in st.session_state:
 if "journal_data" not in st.session_state:
     load_journal()
 
+# 1. กำหนดค่าเริ่มต้นให้ session_state (ถ้ายังไม่มี)
+if 'selected_user' not in st.session_state:
+    st.session_state.selected_user = "พี่อ้ำ (หุ้น+TFEX)"
+    
 # --- Initialize Session State ---
 # ตั้งค่าหน้าจอ
 st.set_page_config(layout="wide")
