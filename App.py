@@ -2485,6 +2485,6 @@ def load_and_calculate_stock_data():
                     else:
                         st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
 
-           if __name__ == "__main__":
-                main()
+    if __name__ == "__main__":
+        main()
             
