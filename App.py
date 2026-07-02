@@ -32,7 +32,7 @@ def get_user_config():
         }
     else:
         return {
-            "id": "1G6RcxSV9N8oqi0-H63oSizvE_ksxH_JF",
+            "id": "1_XGlYuPx10Ed1rUYfqIp37xMc_J-1LylkHVJIoGmdDM",
             "mode": "STOCK_ONLY"
         }
 
