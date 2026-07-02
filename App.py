@@ -20,21 +20,13 @@ from datetime import datetime
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
 # add user #
-
 def get_user_config():
-    # สร้างเมนูใน Sidebar
-    user = st.sidebar.radio("เลือกผู้ใช้งาน:", ["พี่อ้ำ (หุ้น+TFEX)", "Nuji"], key="user_radio_select")
-    
-    if user == "พี่อ้ำ (หุ้น+TFEX)":
-        return {
-            "id": "1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU",
-            "mode": "FULL"
-        }
+    # ให้ฟังก์ชันนี้คืนค่า Config ตามชื่อที่เลือก ไม่ต้องสร้าง Widget ในนี้
+    # เราจะส่ง 'selected_user' เข้าไปแทน
+    if st.session_state.selected_user == "พี่อ้ำ (หุ้น+TFEX)":
+        return {"id": "1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU", "mode": "FULL"}
     else:
-        return {
-            "id": "1_XGlYuPx10Ed1rUYfqIp37xMc_J-1LylkHVJIoGmdDM",
-            "mode": "STOCK_ONLY"
-        }
+        return {"id": "1_XGlYuPx10Ed1rUYfqIp37xMc_J-1LylkHVJIoGmdDM", "mode": "STOCK_ONLY"}
 
 ###################
 # Def TEFEX #
@@ -534,22 +526,24 @@ st.set_page_config(layout="wide")
 ###################################
 # 1. ส่วนตั้งค่า Tab (จากโค้ดด้านบนที่พี่อ้ำวาง)
 # ใน Sidebar ที่พี่อ้ำเลือก User
+# --- 1. ดึงค่า config ครั้งเดียวพอ ---
 config = get_user_config()
 st.session_state.current_sheet_id = config["id"]
 st.session_state.user_mode = config["mode"]
 
-# ใส่บรรทัดนี้ไว้เพื่อเช็ค
-st.sidebar.write(f"DEBUG: กำลังอ่านไฟล์ ID: {st.session_state.current_sheet_id}")
-config = get_user_config()
+# --- 2. ส่วนแสดง Debug (ถ้าเห็นว่าเลข ID เปลี่ยนตาม User ก็แปลว่าถูกต้องแล้วครับ) ---
+st.sidebar.write(f"DEBUG: กำลังอ่านไฟล์ ID: {st.session_state.current_sheet_id[-5:]}...") 
 
-
+# --- 3. การตั้งค่า Tabs ---
 if st.session_state.user_mode == "FULL":
+    # โหมดพี่อ้ำ: สร้าง 2 Tabs
     tab1, tab2 = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
     tab_stock = tab1
     tab_tfex = tab2
 else:
+    # โหมด Nuji: สร้าง 1 Tab
     tab_stock = st.tabs(["📊 หุ้น (Stock)"])[0]
-    tab_tfex = None 
+    tab_tfex = None
 
 # 2. ส่วนเรียกใช้งาน Tab (ใช้ with ตามตัวแปรที่เราตั้งไว้)
 with tab_stock:
