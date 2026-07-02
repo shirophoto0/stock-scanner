@@ -19,7 +19,22 @@ from datetime import datetime
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
+# 1. กำหนดค่าเริ่มต้นถ้ายังไม่มี
+if 'selected_user' not in st.session_state:
+    st.session_state.selected_user = "พี่อ้ำ (หุ้น+TFEX)"
 
+# 2. สร้าง Sidebar ปุ่มสลับผู้ใช้งาน (จุดนี้คือที่หายไป)
+st.sidebar.title("🛠 ตั้งค่าผู้ใช้งาน")
+selected_user = st.sidebar.radio(
+    "เลือกผู้ใช้งาน:", 
+    ["พี่อ้ำ (หุ้น+TFEX)", "Nuji"], 
+    key="user_radio_select"
+)
+
+# 3. อัปเดตค่าลง session_state เมื่อมีการเปลี่ยน
+if selected_user != st.session_state.selected_user:
+    st.session_state.selected_user = selected_user
+    st.rerun() # สั่งรีเฟรชหน้าจอเพื่อให้ข้อมูลเปลี่ยนทันทีที่กดเลือก
     
 # add user #
 def get_user_config():
@@ -519,10 +534,6 @@ if "my_portfolio" not in st.session_state:
 
 if "journal_data" not in st.session_state:
     load_journal()
-
-# 1. กำหนดค่าเริ่มต้นให้ session_state (ถ้ายังไม่มี)
-if 'selected_user' not in st.session_state:
-    st.session_state.selected_user = "พี่อ้ำ (หุ้น+TFEX)"
     
 # --- Initialize Session State ---
 # ตั้งค่าหน้าจอ
