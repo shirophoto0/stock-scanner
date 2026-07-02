@@ -36,8 +36,6 @@ def get_user_config():
             "mode": "STOCK_ONLY"
         }
 
-
-
 ###################
 # Def TEFEX #
 ###################
