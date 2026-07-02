@@ -42,9 +42,9 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     # คำนวณกำไร
     open_price = df.loc[row_index-2, 'Open_Price']
     size = df.loc[row_index-2, 'Size']
-    side = df.loc[row_index-2, 'Side']
+    Status = df.loc[row_index-2, 'Status']
     
-    if side.upper() == 'LONG':
+    if Status.upper() == 'LONG':
         net_profit = (close_price - open_price) * size * 200
     else:
         net_profit = (open_price - close_price) * size * 200
@@ -56,12 +56,12 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     
     return True
     
-def calculate_tfex_result(entry, close, size, comm, side):
+def calculate_tfex_result(entry, close, size, comm, Status):
     # Multiplier ของ S50 ปกติคือ 200
     multiplier = 200
     
     # คำนวณจุดที่ได้ (Points)
-    points = (close - entry) if side == "Long" else (entry - close)
+    points = (close - entry) if Status == "Long" else (entry - close)
     
     # คำนวณกำไร/ขาดทุนก่อนหักคอม
     realized = points * size * multiplier
@@ -2322,7 +2322,7 @@ with tab_tfex:
             with col1:
                 date_open = st.date_input("วันที่เปิด")
                 series = st.text_input("Series (เช่น S50Z25)")
-                side = st.selectbox("สถานะ:", ["Long", "Short"])
+                Status = st.selectbox("สถานะ:", ["Long", "Short"])
             with col2:
                 entry = st.number_input("ราคา Open:", format="%.2f")
                 size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
@@ -2336,7 +2336,7 @@ with tab_tfex:
                     "Trade_ID": trade_id, # สำคัญมากสำหรับการอัปเดตภายหลัง
                     "Date_Open": date_open.strftime("%Y-%m-%d"),
                     "Series": series,
-                    "Status": side,
+                    "Status": Status,
                     "Size": size,
                     "Open_Price": entry,
                     "Close_Price": 0, # กำหนดเป็น 0 เพื่อบอกระบบว่ายังถืออยู่
@@ -2362,7 +2362,7 @@ with tab_tfex:
             
             # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
             trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
-            st.write(f"รายละเอียด: {trade_detail['Side']} {trade_detail['Size']} สัญญาที่ราคา {trade_detail['Open_Price']}")
+            st.write(f"รายละเอียด: {trade_detail['Status']} {trade_detail['Size']} สัญญาที่ราคา {trade_detail['Open_Price']}")
             
             # ฟอร์มกรอกข้อมูลปิดสถานะ
             close_price = st.number_input("ราคาปิด:", value=0.0, step=0.1)
