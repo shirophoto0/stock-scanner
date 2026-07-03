@@ -759,7 +759,7 @@ def highlight_rsi_zones(row):
 ######################################
 st.set_page_config(layout="wide")
 def main():
-    
+    filtered_df = pd.DataFrame()
     # ใน Sidebar ที่พี่อ้ำเลือก User
     config = get_user_config()
     st.session_state.current_sheet_id = config["id"]
