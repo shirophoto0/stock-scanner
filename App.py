@@ -592,9 +592,6 @@ if "my_portfolio" not in st.session_state:
 if "journal_data" not in st.session_state:
     load_journal()
     
-# --- Initialize Session State ---
-# ตั้งค่าหน้าจอ
-st.set_page_config(layout="wide")
 ####################################
 # เลือก User 
 ###################################
@@ -757,8 +754,9 @@ def highlight_rsi_zones(row):
 #####################################
 # Def Main ส่วนครอบ code ทั้งหมด
 ######################################
-st.set_page_config(layout="wide")
+
 def main():
+    st.set_page_config(layout="wide")
     filtered_df = pd.DataFrame()
     # ใน Sidebar ที่พี่อ้ำเลือก User
     config = get_user_config()
@@ -2488,4 +2486,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-        
