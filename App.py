@@ -19,7 +19,7 @@ from datetime import datetime
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
-
+st.set_page_config(layout="wide")
 ###################
 # Def TEFEX #
 ###################
@@ -517,9 +517,6 @@ if "journal_data" not in st.session_state:
 
 # --- Initialize Session State ---
 
-# ตั้งค่าหน้าจอ
-st.set_page_config(layout="wide")
-
 tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
 # 1. ส่วนหุ้น
 with tab_stock:
@@ -758,7 +755,6 @@ with tab_stock:
     #####################################
     # Def Main ส่วนครอบ code ทั้งหมด
     ######################################
-    st.set_page_config(layout="wide")
 
     def main():
         df_all_stocks = pd.DataFrame() 
