@@ -275,19 +275,6 @@ def save_cash_balance(amount):
         sheet.update('D2', [[amount]]) # เขียนเงินสดลงเซลล์ D2
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึกเงินสด: {e}")
-
-def load_cash_balance():
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
-        val = sheet.acell('D2').value
-        if val is None or val == "":
-            st.warning("เซลล์ D2 ว่างเปล่า ระบบใช้ 100,000 เป็นค่าเริ่มต้น")
-            return 100000.0
-        return float(val)
-    except Exception as e:
-        st.error(f"โหลดเงินสดจาก Sheets ไม่ได้: {e}")
-        return 100000.0 # ถ้าพังจริงๆ ก็ใช้ 100,000 ไปก่อน
         
 def log_cash_transaction(date, trans_type, amount, note):
     try:
