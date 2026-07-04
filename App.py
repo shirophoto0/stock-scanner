@@ -516,237 +516,9 @@ def highlight_rsi_zones(row):
 # ส่วนเร่ิมต้นของ file
 # =============================================================
 
-if "journal_data" not in st.session_state:
-    load_journal()   # <--- ใส่บรรทัดนี้ลงไปครับ! มันจะช่วยดึงข้อมูลจากไฟล์มาโชว์ตอนเปิดแอป
-
-if "my_portfolio" not in st.session_state:
-    load_portfolio()
-
-# เรียกโหลดข้อมูลทุกครั้งที่รันแอปฯ
-if "my_portfolio" not in st.session_state:
-    load_portfolio()
-
-if "journal_data" not in st.session_state:
-    load_journal()
-
 # --- Initialize Session State ---
 
-tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
-# 1. ส่วนหุ้น
-with tab_stock:
-    
-    st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย (Mark Minervini Style - RS vs SET Index)")
-    st.write("ระบบสแกนหุ้นกลุ่ม SET100 พร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
-    
-    # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
-    if "selected_ticker" not in st.session_state:
-        st.session_state.selected_ticker = "KBANK"
-    
-    # =============================================================
-    # 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
-    # =============================================================
-    
-    
-    # สารตั้งต้นข้อมูลหุ้นกลุ่ม SET100
-    SET100_TICKERS = [
-        "A5.BK", "AAI.BK", "AAV.BK", "ABM.BK", "ACC.BK", "ACE.BK", "ACG.BK", "ADB.BK", "ADD.BK", "ADVANC.BK",
-        "ADVICE.BK", "AE.BK", "AEONTS.BK", "AF.BK", "AGE.BK", "AH.BK", "AHC.BK", "AI.BK", "AIE.BK", "AIT.BK",
-        "AJ.BK", "AJA.BK", "AKP.BK", "AKR.BK", "ALLA.BK", "ALLY.BK", "ALPHAX.BK", "ALT.BK", "ALUCON.BK", "AMA.BK",
-        "AMANAH.BK", "AMARC.BK", "AMATA.BK", "AMR.BK", "ANAN.BK", "ANI.BK", "AOT.BK", "AP.BK", "APCO.BK", "APCS.BK",
-        "APO.BK", "APP.BK", "APURE.BK", "AQUA.BK", "ARIN.BK", "ARIP.BK", "ARROW.BK", "AS.BK", "ASAP.BK", "ASEFA.BK",
-        "ASIA.BK", "ASIAN.BK", "ASIMAR.BK", "ASK.BK", "ASN.BK", "ASP.BK", "ASW.BK", "ATP30.BK", "AU.BK", "AUCT.BK",
-        "AURA.BK", "AWC.BK", "B.BK", "BA.BK", "BAFS.BK", "BAM.BK", "BANPU.BK", "BAY.BK", "BBGI.BK", "BBIK.BK",
-        "BBL.BK", "BC.BK", "BCH.BK", "BCP.BK", "BCPG.BK", "BCT.BK", "BDMS.BK", "BE8.BK", "BEAUTY.BK", "BEC.BK",
-        "BEM.BK", "BGC.BK", "BGRIM.BK", "BH.BK", "BIS.BK", "BIZ.BK", "BJC.BK", "BJCHI.BK", "BKD.BK", "BLAND.BK",
-        "BLC.BK", "BM.BK", "BOL.BK", "BPP.BK", "BRI.BK", "BRR.BK", "BSBM.BK", "BTG.BK", "BTS.BK", "BWG.BK", "BYD.BK",
-        "CBG.BK", "CCET.BK", "CCP.BK", "CGD.BK", "CH.BK", "CHAYO.BK", "CHEWA.BK", "CHG.BK", "CHO.BK", "CHOW.BK",
-        "CI.BK", "CIG.BK", "CIMBT.BK", "CIVIL.BK", "CK.BK", "CKP.BK", "CM.BK", "CMC.BK", "CMO.BK", "CMR.BK",
-        "CNT.BK", "COLOR.BK", "COM7.BK", "CPALL.BK", "CPF.BK", "CPI.BK", "CPN.BK", "CPT.BK", "CRC.BK", "CRD.BK",
-        "CSC.BK", "CSP.BK", "CSS.BK", "CV.BK", "CWT.BK", "D.BK", "DCC.BK", "DDD.BK", "DELTA.BK", "DEMCO.BK",
-        "DEXON.BK", "DHOUSE.BK", "DITTO.BK", "DMT.BK", "DOHOME.BK", "DOD.BK", "DRT.BK", "DTCENT.BK", "DTCI.BK",
-        "EA.BK", "EASTW.BK", "EE.BK", "EFORL.BK", "EKH.BK", "EMC.BK", "EP.BK", "ERW.BK", "ESTAR.BK", "ETC.BK",
-        "ETE.BK", "EURO.BK", "FANCY.BK", "FMT.BK", "FNS.BK", "FORTH.BK", "FPI.BK", "FSMART.BK", "FSS.BK", "FTE.BK",
-        "GABLE.BK", "GBX.BK", "GC.BK", "GCAP.BK", "GEL.BK", "GENCO.BK", "GFPT.BK", "GGC.BK", "GLAND.BK", "GLOBAL.BK",
-        "GLOCON.BK", "GPI.BK", "GPSC.BK", "GRAMMY.BK", "GREEN.BK", "GSC.BK", "GTB.BK", "GULF.BK", "GUNKUL.BK", "GVREIT.BK",
-        "HANA.BK", "HARN.BK", "HENG.BK", "HFT.BK", "HL.BK", "HMPRO.BK", "HTC.BK", "HTECH.BK", "HUMAN.BK", "HYDRO.BK",
-        "ICC.BK", "ICHI.BK", "ICN.BK", "IFEC.BK", "IFS.BK", "IHL.BK", "III.BK", "ILINK.BK", "IMH.BK", "IND.BK",
-        "INET.BK", "INGRS.BK", "INOX.BK", "INSURE.BK", "INTUCH.BK", "IRC.BK", "IRCP.BK", "IT.BK", "ITC.BK", "ITEL.BK",
-        "ITD.BK", "IVL.BK", "J.BK", "JAS.BK", "JCK.BK", "JCKH.BK", "JMART.BK", "JMT.BK", "JSP.BK", "JTS.BK",
-        "K.BK", "KAMART.BK", "KBANK.BK", "KBS.BK", "KC.BK", "KCE.BK", "KEX.BK", "KGI.BK", "KHC.BK", "KJL.BK",
-        "KKP.BK", "KSL.BK", "KTB.BK", "KTC.BK", "KTIS.BK", "KWC.BK", "KWM.BK", "L&E.BK", "LALIN.BK", "LANNA.BK",
-        "LEO.BK", "LH.BK", "LHK.BK", "LPN.BK", "LRH.BK", "LST.BK", "M.BK", "MACO.BK", "MAJOR.BK", "MAKRO.BK",
-        "MC.BK", "MCA.BK", "MCOT.BK", "MCS.BK", "MDX.BK", "MEGA.BK", "META.BK", "MFC.BK", "MGT.BK", "MICRO.BK",
-        "MINT.BK", "MITSIB.BK", "MJD.BK", "MK.BK", "ML.BK", "MOSHI.BK", "MTC.BK", "NCAP.BK", "NCH.BK", "NER.BK",
-        "NETBAY.BK", "NEX.BK", "NKI.BK", "NNCL.BK", "NOBLE.BK", "NOK.BK", "NRF.BK", "NUSA.BK", "NVD.BK", "NYT.BK",
-        "OCC.BK", "OGC.BK", "OISHI.BK", "OR.BK", "ORI.BK", "OSP.BK", "OTO.BK", "PACE.BK", "PAF.BK", "PAP.BK",
-        "PCSGH.BK", "PDG.BK", "PERM.BK", "PF.BK", "PG.BK", "PHOL.BK", "PICO.BK", "PIN.BK", "PIS.BK", "PLANB.BK",
-        "PLAT.BK", "PLE.BK", "PM.BK", "PMC.BK", "PMP.BK", "PPP.BK", "PPPM.BK", "PR9.BK", "PREB.BK", "PRG.BK",
-        "PRINC.BK", "PRM.BK", "PROEN.BK", "PROS.BK", "PSH.BK", "PSL.BK", "PT.BK", "PTC.BK", "PTG.BK", "PTL.BK",
-        "PTT.BK", "PTTEP.BK", "PTTGC.BK", "PYLON.BK", "QH.BK", "QLT.BK", "QTC.BK", "RATCH.BK", "RBF.BK", "RCL.BK",
-        "RICHY.BK", "RJH.BK", "RML.BK", "ROJNA.BK", "RPC.BK", "RPH.BK", "RS.BK", "RSP.BK", "S.BK", "S11.BK",
-        "SABINA.BK", "SAK.BK", "SAPPE.BK", "SAT.BK", "SAWAD.BK", "SC.BK", "SCB.BK", "SCC.BK", "SCCC.BK", "SCGP.BK",
-        "SCI.BK", "SCP.BK", "SDC.BK", "SEAFCO.BK", "SEAOIL.BK", "SECURE.BK", "SELIC.BK", "SENA.BK", "SFLEX.BK", "SGP.BK",
-        "SHR.BK", "SIRI.BK", "SIS.BK", "SITHAI.BK", "SJWD.BK", "SKN.BK", "SKE.BK", "SKR.BK", "SNNP.BK", "SNP.BK",
-        "SORKON.BK", "SPALI.BK", "SPC.BK", "SPCG.BK", "SPG.BK", "SPI.BK", "SPRC.BK", "SR.BK", "SSC.BK", "SSF.BK",
-        "SSP.BK", "SSSC.BK", "STANLY.BK", "STEC.BK", "STGT.BK", "STPI.BK", "SUSCO.BK", "SUTHA.BK", "SVI.BK",
-        "SVOA.BK", "SVT.BK", "SYMC.BK", "SYNEX.BK", "SYNTEC.BK", "TACC.BK", "TAE.BK", "TAKUNI.BK", "TASCO.BK", "TCAP.BK",
-        "TCMC.BK", "TCOAT.BK", "TEAM.BK", "TEGH.BK", "TFFIF.BK", "TFG.BK", "TFMAMA.BK", "TGE.BK", "TGH.BK", "TIDLOR.BK",
-        "TIPH.BK", "TISCO.BK", "TKN.BK", "TKS.BK", "TKT.BK", "TLI.BK", "TM.BK", "TMD.BK", "TMILL.BK", "TMT.BK",
-        "TNP.BK", "TOA.BK", "TOG.BK", "TOP.BK", "TPA.BK", "TPBI.BK", "TPIPL.BK", "TPIPP.BK", "TPOLY.BK", "TPP.BK",
-        "TRC.BK", "TRU.BK", "TRUBB.BK", "TRUE.BK", "TSC.BK", "TSE.BK", "TSI.BK", "TSTH.BK", "TTA.BK", "TTB.BK",
-        "TTCL.BK", "TTI.BK", "TTW.BK", "TU.BK", "TVO.BK", "TWPC.BK", "UAC.BK", "UBE.BK", "UBIS.BK", "UEC.BK",
-        "UKEM.BK", "UMI.BK", "UNIQ.BK", "UP.BK", "UPF.BK", "UPL.BK", "UPOIC.BK", "UV.BK", "UVAN.BK", "VARO.BK",
-        "VGI.BK", "VIBHA.BK", "VIH.BK", "VL.BK", "VNG.BK", "VPO.BK", "W.BK", "WACOAL.BK", "WAVE.BK", "WGE.BK",
-        "WHA.BK", "WHART.BK", "WICE.BK", "WIIK.BK", "WIN.BK", "WORK.BK", "WP.BK", "WPH.BK", "XO.BK", "YGG.BK",
-        "ZEN.BK", "ZIGA.BK", "EPG.BK", "GTV.BK", "MRDIYT.BK"
-    ]
-    
-    # =============================================================
-    # 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
-    # ============================================================
-    @st.cache_data(ttl=3600)
-    def load_from_gsheet():
-        try:
-            client = get_gsheet_client()
-            sheet = client.open('MyStockData').worksheet('StockData')
-            data = sheet.get_all_records()
-            
-            if not data:
-                st.warning("ไม่มีข้อมูลใน Google Sheet ครับ")
-                return None
-                
-            # ดึงข้อมูลออกมาเป็น DataFrame
-            df = pd.DataFrame(data)
-            
-            # ล้างชื่อคอลัมน์ (เผื่อมีช่องว่างติดมา)
-            df.columns = df.columns.str.strip()
-            
-            # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ
-            numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            return df
-    
-        except Exception as e:
-            st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
-            return None
-            
-    def load_and_calculate_stock_data():
-        stock_list = []
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        total = len(SET100_TICKERS)
-        
-        set_market_pre = yf.Ticker("^SET.BK")
-        hist_market_all = set_market_pre.history(period="2y")['Close'].to_frame(name='Market_Close')
-        if hist_market_all.index.tz is not None:
-            hist_market_all.index = hist_market_all.index.tz_localize(None)
-    
-        for i, ticker in enumerate(SET100_TICKERS):
-            try:
-                status_text.text(f"กำลังคำนวณสัญญาณหุ้น: {ticker} ({i+1}/{total})")
-                progress_bar.progress((i + 1) / total)
-                
-                stock = yf.Ticker(ticker)
-                hist = stock.history(period="2y")
-                
-                # ตรวจสอบว่ามีข้อมูลพอหรือไม่
-                if hist.empty or len(hist) < 200: 
-                    continue
-                    
-                if hist.index.tz is not None:
-                    hist.index = hist.index.tz_localize(None)
-                
-                latest_price = hist['Close'].iloc[-1]
-                combined = hist[['Open', 'High', 'Low', 'Close']].join(hist_market_all, how='inner')
-                
-                if combined.empty or len(combined) < 2:
-                    continue
-                    
-                combined['RSI'] = calculate_rsi(combined['Close'], period=14)
-                current_rsi = combined['RSI'].iloc[-1]
-                
-                # คำนวณ RS_Line
-                base_stock = combined['Close'].iloc[0]
-                stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
-                base_market = combined['Market_Close'].iloc[0]
-                market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
-                combined['RS_Line'] = stock_perf - market_perf
-                current_rs_val = combined['RS_Line'].iloc[-1]
-                
-                # คำนวณสถานะเส้น RS
-                is_rs_above_zero = current_rs_val > 0
-                days_above_zero = 0
-                days_below_zero = 0
-                
-                # คำนวณค่าทางเทคนิคแบบปลอดภัย
-                high_3m = combined['High'].iloc[:-1].tail(60).max()
-                high_6m = combined['High'].iloc[:-1].tail(120).max()
-                high_52w = combined['High'].iloc[:-1].tail(250).max()
-    
-                # 1. หาวันที่ล่าสุด (วันปัจจุบันที่รันสแกน)
-                today_date = combined.index[-1]
-                
-                # 2. คำนวณจำนวนวันสำหรับ 3 Month High
-                # หาข้อมูลช่วง 3 เดือนที่ผ่านมา
-                df_3m = combined['High'].tail(60)
-                # หาว่า High สูงสุดเกิดขึ้นที่ตำแหน่งไหน (วันไหน)
-                last_high_3m_date = df_3m[df_3m == high_3m].index[-1]
-                days_3m = (today_date - last_high_3m_date).days
-                
-                # 3. คำนวณจำนวนวันสำหรับ 6 Month High
-                df_6m = combined['High'].tail(120)
-                last_high_6m_date = df_6m[df_6m == high_6m].index[-1]
-                days_6m = (today_date - last_high_6m_date).days
-                
-                # 4. คำนวณจำนวนวันสำหรับ 52 Week High
-                df_52w = combined['High'].tail(250)
-                last_high_52w_date = df_52w[df_52w == high_52w].index[-1]
-                days_52w = (today_date - last_high_52w_date).days
-                
-                # คำนวณปันผลจากข้อมูลจริง (ไม่ใช้ .info)
-                dividends_history = stock.dividends
-                total_div_1y = 0.0
-                if not dividends_history.empty:
-                    last_year = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=365)
-                    div_1y = dividends_history[dividends_history.index.tz_localize(None) > last_year.replace(tzinfo=None)]
-                    total_div_1y = div_1y.sum()
-                
-                calc_div_yield = ((total_div_1y / latest_price) * 100) if total_div_1y > 0 else 0.0
-                
-                # ดึง PE ด้วยวิธีที่ปลอดภัย (ไม่ใช้ .info)
-                pe_ratio = get_pe_ratio(stock)
-                
-                # รวมผลลัพธ์
-                stock_list.append({
-                    'Ticker': ticker.replace('.BK', ''),
-                    'ราคาล่าสุด': round(latest_price, 2),
-                    'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else 0,
-                    'RS_Line': round(current_rs_val, 2),
-                    'PE_Ratio': round(pe_ratio, 2) if pe_ratio else 0,
-                    'ปันผล_%': round(calc_div_yield, 2),
-                    'Is_RS_Above_0': is_rs_above_zero,
-                    'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero,
-                    'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero,
-                    'Is_3M_High': latest_price >= (high_3m * 0.95),
-                    'Is_6M_High': latest_price >= (high_6m * 0.95),
-                    'Is_52W_High': latest_price >= (high_52w * 0.95),
-                    'New_High_3M_มาแล้ว(วัน)': days_3m,
-                    'New_High_6M_มาแล้ว(วัน)': days_6m,
-                    'New_High_52W_มาแล้ว(วัน)': days_52w,
-                })
-                
-                # ใส่หน่วงเวลาเล็กน้อยเพื่อป้องกันการถูกบล็อก
-                time.sleep(0.1)
-                
-            except Exception:
-                continue
-                
-        progress_bar.empty()
-        status_text.empty()
-        return pd.DataFrame(stock_list)
+
     
     
     ###################################################################
@@ -761,7 +533,19 @@ with tab_stock:
 
     def main():
         df_all_stocks = pd.DataFrame() 
+        if "journal_data" not in st.session_state:
+            load_journal()   # <--- ใส่บรรทัดนี้ลงไปครับ! มันจะช่วยดึงข้อมูลจากไฟล์มาโชว์ตอนเปิดแอป
         
+        if "my_portfolio" not in st.session_state:
+            load_portfolio()
+        
+        # เรียกโหลดข้อมูลทุกครั้งที่รันแอปฯ
+        if "my_portfolio" not in st.session_state:
+            load_portfolio()
+        
+        if "journal_data" not in st.session_state:
+            load_journal()
+                
         # 2. กรณีรันผ่าน GitHub Actions (สแกนหุ้นใหม่แล้วบันทึก)
         if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
             print("GitHub Mode: กำลังเริ่มสแกน...")
@@ -792,7 +576,222 @@ with tab_stock:
         
         # --- กรณีรันผ่านหน้าเว็บ Streamlit ---
         st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
-        
+        tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
+        # 1. ส่วนหุ้น
+        with tab_stock:
+            
+            st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย (Mark Minervini Style - RS vs SET Index)")
+            st.write("ระบบสแกนหุ้นกลุ่ม SET100 พร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
+            
+            # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
+            if "selected_ticker" not in st.session_state:
+                st.session_state.selected_ticker = "KBANK"
+            
+            # =============================================================
+            # 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
+            # =============================================================
+            
+            
+            # สารตั้งต้นข้อมูลหุ้นกลุ่ม SET100
+            SET100_TICKERS = [
+                "A5.BK", "AAI.BK", "AAV.BK", "ABM.BK", "ACC.BK", "ACE.BK", "ACG.BK", "ADB.BK", "ADD.BK", "ADVANC.BK",
+                "ADVICE.BK", "AE.BK", "AEONTS.BK", "AF.BK", "AGE.BK", "AH.BK", "AHC.BK", "AI.BK", "AIE.BK", "AIT.BK",
+                "AJ.BK", "AJA.BK", "AKP.BK", "AKR.BK", "ALLA.BK", "ALLY.BK", "ALPHAX.BK", "ALT.BK", "ALUCON.BK", "AMA.BK",
+                "AMANAH.BK", "AMARC.BK", "AMATA.BK", "AMR.BK", "ANAN.BK", "ANI.BK", "AOT.BK", "AP.BK", "APCO.BK", "APCS.BK",
+                "APO.BK", "APP.BK", "APURE.BK", "AQUA.BK", "ARIN.BK", "ARIP.BK", "ARROW.BK", "AS.BK", "ASAP.BK", "ASEFA.BK",
+                "ASIA.BK", "ASIAN.BK", "ASIMAR.BK", "ASK.BK", "ASN.BK", "ASP.BK", "ASW.BK", "ATP30.BK", "AU.BK", "AUCT.BK",
+                "AURA.BK", "AWC.BK", "B.BK", "BA.BK", "BAFS.BK", "BAM.BK", "BANPU.BK", "BAY.BK", "BBGI.BK", "BBIK.BK",
+                "BBL.BK", "BC.BK", "BCH.BK", "BCP.BK", "BCPG.BK", "BCT.BK", "BDMS.BK", "BE8.BK", "BEAUTY.BK", "BEC.BK",
+                "BEM.BK", "BGC.BK", "BGRIM.BK", "BH.BK", "BIS.BK", "BIZ.BK", "BJC.BK", "BJCHI.BK", "BKD.BK", "BLAND.BK",
+                "BLC.BK", "BM.BK", "BOL.BK", "BPP.BK", "BRI.BK", "BRR.BK", "BSBM.BK", "BTG.BK", "BTS.BK", "BWG.BK", "BYD.BK",
+                "CBG.BK", "CCET.BK", "CCP.BK", "CGD.BK", "CH.BK", "CHAYO.BK", "CHEWA.BK", "CHG.BK", "CHO.BK", "CHOW.BK",
+                "CI.BK", "CIG.BK", "CIMBT.BK", "CIVIL.BK", "CK.BK", "CKP.BK", "CM.BK", "CMC.BK", "CMO.BK", "CMR.BK",
+                "CNT.BK", "COLOR.BK", "COM7.BK", "CPALL.BK", "CPF.BK", "CPI.BK", "CPN.BK", "CPT.BK", "CRC.BK", "CRD.BK",
+                "CSC.BK", "CSP.BK", "CSS.BK", "CV.BK", "CWT.BK", "D.BK", "DCC.BK", "DDD.BK", "DELTA.BK", "DEMCO.BK",
+                "DEXON.BK", "DHOUSE.BK", "DITTO.BK", "DMT.BK", "DOHOME.BK", "DOD.BK", "DRT.BK", "DTCENT.BK", "DTCI.BK",
+                "EA.BK", "EASTW.BK", "EE.BK", "EFORL.BK", "EKH.BK", "EMC.BK", "EP.BK", "ERW.BK", "ESTAR.BK", "ETC.BK",
+                "ETE.BK", "EURO.BK", "FANCY.BK", "FMT.BK", "FNS.BK", "FORTH.BK", "FPI.BK", "FSMART.BK", "FSS.BK", "FTE.BK",
+                "GABLE.BK", "GBX.BK", "GC.BK", "GCAP.BK", "GEL.BK", "GENCO.BK", "GFPT.BK", "GGC.BK", "GLAND.BK", "GLOBAL.BK",
+                "GLOCON.BK", "GPI.BK", "GPSC.BK", "GRAMMY.BK", "GREEN.BK", "GSC.BK", "GTB.BK", "GULF.BK", "GUNKUL.BK", "GVREIT.BK",
+                "HANA.BK", "HARN.BK", "HENG.BK", "HFT.BK", "HL.BK", "HMPRO.BK", "HTC.BK", "HTECH.BK", "HUMAN.BK", "HYDRO.BK",
+                "ICC.BK", "ICHI.BK", "ICN.BK", "IFEC.BK", "IFS.BK", "IHL.BK", "III.BK", "ILINK.BK", "IMH.BK", "IND.BK",
+                "INET.BK", "INGRS.BK", "INOX.BK", "INSURE.BK", "INTUCH.BK", "IRC.BK", "IRCP.BK", "IT.BK", "ITC.BK", "ITEL.BK",
+                "ITD.BK", "IVL.BK", "J.BK", "JAS.BK", "JCK.BK", "JCKH.BK", "JMART.BK", "JMT.BK", "JSP.BK", "JTS.BK",
+                "K.BK", "KAMART.BK", "KBANK.BK", "KBS.BK", "KC.BK", "KCE.BK", "KEX.BK", "KGI.BK", "KHC.BK", "KJL.BK",
+                "KKP.BK", "KSL.BK", "KTB.BK", "KTC.BK", "KTIS.BK", "KWC.BK", "KWM.BK", "L&E.BK", "LALIN.BK", "LANNA.BK",
+                "LEO.BK", "LH.BK", "LHK.BK", "LPN.BK", "LRH.BK", "LST.BK", "M.BK", "MACO.BK", "MAJOR.BK", "MAKRO.BK",
+                "MC.BK", "MCA.BK", "MCOT.BK", "MCS.BK", "MDX.BK", "MEGA.BK", "META.BK", "MFC.BK", "MGT.BK", "MICRO.BK",
+                "MINT.BK", "MITSIB.BK", "MJD.BK", "MK.BK", "ML.BK", "MOSHI.BK", "MTC.BK", "NCAP.BK", "NCH.BK", "NER.BK",
+                "NETBAY.BK", "NEX.BK", "NKI.BK", "NNCL.BK", "NOBLE.BK", "NOK.BK", "NRF.BK", "NUSA.BK", "NVD.BK", "NYT.BK",
+                "OCC.BK", "OGC.BK", "OISHI.BK", "OR.BK", "ORI.BK", "OSP.BK", "OTO.BK", "PACE.BK", "PAF.BK", "PAP.BK",
+                "PCSGH.BK", "PDG.BK", "PERM.BK", "PF.BK", "PG.BK", "PHOL.BK", "PICO.BK", "PIN.BK", "PIS.BK", "PLANB.BK",
+                "PLAT.BK", "PLE.BK", "PM.BK", "PMC.BK", "PMP.BK", "PPP.BK", "PPPM.BK", "PR9.BK", "PREB.BK", "PRG.BK",
+                "PRINC.BK", "PRM.BK", "PROEN.BK", "PROS.BK", "PSH.BK", "PSL.BK", "PT.BK", "PTC.BK", "PTG.BK", "PTL.BK",
+                "PTT.BK", "PTTEP.BK", "PTTGC.BK", "PYLON.BK", "QH.BK", "QLT.BK", "QTC.BK", "RATCH.BK", "RBF.BK", "RCL.BK",
+                "RICHY.BK", "RJH.BK", "RML.BK", "ROJNA.BK", "RPC.BK", "RPH.BK", "RS.BK", "RSP.BK", "S.BK", "S11.BK",
+                "SABINA.BK", "SAK.BK", "SAPPE.BK", "SAT.BK", "SAWAD.BK", "SC.BK", "SCB.BK", "SCC.BK", "SCCC.BK", "SCGP.BK",
+                "SCI.BK", "SCP.BK", "SDC.BK", "SEAFCO.BK", "SEAOIL.BK", "SECURE.BK", "SELIC.BK", "SENA.BK", "SFLEX.BK", "SGP.BK",
+                "SHR.BK", "SIRI.BK", "SIS.BK", "SITHAI.BK", "SJWD.BK", "SKN.BK", "SKE.BK", "SKR.BK", "SNNP.BK", "SNP.BK",
+                "SORKON.BK", "SPALI.BK", "SPC.BK", "SPCG.BK", "SPG.BK", "SPI.BK", "SPRC.BK", "SR.BK", "SSC.BK", "SSF.BK",
+                "SSP.BK", "SSSC.BK", "STANLY.BK", "STEC.BK", "STGT.BK", "STPI.BK", "SUSCO.BK", "SUTHA.BK", "SVI.BK",
+                "SVOA.BK", "SVT.BK", "SYMC.BK", "SYNEX.BK", "SYNTEC.BK", "TACC.BK", "TAE.BK", "TAKUNI.BK", "TASCO.BK", "TCAP.BK",
+                "TCMC.BK", "TCOAT.BK", "TEAM.BK", "TEGH.BK", "TFFIF.BK", "TFG.BK", "TFMAMA.BK", "TGE.BK", "TGH.BK", "TIDLOR.BK",
+                "TIPH.BK", "TISCO.BK", "TKN.BK", "TKS.BK", "TKT.BK", "TLI.BK", "TM.BK", "TMD.BK", "TMILL.BK", "TMT.BK",
+                "TNP.BK", "TOA.BK", "TOG.BK", "TOP.BK", "TPA.BK", "TPBI.BK", "TPIPL.BK", "TPIPP.BK", "TPOLY.BK", "TPP.BK",
+                "TRC.BK", "TRU.BK", "TRUBB.BK", "TRUE.BK", "TSC.BK", "TSE.BK", "TSI.BK", "TSTH.BK", "TTA.BK", "TTB.BK",
+                "TTCL.BK", "TTI.BK", "TTW.BK", "TU.BK", "TVO.BK", "TWPC.BK", "UAC.BK", "UBE.BK", "UBIS.BK", "UEC.BK",
+                "UKEM.BK", "UMI.BK", "UNIQ.BK", "UP.BK", "UPF.BK", "UPL.BK", "UPOIC.BK", "UV.BK", "UVAN.BK", "VARO.BK",
+                "VGI.BK", "VIBHA.BK", "VIH.BK", "VL.BK", "VNG.BK", "VPO.BK", "W.BK", "WACOAL.BK", "WAVE.BK", "WGE.BK",
+                "WHA.BK", "WHART.BK", "WICE.BK", "WIIK.BK", "WIN.BK", "WORK.BK", "WP.BK", "WPH.BK", "XO.BK", "YGG.BK",
+                "ZEN.BK", "ZIGA.BK", "EPG.BK", "GTV.BK", "MRDIYT.BK"
+            ]
+            
+            # =============================================================
+            # 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
+            # ============================================================
+            @st.cache_data(ttl=3600)
+            def load_from_gsheet():
+                try:
+                    client = get_gsheet_client()
+                    sheet = client.open('MyStockData').worksheet('StockData')
+                    data = sheet.get_all_records()
+                    
+                    if not data:
+                        st.warning("ไม่มีข้อมูลใน Google Sheet ครับ")
+                        return None
+                        
+                    # ดึงข้อมูลออกมาเป็น DataFrame
+                    df = pd.DataFrame(data)
+                    
+                    # ล้างชื่อคอลัมน์ (เผื่อมีช่องว่างติดมา)
+                    df.columns = df.columns.str.strip()
+                    
+                    # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ
+                    numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
+                    for col in numeric_cols:
+                        if col in df.columns:
+                            df[col] = pd.to_numeric(df[col], errors='coerce')
+                    
+                    return df
+            
+                except Exception as e:
+                    st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+                    return None
+                    
+            def load_and_calculate_stock_data():
+                stock_list = []
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                total = len(SET100_TICKERS)
+                
+                set_market_pre = yf.Ticker("^SET.BK")
+                hist_market_all = set_market_pre.history(period="2y")['Close'].to_frame(name='Market_Close')
+                if hist_market_all.index.tz is not None:
+                    hist_market_all.index = hist_market_all.index.tz_localize(None)
+            
+                for i, ticker in enumerate(SET100_TICKERS):
+                    try:
+                        status_text.text(f"กำลังคำนวณสัญญาณหุ้น: {ticker} ({i+1}/{total})")
+                        progress_bar.progress((i + 1) / total)
+                        
+                        stock = yf.Ticker(ticker)
+                        hist = stock.history(period="2y")
+                        
+                        # ตรวจสอบว่ามีข้อมูลพอหรือไม่
+                        if hist.empty or len(hist) < 200: 
+                            continue
+                            
+                        if hist.index.tz is not None:
+                            hist.index = hist.index.tz_localize(None)
+                        
+                        latest_price = hist['Close'].iloc[-1]
+                        combined = hist[['Open', 'High', 'Low', 'Close']].join(hist_market_all, how='inner')
+                        
+                        if combined.empty or len(combined) < 2:
+                            continue
+                            
+                        combined['RSI'] = calculate_rsi(combined['Close'], period=14)
+                        current_rsi = combined['RSI'].iloc[-1]
+                        
+                        # คำนวณ RS_Line
+                        base_stock = combined['Close'].iloc[0]
+                        stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
+                        base_market = combined['Market_Close'].iloc[0]
+                        market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
+                        combined['RS_Line'] = stock_perf - market_perf
+                        current_rs_val = combined['RS_Line'].iloc[-1]
+                        
+                        # คำนวณสถานะเส้น RS
+                        is_rs_above_zero = current_rs_val > 0
+                        days_above_zero = 0
+                        days_below_zero = 0
+                        
+                        # คำนวณค่าทางเทคนิคแบบปลอดภัย
+                        high_3m = combined['High'].iloc[:-1].tail(60).max()
+                        high_6m = combined['High'].iloc[:-1].tail(120).max()
+                        high_52w = combined['High'].iloc[:-1].tail(250).max()
+            
+                        # 1. หาวันที่ล่าสุด (วันปัจจุบันที่รันสแกน)
+                        today_date = combined.index[-1]
+                        
+                        # 2. คำนวณจำนวนวันสำหรับ 3 Month High
+                        # หาข้อมูลช่วง 3 เดือนที่ผ่านมา
+                        df_3m = combined['High'].tail(60)
+                        # หาว่า High สูงสุดเกิดขึ้นที่ตำแหน่งไหน (วันไหน)
+                        last_high_3m_date = df_3m[df_3m == high_3m].index[-1]
+                        days_3m = (today_date - last_high_3m_date).days
+                        
+                        # 3. คำนวณจำนวนวันสำหรับ 6 Month High
+                        df_6m = combined['High'].tail(120)
+                        last_high_6m_date = df_6m[df_6m == high_6m].index[-1]
+                        days_6m = (today_date - last_high_6m_date).days
+                        
+                        # 4. คำนวณจำนวนวันสำหรับ 52 Week High
+                        df_52w = combined['High'].tail(250)
+                        last_high_52w_date = df_52w[df_52w == high_52w].index[-1]
+                        days_52w = (today_date - last_high_52w_date).days
+                        
+                        # คำนวณปันผลจากข้อมูลจริง (ไม่ใช้ .info)
+                        dividends_history = stock.dividends
+                        total_div_1y = 0.0
+                        if not dividends_history.empty:
+                            last_year = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=365)
+                            div_1y = dividends_history[dividends_history.index.tz_localize(None) > last_year.replace(tzinfo=None)]
+                            total_div_1y = div_1y.sum()
+                        
+                        calc_div_yield = ((total_div_1y / latest_price) * 100) if total_div_1y > 0 else 0.0
+                        
+                        # ดึง PE ด้วยวิธีที่ปลอดภัย (ไม่ใช้ .info)
+                        pe_ratio = get_pe_ratio(stock)
+                        
+                        # รวมผลลัพธ์
+                        stock_list.append({
+                            'Ticker': ticker.replace('.BK', ''),
+                            'ราคาล่าสุด': round(latest_price, 2),
+                            'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else 0,
+                            'RS_Line': round(current_rs_val, 2),
+                            'PE_Ratio': round(pe_ratio, 2) if pe_ratio else 0,
+                            'ปันผล_%': round(calc_div_yield, 2),
+                            'Is_RS_Above_0': is_rs_above_zero,
+                            'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero,
+                            'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero,
+                            'Is_3M_High': latest_price >= (high_3m * 0.95),
+                            'Is_6M_High': latest_price >= (high_6m * 0.95),
+                            'Is_52W_High': latest_price >= (high_52w * 0.95),
+                            'New_High_3M_มาแล้ว(วัน)': days_3m,
+                            'New_High_6M_มาแล้ว(วัน)': days_6m,
+                            'New_High_52W_มาแล้ว(วัน)': days_52w,
+                        })
+                        
+                        # ใส่หน่วงเวลาเล็กน้อยเพื่อป้องกันการถูกบล็อก
+                        time.sleep(0.1)
+                        
+                    except Exception:
+                        continue
+                        
+                progress_bar.empty()
+                status_text.empty()
+                return pd.DataFrame(stock_list)
         # ดึงข้อมูลจาก Sheets หรือ Yahoo
         if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
             with st.spinner("กำลังดึงข้อมูลจาก Yahoo Finance..."):
