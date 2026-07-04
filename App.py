@@ -309,12 +309,13 @@ def load_total_cash_balance():
         sheet = client.open('MyStockData').worksheet('CashFlow')
         df = pd.DataFrame(sheet.get_all_records())
         
-        if not df.empty:
-            # รวมยอด Amount ทั้งหมด
+        # กรองเฉพาะคอลัมน์ Amount และแปลงเป็นตัวเลข
+        if 'Amount' in df.columns:
+            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
             return float(df['Amount'].sum())
-        return 69102.44 # ถ้าไม่มีข้อมูลให้ใช้ยอดเริ่มต้น
-    except:
-        return 69102.44
+        return 0.0
+    except Exception as e:
+        return 0.0
         
 # ฟังก์ชัน Load ไฟล์ CSV/Excel (ยังคงใช้ได้เหมือนเดิม)
 def load_data_from_file(uploaded_file):
