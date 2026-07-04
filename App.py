@@ -1940,7 +1940,10 @@ with tab_stock:
                         risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
                     
                     with r_col2:
-                        # ... (ส่วนเดิมของ sl_type ที่พี่อ้ำมีอยู่) ...
+                        # เพิ่มค่าเริ่มต้นไว้ก่อนเข้าเงื่อนไข
+                        latest_p = float(latest_price_single)
+                        sl_price = latest_p * 0.95  # สมมติให้ค่า default คือคัทที่ 5% ถ้าไม่ได้เลือกอะไรเลย
+                                          
                         sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
                             f"เส้น EMA 10 ({chart_combined['EMA10'].iloc[-1]:.2f} บาท)",
                             f"เส้น EMA 20 ({chart_combined['EMA20'].iloc[-1]:.2f} บาท)",
@@ -1948,9 +1951,7 @@ with tab_stock:
                             "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
                         ])
                         
-                        # ... (ส่วนการคำนวณ sl_price ที่พี่อ้ำมีอยู่) ...
                         latest_p = float(latest_price_single)
-                        # ... [โค้ดส่วนเดิมของพี่อ้ำ] ...
                     
                     # 3. ผลลัพธ์
                     max_risk_money = total_cap * (risk_pct / 100)
