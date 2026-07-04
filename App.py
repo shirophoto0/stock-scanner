@@ -1913,11 +1913,22 @@ with tab_stock:
             ############################        
             with tab_risk:
                     st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing (ตามหลัก Minervini)")
+
+                    # 1. คำนวณเงินทุนทั้งหมดที่มี (เงินสด + มูลค่าหุ้นที่ถืออยู่)
+                    # ใช้ฟังก์ชัน load_total_cash_balance() ที่เราทำไว้ และบวกมูลค่าหุ้นจริงจากตลาด
+                    current_total_equity = load_total_cash_balance() + get_total_market_value()
                     
                     r_col1, r_col2 = st.columns([1, 1])
                     with r_col1:
-                        total_cap = st.number_input("1. เงินทุนทั้งหมดในพอร์ตของพี่อ้ำ (บาท):", min_value=5000, value=100000, step=5000)
-                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดที่ยอมขาดทุนต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, help="ตามหลักสากลแนะนำไม่เกิน 1%")
+                        # นำค่า current_total_equity มาเป็นค่าเริ่มต้น (value) ของ input
+                        total_cap = st.number_input(
+                            "1. เงินทุนทั้งหมดในพอร์ต (บาท):", 
+                            min_value=5000, 
+                            value=float(current_total_equity), 
+                            step=5000,
+                            help="เงินสดรวมกับมูลค่าหุ้นปัจจุบันในพอร์ต"
+                        )
+                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดที่ยอมขาดทุนต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
                     
                     with r_col2:
                         sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
@@ -1936,14 +1947,14 @@ with tab_stock:
                             fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
                             sl_price = latest_p * (1 - (fixed_sl_pct / 100))
                         else:
-                            sl_price = st.number_input("ระบุราคา Stop Loss ที่ต้องการคัท (บาท):", min_value=0.0, value=latest_p * 0.93, step=0.25)
+                            sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93, step=0.25)
                     
                     # ประมวลผลลัพธ์คุมเสี่ยง
                     max_risk_money = total_cap * (risk_pct / 100)
                     risk_per_share = latest_p - sl_price
                     
                     if risk_per_share <= 0:
-                        st.error("⚠️ ขอบเขตราคาผิดพลาด: ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับพี่อ้ำ กรุณาปรับใหม่อีกครั้ง")
+                        st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
                     else:
                         shares_to_buy = int(max_risk_money / risk_per_share)
                         total_buy_value = shares_to_buy * latest_p
@@ -1952,10 +1963,10 @@ with tab_stock:
                         
                         st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
                         res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-                        res_col1.metric(label="จำนวนหุ้นที่ควรซื้อ", value=f"{shares_to_buy:,} หุ้น")
-                        res_col2.metric(label="เงินลงทุนไม้ซื้อนี้ (Position Size)", value=f"{total_buy_value:,.2f} บาท", delta=f"{portfolio_exposure:.1f}% ของพอร์ต")
-                        res_col3.metric(label="ตั้ง Stop Loss ที่ราคา", value=f"{sl_price:.2f} บาท", delta=f"-{actual_sl_pct:.2f}%")
-                        res_col4.metric(label="หากแพ้จะเสียเงินสูงสุด", value=f"{max_risk_money:,.2f} บาท", delta="ปลอดภัยตามวินัยเทรด", delta_color="inverse")
+                        res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
+                        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿", f"{portfolio_exposure:.1f}% ของพอร์ต")
+                        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿", f"-{actual_sl_pct:.1f}%")
+                        res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
             #######################          
                     st.markdown("---")
                     # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
