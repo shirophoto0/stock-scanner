@@ -116,19 +116,19 @@ def get_cached_stock_info(ticker):
     stock = yf.Ticker(ticker)
     return stock.info  
     
-#def clear_and_save_data(df, sheet_name):
-   # client = get_gsheet_client()
-   # sheet = client.open('MyStockData').worksheet('TradingPlan')
+def clear_and_save_data(df, sheet_name):
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet('TradingPlan')
     
-    # ต้องสั่ง clear() ก่อนเสมอ เพื่อลบข้อมูลเก่าทั้งหมดทิ้ง (แถวที่ลบไปจะหายไป)
-    #sheet.clear()
+    #ต้องสั่ง clear() ก่อนเสมอ เพื่อลบข้อมูลเก่าทั้งหมดทิ้ง (แถวที่ลบไปจะหายไป)
+    sheet.clear()
     
     # ส่ง Header + ข้อมูล
-   # data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
+    data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
     
     # ระบุ 'A1' เพื่อให้เริ่มวางที่หัวตาราง
-    #sheet.update('A1', data_to_save)
-    #return True
+    sheet.update('A1', data_to_save)
+    return True
 
 def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
