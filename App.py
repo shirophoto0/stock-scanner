@@ -1929,21 +1929,20 @@ with tab_stock:
                     
                     # 2. ส่วนการคำนวณ
                     r_col1, r_col2 = st.columns([1, 1])
+
                     with r_col1:
                         total_cap = st.number_input(
                             "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
                             min_value=1000, 
-                            value=int(total_equity), # นี่คือค่าเริ่มต้น (จะอัปเดตตามเงินจริง)
+                            value=int(total_equity), # นี่คือค่าเริ่มต้นที่ดึงมาจากพอร์ตจริง
                             step=1000,
                             help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
                         )
                         risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
                     
                     with r_col2:
-                        # เพิ่มค่าเริ่มต้นไว้ก่อนเข้าเงื่อนไข
                         latest_p = float(latest_price_single)
-                        sl_price = latest_p * 0.95  # สมมติให้ค่า default คือคัทที่ 5% ถ้าไม่ได้เลือกอะไรเลย
-                                          
+                        
                         sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
                             f"เส้น EMA 10 ({chart_combined['EMA10'].iloc[-1]:.2f} บาท)",
                             f"เส้น EMA 20 ({chart_combined['EMA20'].iloc[-1]:.2f} บาท)",
@@ -1951,12 +1950,22 @@ with tab_stock:
                             "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
                         ])
                         
-                        latest_p = float(latest_price_single)
+                        # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
+                        if "EMA 10" in sl_type:
+                            sl_price = float(chart_combined['EMA10'].iloc[-1])
+                        elif "EMA 20" in sl_type:
+                            sl_price = float(chart_combined['EMA20'].iloc[-1])
+                        elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
+                            fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
+                            sl_price = latest_p * (1 - (fixed_sl_pct / 100))
+                        else: # Manual Price
+                            sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93, step=0.25)
                     
-                    # 3. ผลลัพธ์
+                    # 3. คำนวณผลลัพธ์
                     max_risk_money = total_cap * (risk_pct / 100)
                     risk_per_share = latest_p - sl_price
                     
+                    # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
                     if risk_per_share <= 0:
                         st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
                     else:
@@ -1969,7 +1978,7 @@ with tab_stock:
                         res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
                         res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
                         res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
-                        
+                                            
             #######################          
                     st.markdown("---")
                     # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
