@@ -2236,9 +2236,8 @@ with tab_stock:
                             
                             for c in cols:
                                 if c not in final_df.columns: final_df[c] = ""
-                            
-                            # ใช้ save_to_gsheet แทน (ตามที่พี่อ้ำคุยไว้ก่อนหน้า)
-                            if save_to_gsheet(final_df[cols], "TradingPlan"):
+                                    
+                            if clear_and_save_data(final_df[cols], "TradingPlan"):
                                 st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
                                 st.cache_data.clear()
                                 st.rerun()
