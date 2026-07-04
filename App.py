@@ -1912,25 +1912,35 @@ with tab_stock:
             
             ############################        
             with tab_risk:
-                    st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing (ตามหลัก Minervini)")
+                    st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
 
-                    # 1. คำนวณเงินทุนทั้งหมดที่มี (เงินสด + มูลค่าหุ้นที่ถืออยู่)
-                    # ใช้ฟังก์ชัน load_total_cash_balance() ที่เราทำไว้ และบวกมูลค่าหุ้นจริงจากตลาด
-                    current_total_equity = load_total_cash_balance() + get_total_market_value()
+                    # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
+                    cash_balance = load_total_cash_balance()
+                    market_value = get_total_market_value()
+                    total_equity = cash_balance + market_value
                     
+                    st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
+                    col_a, col_b, col_c = st.columns(3)
+                    col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
+                    col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
+                    col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
+                    
+                    st.divider()
+                    
+                    # 2. ส่วนการคำนวณ
                     r_col1, r_col2 = st.columns([1, 1])
                     with r_col1:
-                        # นำค่า current_total_equity มาเป็นค่าเริ่มต้น (value) ของ input
                         total_cap = st.number_input(
-                            "1. เงินทุนทั้งหมดในพอร์ต (บาท):", 
-                            min_value=5000, 
-                            value=int(current_total_equity),  # เปลี่ยนจาก float เป็น int
-                            step=5000,                        # ต้องเป็น int ด้วย
-                            help="เงินสดรวมกับมูลค่าหุ้นปัจจุบันในพอร์ต"
+                            "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
+                            min_value=1000, 
+                            value=int(total_equity), # นี่คือค่าเริ่มต้น (จะอัปเดตตามเงินจริง)
+                            step=1000,
+                            help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
                         )
-                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดที่ยอมขาดทุนต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
+                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
                     
                     with r_col2:
+                        # ... (ส่วนเดิมของ sl_type ที่พี่อ้ำมีอยู่) ...
                         sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
                             f"เส้น EMA 10 ({chart_combined['EMA10'].iloc[-1]:.2f} บาท)",
                             f"เส้น EMA 20 ({chart_combined['EMA20'].iloc[-1]:.2f} บาท)",
@@ -1938,18 +1948,11 @@ with tab_stock:
                             "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
                         ])
                         
+                        # ... (ส่วนการคำนวณ sl_price ที่พี่อ้ำมีอยู่) ...
                         latest_p = float(latest_price_single)
-                        if "EMA 10" in sl_type:
-                            sl_price = chart_combined['EMA10'].iloc[-1]
-                        elif "EMA 20" in sl_type:
-                            sl_price = chart_combined['EMA20'].iloc[-1]
-                        elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                            fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
-                            sl_price = latest_p * (1 - (fixed_sl_pct / 100))
-                        else:
-                            sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93, step=0.25)
+                        # ... [โค้ดส่วนเดิมของพี่อ้ำ] ...
                     
-                    # ประมวลผลลัพธ์คุมเสี่ยง
+                    # 3. ผลลัพธ์
                     max_risk_money = total_cap * (risk_pct / 100)
                     risk_per_share = latest_p - sl_price
                     
@@ -1958,15 +1961,14 @@ with tab_stock:
                     else:
                         shares_to_buy = int(max_risk_money / risk_per_share)
                         total_buy_value = shares_to_buy * latest_p
-                        portfolio_exposure = (total_buy_value / total_cap) * 100
-                        actual_sl_pct = ((latest_p - sl_price) / latest_p) * 100
                         
                         st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
                         res_col1, res_col2, res_col3, res_col4 = st.columns(4)
                         res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
-                        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿", f"{portfolio_exposure:.1f}% ของพอร์ต")
-                        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿", f"-{actual_sl_pct:.1f}%")
+                        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
+                        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
                         res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
+                        
             #######################          
                     st.markdown("---")
                     # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
