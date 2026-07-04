@@ -80,23 +80,30 @@ def calculate_tfex_result(entry, close, size, comm, Status):
     }
     
 def save_data_to_sheet(df, sheet_name):
-    # ป้องกันการบันทึกถ้า df ว่างเปล่า เพื่อไม่ให้ข้อมูลหาย
+    """
+    ฟังก์ชันสำหรับบันทึกรายการ TFEX ใหม่ต่อท้ายตารางเดิม
+    ปลอดภัยที่สุด: ใช้ append_rows เพื่อไม่ให้ข้อมูลเก่าใน Sheet เสียหาย
+    """
     if df.empty:
         st.warning("ไม่มีข้อมูลที่จะบันทึก")
         return False
         
     try:
-        client = get_gsheet_client() # ใช้ Client เดิมของพี่อ้ำ
-        sheet = client.open('MyStockData').worksheet(sheet_name)
+        client = get_gsheet_client()
+        # เปลี่ยนชื่อไฟล์ให้ตรงกับที่พี่อ้ำใช้จริง
+        sheet = client.open('MyStockData').worksheet('TFEX_Histoy')
         
-        # เพิ่มข้อมูลต่อท้าย (Append) เท่านั้น ห้าม update ห้าม clear
-        # วิธีนี้ปลอดภัยที่สุด ข้อมูลเดิมจะอยู่ครบ
-        sheet.append_rows(df.values.tolist())
+        # แปลงข้อมูลเป็น List ของ List (ไม่เอา Header ไปด้วย เพราะเราจะเอาไปต่อท้าย)
+        # ถ้าอยากให้ชัวร์ว่าลำดับคอลัมน์ตรง ให้มั่นใจว่า df มีคอลัมน์ครบตาม Sheet
+        data_to_append = df.values.tolist()
+        
+        # ใช้ append_rows เพื่อบันทึกต่อท้าย
+        sheet.append_rows(data_to_append)
         
         return True
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
-        return False
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก TFEX: {e}")
+        return False    
 ####################
 
 @st.cache_data(ttl=60)
@@ -115,46 +122,41 @@ def load_data(sheet_name):
 def get_cached_stock_info(ticker):
     stock = yf.Ticker(ticker)
     return stock.info  
-    
-def clear_and_save_data(df, sheet_name):
+
+# =============================================================
+# 1. ฟังก์ชันสำหรับบันทึก (แก้ไขให้แม่นยำ)
+# =============================================================
+
+def save_data_to_trading_plan(df):
+    """ใช้สำหรับบันทึก Trading Plan โดยเฉพาะ"""
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('TradingPlan')
         
-        # ล้างข้อมูลเดิม
-        sheet.clear()
+        sheet.clear() # ล้างของเก่าทิ้ง
         
-        # เลือกเฉพาะคอลัมน์หลักที่เราใช้ในตาราง เพื่อความชัวร์
-        cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Alert_Date', 'Timestamp', 'Image_URL']
-        # กรองเอาเฉพาะคอลัมน์ที่มีอยู่จริง
-        save_df = df[[c for c in cols if c in df.columns]]
-        
-        # เตรียมข้อมูล Header + Data
-        data_to_save = [save_df.columns.tolist()] + save_df.fillna("").values.tolist()
-        
-        # บันทึก
+        # เขียน Header + Data
+        data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
         sheet.update('A1', data_to_save)
-        return True
+        st.success("บันทึก Trading Plan สำเร็จ!")
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาด: {e}")
-        return False
+        st.error(f"Save Trading Plan พัง: {e}")
 
-def save_to_gsheet(df, sheet_name='StockData'):
-    client = get_gsheet_client()
-    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-    sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
-    
-    # --- จุดแก้ไขสำคัญ: ล้างข้อมูลก่อนส่ง ---
-    # 1. แทนที่ค่าที่เป็น NaN หรือ None ให้เป็นค่าว่าง ""
-    # 2. แทนที่ค่า Infinity (inf) ให้เป็น 0
-    df = df.replace([np.inf, -np.inf], 0).fillna("")
-    
-    # รวม Header และ ข้อมูล
-    data_to_write = [df.columns.tolist()] + df.values.tolist()
-    
-    # ใช้ชื่อพารามิเตอร์เพื่อให้เป็นไปตามกฎใหม่ของ gspread
-    sheet.update(range_name='A1', values=data_to_write)
-    print(f"บันทึกข้อมูลลง {sheet_name} สำเร็จ!")
+def update_stock_data_sheet(df):
+    """ใช้สำหรับอัปเดตข้อมูล Scan หุ้น (StockData) เท่านั้น"""
+    try:
+        client = get_gsheet_client()
+        spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+        sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
+        
+        # เตรียมข้อมูล
+        df_clean = df.replace([np.inf, -np.inf], 0).fillna("")
+        data_to_write = [df_clean.columns.tolist()] + df_clean.values.tolist()
+        
+        sheet.update('A1', data_to_write)
+        print("อัปเดต StockData เรียบร้อย")
+    except Exception as e:
+        st.error(f"อัปเดต StockData พัง: {e}")
     
 def get_gsheet_client():
     scope = [
@@ -757,23 +759,26 @@ with tab_stock:
     # Def Main ส่วนครอบ code ทั้งหมด
     ######################################
     st.set_page_config(layout="wide")
+
     def main():
-        
         df_all_stocks = pd.DataFrame() 
-        filtered_df = None
         
         # 2. กรณีรันผ่าน GitHub Actions (สแกนหุ้นใหม่แล้วบันทึก)
         if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
             print("GitHub Mode: กำลังเริ่มสแกน...")
             df_new = load_and_calculate_stock_data()
-            save_to_gsheet(df_new)
+            
+            # ใช้ฟังก์ชันใหม่ที่ปลอดภัยแทน
+            update_stock_data_sheet(df_new)
+            
             print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
             return 
-    
+        
         # 3. กรณีรันโหมดปกติบน Streamlit Cloud (ดึงข้อมูลจาก Sheet มาแสดง)
         else:
             try:
-                # ดึงข้อมูลจาก Sheet ที่เราบันทึกไว้ในโหมด GitHub
+                # ใช้ฟังก์ชัน load ที่เราเคยเขียนไว้เพื่อให้ง่ายต่อการจัดการ
+                # หรือถ้าพี่อ้ำสะดวกดึงตรงๆ ก็ใช้โค้ดที่เคยมีได้ครับ แต่อันนี้จะสะอาดขึ้น
                 client = get_gsheet_client()
                 spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
                 sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
@@ -791,20 +796,35 @@ with tab_stock:
         
         # ดึงข้อมูลจาก Sheets หรือ Yahoo
         if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
-            with st.spinner("กำลังดึงข้อมูล..."):
-                df_all_stocks = load_and_calculate_stock_data()
-                save_to_gsheet(df_all_stocks)
-        else:
-            try:
-                df_all_stocks = load_from_gsheet()
-                st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
-            except:
-                st.warning("⚠️ ไม่พบข้อมูลใน Sheet กำลังโหลดใหม่...")
+            with st.spinner("กำลังดึงข้อมูลจาก Yahoo Finance..."):
+                # 1. คำนวณข้อมูลใหม่
                 df_all_stocks = load_and_calculate_stock_data()
                 
-                # แสดงตาราง
-                st.dataframe(filtered_df, use_container_width=True)
-            
+                # 2. บันทึกลง StockData โดยเฉพาะ (ปลอดภัย ไม่ทับงานอื่น)
+                update_stock_data_sheet(df_all_stocks)
+                
+                st.success("✅ อัปเดตข้อมูลหุ้นลง Google Sheets เรียบร้อย!")
+                st.cache_data.clear() # ล้าง Cache เพื่อให้ข้อมูลใหม่แสดงผลทันที
+                st.rerun()
+        else:
+            # กรณีโหลดปกติ
+            try:
+                # สมมติว่ามีฟังก์ชัน load_from_gsheet (หรือเปลี่ยนเป็น load_data('StockData'))
+                df_all_stocks = load_from_gsheet()
+                if df_all_stocks.empty:
+                    raise Exception("ข้อมูลว่างเปล่า")
+                st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
+            except Exception as e:
+                st.warning(f"⚠️ ไม่พบข้อมูลหรือโหลดไม่สำเร็จ ({e}) กำลังคำนวณใหม่...")
+                df_all_stocks = load_and_calculate_stock_data()
+                # บันทึกกลับลงไปเพื่อเป็นข้อมูลตั้งต้น
+                update_stock_data_sheet(df_all_stocks)
+        
+        # แสดงตาราง (ตรวจสอบให้แน่ใจว่า df_all_stocks พร้อมก่อนแสดงผล)
+        if not df_all_stocks.empty:
+            st.dataframe(df_all_stocks, use_container_width=True)
+        else:
+            st.error("ไม่พบข้อมูลหุ้นในระบบ")
             ################################
             # 1. Slidebar (ตัวกรอง)
             ################################
@@ -2168,10 +2188,10 @@ with tab_stock:
                                     new_df = pd.DataFrame([new_data])
                                     final_df = pd.concat([current_df, new_df], ignore_index=True)
                                     
-                                # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน clear_and_save_data
+                                # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน
                                 # (เพราะฟังก์ชันนี้ลบของเก่าแล้วเขียนทับใหม่ เราจึงต้องส่ง 'ข้อมูลก้อนใหม่' ที่รวมตัวเก่าไปให้)
-                                if clear_and_save_data(final_df, "TradingPlan"):
-                                    st.success("บันทึกแผนเรียบร้อย!")
+                                if save_data_to_trading_plan(final_df[cols]):
+                                    st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
                                     st.cache_data.clear()
                                     st.rerun()
                                 else:
@@ -2237,8 +2257,7 @@ with tab_stock:
                             for c in cols:
                                 if c not in final_df.columns: final_df[c] = ""
                             
-                            # ใช้ save_to_gsheet แทน (ตามที่พี่อ้ำคุยไว้ก่อนหน้า)
-                            if save_to_gsheet(final_df[cols], "TradingPlan"):
+                            if save_data_to_trading_plan(final_df[cols], "TradingPlan"):
                                 st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
                                 st.cache_data.clear()
                                 st.rerun()
