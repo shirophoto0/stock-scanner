@@ -307,15 +307,25 @@ def load_total_cash_balance():
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('CashFlow')
-        df = pd.DataFrame(sheet.get_all_records())
         
-        # กรองเฉพาะคอลัมน์ Amount และแปลงเป็นตัวเลข
+        # ดึงข้อมูลทั้งหมด
+        records = sheet.get_all_records()
+        df = pd.DataFrame(records)
+        
+        # ตรวจสอบว่าคอลัมน์ Amount มีอยู่จริง
         if 'Amount' in df.columns:
+            # 1. แปลงค่าใน Amount ให้เป็นตัวเลข ถ้าเจอข้อความ ให้เปลี่ยนเป็น NaN
             df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
-            return float(df['Amount'].sum())
-        return 0.0
+            
+            # 2. .dropna() จะลบแถวที่แปลงไม่ได้ (พวกที่มีข้อความ) ออกไป
+            # 3. .sum() จะบวกเฉพาะตัวเลขที่เหลือ
+            total_balance = df['Amount'].dropna().sum()
+            return float(total_balance)
+        
+        return 69102.44 # ยอดเริ่มต้นถ้าหาคอลัมน์ไม่เจอ
     except Exception as e:
-        return 0.0
+        print(f"DEBUG: Error ในการโหลดเงินสด: {e}")
+        return 69102.44
         
 # ฟังก์ชัน Load ไฟล์ CSV/Excel (ยังคงใช้ได้เหมือนเดิม)
 def load_data_from_file(uploaded_file):
