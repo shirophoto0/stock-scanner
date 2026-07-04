@@ -498,6 +498,20 @@ def check_alerts(row):
     
     # ถ้าไม่เข้าเงื่อนไขเลย ให้คืนค่าปกติ
     return "ปกติ"
+
+def calculate_rsi(series, period=14):
+        delta = series.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+def highlight_rsi_zones(row):
+    if row['RSI_14'] >= 65.0:
+        return ['background-color: #fce4d6; color: black'] * len(row)
+    elif 30.0 <= row['RSI_14'] <= 45.0:
+        return ['background-color: #e2f0d9; color: black'] * len(row)
+    return [''] * len(row)
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
@@ -531,13 +545,7 @@ with tab_stock:
     # =============================================================
     # 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
     # =============================================================
-    def calculate_rsi(series, period=14):
-        delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
+    
     
     # สารตั้งต้นข้อมูลหุ้นกลุ่ม SET100
     SET100_TICKERS = [
@@ -745,12 +753,7 @@ with tab_stock:
     # # --- ฟังก์ชัน Main ---
     ###################################################################
     
-    def highlight_rsi_zones(row):
-        if row['RSI_14'] >= 65.0:
-            return ['background-color: #fce4d6; color: black'] * len(row)
-        elif 30.0 <= row['RSI_14'] <= 45.0:
-            return ['background-color: #e2f0d9; color: black'] * len(row)
-        return [''] * len(row)
+  
     
     #####################################
     # Def Main ส่วนครอบ code ทั้งหมด
