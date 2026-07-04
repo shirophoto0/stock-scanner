@@ -1497,7 +1497,7 @@ with tab_stock:
                 
                 # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
                 if "cash_balance" not in st.session_state:
-                    st.session_state.cash_balance = load_cash_balance()
+                    st.session_state.cash_balance = load_total_cash_balance()
                     
                 # ส่วนแสดงปุ่มเข้าออกเงินสด 
                 with st.expander("💰 บันทึกรายการเงินสดเข้า-ออก"):
