@@ -117,18 +117,27 @@ def get_cached_stock_info(ticker):
     return stock.info  
     
 def clear_and_save_data(df, sheet_name):
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('TradingPlan')
-    
-    #ต้องสั่ง clear() ก่อนเสมอ เพื่อลบข้อมูลเก่าทั้งหมดทิ้ง (แถวที่ลบไปจะหายไป)
-    sheet.clear()
-    
-    # ส่ง Header + ข้อมูล
-    data_to_save = [df.columns.tolist()] + df.fillna("").values.tolist()
-    
-    # ระบุ 'A1' เพื่อให้เริ่มวางที่หัวตาราง
-    sheet.update('A1', data_to_save)
-    return True
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet('TradingPlan')
+        
+        # ล้างข้อมูลเดิม
+        sheet.clear()
+        
+        # เลือกเฉพาะคอลัมน์หลักที่เราใช้ในตาราง เพื่อความชัวร์
+        cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Alert_Date', 'Timestamp', 'Image_URL']
+        # กรองเอาเฉพาะคอลัมน์ที่มีอยู่จริง
+        save_df = df[[c for c in cols if c in df.columns]]
+        
+        # เตรียมข้อมูล Header + Data
+        data_to_save = [save_df.columns.tolist()] + save_df.fillna("").values.tolist()
+        
+        # บันทึก
+        sheet.update('A1', data_to_save)
+        return True
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาด: {e}")
+        return False
 
 def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
@@ -2138,18 +2147,36 @@ with tab_stock:
                                 st.error("กรุณาระบุชื่อหุ้นครับ!")
                             else:
                                 from datetime import datetime
+                                
+                                # 1. สร้าง Dictionary ของหุ้นใหม่
                                 new_data = {
                                     'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
                                     'Stop_Loss': stop_loss, 'แนวรับ': support, 'แนวต้าน': resistance, 
                                     'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
                                     'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    'Image_URL': image_url
+                                    'Image_URL': image_url, 'Alert_Date': ''
                                 }
-                                if save_trading_plan_exclusive(pd.DataFrame([new_data])):
+                                
+                                # 2. โหลดข้อมูลปัจจุบันจาก Google Sheet ออกมาก่อน
+                                current_df = load_data("TradingPlan")
+                                
+                                # ถ้าตารางว่าง ให้สร้าง DataFrame ใหม่ขึ้นมาเลย
+                                if current_df is None or current_df.empty:
+                                    final_df = pd.DataFrame([new_data])
+                                else:
+                                    # รวมหุ้นเดิมกับหุ้นใหม่เข้าด้วยกัน
+                                    new_df = pd.DataFrame([new_data])
+                                    final_df = pd.concat([current_df, new_df], ignore_index=True)
+                                    
+                                # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน clear_and_save_data
+                                # (เพราะฟังก์ชันนี้ลบของเก่าแล้วเขียนทับใหม่ เราจึงต้องส่ง 'ข้อมูลก้อนใหม่' ที่รวมตัวเก่าไปให้)
+                                if clear_and_save_data(final_df, "TradingPlan"):
                                     st.success("บันทึกแผนเรียบร้อย!")
                                     st.cache_data.clear()
                                     st.rerun()
-                    
+                                else:
+                                    st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ")
+                                            
                         # 2. ส่วนตารางแสดงผล (แยกออกมาเป็นอิสระ)
                         st.divider()
                         st.subheader("📊 ตารางแผนการเทรดของฉัน")
