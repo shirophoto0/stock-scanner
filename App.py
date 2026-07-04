@@ -1924,8 +1924,8 @@ with tab_stock:
                         total_cap = st.number_input(
                             "1. เงินทุนทั้งหมดในพอร์ต (บาท):", 
                             min_value=5000, 
-                            value=float(current_total_equity), 
-                            step=5000,
+                            value=int(current_total_equity),  # เปลี่ยนจาก float เป็น int
+                            step=5000,                        # ต้องเป็น int ด้วย
                             help="เงินสดรวมกับมูลค่าหุ้นปัจจุบันในพอร์ต"
                         )
                         risk_pct = st.slider("2. ความเสี่ยงสูงสุดที่ยอมขาดทุนต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
