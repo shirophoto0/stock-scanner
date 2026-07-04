@@ -2211,19 +2211,21 @@ with tab_stock:
                         edited_df = st.data_editor(
                             plan_df[cols],
                             column_config={
-                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True),
-                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f"),
-                                "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f"),    
-                                "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f"),
-                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True),
-                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f"),
-                                "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f"),
-                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True),
-                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True),
-                                "Alert_Date": st.column_config.TextColumn("วันที่เตือนล่าสุด", disabled=True),
-                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True),
+                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
+                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
+                                "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
+                                "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
+                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
+                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
+                                "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
+                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
+                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"), # ให้สถานะกว้างขึ้นนิดนึง
+                                "Alert_Date": st.column_config.TextColumn("วันที่เตือนล่าสุด", disabled=True, width="medium"),
+                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
                             },
-                            use_container_width=True, key="fixed_plan_editor_v2", num_rows="dynamic"
+                            use_container_width=True, 
+                            key="fixed_plan_editor_v2", 
+                            num_rows="dynamic"
                         )
                         
                         if st.button("💾 บันทึกการแก้ไข"):
