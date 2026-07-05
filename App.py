@@ -1103,7 +1103,7 @@ with tab_stock:
                     latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
                     latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
                     with col_metrics:
-                        m1, m2, m3, m4 = st.columns([1.5, 0.75, 2, 0.75]) 
+                        m1, m2, m3, m4 = st.columns([1.5, 0.75, 1.5, 0.75]) 
                         
                         # ปรับส่วนดึงข้อมูลปันผล
                         raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
@@ -1115,16 +1115,22 @@ with tab_stock:
                                 div_display = f"{raw_div * 100:.2f}%"
                         else:
                             div_display = "N/A"
+
+                        # --- m1: ชื่อบริษัท ---
+                        m1.caption("ชื่อบริษัท")
+                        m1.write(f"**{info.get('longName', 'N/A')}**")
                         
-                        # --- ย้ายบรรทัดเหล่านี้ออกมาให้ตรงกับ m1, m2, m3, m4 ---
-                        # โดยให้อยู่ใต้ with col_metrics: แต่ไม่ต้องอยู่ใต้ if raw_div:
-                        m1.markdown(f"""
-                            <div style="font-size: 0.8em; color: gray;">ชื่อบริษัท</div>
-                            <div style="font-size: 1.2em; font-weight: bold;">{info.get('longName', 'N/A')}</div>
-                        """, unsafe_allow_html=True)
-                        m2.metric("ราคาล่าสุด", f"{latest_price_single:.2f} บ.")
-                        m3.metric("สถานะ RS", "แข็งแกร่งกว่าตลาด" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด")
-                        m4.metric("ปันผล (Yield)", div_display)
+                        # --- m2: ราคาล่าสุด ---
+                        m2.caption("ราคาล่าสุด")
+                        m2.write(f"**{latest_price_single:.2f} บ.**")
+                        
+                        # --- m3: สถานะ RS ---
+                        m3.caption("สถานะ RS")
+                        m3.write(f"**{'แข็งแกร่งกว่าตลาด' if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else 'อ่อนแอกว่าตลาด'}**")
+                        
+                        # --- m4: ปันผล (Yield) ---
+                        m4.caption("ปันผล (Yield)")
+                        m4.write(f"**{div_display}**")
                                 
                     # 3.4 วาดกราฟ
                     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
