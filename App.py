@@ -522,8 +522,8 @@ tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
 # 1. ส่วนหุ้น
 with tab_stock:
     
-    st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย (Mark Minervini Style - RS vs SET Index)")
-    st.write("ระบบสแกนหุ้นกลุ่ม SET100 พร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
+    st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
+    st.write("ระบบสแกนหุ้นพร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
     
     # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
     if "selected_ticker" not in st.session_state:
