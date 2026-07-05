@@ -2436,7 +2436,34 @@ with tab_tfex:
                 st.rerun() # สั่งรีเฟรชหน้าจอเพื่อให้อัปเดตข้อมูล
         else:
             st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
+            
+    with sub_tfex_cash:
+        st.subheader("💰 บันทึกเติม/ถอนเงิน")
+        
+        with st.form("cash_flow_form"):
+            col1, col2 = st.columns(2)
+            with col1:
+                cash_date = st.date_input("วันที่:")
+                cash_type = st.selectbox("ประเภท:", ["Deposit", "Withdraw"])
+            with col2:
+                amount = st.number_input("จำนวนเงิน (บาท):", min_value=0.0, step=100.0)
+                note = st.text_input("หมายเหตุ:")
+            
+            if st.form_submit_button("บันทึกรายการ"):
+                new_cash = pd.DataFrame([{
+                    "Date": str(cash_date),
+                    "Type": cash_type,
+                    "Amount": amount,
+                    "Note": note
+                }])
+                if save_data_to_sheet(new_cash, "Cash_Flow"):
+                    st.success("บันทึกข้อมูลเงินเรียบร้อย!")
+                    st.rerun()
 
+        st.divider()
+        st.write("รายการล่าสุด:")
+        st.dataframe(cash_df, use_container_width=True)
+    
     with sub_tfex_history:
         st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
         
