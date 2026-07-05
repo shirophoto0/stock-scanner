@@ -786,9 +786,6 @@ with tab_stock:
             except Exception as e:
                 st.error(f"ไม่สามารถดึงข้อมูลจาก Google Sheet ได้: {e}")
         
-        # --- กรณีรันผ่านหน้าเว็บ Streamlit ---
-        st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
-        
         # ดึงข้อมูลจาก Sheets หรือ Yahoo
         if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
             with st.spinner("กำลังดึงข้อมูล..."):
