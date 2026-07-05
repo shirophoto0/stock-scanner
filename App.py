@@ -78,25 +78,25 @@ def calculate_tfex_result(entry, close, size, comm, Status):
         "Win_Lose": win_lose,
         "Points": round(points, 2)
     }
-    
-def save_data_to_sheet(df, sheet_name):
-    # ป้องกันการบันทึกถ้า df ว่างเปล่า เพื่อไม่ให้ข้อมูลหาย
-    if df.empty:
-        st.warning("ไม่มีข้อมูลที่จะบันทึก")
-        return False
-        
+def save_data_to_sheet(new_df, sheet_name):
     try:
-        client = get_gsheet_client() # ใช้ Client เดิมของพี่อ้ำ
-        sheet = client.open('MyStockData').worksheet(sheet_name)
+        # 1. เชื่อมต่อ Google Sheets
+        client = get_gsheet_client()
+        spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
+        sheet = client.open_by_key(spreadsheet_id).worksheet('Cash_Flow')
         
-        # เพิ่มข้อมูลต่อท้าย (Append) เท่านั้น ห้าม update ห้าม clear
-        # วิธีนี้ปลอดภัยที่สุด ข้อมูลเดิมจะอยู่ครบ
-        sheet.append_rows(df.values.tolist())
+        # 2. แปลง DataFrame เป็น List of Lists เพื่อบันทึก
+        # เราจะนำข้อมูลไปต่อท้าย (Append) ในบรรทัดว่างถัดไป
+        data_to_append = new_df.values.tolist()
         
+        # 3. บันทึก
+        sheet.append_rows(data_to_append)
         return True
+    
     except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึก: {e}")
-        return False
+        st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
+        return False  
+        
 ####################
 
 @st.cache_data(ttl=60)
