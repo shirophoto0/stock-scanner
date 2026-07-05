@@ -1103,7 +1103,7 @@ with tab_stock:
                     latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
                     latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
                     with col_metrics:
-                        m1, m2, m3, m4 = st.columns(4)
+                        m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
                     # ปรับส่วนดึงข้อมูลปันผลในส่วน 3.5 Metrics
                     raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
             
@@ -1116,8 +1116,6 @@ with tab_stock:
                             div_display = f"{raw_div * 100:.2f}%"
                     else:
                         div_display = "N/A"
-            
-                        m1, m2, m3, m4 = st.columns([1, 1, 1.5, 1.5]) 
     
                         m1.metric("ชื่อบริษัท", info.get('longName', 'N/A'))
                         m2.metric("ราคาล่าสุด", f"{latest_price_single:.2f} บ.")
