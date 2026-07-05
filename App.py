@@ -1117,11 +1117,12 @@ with tab_stock:
                     else:
                         div_display = "N/A"
             
-                    m4.metric("ปันผล (Yield)", div_display)
+                    m1, m2, m3, m4 = st.columns([1, 1, 1.5, 1.5]) 
+
                     m1.metric("ชื่อบริษัท", info.get('longName', 'N/A'))
                     m2.metric("ราคาล่าสุด", f"{latest_price_single:.2f} บ.")
                     m3.metric("สถานะ RS", "แข็งแกร่งกว่าตลาด" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด")
-                
+                    m4.metric("ปันผล (Yield)", div_display)
             
                     # 3.4 วาดกราฟ
                     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
