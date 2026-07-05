@@ -1103,7 +1103,7 @@ with tab_stock:
                     latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
                     latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
                     with col_metrics:
-                        m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
+                        m1, m2, m3, m4 = st.columns([1.5, 1, 1.5, 1]) 
                         
                         # ปรับส่วนดึงข้อมูลปันผล
                         raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
@@ -1118,7 +1118,10 @@ with tab_stock:
                         
                         # --- ย้ายบรรทัดเหล่านี้ออกมาให้ตรงกับ m1, m2, m3, m4 ---
                         # โดยให้อยู่ใต้ with col_metrics: แต่ไม่ต้องอยู่ใต้ if raw_div:
-                        m1.metric("ชื่อบริษัท", info.get('longName', 'N/A'))
+                        m1.markdown(f"""
+                            <div style="font-size: 0.8em; color: gray;">ชื่อบริษัท</div>
+                            <div style="font-size: 1.2em; font-weight: bold;">{info.get('longName', 'N/A')}</div>
+                        """, unsafe_allow_html=True)
                         m2.metric("ราคาล่าสุด", f"{latest_price_single:.2f} บ.")
                         m3.metric("สถานะ RS", "แข็งแกร่งกว่าตลาด" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด")
                         m4.metric("ปันผล (Yield)", div_display)
