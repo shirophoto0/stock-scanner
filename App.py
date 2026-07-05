@@ -990,7 +990,12 @@ with tab_stock:
                         st.write(f"• **ผลตอบแทนต่อส่วนผู้ถือหุ้น (ROE):** {roe * 100:.2f} %")
                     if pb_ratio is not None:
                         st.write(f"• **ราคาต่อมูลค่าทางบัญชี (P/B Ratio):** {pb_ratio:.2f} เท่า")
-                    st.write(f"• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** {info.get('trailingPE', 'ไม่มีข้อมูล')} เท่า")
+                    pe_value = info.get('trailingPE')
+                    
+                    if pe_value is not None:
+                        st.write(f"• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** {pe_value:.2f} เท่า")
+                    else:
+                        st.write("• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** ไม่มีข้อมูล")
                     
                 st.info("💡 **ข้อแนะนำจากระบบ:** หุ้นซุปเปอร์สต็อกตามสไตล์ Mark Minervini มักจะมี EPS Growth ขยายตัวมากกว่า 20%-25% ขึ้นไป ควบคู่กับราคาหุ้นที่ยกฐานยืนเหนือเส้น EMA ขาขึ้น")
                 
