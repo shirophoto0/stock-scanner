@@ -2440,7 +2440,7 @@ with tab_tfex:
     with sub_tfex_cash:
         st.subheader("💰 บันทึกเติม/ถอนเงิน")
         
-        with st.form("cash_flow_form"):
+        with st.form("cash_flow"):
             col1, col2 = st.columns(2)
             with col1:
                 cash_date = st.date_input("วันที่:")
