@@ -1104,24 +1104,25 @@ with tab_stock:
                     latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
                     with col_metrics:
                         m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
-                    # ปรับส่วนดึงข้อมูลปันผลในส่วน 3.5 Metrics
-                    raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
-            
-                    if raw_div:
-                        # ถ้าค่าที่ได้ > 1 (เช่น 3.5) แสดงว่าเป็นเปอร์เซ็นต์อยู่แล้ว
-                        # ถ้าค่าที่ได้ <= 1 (เช่น 0.035) แสดงว่าเป็นทศนิยม ต้องคูณ 100
-                        if raw_div > 1:
-                            div_display = f"{raw_div:.2f}%"
+                        
+                        # ปรับส่วนดึงข้อมูลปันผล
+                        raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
+                        
+                        if raw_div:
+                            if raw_div > 1:
+                                div_display = f"{raw_div:.2f}%"
+                            else:
+                                div_display = f"{raw_div * 100:.2f}%"
                         else:
-                            div_display = f"{raw_div * 100:.2f}%"
-                    else:
-                        div_display = "N/A"
-    
+                            div_display = "N/A"
+                        
+                        # --- ย้ายบรรทัดเหล่านี้ออกมาให้ตรงกับ m1, m2, m3, m4 ---
+                        # โดยให้อยู่ใต้ with col_metrics: แต่ไม่ต้องอยู่ใต้ if raw_div:
                         m1.metric("ชื่อบริษัท", info.get('longName', 'N/A'))
                         m2.metric("ราคาล่าสุด", f"{latest_price_single:.2f} บ.")
                         m3.metric("สถานะ RS", "แข็งแกร่งกว่าตลาด" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด")
                         m4.metric("ปันผล (Yield)", div_display)
-            
+                                
                     # 3.4 วาดกราฟ
                     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
                     fig.add_trace(go.Candlestick(x=chart_combined.index, open=chart_combined['Open'], high=chart_combined['High'], low=chart_combined['Low'], close=chart_combined['Close'], name='Price'), row=1, col=1)
