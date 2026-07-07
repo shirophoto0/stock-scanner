@@ -30,6 +30,7 @@ IM_PER_CONTRACT = 13300
 # ---------------------
 def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     client = get_gsheet_client()
+    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
     sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
     
     # ดึงข้อมูลทั้งหมดมาค้นหา Row
