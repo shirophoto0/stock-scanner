@@ -84,7 +84,7 @@ def save_data_to_sheet(new_df, sheet_name):
         # 1. เชื่อมต่อ Google Sheets
         client = get_gsheet_client()
         spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
-        sheet = client.open_by_key(spreadsheet_id).worksheet('Cash_Flow')
+        sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
         
         # 2. แปลง DataFrame เป็น List of Lists เพื่อบันทึก
         # เราจะนำข้อมูลไปต่อท้าย (Append) ในบรรทัดว่างถัดไป
@@ -98,6 +98,30 @@ def save_data_to_sheet(new_df, sheet_name):
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
         return False  
         
+def save_cash_to_gsheet(df):
+    """
+    ฟังก์ชันเฉพาะสำหรับบันทึกรายการเงินเข้าหน้า Cash_Flow เท่านั้น
+    """
+    if df.empty:
+        st.warning("ไม่มีข้อมูลที่จะบันทึก")
+        return False
+        
+    try:
+        # 1. เชื่อมต่อ (ใช้ client เดิมของคุณ)
+        client = get_gsheet_client()
+        
+        # 2. เปิดไฟล์ MyStockData และระบุชื่อ Sheet ตรงนี้เลย
+        # การใส่ชื่อนี้โดยตรงในโค้ดจะช่วยป้องกันความผิดพลาดเรื่องการพิมพ์ชื่อ Sheet
+        sheet = client.open('MyStockData').worksheet("Cash_Flow")
+        
+        # 3. เตรียมและบันทึกข้อมูลต่อท้าย
+        sheet.append_rows(df.values.tolist())
+        
+        return True
+        
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก Cash_Flow: {e}")
+        return False        
 ####################
 
 @st.cache_data(ttl=60)
@@ -2457,7 +2481,7 @@ with tab_tfex:
                     "Amount": amount,
                     "Note": note
                 }])
-                if save_data_to_sheet(new_cash, "Cash_Flow"):
+                if save_cash_to_gsheet(new_cash, "Cash_Flow"):
                     st.success("บันทึกข้อมูลเงินเรียบร้อย!")
                     st.rerun()
 
