@@ -2552,7 +2552,7 @@ with tab_tfex:
             # --- ตารางประวัติเต็ม ---
             st.divider()
             st.subheader("📜 ประวัติเทรดทั้งหมด")
-            tfex_df['Cumulative_Profit'] = tfex_df['Net_Profit'].cumsum()
+            tfex_df['Net_Profit'] = pd.to_numeric(tfex_df['Net_Profit'], errors='coerce').fillna(0)
             st.dataframe(tfex_df, use_container_width=True)
             
         else:
