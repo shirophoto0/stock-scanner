@@ -2444,9 +2444,10 @@ with tab_tfex:
                 }
                 # บันทึกโดยแปลงเป็น DataFrame
                 df_to_save = pd.DataFrame([new_record])
-    if save_data_to_sheet(df_to_save, "TFEX_History"):
-        st.success("เปิดสถานะเรียบร้อย!")
-        st.rerun()
+                
+                if save_data_to_sheet(df_to_save, "TFEX_History"):
+                    st.success("เปิดสถานะเรียบร้อย!")
+                    st.rerun()
     with sub_tfex_close:
         st.subheader("🏁 ปิดสถานะเทรด")
         
