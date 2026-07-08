@@ -33,27 +33,35 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
     sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
     
-    # ดึงข้อมูลทั้งหมดมาค้นหา Row
     records = sheet.get_all_records()
     df = pd.DataFrame(records)
     
-    # สมมติว่ามีคอลัมน์ 'Trade_ID' ที่เป็นตัวระบุแถว (พี่อ้ำต้องมี ID นี้ใน Sheet นะครับ)
-    row_index = df.index[df['Trade_ID'] == trade_id].tolist()[0] + 2 # +2 เพราะ GSheet เริ่มแถวที่ 1 และหัวตารางอยู่แถว 1
+    # หาตำแหน่ง Row
+    idx_list = df.index[df['Trade_ID'] == trade_id].tolist()
+    if not idx_list:
+        st.error("ไม่พบ Trade ID นี้ในระบบ")
+        return False
+    row_index = idx_list[0] + 2 
     
-    # คำนวณกำไร
-    open_price = df.loc[row_index-2, 'Open_Price']
-    size = df.loc[row_index-2, 'Size']
-    Status = df.loc[row_index-2, 'Status']
+    # ดึงค่าเดิมมาคำนวณ
+    trade_row = df.loc[idx_list[0]]
+    open_price = float(trade_row['Open_Price'])
+    size = int(trade_row['Size'])
+    status = trade_row['Status']
     
-    if Status.upper() == 'LONG':
-        net_profit = (close_price - open_price) * size * 200
-    else:
-        net_profit = (open_price - close_price) * size * 200
-        
-    # อัปเดตลง Google Sheet
-    sheet.update_cell(row_index, df.columns.get_loc('Close_Price') + 1, close_price)
-    sheet.update_cell(row_index, df.columns.get_loc('Date_Close') + 1, date_close)
-    sheet.update_cell(row_index, df.columns.get_loc('Net_Profit') + 1, net_profit)
+    # คำนวณผลลัพธ์ผ่านฟังก์ชันเดิม (เพิ่มคอมมิชชั่นสมมติที่ 50 บาท/สัญญา)
+    comm = size * 50 
+    calc = calculate_tfex_result(open_price, close_price, size, comm, status)
+    
+    # อัปเดตข้อมูลทีละตำแหน่งให้ตรงคอลัมน์
+    # หัวตาราง: Trade_ID(1), Date_Open(2), Date_Close(3), Series(4), Status(5), Size(6), Open_Price(7), Close_Price(8), Realized(9), Comm(10), Net_Profit(11), Win_Lose(12), Reason(13)
+    
+    sheet.update_cell(row_index, 3, date_close)       # Date_Close
+    sheet.update_cell(row_index, 8, close_price)      # Close_Price
+    sheet.update_cell(row_index, 9, calc['Realized']) # Realized
+    sheet.update_cell(row_index, 10, comm)            # Comm
+    sheet.update_cell(row_index, 11, calc['Net_Profit']) # Net_Profit
+    sheet.update_cell(row_index, 12, calc['Win_Lose'])   # Win_Lose
     
     return True
     
@@ -81,22 +89,23 @@ def calculate_tfex_result(entry, close, size, comm, Status):
     }
 def save_data_to_sheet(new_df, sheet_name):
     try:
-        # 1. เชื่อมต่อ Google Sheets
         client = get_gsheet_client()
         spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
         sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
         
-        # 2. แปลง DataFrame เป็น List of Lists เพื่อบันทึก
-        # เราจะนำข้อมูลไปต่อท้าย (Append) ในบรรทัดว่างถัดไป
-        data_to_append = new_df.values.tolist()
+        # ตรวจสอบว่ามีข้อมูลครบ 13 คอลัมน์
+        # จัดลำดับให้ตรงเป๊ะ: Trade_ID, Date_Open, Date_Close, Series, Status, Size, Open_Price, Close_Price, Realized, Comm, Net_Profit, Win_Lose, Reason
+        cols = ["Trade_ID", "Date_Open", "Date_Close", "Series", "Status", "Size", "Open_Price", 
+                "Close_Price", "Realized", "Comm", "Net_Profit", "Win_Lose", "Reason"]
         
-        # 3. บันทึก
-        sheet.append_rows(data_to_append)
+        # จัดลำดับคอลัมน์ใน DataFrame ให้ตรงกับ Google Sheet
+        new_df = new_df.reindex(columns=cols)
+        
+        sheet.append_rows(new_df.values.tolist())
         return True
-    
     except Exception as e:
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
-        return False  
+        return False
         
 def save_cash_to_gsheet(df):
     """
@@ -2419,19 +2428,25 @@ with tab_tfex:
             
             if st.form_submit_button("เปิดสถานะเทรด"):
                 new_record = {
-                    "Trade_ID": trade_id, # สำคัญมากสำหรับการอัปเดตภายหลัง
+                    "Trade_ID": trade_id,
                     "Date_Open": date_open.strftime("%Y-%m-%d"),
+                    "Date_Close": "",          # ว่างไว้ก่อนเพราะยังไม่ปิด
                     "Series": series,
                     "Status": Status,
                     "Size": size,
                     "Open_Price": entry,
-                    "Close_Price": 0, # กำหนดเป็น 0 เพื่อบอกระบบว่ายังถืออยู่
-                    "Net_Profit": 0,  # ยังไม่มีกำไร
+                    "Close_Price": 0,          # ต้องมีค่าเป็น 0 เพื่อให้ระบบเช็คได้ว่ายังไม่ปิด
+                    "Realized": 0,             # คอลัมน์ใหม่
+                    "Comm": 0,                 # คอลัมน์ใหม่
+                    "Net_Profit": 0,
+                    "Win_Lose": "",            # คอลัมน์ใหม่
                     "Reason": reason
                 }
-                if save_data_to_sheet(pd.DataFrame([new_record]), "TFEX_History"):
-                    st.success("เปิดสถานะเรียบร้อย!")
-                    st.rerun()
+                # บันทึกโดยแปลงเป็น DataFrame
+                df_to_save = pd.DataFrame([new_record])
+    if save_data_to_sheet(df_to_save, "TFEX_History"):
+        st.success("เปิดสถานะเรียบร้อย!")
+        st.rerun()
     with sub_tfex_close:
         st.subheader("🏁 ปิดสถานะเทรด")
         
