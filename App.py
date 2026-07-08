@@ -2472,7 +2472,7 @@ with tab_tfex:
             
             if st.button("ยืนยันการปิดสถานะ"):
                 # เรียกใช้ฟังก์ชันที่เราเตรียมไว้
-                update_trade_close(CURRENT_SHEET_ID, selected_trade_id, close_price, str(close_date))
+                update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
                 st.success("อัปเดตข้อมูลสำเร็จ! ระบบจะคำนวณกำไรให้ทันที")
                 st.rerun() # สั่งรีเฟรชหน้าจอเพื่อให้อัปเดตข้อมูล
         else:
