@@ -2203,19 +2203,47 @@ def main():
                     
                         # คำนวณข้อมูล (ให้ทำงานถ้ามีหุ้นในตาราง)
                         if not plan_df.empty and 'Ticker' in plan_df.columns:
-                            # คำนวณราคาและสถานะ
-                            prices = []
-                            for t in plan_df['Ticker']:
-                                try:
-                                    prices.append(float(yf.Ticker(f"{t}.BK").history(period="1d")['Close'].iloc[-1]))
-                                except:
-                                    prices.append(0.0)
-                            plan_df['ราคาตลาด'] = prices
+                            # 1. จัดการชื่อคอลัมน์ให้สะอาดก่อน (เผื่อมีช่องว่างติดมา)
+                            plan_df.columns = plan_df.columns.str.strip()
                             
-                            for c in ['Entry_Price', 'Stop_Loss', 'Take_Profit']:
-                                plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
+                            # 2. แปลงเฉพาะคอลัมน์ที่มีอยู่จริง เพื่อป้องกัน KeyError
+                            target_cols = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
+                            for c in target_cols:
+                                if c in plan_df.columns:
+                                    plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
+                                else:
+                                    plan_df[c] = 0.0  # ถ้าไม่มีคอลัมน์นี้ ให้สร้างเป็น 0.0 ไปเลย
+                            
+                            # 3. ดึงราคาแบบมีประสิทธิภาพ (Batch Download)
+                            # แทนที่จะวนลูป yf.Ticker ทีละตัว ให้ดึงรวมกันทีเดียวจะเร็วกว่ามาก
+                            tickers = [f"{t}.BK" for t in plan_df['Ticker'].unique()]
+                            try:
+                                # ใช้ download ดึงทีเดียวทั้งพอร์ต
+                                price_data = yf.download(tickers, period="1d", group_by='ticker', progress=False)['Close']
                                 
-                            plan_df['ห่างจาก_SL(%)'] = ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100).fillna(0).round(2)
+                                # ฟังก์ชันดึงราคาล่าสุดจาก Data
+                                def get_price(t):
+                                    symbol = f"{t}.BK"
+                                    # ถ้าเป็น DataFrame ดึงค่าล่าสุด ถ้าเป็น Series ดึงค่าสุดท้าย
+                                    try:
+                                        if isinstance(price_data, pd.DataFrame):
+                                            return float(price_data[symbol].iloc[-1])
+                                        return float(price_data.iloc[-1])
+                                    except:
+                                        return 0.0
+                                
+                                plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(get_price)
+                            except:
+                                plan_df['ราคาตลาด'] = 0.0
+                        
+                            # 4. คำนวณห่างจาก SL แบบปลอดภัย (ป้องกันหารด้วย 0)
+                            plan_df['ห่างจาก_SL(%)'] = np.where(
+                                plan_df['ราคาตลาด'] > 0,
+                                ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100),
+                                0.0
+                            ).round(2)
+                            
+                            # 5. อัปเดตสถานะ
                             plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
 
                         # 3. แสดงตารางและปุ่มบันทึกแก้ไข
