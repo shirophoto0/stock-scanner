@@ -2246,42 +2246,42 @@ def main():
                             # 5. อัปเดตสถานะ
                             plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
 
-                        # 3. แสดงตารางและปุ่มบันทึกแก้ไข
-                        edited_df = st.data_editor(
-                            plan_df[cols],
-                            column_config={
-                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
-                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
-                                "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
-                                "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
-                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
-                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
-                                "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
-                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
-                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"), # ให้สถานะกว้างขึ้นนิดนึง
-                                "Alert_Date": st.column_config.TextColumn("วันที่เตือนล่าสุด", disabled=True, width="medium"),
-                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
-                            },
-                            use_container_width=True, 
-                            key="fixed_plan_editor_v2", 
-                            num_rows="dynamic"
-                        )
-                        
-                        if st.button("💾 บันทึกการแก้ไข"):
-                            final_df = edited_df.copy()
+                            # 3. แสดงตารางและปุ่มบันทึกแก้ไข
+                            edited_df = st.data_editor(
+                                plan_df[cols],
+                                column_config={
+                                    "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
+                                    "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
+                                    "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
+                                    "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
+                                    "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
+                                    "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
+                                    "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
+                                    "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
+                                    "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"), # ให้สถานะกว้างขึ้นนิดนึง
+                                    "Alert_Date": st.column_config.TextColumn("วันที่เตือนล่าสุด", disabled=True, width="medium"),
+                                    "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
+                                },
+                                use_container_width=True, 
+                                key="fixed_plan_editor_v2", 
+                                num_rows="dynamic"
+                            )
                             
-                            # --- จุดที่แก้ไข: ล้างค่าสถานะและวันที่ก่อนบันทึกลง Sheet ---
-                            # เพื่อให้ทุกครั้งที่โหลดแอปใหม่ สถานะจะถูกคำนวณใหม่ตามค่าปัจจุบัน
-                            final_df['สถานะ'] = ""
-                            final_df['Alert_Date'] = ""
-                            
-                            for c in cols:
-                                if c not in final_df.columns: final_df[c] = ""
-                                    
-                            if clear_and_save_data(final_df[cols], "TradingPlan"):
-                                st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
-                                st.cache_data.clear()
-                                st.rerun()
+                            if st.button("💾 บันทึกการแก้ไข"):
+                                final_df = edited_df.copy()
+                                
+                                # --- จุดที่แก้ไข: ล้างค่าสถานะและวันที่ก่อนบันทึกลง Sheet ---
+                                # เพื่อให้ทุกครั้งที่โหลดแอปใหม่ สถานะจะถูกคำนวณใหม่ตามค่าปัจจุบัน
+                                final_df['สถานะ'] = ""
+                                final_df['Alert_Date'] = ""
+                                
+                                for c in cols:
+                                    if c not in final_df.columns: final_df[c] = ""
+                                        
+                                if clear_and_save_data(final_df[cols], "TradingPlan"):
+                                    st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
+                                    st.cache_data.clear()
+                                    st.rerun()
 
         
     ###################################################################
