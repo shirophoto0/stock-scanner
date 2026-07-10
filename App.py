@@ -531,7 +531,7 @@ def check_alerts(row):
     # ถ้าไม่เข้าเงื่อนไขเลย ให้คืนค่าปกติ
     return "ปกติ"
 
- @st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600)
 def load_from_gsheet():
     try:
         client = get_gsheet_client()
