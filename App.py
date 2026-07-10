@@ -825,7 +825,7 @@ def main():
     if not df_all_stocks.empty:
         # ใช้ filtered_df ถ้ามี (เช่นจากการ Filter ของผู้ใช้) ถ้าไม่มีก็ใช้ df_all_stocks
         df_to_show = filtered_df if filtered_df is not None else df_all_stocks
-        st.dataframe(df_to_show, use_container_width=True)
+        # st.dataframe(df_to_show, use_container_width=True)
     else:
         st.error("ไม่สามารถโหลดข้อมูลหุ้นได้เลย กรุณาตรวจสอบการเชื่อมต่อ Google Sheets")
 
