@@ -831,99 +831,99 @@ with tab_stock:
         else:
             st.error("ไม่สามารถโหลดข้อมูลหุ้นได้เลย กรุณาตรวจสอบการเชื่อมต่อ Google Sheets")
                 
-            ################################
-            # 1. Slidebar (ตัวกรอง)
-            ################################
-            with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
-                max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0)
-                min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0)
-                rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0))
+        ################################
+        # 1. Slidebar (ตัวกรอง)
+        ################################
+        with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
+            max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0)
+            min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0)
+            rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0))
+            
+            strategy_option = st.selectbox(
+                "เลือกหน้าเทรด:",
+                options=[
+                    "ไม่กรองเงื่อนไขนี้", 
+                    "--- กลุ่ม RS Line ---",
+                    "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว", 
+                    "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)",
+                    "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)", 
+                    "--- กลุ่ม New High ---",
+                    "3 Month High", 
+                    "6 Month High", 
+                    "52 Week High"
+                ]
+            )
+
+            # ตรวจสอบข้อมูลก่อนโชว์
+            if df_all_stocks is not None and not df_all_stocks.empty:
+                # 1. เตรียมข้อมูลและทำความสะอาด
+                filtered_df = df_all_stocks.copy()
+                filtered_df.columns = filtered_df.columns.str.strip()
                 
-                strategy_option = st.selectbox(
-                    "เลือกหน้าเทรด:",
-                    options=[
-                        "ไม่กรองเงื่อนไขนี้", 
-                        "--- กลุ่ม RS Line ---",
-                        "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว", 
-                        "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)",
-                        "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)", 
-                        "--- กลุ่ม New High ---",
-                        "3 Month High", 
-                        "6 Month High", 
-                        "52 Week High"
-                    ]
-                )
+                # แปลงคอลัมน์ตัวเลข
+                numeric_cols = ['PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
+                for col in numeric_cols:
+                    if col in filtered_df.columns:
+                        filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce').fillna(0)
+                
+                # แปลงคอลัมน์ Boolean (สำคัญมากสำหรับการกรองเงื่อนไข)
+                bool_cols = ['Is_RS_Above_0', 'Is_3M_High', 'Is_6M_High', 'Is_52W_High']
+                for col in bool_cols:
+                    if col in filtered_df.columns:
+                        filtered_df[col] = filtered_df[col].astype(str).str.lower().str.strip() == 'true'
+
+                # 2. กรองพื้นฐานด้วย Slider (จะกรองทับกันไปเรื่อยๆ)
+                if max_pe < 100:
+                    filtered_df = filtered_df[filtered_df['PE_Ratio'] <= max_pe]
+                filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
+                filtered_df = filtered_df[(filtered_df['RSI_14'] >= rsi_range[0]) & (filtered_df['RSI_14'] <= rsi_range[1])]
     
-                # ตรวจสอบข้อมูลก่อนโชว์
-                if df_all_stocks is not None and not df_all_stocks.empty:
-                    # 1. เตรียมข้อมูลและทำความสะอาด
-                    filtered_df = df_all_stocks.copy()
-                    filtered_df.columns = filtered_df.columns.str.strip()
-                    
-                    # แปลงคอลัมน์ตัวเลข
-                    numeric_cols = ['PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
-                    for col in numeric_cols:
-                        if col in filtered_df.columns:
-                            filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce').fillna(0)
-                    
-                    # แปลงคอลัมน์ Boolean (สำคัญมากสำหรับการกรองเงื่อนไข)
-                    bool_cols = ['Is_RS_Above_0', 'Is_3M_High', 'Is_6M_High', 'Is_52W_High']
-                    for col in bool_cols:
-                        if col in filtered_df.columns:
-                            filtered_df[col] = filtered_df[col].astype(str).str.lower().str.strip() == 'true'
+                # 3. กำหนดคอลัมน์พื้นฐานและ Sort
+                show_columns = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
+                sort_by_col = 'Ticker'
+                ascending_sort = True
     
-                    # 2. กรองพื้นฐานด้วย Slider (จะกรองทับกันไปเรื่อยๆ)
-                    if max_pe < 100:
-                        filtered_df = filtered_df[filtered_df['PE_Ratio'] <= max_pe]
-                    filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
-                    filtered_df = filtered_df[(filtered_df['RSI_14'] >= rsi_range[0]) & (filtered_df['RSI_14'] <= rsi_range[1])]
-        
-                    # 3. กำหนดคอลัมน์พื้นฐานและ Sort
-                    show_columns = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
-                    sort_by_col = 'Ticker'
-                    ascending_sort = True
-        
-                    # 4. กรองตามหน้าเทรด (Strategy)
-                    if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
-                        filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
-                        show_columns.append('ตัดเส้น0ขึ้นมาแล้ว(วัน)')
-                        sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
-                    
-                    elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
-                        filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
-                        sort_by_col, ascending_sort = 'RS_Line', False
-                    
-                    elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
-                        time_map = {"3 เดือน (60 วัน)": 60, "6 เดือน (120 วัน)": 120, "1 ปี (240 วัน)": 240}
-                        time_choice = st.sidebar.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
-                        min_days = time_map[time_choice]
-                        filtered_df = filtered_df[(filtered_df['RS_Line'] <= 0.0) & (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days)]
-                        show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
-                        sort_by_col, ascending_sort = 'RS_Line', False
-                    
-                    elif strategy_option == "3 Month High":
-                        filtered_df = filtered_df[filtered_df['Is_3M_High'] == True]
-                        show_columns.append('New_High_3M_มาแล้ว(วัน)')
-                        sort_by_col, ascending_sort = 'New_High_3M_มาแล้ว(วัน)', True
-                    
-                    elif strategy_option == "6 Month High":
-                        filtered_df = filtered_df[filtered_df['Is_6M_High'] == True]
-                        show_columns.append('New_High_6M_มาแล้ว(วัน)')
-                        sort_by_col, ascending_sort = 'New_High_6M_มาแล้ว(วัน)', True
-                    
-                    elif strategy_option == "52 Week High":
-                        filtered_df = filtered_df[filtered_df['Is_52W_High'] == True]
-                        show_columns.append('New_High_52W_มาแล้ว(วัน)')
-                        sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
-        
-                    # 5. แสดงผล
-                    results_container = st.empty() 
+                # 4. กรองตามหน้าเทรด (Strategy)
+                if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
+                    filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
+                    show_columns.append('ตัดเส้น0ขึ้นมาแล้ว(วัน)')
+                    sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
+                
+                elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
+                    filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
+                    sort_by_col, ascending_sort = 'RS_Line', False
+                
+                elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
+                    time_map = {"3 เดือน (60 วัน)": 60, "6 เดือน (120 วัน)": 120, "1 ปี (240 วัน)": 240}
+                    time_choice = st.sidebar.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
+                    min_days = time_map[time_choice]
+                    filtered_df = filtered_df[(filtered_df['RS_Line'] <= 0.0) & (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days)]
+                    show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
+                    sort_by_col, ascending_sort = 'RS_Line', False
+                
+                elif strategy_option == "3 Month High":
+                    filtered_df = filtered_df[filtered_df['Is_3M_High'] == True]
+                    show_columns.append('New_High_3M_มาแล้ว(วัน)')
+                    sort_by_col, ascending_sort = 'New_High_3M_มาแล้ว(วัน)', True
+                
+                elif strategy_option == "6 Month High":
+                    filtered_df = filtered_df[filtered_df['Is_6M_High'] == True]
+                    show_columns.append('New_High_6M_มาแล้ว(วัน)')
+                    sort_by_col, ascending_sort = 'New_High_6M_มาแล้ว(วัน)', True
+                
+                elif strategy_option == "52 Week High":
+                    filtered_df = filtered_df[filtered_df['Is_52W_High'] == True]
+                    show_columns.append('New_High_52W_มาแล้ว(วัน)')
+                    sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
+    
+                # 5. แสดงผล
+                results_container = st.empty() 
+            
+            
+                # กรองคอลัมน์ที่เลือกให้โชว์
+                valid_cols = [c for c in show_columns if c in filtered_df.columns]
                 
                 
-                    # กรองคอลัมน์ที่เลือกให้โชว์
-                    valid_cols = [c for c in show_columns if c in filtered_df.columns]
-                    
-                    
     
             ##########################
             # 4. ส่วนการเลือกหุ้น (เป็นตัวกลางส่งค่าไป Fundamental และ กราฟ)
