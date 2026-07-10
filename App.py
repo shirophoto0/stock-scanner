@@ -790,7 +790,7 @@ with tab_stock:
     #####################################
     # Def Main ส่วนครอบ code ทั้งหมด
     ######################################
-    st.set_page_config(layout="wide")
+  
     def main():
         # 1. ประกาศตัวแปรเริ่มต้น
         df_all_stocks = pd.DataFrame() 
