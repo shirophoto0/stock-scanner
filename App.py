@@ -16,10 +16,6 @@ from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
 from datetime import datetime
-# =============================================================
-# 1. ฟังก์ชันจัดการ Google Sheets (Utility)
-# =============================================================
-
 ###################
 # Def TEFEX #
 ###################
@@ -132,13 +128,14 @@ def save_cash_to_gsheet(df):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Cash_Flow: {e}")
         return False        
 ####################
-
+# Def load & Save Stock
+####################
 @st.cache_data(ttl=60)
 def load_data(sheet_name):
     try:
         client = get_gsheet_client()
         # เปลี่ยนจาก 'TradingPlan' เป็นตัวแปร sheet_name ที่รับเข้ามา
-        sheet = client.open('MyStockData').worksheet(sheet_name) 
+        sheet = client.open('MyStockData').worksheet('StockData') 
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
@@ -178,9 +175,6 @@ def save_to_gsheet(df, sheet_name='StockData'):
     spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
     sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
     
-    # --- จุดแก้ไขสำคัญ: ล้างข้อมูลก่อนส่ง ---
-    # 1. แทนที่ค่าที่เป็น NaN หรือ None ให้เป็นค่าว่าง ""
-    # 2. แทนที่ค่า Infinity (inf) ให้เป็น 0
     df = df.replace([np.inf, -np.inf], 0).fillna("")
     
     # รวม Header และ ข้อมูล
@@ -214,10 +208,7 @@ def get_gsheet_client():
         # ถ้าพัง ให้ print ออกมาดูใน Log ของ GitHub
         print(f"Error ในการเชื่อมต่อ Google Sheets: {e}")
         raise e
-# =============================================================
-# 2. ฟังก์ชัน Load/Save ข้อมูล
-# =============================================================
-# ปรับฟังก์ชัน SAVE (บันทึกลง Google Sheets)
+
 def save_journal():
     df_temp = pd.DataFrame(st.session_state.journal_data)
     
@@ -476,8 +467,7 @@ def get_pe_ratio(ticker_obj):
         return pe if pe is not None else 0
     except:
         return 0   
-        
-        
+               
 def get_latest_prices(tickers):
     prices = {}
     for t in tickers:
@@ -495,7 +485,6 @@ def get_latest_prices(tickers):
         except Exception as e:
             prices[clean_t] = 0.0
     return prices
-
 from datetime import datetime
 
 def check_alerts(row):
@@ -675,11 +664,6 @@ def load_and_calculate_stock_data():
     status_text.empty()
     return pd.DataFrame(stock_list)
 
-
-###################################################################
-# # --- ฟังก์ชัน Main ---
-###################################################################
-
 def highlight_rsi_zones(row):
     if row['RSI_14'] >= 65.0:
         return ['background-color: #fce4d6; color: black'] * len(row)
@@ -721,7 +705,6 @@ if "selected_ticker" not in st.session_state:
 # =============================================================
 # 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
 # =============================================================
-
 
 # สารตั้งต้นข้อมูลหุ้นกลุ่ม SET100
 SET100_TICKERS = [
@@ -777,19 +760,11 @@ SET100_TICKERS = [
     "ZEN.BK", "ZIGA.BK", "EPG.BK", "GTV.BK", "MRDIYT.BK"
 ]
 
-# =============================================================
-# 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
-# ============================================================
-
-
-#####################################
-# Def Main ส่วนครอบ code ทั้งหมด
-######################################
-        
-
     
 # --- Initialize Session State ---
-
+###################################################################
+# # --- ฟังก์ชัน Main ---
+###################################################################
 # ตั้งค่าหน้าจอ
 st.set_page_config(layout="wide")
 def main():
@@ -920,9 +895,9 @@ def main():
         
             # กรองคอลัมน์ที่เลือกให้โชว์
             valid_cols = [c for c in show_columns if c in filtered_df.columns]
-        ##########################
+    ##########################
     # 4. ส่วนการเลือกหุ้น (เป็นตัวกลางส่งค่าไป Fundamental และ กราฟ)
-    
+    ##########################
     st.subheader("🔍 1. วิเคราะห์กราฟเทคนิคัลอัจฉริยะ (Multi-Timeframe & RS vs SET Index)")
     
     col_input, col_metrics = st.columns([1, 3])
@@ -970,8 +945,9 @@ def main():
     with col2:
         tv_url = f"https://www.tradingview.com/chart/?symbol=SET%3A{st.session_state.selected_ticker}"
         st.link_button(f"📈 กราฟ TradingView", tv_url, use_container_width=True)
-    
+    ##########################
     # 5. Fundamental Dashboard
+    ##########################
     if info:
         st.markdown("#### 📊 Fundamental Growth Dashboard (คัดกรองพลังขับเคลื่อนตามสูตร SEPA)")
     
@@ -1020,8 +996,8 @@ def main():
             
         st.info("💡 **ข้อแนะนำจากระบบ:** หุ้นซุปเปอร์สต็อกตามสไตล์ Mark Minervini มักจะมี EPS Growth ขยายตัวมากกว่า 20%-25% ขึ้นไป ควบคู่กับราคาหุ้นที่ยกฐานยืนเหนือเส้น EMA ขาขึ้น")
         
+        ##########################
         # 3. แสดงผลตารางและกราฟ
-        # ... (เอาโค้ดส่วนแสดงผล st.dataframe และ st.plotly_chart มาใส่ตรงนี้) ...
         #####################################
     
         st.markdown("##### ⚙️ ตั้งค่าการแสดงผลกราฟ")
@@ -1041,8 +1017,7 @@ def main():
             "5 ปี (5y)": "5y", 
             "ตั้งแต่เข้าตลาด (All Time)": "max"
         }
-        
-        
+          
         with col_tf:
             tf_select = st.pills("เลือกความถี่แท่งเทียน (Timeframe):", options=list(tf_mapping.keys()), default="1 วัน (Day)")
             if not tf_select:
@@ -1321,17 +1296,13 @@ def main():
                 if st.session_state.get("selected_ticker"):
                     del st.session_state.selected_ticker
                     st.rerun()
+
+    ###########################################################
+    # ส่วนแสดง TAP 
+    ###########################################################
     tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
     # 1. ส่วนหุ้น
     with tab_stock:
-        
-        
-                        
-            # 4. ส่วนของ Tabs ต่างๆ
-            # ... (เอาโค้ด tab_dashboard, tab_risk, tab_portfolio ของพี่อ้ำมาใส่) ...
-            ##########################
-            # 8.แท็บข้อมูล
-            ##############################  
             st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
             st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
             
