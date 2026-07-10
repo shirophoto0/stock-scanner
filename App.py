@@ -792,50 +792,45 @@ with tab_stock:
     ######################################
     st.set_page_config(layout="wide")
     def main():
-        
+        # 1. ประกาศตัวแปรเริ่มต้น
         df_all_stocks = pd.DataFrame() 
         filtered_df = None
         
-        # 2. กรณีรันผ่าน GitHub Actions (สแกนหุ้นใหม่แล้วบันทึก)
+        # 2. โหมด GitHub (ทำงานจบในตัว)
         if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
             print("GitHub Mode: กำลังเริ่มสแกน...")
             df_new = load_and_calculate_stock_data()
             save_to_gsheet(df_new)
             print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
-            return 
+            return # จบการทำงานทันที
     
-        # 3. กรณีรันโหมดปกติบน Streamlit Cloud (ดึงข้อมูลจาก Sheet มาแสดง)
-        else:
-            try:
-                # ดึงข้อมูลจาก Sheet ที่เราบันทึกไว้ในโหมด GitHub
-                client = get_gsheet_client()
-                spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-                sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
-                data = sheet.get_all_records()
-                
-                if data:
-                    df_all_stocks = pd.DataFrame(data)
-                else:
-                    st.warning("ยังไม่มีข้อมูลใน Google Sheet")
-            except Exception as e:
-                st.error(f"ไม่สามารถดึงข้อมูลจาก Google Sheet ได้: {e}")
-        
-        # ดึงข้อมูลจาก Sheets หรือ Yahoo
+        # 3. โหมด Streamlit (หน้าจอผู้ใช้)
+        st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
+    
+        # ส่วนจัดการการโหลดข้อมูล
         if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
             with st.spinner("กำลังดึงข้อมูล..."):
                 df_all_stocks = load_and_calculate_stock_data()
                 save_to_gsheet(df_all_stocks)
+                st.success("อัปเดตข้อมูลจาก Yahoo สำเร็จ!")
         else:
-            try:
-                df_all_stocks = load_from_gsheet()
-                st.success("✅ โหลดข้อมูลจาก Google Sheets เรียบร้อย")
-            except:
-                st.warning("⚠️ ไม่พบข้อมูลใน Sheet กำลังโหลดใหม่...")
-                df_all_stocks = load_and_calculate_stock_data()
-                
-                # แสดงตาราง
-                st.dataframe(filtered_df, use_container_width=True)
+            # โหลดปกติจาก Google Sheets
+            df_all_stocks = load_from_gsheet()
             
+            # ถ้าโหลดไม่ขึ้น ให้ลองดึงจาก Yahoo ให้อัตโนมัติครั้งเดียว
+            if df_all_stocks is None or df_all_stocks.empty:
+                st.warning("ไม่พบข้อมูลใน Sheet กำลังดึงจาก Yahoo ใหม่...")
+                df_all_stocks = load_and_calculate_stock_data()
+                save_to_gsheet(df_all_stocks)
+        
+        # ตรวจสอบก่อนแสดงผล
+        if not df_all_stocks.empty:
+            # ใช้ filtered_df ถ้ามี (เช่นจากการ Filter ของผู้ใช้) ถ้าไม่มีก็ใช้ df_all_stocks
+            df_to_show = filtered_df if filtered_df is not None else df_all_stocks
+            st.dataframe(df_to_show, use_container_width=True)
+        else:
+            st.error("ไม่สามารถโหลดข้อมูลหุ้นได้เลย กรุณาตรวจสอบการเชื่อมต่อ Google Sheets")
+                
             ################################
             # 1. Slidebar (ตัวกรอง)
             ################################
