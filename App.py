@@ -771,9 +771,9 @@ with tab_stock:
             except Exception:
                 continue
                 
-        progress_bar.empty()
-        status_text.empty()
-        return pd.DataFrame(stock_list)
+    progress_bar.empty()
+    status_text.empty()
+    return pd.DataFrame(stock_list)
     
     
     ###################################################################
