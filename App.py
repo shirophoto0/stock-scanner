@@ -551,250 +551,250 @@ if "journal_data" not in st.session_state:
 
 # ตั้งค่าหน้าจอ
 st.set_page_config(layout="wide")
-
-tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
-# 1. ส่วนหุ้น
-with tab_stock:
-    
-    st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
-    st.write("ระบบสแกนหุ้นพร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
-    
-    # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
-    if "selected_ticker" not in st.session_state:
-        st.session_state.selected_ticker = "KBANK"
-    
-    # =============================================================
-    # 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
-    # =============================================================
-    def calculate_rsi(series, period=14):
-        delta = series.diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
-        rsi = 100 - (100 / (1 + rs))
-        return rsi
-    
-    # สารตั้งต้นข้อมูลหุ้นกลุ่ม SET100
-    SET100_TICKERS = [
-        "A5.BK", "AAI.BK", "AAV.BK", "ABM.BK", "ACC.BK", "ACE.BK", "ACG.BK", "ADB.BK", "ADD.BK", "ADVANC.BK",
-        "ADVICE.BK", "AE.BK", "AEONTS.BK", "AF.BK", "AGE.BK", "AH.BK", "AHC.BK", "AI.BK", "AIE.BK", "AIT.BK",
-        "AJ.BK", "AJA.BK", "AKP.BK", "AKR.BK", "ALLA.BK", "ALLY.BK", "ALPHAX.BK", "ALT.BK", "ALUCON.BK", "AMA.BK",
-        "AMANAH.BK", "AMARC.BK", "AMATA.BK", "AMR.BK", "ANAN.BK", "ANI.BK", "AOT.BK", "AP.BK", "APCO.BK", "APCS.BK",
-        "APO.BK", "APP.BK", "APURE.BK", "AQUA.BK", "ARIN.BK", "ARIP.BK", "ARROW.BK", "AS.BK", "ASAP.BK", "ASEFA.BK",
-        "ASIA.BK", "ASIAN.BK", "ASIMAR.BK", "ASK.BK", "ASN.BK", "ASP.BK", "ASW.BK", "ATP30.BK", "AU.BK", "AUCT.BK",
-        "AURA.BK", "AWC.BK", "B.BK", "BA.BK", "BAFS.BK", "BAM.BK", "BANPU.BK", "BAY.BK", "BBGI.BK", "BBIK.BK",
-        "BBL.BK", "BC.BK", "BCH.BK", "BCP.BK", "BCPG.BK", "BCT.BK", "BDMS.BK", "BE8.BK", "BEAUTY.BK", "BEC.BK",
-        "BEM.BK", "BGC.BK", "BGRIM.BK", "BH.BK", "BIS.BK", "BIZ.BK", "BJC.BK", "BJCHI.BK", "BKD.BK", "BLAND.BK",
-        "BLC.BK", "BM.BK", "BOL.BK", "BPP.BK", "BRI.BK", "BRR.BK", "BSBM.BK", "BTG.BK", "BTS.BK", "BWG.BK", "BYD.BK",
-        "CBG.BK", "CCET.BK", "CCP.BK", "CGD.BK", "CH.BK", "CHAYO.BK", "CHEWA.BK", "CHG.BK", "CHO.BK", "CHOW.BK",
-        "CI.BK", "CIG.BK", "CIMBT.BK", "CIVIL.BK", "CK.BK", "CKP.BK", "CM.BK", "CMC.BK", "CMO.BK", "CMR.BK",
-        "CNT.BK", "COLOR.BK", "COM7.BK", "CPALL.BK", "CPF.BK", "CPI.BK", "CPN.BK", "CPT.BK", "CRC.BK", "CRD.BK",
-        "CSC.BK", "CSP.BK", "CSS.BK", "CV.BK", "CWT.BK", "D.BK", "DCC.BK", "DDD.BK", "DELTA.BK", "DEMCO.BK",
-        "DEXON.BK", "DHOUSE.BK", "DITTO.BK", "DMT.BK", "DOHOME.BK", "DOD.BK", "DRT.BK", "DTCENT.BK", "DTCI.BK",
-        "EA.BK", "EASTW.BK", "EE.BK", "EFORL.BK", "EKH.BK", "EMC.BK", "EP.BK", "ERW.BK", "ESTAR.BK", "ETC.BK",
-        "ETE.BK", "EURO.BK", "FANCY.BK", "FMT.BK", "FNS.BK", "FORTH.BK", "FPI.BK", "FSMART.BK", "FSS.BK", "FTE.BK",
-        "GABLE.BK", "GBX.BK", "GC.BK", "GCAP.BK", "GEL.BK", "GENCO.BK", "GFPT.BK", "GGC.BK", "GLAND.BK", "GLOBAL.BK",
-        "GLOCON.BK", "GPI.BK", "GPSC.BK", "GRAMMY.BK", "GREEN.BK", "GSC.BK", "GTB.BK", "GULF.BK", "GUNKUL.BK", "GVREIT.BK",
-        "HANA.BK", "HARN.BK", "HENG.BK", "HFT.BK", "HL.BK", "HMPRO.BK", "HTC.BK", "HTECH.BK", "HUMAN.BK", "HYDRO.BK",
-        "ICC.BK", "ICHI.BK", "ICN.BK", "IFEC.BK", "IFS.BK", "IHL.BK", "III.BK", "ILINK.BK", "IMH.BK", "IND.BK",
-        "INET.BK", "INGRS.BK", "INOX.BK", "INSURE.BK", "INTUCH.BK", "IRC.BK", "IRCP.BK", "IT.BK", "ITC.BK", "ITEL.BK",
-        "ITD.BK", "IVL.BK", "J.BK", "JAS.BK", "JCK.BK", "JCKH.BK", "JMART.BK", "JMT.BK", "JSP.BK", "JTS.BK",
-        "K.BK", "KAMART.BK", "KBANK.BK", "KBS.BK", "KC.BK", "KCE.BK", "KEX.BK", "KGI.BK", "KHC.BK", "KJL.BK",
-        "KKP.BK", "KSL.BK", "KTB.BK", "KTC.BK", "KTIS.BK", "KWC.BK", "KWM.BK", "L&E.BK", "LALIN.BK", "LANNA.BK",
-        "LEO.BK", "LH.BK", "LHK.BK", "LPN.BK", "LRH.BK", "LST.BK", "M.BK", "MACO.BK", "MAJOR.BK", "MAKRO.BK",
-        "MC.BK", "MCA.BK", "MCOT.BK", "MCS.BK", "MDX.BK", "MEGA.BK", "META.BK", "MFC.BK", "MGT.BK", "MICRO.BK",
-        "MINT.BK", "MITSIB.BK", "MJD.BK", "MK.BK", "ML.BK", "MOSHI.BK", "MTC.BK", "NCAP.BK", "NCH.BK", "NER.BK",
-        "NETBAY.BK", "NEX.BK", "NKI.BK", "NNCL.BK", "NOBLE.BK", "NOK.BK", "NRF.BK", "NUSA.BK", "NVD.BK", "NYT.BK",
-        "OCC.BK", "OGC.BK", "OISHI.BK", "OR.BK", "ORI.BK", "OSP.BK", "OTO.BK", "PACE.BK", "PAF.BK", "PAP.BK",
-        "PCSGH.BK", "PDG.BK", "PERM.BK", "PF.BK", "PG.BK", "PHOL.BK", "PICO.BK", "PIN.BK", "PIS.BK", "PLANB.BK",
-        "PLAT.BK", "PLE.BK", "PM.BK", "PMC.BK", "PMP.BK", "PPP.BK", "PPPM.BK", "PR9.BK", "PREB.BK", "PRG.BK",
-        "PRINC.BK", "PRM.BK", "PROEN.BK", "PROS.BK", "PSH.BK", "PSL.BK", "PT.BK", "PTC.BK", "PTG.BK", "PTL.BK",
-        "PTT.BK", "PTTEP.BK", "PTTGC.BK", "PYLON.BK", "QH.BK", "QLT.BK", "QTC.BK", "RATCH.BK", "RBF.BK", "RCL.BK",
-        "RICHY.BK", "RJH.BK", "RML.BK", "ROJNA.BK", "RPC.BK", "RPH.BK", "RS.BK", "RSP.BK", "S.BK", "S11.BK",
-        "SABINA.BK", "SAK.BK", "SAPPE.BK", "SAT.BK", "SAWAD.BK", "SC.BK", "SCB.BK", "SCC.BK", "SCCC.BK", "SCGP.BK",
-        "SCI.BK", "SCP.BK", "SDC.BK", "SEAFCO.BK", "SEAOIL.BK", "SECURE.BK", "SELIC.BK", "SENA.BK", "SFLEX.BK", "SGP.BK",
-        "SHR.BK", "SIRI.BK", "SIS.BK", "SITHAI.BK", "SJWD.BK", "SKN.BK", "SKE.BK", "SKR.BK", "SNNP.BK", "SNP.BK",
-        "SORKON.BK", "SPALI.BK", "SPC.BK", "SPCG.BK", "SPG.BK", "SPI.BK", "SPRC.BK", "SR.BK", "SSC.BK", "SSF.BK",
-        "SSP.BK", "SSSC.BK", "STANLY.BK", "STEC.BK", "STGT.BK", "STPI.BK", "SUSCO.BK", "SUTHA.BK", "SVI.BK",
-        "SVOA.BK", "SVT.BK", "SYMC.BK", "SYNEX.BK", "SYNTEC.BK", "TACC.BK", "TAE.BK", "TAKUNI.BK", "TASCO.BK", "TCAP.BK",
-        "TCMC.BK", "TCOAT.BK", "TEAM.BK", "TEGH.BK", "TFFIF.BK", "TFG.BK", "TFMAMA.BK", "TGE.BK", "TGH.BK", "TIDLOR.BK",
-        "TIPH.BK", "TISCO.BK", "TKN.BK", "TKS.BK", "TKT.BK", "TLI.BK", "TM.BK", "TMD.BK", "TMILL.BK", "TMT.BK",
-        "TNP.BK", "TOA.BK", "TOG.BK", "TOP.BK", "TPA.BK", "TPBI.BK", "TPIPL.BK", "TPIPP.BK", "TPOLY.BK", "TPP.BK",
-        "TRC.BK", "TRU.BK", "TRUBB.BK", "TRUE.BK", "TSC.BK", "TSE.BK", "TSI.BK", "TSTH.BK", "TTA.BK", "TTB.BK",
-        "TTCL.BK", "TTI.BK", "TTW.BK", "TU.BK", "TVO.BK", "TWPC.BK", "UAC.BK", "UBE.BK", "UBIS.BK", "UEC.BK",
-        "UKEM.BK", "UMI.BK", "UNIQ.BK", "UP.BK", "UPF.BK", "UPL.BK", "UPOIC.BK", "UV.BK", "UVAN.BK", "VARO.BK",
-        "VGI.BK", "VIBHA.BK", "VIH.BK", "VL.BK", "VNG.BK", "VPO.BK", "W.BK", "WACOAL.BK", "WAVE.BK", "WGE.BK",
-        "WHA.BK", "WHART.BK", "WICE.BK", "WIIK.BK", "WIN.BK", "WORK.BK", "WP.BK", "WPH.BK", "XO.BK", "YGG.BK",
-        "ZEN.BK", "ZIGA.BK", "EPG.BK", "GTV.BK", "MRDIYT.BK"
-    ]
-    
-    # =============================================================
-    # 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
-    # ============================================================
-    @st.cache_data(ttl=3600)
-    def load_from_gsheet():
-        try:
-            client = get_gsheet_client()
-            sheet = client.open('MyStockData').worksheet('StockData')
-            data = sheet.get_all_records()
-            
-            if not data:
-                st.warning("ไม่มีข้อมูลใน Google Sheet ครับ")
+def main():
+    # 1. ประกาศตัวแปรเริ่มต้น
+    df_all_stocks = pd.DataFrame() 
+    filtered_df = None
+    tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
+    # 1. ส่วนหุ้น
+    with tab_stock:
+        
+        st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
+        st.write("ระบบสแกนหุ้นพร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
+        
+        # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
+        if "selected_ticker" not in st.session_state:
+            st.session_state.selected_ticker = "KBANK"
+        
+        # =============================================================
+        # 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
+        # =============================================================
+        def calculate_rsi(series, period=14):
+            delta = series.diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+            rs = gain / loss
+            rsi = 100 - (100 / (1 + rs))
+            return rsi
+        
+        # สารตั้งต้นข้อมูลหุ้นกลุ่ม SET100
+        SET100_TICKERS = [
+            "A5.BK", "AAI.BK", "AAV.BK", "ABM.BK", "ACC.BK", "ACE.BK", "ACG.BK", "ADB.BK", "ADD.BK", "ADVANC.BK",
+            "ADVICE.BK", "AE.BK", "AEONTS.BK", "AF.BK", "AGE.BK", "AH.BK", "AHC.BK", "AI.BK", "AIE.BK", "AIT.BK",
+            "AJ.BK", "AJA.BK", "AKP.BK", "AKR.BK", "ALLA.BK", "ALLY.BK", "ALPHAX.BK", "ALT.BK", "ALUCON.BK", "AMA.BK",
+            "AMANAH.BK", "AMARC.BK", "AMATA.BK", "AMR.BK", "ANAN.BK", "ANI.BK", "AOT.BK", "AP.BK", "APCO.BK", "APCS.BK",
+            "APO.BK", "APP.BK", "APURE.BK", "AQUA.BK", "ARIN.BK", "ARIP.BK", "ARROW.BK", "AS.BK", "ASAP.BK", "ASEFA.BK",
+            "ASIA.BK", "ASIAN.BK", "ASIMAR.BK", "ASK.BK", "ASN.BK", "ASP.BK", "ASW.BK", "ATP30.BK", "AU.BK", "AUCT.BK",
+            "AURA.BK", "AWC.BK", "B.BK", "BA.BK", "BAFS.BK", "BAM.BK", "BANPU.BK", "BAY.BK", "BBGI.BK", "BBIK.BK",
+            "BBL.BK", "BC.BK", "BCH.BK", "BCP.BK", "BCPG.BK", "BCT.BK", "BDMS.BK", "BE8.BK", "BEAUTY.BK", "BEC.BK",
+            "BEM.BK", "BGC.BK", "BGRIM.BK", "BH.BK", "BIS.BK", "BIZ.BK", "BJC.BK", "BJCHI.BK", "BKD.BK", "BLAND.BK",
+            "BLC.BK", "BM.BK", "BOL.BK", "BPP.BK", "BRI.BK", "BRR.BK", "BSBM.BK", "BTG.BK", "BTS.BK", "BWG.BK", "BYD.BK",
+            "CBG.BK", "CCET.BK", "CCP.BK", "CGD.BK", "CH.BK", "CHAYO.BK", "CHEWA.BK", "CHG.BK", "CHO.BK", "CHOW.BK",
+            "CI.BK", "CIG.BK", "CIMBT.BK", "CIVIL.BK", "CK.BK", "CKP.BK", "CM.BK", "CMC.BK", "CMO.BK", "CMR.BK",
+            "CNT.BK", "COLOR.BK", "COM7.BK", "CPALL.BK", "CPF.BK", "CPI.BK", "CPN.BK", "CPT.BK", "CRC.BK", "CRD.BK",
+            "CSC.BK", "CSP.BK", "CSS.BK", "CV.BK", "CWT.BK", "D.BK", "DCC.BK", "DDD.BK", "DELTA.BK", "DEMCO.BK",
+            "DEXON.BK", "DHOUSE.BK", "DITTO.BK", "DMT.BK", "DOHOME.BK", "DOD.BK", "DRT.BK", "DTCENT.BK", "DTCI.BK",
+            "EA.BK", "EASTW.BK", "EE.BK", "EFORL.BK", "EKH.BK", "EMC.BK", "EP.BK", "ERW.BK", "ESTAR.BK", "ETC.BK",
+            "ETE.BK", "EURO.BK", "FANCY.BK", "FMT.BK", "FNS.BK", "FORTH.BK", "FPI.BK", "FSMART.BK", "FSS.BK", "FTE.BK",
+            "GABLE.BK", "GBX.BK", "GC.BK", "GCAP.BK", "GEL.BK", "GENCO.BK", "GFPT.BK", "GGC.BK", "GLAND.BK", "GLOBAL.BK",
+            "GLOCON.BK", "GPI.BK", "GPSC.BK", "GRAMMY.BK", "GREEN.BK", "GSC.BK", "GTB.BK", "GULF.BK", "GUNKUL.BK", "GVREIT.BK",
+            "HANA.BK", "HARN.BK", "HENG.BK", "HFT.BK", "HL.BK", "HMPRO.BK", "HTC.BK", "HTECH.BK", "HUMAN.BK", "HYDRO.BK",
+            "ICC.BK", "ICHI.BK", "ICN.BK", "IFEC.BK", "IFS.BK", "IHL.BK", "III.BK", "ILINK.BK", "IMH.BK", "IND.BK",
+            "INET.BK", "INGRS.BK", "INOX.BK", "INSURE.BK", "INTUCH.BK", "IRC.BK", "IRCP.BK", "IT.BK", "ITC.BK", "ITEL.BK",
+            "ITD.BK", "IVL.BK", "J.BK", "JAS.BK", "JCK.BK", "JCKH.BK", "JMART.BK", "JMT.BK", "JSP.BK", "JTS.BK",
+            "K.BK", "KAMART.BK", "KBANK.BK", "KBS.BK", "KC.BK", "KCE.BK", "KEX.BK", "KGI.BK", "KHC.BK", "KJL.BK",
+            "KKP.BK", "KSL.BK", "KTB.BK", "KTC.BK", "KTIS.BK", "KWC.BK", "KWM.BK", "L&E.BK", "LALIN.BK", "LANNA.BK",
+            "LEO.BK", "LH.BK", "LHK.BK", "LPN.BK", "LRH.BK", "LST.BK", "M.BK", "MACO.BK", "MAJOR.BK", "MAKRO.BK",
+            "MC.BK", "MCA.BK", "MCOT.BK", "MCS.BK", "MDX.BK", "MEGA.BK", "META.BK", "MFC.BK", "MGT.BK", "MICRO.BK",
+            "MINT.BK", "MITSIB.BK", "MJD.BK", "MK.BK", "ML.BK", "MOSHI.BK", "MTC.BK", "NCAP.BK", "NCH.BK", "NER.BK",
+            "NETBAY.BK", "NEX.BK", "NKI.BK", "NNCL.BK", "NOBLE.BK", "NOK.BK", "NRF.BK", "NUSA.BK", "NVD.BK", "NYT.BK",
+            "OCC.BK", "OGC.BK", "OISHI.BK", "OR.BK", "ORI.BK", "OSP.BK", "OTO.BK", "PACE.BK", "PAF.BK", "PAP.BK",
+            "PCSGH.BK", "PDG.BK", "PERM.BK", "PF.BK", "PG.BK", "PHOL.BK", "PICO.BK", "PIN.BK", "PIS.BK", "PLANB.BK",
+            "PLAT.BK", "PLE.BK", "PM.BK", "PMC.BK", "PMP.BK", "PPP.BK", "PPPM.BK", "PR9.BK", "PREB.BK", "PRG.BK",
+            "PRINC.BK", "PRM.BK", "PROEN.BK", "PROS.BK", "PSH.BK", "PSL.BK", "PT.BK", "PTC.BK", "PTG.BK", "PTL.BK",
+            "PTT.BK", "PTTEP.BK", "PTTGC.BK", "PYLON.BK", "QH.BK", "QLT.BK", "QTC.BK", "RATCH.BK", "RBF.BK", "RCL.BK",
+            "RICHY.BK", "RJH.BK", "RML.BK", "ROJNA.BK", "RPC.BK", "RPH.BK", "RS.BK", "RSP.BK", "S.BK", "S11.BK",
+            "SABINA.BK", "SAK.BK", "SAPPE.BK", "SAT.BK", "SAWAD.BK", "SC.BK", "SCB.BK", "SCC.BK", "SCCC.BK", "SCGP.BK",
+            "SCI.BK", "SCP.BK", "SDC.BK", "SEAFCO.BK", "SEAOIL.BK", "SECURE.BK", "SELIC.BK", "SENA.BK", "SFLEX.BK", "SGP.BK",
+            "SHR.BK", "SIRI.BK", "SIS.BK", "SITHAI.BK", "SJWD.BK", "SKN.BK", "SKE.BK", "SKR.BK", "SNNP.BK", "SNP.BK",
+            "SORKON.BK", "SPALI.BK", "SPC.BK", "SPCG.BK", "SPG.BK", "SPI.BK", "SPRC.BK", "SR.BK", "SSC.BK", "SSF.BK",
+            "SSP.BK", "SSSC.BK", "STANLY.BK", "STEC.BK", "STGT.BK", "STPI.BK", "SUSCO.BK", "SUTHA.BK", "SVI.BK",
+            "SVOA.BK", "SVT.BK", "SYMC.BK", "SYNEX.BK", "SYNTEC.BK", "TACC.BK", "TAE.BK", "TAKUNI.BK", "TASCO.BK", "TCAP.BK",
+            "TCMC.BK", "TCOAT.BK", "TEAM.BK", "TEGH.BK", "TFFIF.BK", "TFG.BK", "TFMAMA.BK", "TGE.BK", "TGH.BK", "TIDLOR.BK",
+            "TIPH.BK", "TISCO.BK", "TKN.BK", "TKS.BK", "TKT.BK", "TLI.BK", "TM.BK", "TMD.BK", "TMILL.BK", "TMT.BK",
+            "TNP.BK", "TOA.BK", "TOG.BK", "TOP.BK", "TPA.BK", "TPBI.BK", "TPIPL.BK", "TPIPP.BK", "TPOLY.BK", "TPP.BK",
+            "TRC.BK", "TRU.BK", "TRUBB.BK", "TRUE.BK", "TSC.BK", "TSE.BK", "TSI.BK", "TSTH.BK", "TTA.BK", "TTB.BK",
+            "TTCL.BK", "TTI.BK", "TTW.BK", "TU.BK", "TVO.BK", "TWPC.BK", "UAC.BK", "UBE.BK", "UBIS.BK", "UEC.BK",
+            "UKEM.BK", "UMI.BK", "UNIQ.BK", "UP.BK", "UPF.BK", "UPL.BK", "UPOIC.BK", "UV.BK", "UVAN.BK", "VARO.BK",
+            "VGI.BK", "VIBHA.BK", "VIH.BK", "VL.BK", "VNG.BK", "VPO.BK", "W.BK", "WACOAL.BK", "WAVE.BK", "WGE.BK",
+            "WHA.BK", "WHART.BK", "WICE.BK", "WIIK.BK", "WIN.BK", "WORK.BK", "WP.BK", "WPH.BK", "XO.BK", "YGG.BK",
+            "ZEN.BK", "ZIGA.BK", "EPG.BK", "GTV.BK", "MRDIYT.BK"
+        ]
+        
+        # =============================================================
+        # 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
+        # ============================================================
+        @st.cache_data(ttl=3600)
+        def load_from_gsheet():
+            try:
+                client = get_gsheet_client()
+                sheet = client.open('MyStockData').worksheet('StockData')
+                data = sheet.get_all_records()
+                
+                if not data:
+                    st.warning("ไม่มีข้อมูลใน Google Sheet ครับ")
+                    return None
+                    
+                # ดึงข้อมูลออกมาเป็น DataFrame
+                df = pd.DataFrame(data)
+                
+                # ล้างชื่อคอลัมน์ (เผื่อมีช่องว่างติดมา)
+                df.columns = df.columns.str.strip()
+                
+                # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ
+                numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
+                for col in numeric_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+                return df
+        
+            except Exception as e:
+                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
                 return None
                 
-            # ดึงข้อมูลออกมาเป็น DataFrame
-            df = pd.DataFrame(data)
+        def load_and_calculate_stock_data():
+            stock_list = []
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            total = len(SET100_TICKERS)
             
-            # ล้างชื่อคอลัมน์ (เผื่อมีช่องว่างติดมา)
-            df.columns = df.columns.str.strip()
-            
-            # แปลงคอลัมน์ตัวเลขให้เป็นตัวเลขจริงๆ
-            numeric_cols = ['ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
-            for col in numeric_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-            return df
-    
-        except Exception as e:
-            st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
-            return None
-            
-    def load_and_calculate_stock_data():
-        stock_list = []
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        total = len(SET100_TICKERS)
+            set_market_pre = yf.Ticker("^SET.BK")
+            hist_market_all = set_market_pre.history(period="2y")['Close'].to_frame(name='Market_Close')
+            if hist_market_all.index.tz is not None:
+                hist_market_all.index = hist_market_all.index.tz_localize(None)
         
-        set_market_pre = yf.Ticker("^SET.BK")
-        hist_market_all = set_market_pre.history(period="2y")['Close'].to_frame(name='Market_Close')
-        if hist_market_all.index.tz is not None:
-            hist_market_all.index = hist_market_all.index.tz_localize(None)
-    
-        for i, ticker in enumerate(SET100_TICKERS):
-            try:
-                status_text.text(f"กำลังคำนวณสัญญาณหุ้น: {ticker} ({i+1}/{total})")
-                progress_bar.progress((i + 1) / total)
-                
-                stock = yf.Ticker(ticker)
-                hist = stock.history(period="2y")
-                
-                # ตรวจสอบว่ามีข้อมูลพอหรือไม่
-                if hist.empty or len(hist) < 200: 
+            for i, ticker in enumerate(SET100_TICKERS):
+                try:
+                    status_text.text(f"กำลังคำนวณสัญญาณหุ้น: {ticker} ({i+1}/{total})")
+                    progress_bar.progress((i + 1) / total)
+                    
+                    stock = yf.Ticker(ticker)
+                    hist = stock.history(period="2y")
+                    
+                    # ตรวจสอบว่ามีข้อมูลพอหรือไม่
+                    if hist.empty or len(hist) < 200: 
+                        continue
+                        
+                    if hist.index.tz is not None:
+                        hist.index = hist.index.tz_localize(None)
+                    
+                    latest_price = hist['Close'].iloc[-1]
+                    combined = hist[['Open', 'High', 'Low', 'Close']].join(hist_market_all, how='inner')
+                    
+                    if combined.empty or len(combined) < 2:
+                        continue
+                        
+                    combined['RSI'] = calculate_rsi(combined['Close'], period=14)
+                    current_rsi = combined['RSI'].iloc[-1]
+                    
+                    # คำนวณ RS_Line
+                    base_stock = combined['Close'].iloc[0]
+                    stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
+                    base_market = combined['Market_Close'].iloc[0]
+                    market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
+                    combined['RS_Line'] = stock_perf - market_perf
+                    current_rs_val = combined['RS_Line'].iloc[-1]
+                    
+                    # คำนวณสถานะเส้น RS
+                    is_rs_above_zero = current_rs_val > 0
+                    days_above_zero = 0
+                    days_below_zero = 0
+                    
+                    # คำนวณค่าทางเทคนิคแบบปลอดภัย
+                    high_3m = combined['High'].iloc[:-1].tail(60).max()
+                    high_6m = combined['High'].iloc[:-1].tail(120).max()
+                    high_52w = combined['High'].iloc[:-1].tail(250).max()
+        
+                    # 1. หาวันที่ล่าสุด (วันปัจจุบันที่รันสแกน)
+                    today_date = combined.index[-1]
+                    
+                    # 2. คำนวณจำนวนวันสำหรับ 3 Month High
+                    # หาข้อมูลช่วง 3 เดือนที่ผ่านมา
+                    df_3m = combined['High'].tail(60)
+                    # หาว่า High สูงสุดเกิดขึ้นที่ตำแหน่งไหน (วันไหน)
+                    last_high_3m_date = df_3m[df_3m == high_3m].index[-1]
+                    days_3m = (today_date - last_high_3m_date).days
+                    
+                    # 3. คำนวณจำนวนวันสำหรับ 6 Month High
+                    df_6m = combined['High'].tail(120)
+                    last_high_6m_date = df_6m[df_6m == high_6m].index[-1]
+                    days_6m = (today_date - last_high_6m_date).days
+                    
+                    # 4. คำนวณจำนวนวันสำหรับ 52 Week High
+                    df_52w = combined['High'].tail(250)
+                    last_high_52w_date = df_52w[df_52w == high_52w].index[-1]
+                    days_52w = (today_date - last_high_52w_date).days
+                    
+                    # คำนวณปันผลจากข้อมูลจริง (ไม่ใช้ .info)
+                    dividends_history = stock.dividends
+                    total_div_1y = 0.0
+                    if not dividends_history.empty:
+                        last_year = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=365)
+                        div_1y = dividends_history[dividends_history.index.tz_localize(None) > last_year.replace(tzinfo=None)]
+                        total_div_1y = div_1y.sum()
+                    
+                    calc_div_yield = ((total_div_1y / latest_price) * 100) if total_div_1y > 0 else 0.0
+                    
+                    # ดึง PE ด้วยวิธีที่ปลอดภัย (ไม่ใช้ .info)
+                    pe_ratio = get_pe_ratio(stock)
+                    
+                    # รวมผลลัพธ์
+                    stock_list.append({
+                        'Ticker': ticker.replace('.BK', ''),
+                        'ราคาล่าสุด': round(latest_price, 2),
+                        'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else 0,
+                        'RS_Line': round(current_rs_val, 2),
+                        'PE_Ratio': round(pe_ratio, 2) if pe_ratio else 0,
+                        'ปันผล_%': round(calc_div_yield, 2),
+                        'Is_RS_Above_0': is_rs_above_zero,
+                        'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero,
+                        'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero,
+                        'Is_3M_High': latest_price >= (high_3m * 0.95),
+                        'Is_6M_High': latest_price >= (high_6m * 0.95),
+                        'Is_52W_High': latest_price >= (high_52w * 0.95),
+                        'New_High_3M_มาแล้ว(วัน)': days_3m,
+                        'New_High_6M_มาแล้ว(วัน)': days_6m,
+                        'New_High_52W_มาแล้ว(วัน)': days_52w,
+                    })
+                    
+                    # ใส่หน่วงเวลาเล็กน้อยเพื่อป้องกันการถูกบล็อก
+                    time.sleep(0.1)
+                    
+                except Exception:
                     continue
                     
-                if hist.index.tz is not None:
-                    hist.index = hist.index.tz_localize(None)
-                
-                latest_price = hist['Close'].iloc[-1]
-                combined = hist[['Open', 'High', 'Low', 'Close']].join(hist_market_all, how='inner')
-                
-                if combined.empty or len(combined) < 2:
-                    continue
-                    
-                combined['RSI'] = calculate_rsi(combined['Close'], period=14)
-                current_rsi = combined['RSI'].iloc[-1]
-                
-                # คำนวณ RS_Line
-                base_stock = combined['Close'].iloc[0]
-                stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
-                base_market = combined['Market_Close'].iloc[0]
-                market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
-                combined['RS_Line'] = stock_perf - market_perf
-                current_rs_val = combined['RS_Line'].iloc[-1]
-                
-                # คำนวณสถานะเส้น RS
-                is_rs_above_zero = current_rs_val > 0
-                days_above_zero = 0
-                days_below_zero = 0
-                
-                # คำนวณค่าทางเทคนิคแบบปลอดภัย
-                high_3m = combined['High'].iloc[:-1].tail(60).max()
-                high_6m = combined['High'].iloc[:-1].tail(120).max()
-                high_52w = combined['High'].iloc[:-1].tail(250).max()
-    
-                # 1. หาวันที่ล่าสุด (วันปัจจุบันที่รันสแกน)
-                today_date = combined.index[-1]
-                
-                # 2. คำนวณจำนวนวันสำหรับ 3 Month High
-                # หาข้อมูลช่วง 3 เดือนที่ผ่านมา
-                df_3m = combined['High'].tail(60)
-                # หาว่า High สูงสุดเกิดขึ้นที่ตำแหน่งไหน (วันไหน)
-                last_high_3m_date = df_3m[df_3m == high_3m].index[-1]
-                days_3m = (today_date - last_high_3m_date).days
-                
-                # 3. คำนวณจำนวนวันสำหรับ 6 Month High
-                df_6m = combined['High'].tail(120)
-                last_high_6m_date = df_6m[df_6m == high_6m].index[-1]
-                days_6m = (today_date - last_high_6m_date).days
-                
-                # 4. คำนวณจำนวนวันสำหรับ 52 Week High
-                df_52w = combined['High'].tail(250)
-                last_high_52w_date = df_52w[df_52w == high_52w].index[-1]
-                days_52w = (today_date - last_high_52w_date).days
-                
-                # คำนวณปันผลจากข้อมูลจริง (ไม่ใช้ .info)
-                dividends_history = stock.dividends
-                total_div_1y = 0.0
-                if not dividends_history.empty:
-                    last_year = pd.Timestamp.now(tz='UTC') - pd.Timedelta(days=365)
-                    div_1y = dividends_history[dividends_history.index.tz_localize(None) > last_year.replace(tzinfo=None)]
-                    total_div_1y = div_1y.sum()
-                
-                calc_div_yield = ((total_div_1y / latest_price) * 100) if total_div_1y > 0 else 0.0
-                
-                # ดึง PE ด้วยวิธีที่ปลอดภัย (ไม่ใช้ .info)
-                pe_ratio = get_pe_ratio(stock)
-                
-                # รวมผลลัพธ์
-                stock_list.append({
-                    'Ticker': ticker.replace('.BK', ''),
-                    'ราคาล่าสุด': round(latest_price, 2),
-                    'RSI_14': round(current_rsi, 2) if not pd.isna(current_rsi) else 0,
-                    'RS_Line': round(current_rs_val, 2),
-                    'PE_Ratio': round(pe_ratio, 2) if pe_ratio else 0,
-                    'ปันผล_%': round(calc_div_yield, 2),
-                    'Is_RS_Above_0': is_rs_above_zero,
-                    'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_zero,
-                    'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_zero,
-                    'Is_3M_High': latest_price >= (high_3m * 0.95),
-                    'Is_6M_High': latest_price >= (high_6m * 0.95),
-                    'Is_52W_High': latest_price >= (high_52w * 0.95),
-                    'New_High_3M_มาแล้ว(วัน)': days_3m,
-                    'New_High_6M_มาแล้ว(วัน)': days_6m,
-                    'New_High_52W_มาแล้ว(วัน)': days_52w,
-                })
-                
-                # ใส่หน่วงเวลาเล็กน้อยเพื่อป้องกันการถูกบล็อก
-                time.sleep(0.1)
-                
-            except Exception:
-                continue
-                
-        progress_bar.empty()
-        status_text.empty()
-        return pd.DataFrame(stock_list)
-    
-    
-    ###################################################################
-    # # --- ฟังก์ชัน Main ---
-    ###################################################################
-    
-    def highlight_rsi_zones(row):
-        if row['RSI_14'] >= 65.0:
-            return ['background-color: #fce4d6; color: black'] * len(row)
-        elif 30.0 <= row['RSI_14'] <= 45.0:
-            return ['background-color: #e2f0d9; color: black'] * len(row)
-        return [''] * len(row)
-    
+            progress_bar.empty()
+            status_text.empty()
+            return pd.DataFrame(stock_list)
+        
+        
+        ###################################################################
+        # # --- ฟังก์ชัน Main ---
+        ###################################################################
+        
+        def highlight_rsi_zones(row):
+            if row['RSI_14'] >= 65.0:
+                return ['background-color: #fce4d6; color: black'] * len(row)
+            elif 30.0 <= row['RSI_14'] <= 45.0:
+                return ['background-color: #e2f0d9; color: black'] * len(row)
+            return [''] * len(row)
+        
     #####################################
     # Def Main ส่วนครอบ code ทั้งหมด
     ######################################
   
-    def main():
-        # 1. ประกาศตัวแปรเริ่มต้น
-        df_all_stocks = pd.DataFrame() 
-        filtered_df = None
+
         
         # 2. โหมด GitHub (ทำงานจบในตัว)
         if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
@@ -2283,288 +2283,290 @@ with tab_stock:
                                 st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
                                 st.cache_data.clear()
                                 st.rerun()
-    # ------------------------------
-    if __name__ == "__main__":
-        main()
-    
+
     
     ###################################################################
     # # --- ฟังก์ชัน Main tap stock Finish---
     ###################################################################
-# 2. ส่วน TFEX
-with tab_tfex:
-    st.subheader("📝 ระบบเทรด TFEX")
-    
-    # 1. โหลดข้อมูล
-    tfex_df = load_data("TFEX_History") 
-    cash_df = load_data("Cash_Flow")
-    
-    # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
-    # สมมติว่าถ้ายังไม่ปิด Close_Price จะเป็น 0 หรือเป็นค่าว่าง
-    # หากคอลัมน์พี่อ้ำชื่ออื่น (เช่น 'Status' ที่บอกว่า 'Open') ให้เปลี่ยนในบรรทัดถัดไปครับ
-    closed_trades = tfex_df[tfex_df['Close_Price'] > 0] if not tfex_df.empty and 'Close_Price' in tfex_df.columns else tfex_df
-    total_pnl = closed_trades['Net_Profit'].sum() if not closed_trades.empty and 'Net_Profit' in closed_trades.columns else 0
-    
-    # 3. คำนวณเงินต้นสุทธิ
-    # ใช้ .astype(str).str.lower() เพื่อป้องกันปัญหาตัวอักษรพิมพ์เล็ก/ใหญ่
-    total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum() if not cash_df.empty else 0
-    total_withdraw = cash_df[cash_df['Type'].astype(str).str.lower() == 'withdraw']['Amount'].sum() if not cash_df.empty else 0
-    net_capital = total_deposit - total_withdraw
-    
-    # 4. คำนวณพอร์ต (ใช้ Realized PnL)
-    net_worth = net_capital + total_pnl
-    growth_pct = (total_pnl / net_capital * 100) if net_capital > 0 else 0
-    
-    # แสดง Dashboard
-    c1, c2, c3 = st.columns(3)
-    c1.metric("มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท")
-    c2.metric("กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท")
-    c3.metric("การเติบโต", f"{growth_pct:.2f} %")
-    st.divider()
-
-    # --- เริ่มแถวที่ 2: Performance Metrics ---
-    st.subheader("📊 Performance Monitor")
-    
-    # 1. สร้าง Filter ช่วงเวลา
-    period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
-    selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
-    
-    # 2. กรองข้อมูลเฉพาะแถวที่ปิดสถานะแล้ว และตามช่วงเวลาที่เลือก
-    # แปลง Date_Close เป็น datetime เพื่อคำนวณระยะเวลา
-    perf_df = closed_trades.copy() # ใช้ closed_trades ที่เรากรองไว้แล้วก่อนหน้านี้
-    perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
-    
-    days_ago = period_options[selected_period]
-    if days_ago != 9999:
-        cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
-        perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
-
-    # 3. คำนวณค่าต่างๆ
-    total_trades = len(perf_df)
-    win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
-    win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
-    
-    avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
-    avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if (total_trades - win_trades) > 0 else 0
-    rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
-    
-    gross_profit = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum()
-    gross_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()
-    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
-    
-    expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
-
-    # 4. แสดงผล
-    p1, p2, p3, p4 = st.columns(4)
-    p1.metric("Win Rate", f"{win_rate:.1f}%")
-    p2.metric("R:R Ratio", f"{rr_ratio:.2f}")
-    p3.metric("Profit Factor", f"{profit_factor:.2f}")
-    p4.metric("Expectancy", f"{expectancy:,.0f}")
-    
-    # 3. สร้าง 3 Tabs
-    sub_tfex_input, sub_tfex_close, sub_tfex_cash, sub_tfex_history = st.tabs([
-    "➕ บันทึกเทรดใหม่", 
-    "🏁 ปิดสถานะเทรด", 
-    "➕ บันทึกเติม/ถอนเงิน", 
-    "📜 ประวัติและ Portfolio"
-    ])
-    with sub_tfex_input:
-        st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
+    # 2. ส่วน TFEX
+    with tab_tfex:
+        st.subheader("📝 ระบบเทรด TFEX")
         
-        c1, c2 = st.columns(2)
-        risk_amount = c1.number_input("เงินที่ยอมขาดทุนได้ (บาท)", value=2000)
-        stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=2.0)
+        # 1. โหลดข้อมูล
+        tfex_df = load_data("TFEX_History") 
+        cash_df = load_data("Cash_Flow")
         
-        # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
-        im_per_contract = IM_PER_CONTRACT 
+        # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
+        # สมมติว่าถ้ายังไม่ปิด Close_Price จะเป็น 0 หรือเป็นค่าว่าง
+        # หากคอลัมน์พี่อ้ำชื่ออื่น (เช่น 'Status' ที่บอกว่า 'Open') ให้เปลี่ยนในบรรทัดถัดไปครับ
+        closed_trades = tfex_df[tfex_df['Close_Price'] > 0] if not tfex_df.empty and 'Close_Price' in tfex_df.columns else tfex_df
+        total_pnl = closed_trades['Net_Profit'].sum() if not closed_trades.empty and 'Net_Profit' in closed_trades.columns else 0
         
-        # คำนวณสัญญา
-        contract_by_risk = risk_amount / (stop_loss_points * 200)
-        contract_by_margin = net_worth / im_per_contract # net_worth ดึงมาจาก Dashboard
+        # 3. คำนวณเงินต้นสุทธิ
+        # ใช้ .astype(str).str.lower() เพื่อป้องกันปัญหาตัวอักษรพิมพ์เล็ก/ใหญ่
+        total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum() if not cash_df.empty else 0
+        total_withdraw = cash_df[cash_df['Type'].astype(str).str.lower() == 'withdraw']['Amount'].sum() if not cash_df.empty else 0
+        net_capital = total_deposit - total_withdraw
         
-        max_contracts = min(int(contract_by_risk), int(contract_by_margin))
+        # 4. คำนวณพอร์ต (ใช้ Realized PnL)
+        net_worth = net_capital + total_pnl
+        growth_pct = (total_pnl / net_capital * 100) if net_capital > 0 else 0
         
-        # แสดงผลแบบมืออาชีพ
-        st.info(f"📋 ข้อมูลการคำนวณ:")
-        st.write(f"- ค่า IM ปัจจุบัน: {im_per_contract:,.0f} บาท/สัญญา")
-        st.write(f"- เงินต้นรวม (Net Worth): {net_worth:,.0f} บาท")
-        
-        if max_contracts <= 0:
-            st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
-        else:
-            st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
-        
-        # 1. แสดงรายการที่ถืออยู่ (Open Positions)
-        st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
-        # สมมติว่าในตาราง History ของพี่อ้ำมีคอลัมน์ 'Close_Price' ที่เป็น 0 หรือว่าง สำหรับรายการที่ยังไม่ปิด
-        # ตรงนี้ต้องปรับให้ตรงกับคอลัมน์ใน Google Sheet ของพี่อ้ำนะครับ
-        open_positions = tfex_df[tfex_df['Close_Price'] == 0] 
-        
-        if not open_positions.empty:
-            st.dataframe(open_positions[['Date_Open', 'Series', 'Status', 'Size', 'Open_Price']], use_container_width=True)
-        else:
-            st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
-
+        # แสดง Dashboard
+        c1, c2, c3 = st.columns(3)
+        c1.metric("มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท")
+        c2.metric("กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท")
+        c3.metric("การเติบโต", f"{growth_pct:.2f} %")
         st.divider()
+    
+        # --- เริ่มแถวที่ 2: Performance Metrics ---
+        st.subheader("📊 Performance Monitor")
         
-        with st.form("tfex_entry_form"):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                date_open = st.date_input("วันที่เปิด")
-                series = st.text_input("Series (เช่น S50Z25)")
-                Status = st.selectbox("สถานะ:", ["Long", "Short"])
-            with col2:
-                entry = st.number_input("ราคา Open:", format="%.2f")
-                size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
-                # เพิ่มช่อง Trade_ID ให้พี่อ้ำกรอกเอง หรือจะให้ระบบรันเลขให้อัตโนมัติก็ได้ครับ
-                trade_id = st.text_input("Trade ID (ตั้งชื่อให้ไม่ซ้ำ):") 
-            with col3:
-                reason = st.text_area("เหตุผลที่เข้าเทรด:")
+        # 1. สร้าง Filter ช่วงเวลา
+        period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
+        selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
+        
+        # 2. กรองข้อมูลเฉพาะแถวที่ปิดสถานะแล้ว และตามช่วงเวลาที่เลือก
+        # แปลง Date_Close เป็น datetime เพื่อคำนวณระยะเวลา
+        perf_df = closed_trades.copy() # ใช้ closed_trades ที่เรากรองไว้แล้วก่อนหน้านี้
+        perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
+        
+        days_ago = period_options[selected_period]
+        if days_ago != 9999:
+            cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
+            perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
+    
+        # 3. คำนวณค่าต่างๆ
+        total_trades = len(perf_df)
+        win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
+        win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
+        
+        avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
+        avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if (total_trades - win_trades) > 0 else 0
+        rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
+        
+        gross_profit = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum()
+        gross_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
+        
+        expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
+    
+        # 4. แสดงผล
+        p1, p2, p3, p4 = st.columns(4)
+        p1.metric("Win Rate", f"{win_rate:.1f}%")
+        p2.metric("R:R Ratio", f"{rr_ratio:.2f}")
+        p3.metric("Profit Factor", f"{profit_factor:.2f}")
+        p4.metric("Expectancy", f"{expectancy:,.0f}")
+        
+        # 3. สร้าง 3 Tabs
+        sub_tfex_input, sub_tfex_close, sub_tfex_cash, sub_tfex_history = st.tabs([
+        "➕ บันทึกเทรดใหม่", 
+        "🏁 ปิดสถานะเทรด", 
+        "➕ บันทึกเติม/ถอนเงิน", 
+        "📜 ประวัติและ Portfolio"
+        ])
+        with sub_tfex_input:
+            st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
             
-            if st.form_submit_button("เปิดสถานะเทรด"):
-                new_record = {
-                    "Trade_ID": trade_id,
-                    "Date_Open": date_open.strftime("%Y-%m-%d"),
-                    "Date_Close": "",          # ว่างไว้ก่อนเพราะยังไม่ปิด
-                    "Series": series,
-                    "Status": Status,
-                    "Size": size,
-                    "Open_Price": entry,
-                    "Close_Price": 0,          # ต้องมีค่าเป็น 0 เพื่อให้ระบบเช็คได้ว่ายังไม่ปิด
-                    "Realized": 0,             # คอลัมน์ใหม่
-                    "Comm": 0,                 # คอลัมน์ใหม่
-                    "Net_Profit": 0,
-                    "Win_Lose": "",            # คอลัมน์ใหม่
-                    "Reason": reason
-                }
-                # บันทึกโดยแปลงเป็น DataFrame
-                df_to_save = pd.DataFrame([new_record])
+            c1, c2 = st.columns(2)
+            risk_amount = c1.number_input("เงินที่ยอมขาดทุนได้ (บาท)", value=2000)
+            stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=2.0)
+            
+            # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
+            im_per_contract = IM_PER_CONTRACT 
+            
+            # คำนวณสัญญา
+            contract_by_risk = risk_amount / (stop_loss_points * 200)
+            contract_by_margin = net_worth / im_per_contract # net_worth ดึงมาจาก Dashboard
+            
+            max_contracts = min(int(contract_by_risk), int(contract_by_margin))
+            
+            # แสดงผลแบบมืออาชีพ
+            st.info(f"📋 ข้อมูลการคำนวณ:")
+            st.write(f"- ค่า IM ปัจจุบัน: {im_per_contract:,.0f} บาท/สัญญา")
+            st.write(f"- เงินต้นรวม (Net Worth): {net_worth:,.0f} บาท")
+            
+            if max_contracts <= 0:
+                st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
+            else:
+                st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
+            
+            # 1. แสดงรายการที่ถืออยู่ (Open Positions)
+            st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
+            # สมมติว่าในตาราง History ของพี่อ้ำมีคอลัมน์ 'Close_Price' ที่เป็น 0 หรือว่าง สำหรับรายการที่ยังไม่ปิด
+            # ตรงนี้ต้องปรับให้ตรงกับคอลัมน์ใน Google Sheet ของพี่อ้ำนะครับ
+            open_positions = tfex_df[tfex_df['Close_Price'] == 0] 
+            
+            if not open_positions.empty:
+                st.dataframe(open_positions[['Date_Open', 'Series', 'Status', 'Size', 'Open_Price']], use_container_width=True)
+            else:
+                st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
+    
+            st.divider()
+            
+            with st.form("tfex_entry_form"):
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    date_open = st.date_input("วันที่เปิด")
+                    series = st.text_input("Series (เช่น S50Z25)")
+                    Status = st.selectbox("สถานะ:", ["Long", "Short"])
+                with col2:
+                    entry = st.number_input("ราคา Open:", format="%.2f")
+                    size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
+                    # เพิ่มช่อง Trade_ID ให้พี่อ้ำกรอกเอง หรือจะให้ระบบรันเลขให้อัตโนมัติก็ได้ครับ
+                    trade_id = st.text_input("Trade ID (ตั้งชื่อให้ไม่ซ้ำ):") 
+                with col3:
+                    reason = st.text_area("เหตุผลที่เข้าเทรด:")
                 
-                if save_data_to_sheet(df_to_save, "TFEX_History"):
-                    st.success("เปิดสถานะเรียบร้อย!")
-                    st.rerun()
-    with sub_tfex_close:
-        st.subheader("🏁 ปิดสถานะเทรด")
+                if st.form_submit_button("เปิดสถานะเทรด"):
+                    new_record = {
+                        "Trade_ID": trade_id,
+                        "Date_Open": date_open.strftime("%Y-%m-%d"),
+                        "Date_Close": "",          # ว่างไว้ก่อนเพราะยังไม่ปิด
+                        "Series": series,
+                        "Status": Status,
+                        "Size": size,
+                        "Open_Price": entry,
+                        "Close_Price": 0,          # ต้องมีค่าเป็น 0 เพื่อให้ระบบเช็คได้ว่ายังไม่ปิด
+                        "Realized": 0,             # คอลัมน์ใหม่
+                        "Comm": 0,                 # คอลัมน์ใหม่
+                        "Net_Profit": 0,
+                        "Win_Lose": "",            # คอลัมน์ใหม่
+                        "Reason": reason
+                    }
+                    # บันทึกโดยแปลงเป็น DataFrame
+                    df_to_save = pd.DataFrame([new_record])
+                    
+                    if save_data_to_sheet(df_to_save, "TFEX_History"):
+                        st.success("เปิดสถานะเรียบร้อย!")
+                        st.rerun()
+        with sub_tfex_close:
+            st.subheader("🏁 ปิดสถานะเทรด")
+            
+            # ดึงข้อมูลจากฟังก์ชัน load_data โดยตรง
+            tfex_df = load_data("TFEX_History")
+            
+            # กรองเฉพาะรายการที่ยังถืออยู่ (Open Position)
+            # หมายเหตุ: ต้องมั่นใจว่าใน Google Sheet รายการที่ยังถืออยู่มี Close_Price เป็น 0 หรือว่าง
+            open_trades = tfex_df[tfex_df['Close_Price'] == 0]
+            
+            if not open_trades.empty:
+                # ให้เลือก Trade_ID (พี่อ้ำต้องมี Column นี้ใน Sheet)
+                selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
+                
+                # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
+                trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
+                st.write(f"รายละเอียด: {trade_detail['Status']} {trade_detail['Size']} สัญญาที่ราคา {trade_detail['Open_Price']}")
+                
+                # ฟอร์มกรอกข้อมูลปิดสถานะ
+                close_price = st.number_input("ราคาปิด:", value=0.0, step=0.1)
+                close_date = st.date_input("วันที่ปิด:")
+                
+                if st.button("ยืนยันการปิดสถานะ"):
+                    # เรียกใช้ฟังก์ชันที่เราเตรียมไว้
+                    update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
+                    st.success("อัปเดตข้อมูลสำเร็จ! ระบบจะคำนวณกำไรให้ทันที")
+                    st.rerun() # สั่งรีเฟรชหน้าจอเพื่อให้อัปเดตข้อมูล
+            else:
+                st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
+                
+        with sub_tfex_cash:
+            st.subheader("💰 บันทึกเติม/ถอนเงิน")
+            
+            with st.form("cash_flow"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    cash_date = st.date_input("วันที่:")
+                    cash_type = st.selectbox("ประเภท:", ["Deposit", "Withdraw"])
+                with col2:
+                    amount = st.number_input("จำนวนเงิน (บาท):", min_value=0.0, step=100.0)
+                    note = st.text_input("หมายเหตุ:")
+                
+                if st.form_submit_button("บันทึกรายการ"):
+                    new_cash = pd.DataFrame([{
+                        "Date": str(cash_date),
+                        "Type": cash_type,
+                        "Amount": amount,
+                        "Note": note
+                    }])
+                    if save_cash_to_gsheet(new_cash, "Cash_Flow"):
+                        st.success("บันทึกข้อมูลเงินเรียบร้อย!")
+                        st.rerun()
+    
+            st.divider()
+            st.write("รายการล่าสุด:")
+            st.dataframe(cash_df, use_container_width=True)
         
-        # ดึงข้อมูลจากฟังก์ชัน load_data โดยตรง
-        tfex_df = load_data("TFEX_History")
+        with sub_tfex_history:
+            st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
+            
+            if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
+                # 1. จัดเตรียมข้อมูล
+                closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
+                closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
+                
+                # --- แถวที่ 2: Performance Monitor ---
+                st.divider()
+                st.subheader("📊 Performance Monitor")
+                # เปลี่ยน key ให้ไม่ซ้ำเดิม
+                period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
+                selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="tfex_perf_selector")
+                
+                perf_df = closed_trades.copy()
+                days_ago = period_options[selected_period]
+                if days_ago != 9999:
+                    cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
+                    perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
         
-        # กรองเฉพาะรายการที่ยังถืออยู่ (Open Position)
-        # หมายเหตุ: ต้องมั่นใจว่าใน Google Sheet รายการที่ยังถืออยู่มี Close_Price เป็น 0 หรือว่าง
-        open_trades = tfex_df[tfex_df['Close_Price'] == 0]
+                # คำนวณ Metric
+                total_trades = len(perf_df)
+                win_rate = (len(perf_df[perf_df['Net_Profit'] > 0]) / total_trades * 100) if total_trades > 0 else 0
+                avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if len(perf_df[perf_df['Net_Profit'] > 0]) > 0 else 0
+                avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if len(perf_df[perf_df['Net_Profit'] <= 0]) > 0 else 0
+                rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
+                profit_factor = (perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum() / perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()) if perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum() > 0 else 0
         
-        if not open_trades.empty:
-            # ให้เลือก Trade_ID (พี่อ้ำต้องมี Column นี้ใน Sheet)
-            selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
-            
-            # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
-            trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
-            st.write(f"รายละเอียด: {trade_detail['Status']} {trade_detail['Size']} สัญญาที่ราคา {trade_detail['Open_Price']}")
-            
-            # ฟอร์มกรอกข้อมูลปิดสถานะ
-            close_price = st.number_input("ราคาปิด:", value=0.0, step=0.1)
-            close_date = st.date_input("วันที่ปิด:")
-            
-            if st.button("ยืนยันการปิดสถานะ"):
-                # เรียกใช้ฟังก์ชันที่เราเตรียมไว้
-                update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
-                st.success("อัปเดตข้อมูลสำเร็จ! ระบบจะคำนวณกำไรให้ทันที")
-                st.rerun() # สั่งรีเฟรชหน้าจอเพื่อให้อัปเดตข้อมูล
-        else:
-            st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
-            
-    with sub_tfex_cash:
-        st.subheader("💰 บันทึกเติม/ถอนเงิน")
+                p1, p2, p3 = st.columns(3)
+                p1.metric("Win Rate", f"{win_rate:.1f}%")
+                p2.metric("R:R Ratio", f"{rr_ratio:.2f}")
+                p3.metric("Profit Factor", f"{profit_factor:.2f}")
         
-        with st.form("cash_flow"):
-            col1, col2 = st.columns(2)
-            with col1:
-                cash_date = st.date_input("วันที่:")
-                cash_type = st.selectbox("ประเภท:", ["Deposit", "Withdraw"])
-            with col2:
-                amount = st.number_input("จำนวนเงิน (บาท):", min_value=0.0, step=100.0)
-                note = st.text_input("หมายเหตุ:")
-            
-            if st.form_submit_button("บันทึกรายการ"):
-                new_cash = pd.DataFrame([{
-                    "Date": str(cash_date),
-                    "Type": cash_type,
-                    "Amount": amount,
-                    "Note": note
-                }])
-                if save_cash_to_gsheet(new_cash, "Cash_Flow"):
-                    st.success("บันทึกข้อมูลเงินเรียบร้อย!")
-                    st.rerun()
+                # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
+                st.divider()
+                st.subheader("🗓 สรุปผลรายเดือน")
+                
+                # คำนวณรายเดือน
+                monthly_perf = closed_trades.groupby(closed_trades['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
+                monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
+                monthly_perf['Cumulative_Pct'] = (monthly_perf['Net_Profit'].cumsum() / net_capital) * 100
+                
+                # วาดกราฟ Plotly Combo
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน"), secondary_y=False)
+                fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
+                
+                fig.update_layout(title_text="Monthly Performance", height=400, margin=dict(l=20, r=20, t=40, b=20))
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # ตารางสรุป
+                monthly_df = monthly_perf[['Month', 'Net_Profit', 'Cumulative_Pct']]
+                monthly_df.columns = ['เดือน', 'กำไรสุทธิ (บาท)', '% สะสม']
+                st.dataframe(
+                    monthly_df.style.format({'กำไรสุทธิ (บาท)': '{:,.2f}', '% สะสม': '{:.2f} %'})
+                    .background_gradient(subset=['กำไรสุทธิ (บาท)'], cmap='RdYlGn'),
+                    use_container_width=True
+                )
+                
+                # --- ตารางประวัติเต็ม ---
+                st.divider()
+                st.subheader("📜 ประวัติเทรดทั้งหมด")
+                tfex_df['Net_Profit'] = pd.to_numeric(tfex_df['Net_Profit'], errors='coerce').fillna(0)
+                st.dataframe(tfex_df, use_container_width=True)
+                
+            else:
+                st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
 
-        st.divider()
-        st.write("รายการล่าสุด:")
-        st.dataframe(cash_df, use_container_width=True)
+# ------------------------------
+if __name__ == "__main__":
+    main()
     
-    with sub_tfex_history:
-        st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
-        
-        if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
-            # 1. จัดเตรียมข้อมูล
-            closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
-            closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
-            
-            # --- แถวที่ 2: Performance Monitor ---
-            st.divider()
-            st.subheader("📊 Performance Monitor")
-            # เปลี่ยน key ให้ไม่ซ้ำเดิม
-            period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
-            selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="tfex_perf_selector")
-            
-            perf_df = closed_trades.copy()
-            days_ago = period_options[selected_period]
-            if days_ago != 9999:
-                cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
-                perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
-    
-            # คำนวณ Metric
-            total_trades = len(perf_df)
-            win_rate = (len(perf_df[perf_df['Net_Profit'] > 0]) / total_trades * 100) if total_trades > 0 else 0
-            avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if len(perf_df[perf_df['Net_Profit'] > 0]) > 0 else 0
-            avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if len(perf_df[perf_df['Net_Profit'] <= 0]) > 0 else 0
-            rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
-            profit_factor = (perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum() / perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()) if perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum() > 0 else 0
-    
-            p1, p2, p3 = st.columns(3)
-            p1.metric("Win Rate", f"{win_rate:.1f}%")
-            p2.metric("R:R Ratio", f"{rr_ratio:.2f}")
-            p3.metric("Profit Factor", f"{profit_factor:.2f}")
-    
-            # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
-            st.divider()
-            st.subheader("🗓 สรุปผลรายเดือน")
-            
-            # คำนวณรายเดือน
-            monthly_perf = closed_trades.groupby(closed_trades['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
-            monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
-            monthly_perf['Cumulative_Pct'] = (monthly_perf['Net_Profit'].cumsum() / net_capital) * 100
-            
-            # วาดกราฟ Plotly Combo
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
-            fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน"), secondary_y=False)
-            fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
-            
-            fig.update_layout(title_text="Monthly Performance", height=400, margin=dict(l=20, r=20, t=40, b=20))
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # ตารางสรุป
-            monthly_df = monthly_perf[['Month', 'Net_Profit', 'Cumulative_Pct']]
-            monthly_df.columns = ['เดือน', 'กำไรสุทธิ (บาท)', '% สะสม']
-            st.dataframe(
-                monthly_df.style.format({'กำไรสุทธิ (บาท)': '{:,.2f}', '% สะสม': '{:.2f} %'})
-                .background_gradient(subset=['กำไรสุทธิ (บาท)'], cmap='RdYlGn'),
-                use_container_width=True
-            )
-            
-            # --- ตารางประวัติเต็ม ---
-            st.divider()
-            st.subheader("📜 ประวัติเทรดทั้งหมด")
-            tfex_df['Net_Profit'] = pd.to_numeric(tfex_df['Net_Profit'], errors='coerce').fillna(0)
-            st.dataframe(tfex_df, use_container_width=True)
-            
-        else:
-            st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
