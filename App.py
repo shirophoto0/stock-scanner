@@ -1589,29 +1589,31 @@ def main():
                             
                         with col2:
                             p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"])
-                            p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f")
+                            # เปลี่ยนเป็นรับค่ากำไร/ขาดทุนที่เป็นตัวเลขบวก/ลบธรรมดา ระบบจะปรับให้เอง
+                            p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง")
                             p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f")
                             p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100)
                             p_comm = st.number_input("ค่าธรรมเนียม:", min_value=0.0, step=1.0)
                             
                         p_reason = st.text_area("เหตุผล/กลยุทธ์:")
                         submitted = st.form_submit_button("ยืนยันรายการ")
-            
+                
                         if submitted:
                             total_val = (p_qty * p_price)
                             ticker_upper = p_ticker.upper()
-            
-                            # 1. จัดการข้อมูล Portfolio
+                            
+                            # --- Logic อัตโนมัติ: ถ้าเป็น Stop Loss หรือ ขาดทุน ให้บังคับเป็นค่าลบ ---
+                            final_result = float(p_result)
+                            if "Stop Loss" in p_type or "ขาดทุน" in p_status:
+                                final_result = -abs(final_result) # บังคับติดลบ
+                            else:
+                                final_result = abs(final_result)  # บังคับเป็นบวกสำหรับกำไร
+                
+                            # 1. จัดการข้อมูล Portfolio (อัปเดตสถานะเงินสดและหุ้น)
                             found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
                             
                             if "ซื้อ" in p_type:
-                                # บันทึกประวัติเงินสด (จ่ายออก)
-                                log_cash_transaction(
-                                    date=str(p_buy_date),
-                                    trans_type="ซื้อหุ้น " + ticker_upper,
-                                    amount=-(total_val + p_comm),
-                                    note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}"
-                                )
+                                log_cash_transaction(date=str(p_buy_date), trans_type="ซื้อหุ้น " + ticker_upper, amount=-(total_val + p_comm), note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}")
                                 st.session_state.cash_balance -= (total_val + p_comm)
                                 
                                 if found_idx != -1:
@@ -1623,21 +1625,15 @@ def main():
                                     st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price})
                             
                             else: # กรณีขาย
-                                # บันทึกประวัติเงินสด (รับเข้า)
-                                log_cash_transaction(
-                                    date=str(p_buy_date),
-                                    trans_type="ขายหุ้น " + ticker_upper,
-                                    amount=(total_val - p_comm),
-                                    note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}"
-                                )
+                                log_cash_transaction(date=str(p_buy_date), trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
                                 st.session_state.cash_balance += (total_val - p_comm)
                                 
                                 if found_idx != -1:
                                     st.session_state.my_portfolio[found_idx]['shares'] -= p_qty
                                     if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
                                         st.session_state.my_portfolio.pop(found_idx)
-                                
-                            # 2. เพิ่มข้อมูลเข้า Journal (ปรับ Key ให้ตรงกับสูตรสถิติเดิมของพี่อ้ำ)
+                            
+                            # 2. เพิ่มข้อมูลเข้า Journal ด้วยค่า final_result ที่จัดการเครื่องหมายเรียบร้อย
                             new_entry = {
                                 "วันที่": str(p_buy_date), 
                                 "วันที่ซื้อ": str(p_buy_date),
@@ -1645,24 +1641,22 @@ def main():
                                 "หุ้น": ticker_upper,
                                 "สถานะ": p_status,
                                 "ประเภท": p_type,
-                                "กำไร/ขาดทุน (บาท)": p_result,
+                                "กำไร/ขาดทุน (บาท)": final_result,
                                 "ต้นทุน (บาท)": total_val,
                                 "ราคาหุ้นที่ซื้อ (บาท/หุ้น)": p_price,
                                 "จำนวนหุ้นที่ซื้อ": p_qty,
                                 "เหตุผล": p_reason
                             }
                             st.session_state.journal_data.append(new_entry)
-            
-                            # 3. บันทึกลง Google Sheets
-                            # ... ในส่วน submitted ของ form
-                            st.session_state.cash_balance -= (total_val + p_comm) # หรือ + สำหรับการขาย
+                
+                            # 3. บันทึกลง Google Sheets และอัปเดตหน้าจอ
                             save_portfolio()
                             save_journal()
-                            save_cash_balance(st.session_state.cash_balance) # เพิ่มบรรทัดนี้ครับ!
+                            save_cash_balance(st.session_state.cash_balance)
                             
-                            st.success(f"บันทึกรายการ {ticker_upper} เรียบร้อย! เงินสดคงเหลือ: {st.session_state.cash_balance:,.2f} ฿")
+                            st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
                             st.rerun()
-            
+                            
                 # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
                 st.divider()
                 st.markdown("##### 📊 สรุปพอร์ตการลงทุน")
