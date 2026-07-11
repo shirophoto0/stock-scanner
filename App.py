@@ -1322,13 +1322,15 @@ def main():
                     del st.session_state.selected_ticker
                     st.rerun()
     st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
-    # สร้างแถวที่มีทั้ง Icon และ Title
+
+    # สร้าง Columns โดยระบุให้จัดกึ่งกลางแนวตั้ง
     col1, col2 = st.columns([0.1, 0.9], vertical_alignment="center")
     
-    with title_col1:
-        st.write("# 💹") # ใช้ Emoji ตัวใหญ่
-    with title_col2:
-        st.subheader("Stock and TFEX Management")
+    with col1:
+        # เลือกใช้ emoji ตัวใหญ่แทนไอคอน ถ้าไม่อยากติดตั้ง lib เพิ่ม
+        st.markdown("## 💹") 
+    with col2:
+        st.subheader("Stock and TFEX Management")    
         
     tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
     # 1. ส่วนหุ้น
