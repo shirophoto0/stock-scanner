@@ -8,3 +8,4 @@ gspread
 seaborn
 matplotlib
 oauth2client
+streamlit-bootstrap-icons
