@@ -1323,7 +1323,7 @@ def main():
                     st.rerun()
     st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
     # สร้างแถวที่มีทั้ง Icon และ Title
-    title_col1, title_col2 = st.columns([0.05, 0.95])
+    col1, col2 = st.columns([0.1, 0.9], vertical_alignment="center")
     
     with title_col1:
         st.write("# 💹") # ใช้ Emoji ตัวใหญ่
