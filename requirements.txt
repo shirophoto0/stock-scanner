@@ -1,7 +1,10 @@
 streamlit
 yfinance
 pandas
+altair
 numpy
+plotly
 gspread
+seaborn
+matplotlib
 oauth2client
-streamlit-bootstrap-icons
