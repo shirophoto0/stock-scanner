@@ -1321,14 +1321,12 @@ def main():
                 if st.session_state.get("selected_ticker"):
                     del st.session_state.selected_ticker
                     st.rerun()
+    st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
+    st.subheader("Stock and TFEX Management")
     tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
     # 1. ส่วนหุ้น
     with tab_stock:
-        
-        
-                        
-            # 4. ส่วนของ Tabs ต่างๆ
-            # ... (เอาโค้ด tab_dashboard, tab_risk, tab_portfolio ของพี่อ้ำมาใส่) ...
+                       
             ##########################
             # 8.แท็บข้อมูล
             ##############################  
