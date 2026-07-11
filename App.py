@@ -2216,66 +2216,51 @@ def main():
                                     st.rerun()
                                 else:
                                     st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ")
-                                            
-                        # 2. ส่วนตารางแสดงผล (แยกออกมาเป็นอิสระ)
+                 
+                        # 2. ส่วนตารางแสดงผล
                         st.divider()
                         st.subheader("📊 ตารางแผนการเทรดของฉัน")
                         plan_df = load_data("TradingPlan")
                         
-                        # กำหนดคอลัมน์มาตรฐาน
-                        cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Alert_Date', 'Timestamp', 'Image_URL']
-                        # ถ้าดึงมาแล้วว่าง ให้สร้างตารางเปล่า
+                        # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
+                        cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
+                        
                         if plan_df.empty or 'Ticker' not in plan_df.columns:
                             plan_df = pd.DataFrame(columns=cols)
                         else:
                             plan_df.columns = plan_df.columns.str.strip()
-                    
-                        # คำนวณข้อมูล (ให้ทำงานถ้ามีหุ้นในตาราง)
+                        
+                        # คำนวณข้อมูล
                         if not plan_df.empty and 'Ticker' in plan_df.columns:
-                            # 1. จัดการชื่อคอลัมน์ให้สะอาดก่อน (เผื่อมีช่องว่างติดมา)
                             plan_df.columns = plan_df.columns.str.strip()
                             
-                            # 2. แปลงเฉพาะคอลัมน์ที่มีอยู่จริง เพื่อป้องกัน KeyError
+                            # แปลงคอลัมน์ตัวเลข
                             target_cols = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
                             for c in target_cols:
                                 if c in plan_df.columns:
                                     plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
                                 else:
-                                    plan_df[c] = 0.0  # ถ้าไม่มีคอลัมน์นี้ ให้สร้างเป็น 0.0 ไปเลย
+                                    plan_df[c] = 0.0
                             
-                            # 3. ดึงราคาแบบมีประสิทธิภาพ (Batch Download)
-                            # แทนที่จะวนลูป yf.Ticker ทีละตัว ให้ดึงรวมกันทีเดียวจะเร็วกว่ามาก
+                            # ดึงราคาตลาด (Batch)
                             tickers = [f"{t}.BK" for t in plan_df['Ticker'].unique()]
                             try:
-                                # ใช้ download ดึงทีเดียวทั้งพอร์ต
                                 price_data = yf.download(tickers, period="1d", group_by='ticker', progress=False)['Close']
-                                
-                                # ฟังก์ชันดึงราคาล่าสุดจาก Data
                                 def get_price(t):
                                     symbol = f"{t}.BK"
-                                    # ถ้าเป็น DataFrame ดึงค่าล่าสุด ถ้าเป็น Series ดึงค่าสุดท้าย
                                     try:
-                                        if isinstance(price_data, pd.DataFrame):
-                                            return float(price_data[symbol].iloc[-1])
+                                        if isinstance(price_data, pd.DataFrame): return float(price_data[symbol].iloc[-1])
                                         return float(price_data.iloc[-1])
-                                    except:
-                                        return 0.0
-                                
+                                    except: return 0.0
                                 plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(get_price)
                             except:
                                 plan_df['ราคาตลาด'] = 0.0
                         
-                            # 4. คำนวณห่างจาก SL แบบปลอดภัย (ป้องกันหารด้วย 0)
-                            plan_df['ห่างจาก_SL(%)'] = np.where(
-                                plan_df['ราคาตลาด'] > 0,
-                                ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100),
-                                0.0
-                            ).round(2)
-                            
-                            # 5. อัปเดตสถานะ
+                            # คำนวณห่างจาก SL และสถานะ
+                            plan_df['ห่างจาก_SL(%)'] = np.where(plan_df['ราคาตลาด'] > 0, ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100), 0.0).round(2)
                             plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-
-                        # 3. แสดงตารางและปุ่มบันทึกแก้ไข
+                        
+                        # แสดงตาราง (ลบ Alert_Date ออกจาก column_config แล้ว)
                         edited_df = st.data_editor(
                             plan_df[cols],
                             column_config={
@@ -2287,8 +2272,7 @@ def main():
                                 "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
                                 "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
                                 "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
-                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"), # ให้สถานะกว้างขึ้นนิดนึง
-                                "Alert_Date": st.column_config.TextColumn("วันที่เตือนล่าสุด", disabled=True, width="medium"),
+                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"),
                                 "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
                             },
                             use_container_width=True, 
@@ -2298,11 +2282,7 @@ def main():
                         
                         if st.button("💾 บันทึกการแก้ไข"):
                             final_df = edited_df.copy()
-                            
-                            # --- จุดที่แก้ไข: ล้างค่าสถานะและวันที่ก่อนบันทึกลง Sheet ---
-                            # เพื่อให้ทุกครั้งที่โหลดแอปใหม่ สถานะจะถูกคำนวณใหม่ตามค่าปัจจุบัน
-                            final_df['สถานะ'] = ""
-                            final_df['Alert_Date'] = ""
+                            final_df['สถานะ'] = "" # ล้างค่าให้ระบบคำนวณใหม่
                             
                             for c in cols:
                                 if c not in final_df.columns: final_df[c] = ""
@@ -2311,7 +2291,6 @@ def main():
                                 st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
                                 st.cache_data.clear()
                                 st.rerun()
-
         
     ###################################################################
     # # --- ฟังก์ชัน Main tap stock Finish---
