@@ -901,7 +901,7 @@ def main():
     
     # ถ้าพี่อ้ำยังต้องใช้ stock_data เพื่อดึงข้อมูลกราฟ หรืออย่างอื่น
     # ก็ให้ประกาศ stock_data ไว้เหมือนเดิมได้ แต่ไม่ต้องดึง .info แล้วครับ
-    stock_data = yf.Ticker(ticker) 
+        stock_data = yf.Ticker(ticker) 
         
     ##### link web set and trading view ########
     # สร้างคอลัมน์ 2 ช่อง (ขนาดเท่ากัน)
