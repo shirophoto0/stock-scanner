@@ -897,7 +897,7 @@ def main():
     info = get_cached_stock_info(ticker)
     # ใช้ .empty เพื่อเช็คว่า DataFrame ว่างเปล่าหรือไม่
     if info is not None and not info.empty: 
-        # ... ทำงานต่อได้เลย
+    # ... ทำงานต่อได้เลย
     
     # ถ้าพี่อ้ำยังต้องใช้ stock_data เพื่อดึงข้อมูลกราฟ หรืออย่างอื่น
     # ก็ให้ประกาศ stock_data ไว้เหมือนเดิมได้ แต่ไม่ต้องดึง .info แล้วครับ
