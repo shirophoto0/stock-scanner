@@ -1289,13 +1289,13 @@ def main():
         <style>
         /* ปรับขนาดตัวหนังสือใน Tab โดยเฉพาะ */
         div[data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-            font-size: 30px !important;
+            font-size: 40px !important;
             font-weight: bold !important;
         }
         
         /* ปรับความสูงของ Tab ให้รับกับตัวหนังสือที่ใหญ่ขึ้น */
         button[data-baseweb="tab"] {
-            padding: 20px 40px !important;
+            padding: 30px 50px !important;
         }
         </style>
     """, unsafe_allow_html=True)
