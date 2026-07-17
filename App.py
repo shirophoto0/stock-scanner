@@ -49,19 +49,22 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     size = int(trade_row['Size'])
     status = trade_row['Status']
     
-    # คำนวณผลลัพธ์ผ่านฟังก์ชันเดิม (เพิ่มคอมมิชชั่นสมมติที่ 50 บาท/สัญญา)
+    # คำนวณผลลัพธ์ผ่านฟังก์ชันเดิม
     comm = size * 50 
     calc = calculate_tfex_result(open_price, close_price, size, comm, status)
     
-    # อัปเดตข้อมูลทีละตำแหน่งให้ตรงคอลัมน์
-    # หัวตาราง: Trade_ID(1), Date_Open(2), Date_Close(3), Series(4), Status(5), Size(6), Open_Price(7), Close_Price(8), Realized(9), Comm(10), Net_Profit(11), Win_Lose(12), Reason(13)
-    
+    # อัปเดตข้อมูล
     sheet.update_cell(row_index, 3, date_close)       # Date_Close
     sheet.update_cell(row_index, 8, close_price)      # Close_Price
     sheet.update_cell(row_index, 9, calc['Realized']) # Realized
     sheet.update_cell(row_index, 10, comm)            # Comm
     sheet.update_cell(row_index, 11, calc['Net_Profit']) # Net_Profit
     sheet.update_cell(row_index, 12, calc['Win_Lose'])   # Win_Lose
+    
+    # --- ส่วนที่เพิ่มเข้ามาเพื่อแก้ปัญหาดีเลย์ ---
+    st.cache_data.clear()   # 1. ล้าง Cache ข้อมูลเก่าทิ้งทันที
+    st.toast("บันทึกสำเร็จ! กำลังอัปเดตหน้าจอ...", icon="✅")
+    st.rerun()              # 2. บังคับโหลดหน้าจอใหม่เพื่อให้ข้อมูลปัจจุบันที่สุดแสดงทันที
     
     return True
     
@@ -93,15 +96,18 @@ def save_data_to_sheet(new_df, sheet_name):
         spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
         sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
         
-        # ตรวจสอบว่ามีข้อมูลครบ 13 คอลัมน์
-        # จัดลำดับให้ตรงเป๊ะ: Trade_ID, Date_Open, Date_Close, Series, Status, Size, Open_Price, Close_Price, Realized, Comm, Net_Profit, Win_Lose, Reason
         cols = ["Trade_ID", "Date_Open", "Date_Close", "Series", "Status", "Size", "Open_Price", 
                 "Close_Price", "Realized", "Comm", "Net_Profit", "Win_Lose", "Reason"]
         
-        # จัดลำดับคอลัมน์ใน DataFrame ให้ตรงกับ Google Sheet
         new_df = new_df.reindex(columns=cols)
         
         sheet.append_rows(new_df.values.tolist())
+        
+        # --- เพิ่มส่วนนี้เพื่อให้หน้าจออัปเดตทันทีเมื่อ Open สถานะ ---
+        st.cache_data.clear() # ล้างข้อมูลเก่า
+        st.success("เปิดสถานะสำเร็จ!")
+        st.rerun()            # โหลดหน้าจอใหม่ทันที
+        
         return True
     except Exception as e:
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
