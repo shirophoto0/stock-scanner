@@ -1274,56 +1274,34 @@ def main():
 
     # สร้าง Columns โดยระบุให้จัดกึ่งกลางแนวตั้ง
     # ปรับสัดส่วนคอลัมน์ให้ชิดขึ้นอีก (0.08 คือพื้นที่ของไอคอน)
-    col1, col2 = st.columns([0.08, 0.92], vertical_alignment="center")
-    
-    with col1:
-        # เพิ่ม style 'margin: 0px' เพื่อลบระยะห่างขอบ
-        st.markdown("<h1 style='font-size: 50px; margin: 0px;'>💹</h1>", unsafe_allow_html=True)
-    
-    with col2:
-        # เพิ่ม style 'margin: 0px' และลด padding 
-        st.markdown("<h1 style='font-size: 40px; margin: 0px;'>Stock and TFEX Management</h1>", unsafe_allow_html=True)
-    
-    # ปรับขนาด Tab ให้ใหญ่ขึ้น (ใส่ CSS ครั้งเดียวจบ)
-    st.markdown("""
-        <style>
-        /* ลดระยะห่างระหว่างคอลัมน์ */
-        [data-testid="column"] {
-            padding: 0px !important;
-        }
-        /* ปรับขนาดตัวหนังสือใน Tab */
-        button[data-baseweb="tab"] {
-            font-size: 20px !important;
-            font-weight: bold;
-            padding: 15px 25px !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
     # ปรับสัดส่วนให้สมดุลขึ้น
+    # ปรับสัดส่วนให้สมดุล
     col1, col2 = st.columns([0.07, 0.93], vertical_alignment="center")
     
     with col1:
-        # ขนาด Emoji กำลังดี ไม่ใหญ่เกิน
         st.markdown("<div style='font-size: 35px; margin: 0px;'>💹</div>", unsafe_allow_html=True)
     
     with col2:
-        # ปรับหัวข้อให้ดูเด่นแต่ไม่ใหญ่ล้นจอ
         st.markdown("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
     
-    # ปรับขนาด Tab ให้ใหญ่ขึ้นพอดีๆ
+    # --- ปรับขนาดเฉพาะข้อความใน Tab ---
     st.markdown("""
         <style>
-        /* ปรับขนาดตัวหนังสือใน Tab ให้ใหญ่ขึ้นอ่านง่าย */
+        /* ปรับขนาดตัวหนังสือใน Tab โดยเฉพาะ */
+        div[data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+            font-size: 30px !important;
+            font-weight: bold !important;
+        }
+        
+        /* ปรับความสูงของ Tab ให้รับกับตัวหนังสือที่ใหญ่ขึ้น */
         button[data-baseweb="tab"] {
-            font-size: 24px !important; 
-            font-weight: 600 !important;
-            padding: 10px 20px !important;
+            padding: 20px 40px !important;
         }
         </style>
     """, unsafe_allow_html=True)
     
     tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
+    
     # 1. ส่วนหุ้น
     with tab_stock:
                        
