@@ -2350,34 +2350,39 @@ def main():
             
             # 1. แสดงรายการที่ถืออยู่ (Open Positions)
             st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
-            # สมมติว่าในตาราง History ของพี่อ้ำมีคอลัมน์ 'Close_Price' ที่เป็น 0 หรือว่าง สำหรับรายการที่ยังไม่ปิด
-            # ตรงนี้ต้องปรับให้ตรงกับคอลัมน์ใน Google Sheet ของพี่อ้ำนะครับ
-            open_positions = tfex_df[tfex_df['Close_Price'] == 0] 
+            
+            # ปรับปรุงระบบตรวจจับสถานะให้แม่นยำขึ้น (ครอบคลุมทั้ง 0, ค่าว่าง และ NaN)
+            tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+            open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
             
             if not open_positions.empty:
-                st.dataframe(open_positions[['Date_Open', 'Series', 'Status', 'Size', 'Open_Price']], use_container_width=True)
+                st.dataframe(open_positions[['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price']], use_container_width=True)
             else:
                 st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
-    
+        
             st.divider()
             
-            with st.form("tfex_entry_form"):
+            with st.form("tfex_entry_form", clear_on_submit=True):
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     date_open = st.date_input("วันที่เปิด")
-                    series = st.text_input("Series (เช่น S50Z25)")
+                    series = st.text_input("Series (เช่น S50U26)")
                     Status = st.selectbox("สถานะ:", ["Long", "Short"])
                 with col2:
                     entry = st.number_input("ราคา Open:", format="%.2f")
                     size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
-                    # เพิ่มช่อง Trade_ID ให้พี่อ้ำกรอกเอง หรือจะให้ระบบรันเลขให้อัตโนมัติก็ได้ครับ
-                    trade_id = st.text_input("Trade ID (ตั้งชื่อให้ไม่ซ้ำ):") 
+                    trade_id_input = st.text_input("Trade ID (ถ้าเว้นว่าง ระบบจะรันเลขให้อัตโนมัติ):") 
                 with col3:
                     reason = st.text_area("เหตุผลที่เข้าเทรด:")
                 
                 if st.form_submit_button("เปิดสถานะเทรด"):
+                    # ตรวจสอบและตั้งชื่อ Trade_ID อัตโนมัติถ้าไม่ได้กรอก
+                    final_trade_id = trade_id_input.strip()
+                    if not final_trade_id:
+                        final_trade_id = f"TX-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
+                        
                     new_record = {
-                        "Trade_ID": trade_id,
+                        "Trade_ID": final_trade_id,
                         "Date_Open": date_open.strftime("%Y-%m-%d"),
                         "Date_Close": "",          # ว่างไว้ก่อนเพราะยังไม่ปิด
                         "Series": series,
@@ -2385,45 +2390,53 @@ def main():
                         "Size": size,
                         "Open_Price": entry,
                         "Close_Price": 0,          # ต้องมีค่าเป็น 0 เพื่อให้ระบบเช็คได้ว่ายังไม่ปิด
-                        "Realized": 0,             # คอลัมน์ใหม่
-                        "Comm": 0,                 # คอลัมน์ใหม่
+                        "Realized": 0,             
+                        "Comm": 0,                 
                         "Net_Profit": 0,
-                        "Win_Lose": "",            # คอลัมน์ใหม่
+                        "Win_Lose": "",            
                         "Reason": reason
                     }
-                    # บันทึกโดยแปลงเป็น DataFrame
+                    # แปลงเป็น DataFrame
                     df_to_save = pd.DataFrame([new_record])
                     
-                    if save_data_to_sheet(df_to_save, "TFEX_History"):
-                        st.success("เปิดสถานะเรียบร้อย!")
-                        st.rerun()
+                    # บันทึกข้อมูลพร้อม Loading Spinner และล้าง Cache ทันที
+                    with st.spinner("⏳ กำลังเปิดสถานะและบันทึกลง Google Sheets..."):
+                        if save_data_to_sheet(df_to_save, "TFEX_History"):
+                            st.cache_data.clear()  # ล้าง Cache เพื่อดึงข้อมูลใหม่ทันที
+                            st.toast("เปิดสถานะเทรดเรียบร้อย! 🎉", icon="✅")
+                            st.rerun()             # รีเฟรชแอปเพื่ออัปเดตตารางและกราฟทันที
+        
         with sub_tfex_close:
             st.subheader("🏁 ปิดสถานะเทรด")
             
-            # ดึงข้อมูลจากฟังก์ชัน load_data โดยตรง
+            # ดึงข้อมูลจากฟังก์ชัน load_data สดๆ ใหม่ๆ
             tfex_df = load_data("TFEX_History")
             
-            # กรองเฉพาะรายการที่ยังถืออยู่ (Open Position)
-            # หมายเหตุ: ต้องมั่นใจว่าใน Google Sheet รายการที่ยังถืออยู่มี Close_Price เป็น 0 หรือว่าง
-            open_trades = tfex_df[tfex_df['Close_Price'] == 0]
+            # กรองเฉพาะรายการที่ยังถืออยู่
+            tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+            open_trades = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
             
             if not open_trades.empty:
-                # ให้เลือก Trade_ID (พี่อ้ำต้องมี Column นี้ใน Sheet)
+                # ให้เลือก Trade_ID
                 selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
                 
                 # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
                 trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
-                st.write(f"รายละเอียด: {trade_detail['Status']} {trade_detail['Size']} สัญญาที่ราคา {trade_detail['Open_Price']}")
+                st.info(f"🔍 รายละเอียดออเดอร์เดิม: **{trade_detail['Status']}** จำนวน **{trade_detail['Size']}** สัญญา ที่ราคา **{trade_detail['Open_Price']}**")
                 
                 # ฟอร์มกรอกข้อมูลปิดสถานะ
-                close_price = st.number_input("ราคาปิด:", value=0.0, step=0.1)
-                close_date = st.date_input("วันที่ปิด:")
+                c_col1, c_col2 = st.columns(2)
+                close_price = c_col1.number_input("ราคาปิด:", value=float(trade_detail['Open_Price']), step=0.1, format="%.2f")
+                close_date = c_col2.date_input("วันที่ปิด:")
                 
-                if st.button("ยืนยันการปิดสถานะ"):
-                    # เรียกใช้ฟังก์ชันที่เราเตรียมไว้
-                    update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
-                    st.success("อัปเดตข้อมูลสำเร็จ! ระบบจะคำนวณกำไรให้ทันที")
-                    st.rerun() # สั่งรีเฟรชหน้าจอเพื่อให้อัปเดตข้อมูล
+                if st.button("ยืนยันการปิดสถานะ", use_container_width=True, type="primary"):
+                    # บันทึกปิดสถานะพร้อม Loading Spinner และล้าง Cache ทันที
+                    with st.spinner("⏳ กำลังบันทึกการปิดสถานะและคำนวณผลลัพธ์..."):
+                        success = update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
+                        if success:
+                            st.cache_data.clear()  # ล้าง Cache ข้อมูลในหน่วยความจำ
+                            st.toast("ปิดสถานะสำเร็จ และคำนวณกำไรเรียบร้อย! 🏁", icon="🏆")
+                            st.rerun()             # โหลดหน้าจอใหม่เพื่อให้ข้อมูลปัจจุบันที่สุดแสดงทันที
             else:
                 st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
                 
