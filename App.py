@@ -1273,24 +1273,52 @@ def main():
     st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
 
     # สร้าง Columns โดยระบุให้จัดกึ่งกลางแนวตั้ง
-    col1, col2 = st.columns([0.15, 0.85], vertical_alignment="center")
-
+    # ปรับสัดส่วนคอลัมน์ให้ชิดขึ้นอีก (0.08 คือพื้นที่ของไอคอน)
+    col1, col2 = st.columns([0.08, 0.92], vertical_alignment="center")
+    
     with col1:
-        # เพิ่มขนาด Emoji ให้ใหญ่ขึ้นผ่าน font-size
-        st.markdown("<h1 style='font-size: 60px;'>💹</h1>", unsafe_allow_html=True)
+        # เพิ่ม style 'margin: 0px' เพื่อลบระยะห่างขอบ
+        st.markdown("<h1 style='font-size: 50px; margin: 0px;'>💹</h1>", unsafe_allow_html=True)
     
     with col2:
-        # ใช้ h1 และกำหนดขนาดฟอนต์ให้ใหญ่พิเศษ
-        st.markdown("<h1 style='font-size: 45px;'>Stock and TFEX Management</h1>", unsafe_allow_html=True)
+        # เพิ่ม style 'margin: 0px' และลด padding 
+        st.markdown("<h1 style='font-size: 40px; margin: 0px;'>Stock and TFEX Management</h1>", unsafe_allow_html=True)
     
-    # ปรับขนาด Tab ให้ใหญ่ขึ้นด้วย (ต้องใส่ในส่วน custom css เพิ่มเติม)
+    # ปรับขนาด Tab ให้ใหญ่ขึ้น (ใส่ CSS ครั้งเดียวจบ)
     st.markdown("""
         <style>
+        /* ลดระยะห่างระหว่างคอลัมน์ */
+        [data-testid="column"] {
+            padding: 0px !important;
+        }
         /* ปรับขนาดตัวหนังสือใน Tab */
         button[data-baseweb="tab"] {
             font-size: 20px !important;
             font-weight: bold;
-            padding: 20px 30px !important;
+            padding: 15px 25px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
+    # ปรับสัดส่วนให้สมดุลขึ้น
+    col1, col2 = st.columns([0.07, 0.93], vertical_alignment="center")
+    
+    with col1:
+        # ขนาด Emoji กำลังดี ไม่ใหญ่เกิน
+        st.markdown("<div style='font-size: 35px; margin: 0px;'>💹</div>", unsafe_allow_html=True)
+    
+    with col2:
+        # ปรับหัวข้อให้ดูเด่นแต่ไม่ใหญ่ล้นจอ
+        st.markdown("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
+    
+    # ปรับขนาด Tab ให้ใหญ่ขึ้นพอดีๆ
+    st.markdown("""
+        <style>
+        /* ปรับขนาดตัวหนังสือใน Tab ให้ใหญ่ขึ้นอ่านง่าย */
+        button[data-baseweb="tab"] {
+            font-size: 24px !important; 
+            font-weight: 600 !important;
+            padding: 10px 20px !important;
         }
         </style>
     """, unsafe_allow_html=True)
