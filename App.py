@@ -1273,14 +1273,28 @@ def main():
     st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
 
     # สร้าง Columns โดยระบุให้จัดกึ่งกลางแนวตั้ง
-    col1, col2 = st.columns([0.1, 0.9], vertical_alignment="center")
-    
+    col1, col2 = st.columns([0.15, 0.85], vertical_alignment="center")
+
     with col1:
-        # เลือกใช้ emoji ตัวใหญ่แทนไอคอน ถ้าไม่อยากติดตั้ง lib เพิ่ม
-        st.markdown("## 💹") 
+        # เพิ่มขนาด Emoji ให้ใหญ่ขึ้นผ่าน font-size
+        st.markdown("<h1 style='font-size: 60px;'>💹</h1>", unsafe_allow_html=True)
+    
     with col2:
-        st.subheader("Stock and TFEX Management")    
-        
+        # ใช้ h1 และกำหนดขนาดฟอนต์ให้ใหญ่พิเศษ
+        st.markdown("<h1 style='font-size: 45px;'>Stock and TFEX Management</h1>", unsafe_allow_html=True)
+    
+    # ปรับขนาด Tab ให้ใหญ่ขึ้นด้วย (ต้องใส่ในส่วน custom css เพิ่มเติม)
+    st.markdown("""
+        <style>
+        /* ปรับขนาดตัวหนังสือใน Tab */
+        button[data-baseweb="tab"] {
+            font-size: 20px !important;
+            font-weight: bold;
+            padding: 20px 30px !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    
     tab_stock, tab_tfex = st.tabs(["📊 หุ้น (Stock)", "📈 TFEX"])
     # 1. ส่วนหุ้น
     with tab_stock:
