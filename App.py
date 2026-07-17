@@ -1279,7 +1279,7 @@ def main():
     col1, col2 = st.columns([0.07, 0.93], vertical_alignment="center")
     
     with col1:
-        st.markdown("<div style='font-size: 35px; margin: 0px;'>💹</div>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size: 40px; margin: 0px;'>💹</div>", unsafe_allow_html=True)
     
     with col2:
         st.markdown("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
