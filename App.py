@@ -2495,7 +2495,6 @@ def main():
                 closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
                 closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
                 
-        
                 # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
                 st.subheader("🗓 สรุปผลรายเดือน")
@@ -2544,19 +2543,35 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # ตารางสรุป
-                monthly_df = monthly_perf[['Month', 'Net_Profit', 'Cumulative_Pct']]
-                monthly_df.columns = ['เดือน', 'กำไรสุทธิ (บาท)', '% สะสม']
+                # --- คำนวณรายเดือน ---
+                monthly_perf = closed_trades.groupby(closed_trades['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
+                monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
+                
+                # 1. คำนวณกำไรสะสมและมูลค่าพอร์ต
+                monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
+                monthly_perf['Portfolio_Value'] = net_capital + monthly_perf['Cumulative_Profit']
+                
+                # 2. คำนวณ % รายเดือน (เทียบจากเงินต้นของเดือนก่อนหน้า)
+                # สำหรับเดือนแรก ให้เทียบจาก net_capital
+                monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / monthly_perf['Portfolio_Value'].shift(1, fill_value=net_capital)) * 100
+                
+                # 3. คำนวณ % สะสม (เทียบจากเงินต้นเริ่มต้น)
+                monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / net_capital) * 100
+                
+                # --- ตารางสรุป ---
+                monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
+                monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
+                
                 st.dataframe(
-                    monthly_df.style.format({'กำไรสุทธิ (บาท)': '{:,.2f}', '% สะสม': '{:.2f} %'})
-                    .background_gradient(subset=['กำไรสุทธิ (บาท)'], cmap='RdYlGn'),
+                    monthly_df.style.format({
+                        'กำไร/ขาดทุน (บาท)': '{:,.2f}',
+                        '% รายเดือน': '{:+.2f} %', 
+                        'มูลค่าพอร์ต (บาท)': '{:,.2f}',
+                        '% สะสม': '{:+.2f} %'
+                    })
+                    .background_gradient(subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน'], cmap='RdYlGn'),
                     use_container_width=True
                 )
-                
-                # --- ตารางประวัติเต็ม ---
-                st.divider()
-                st.subheader("📜 ประวัติเทรดทั้งหมด")
-                tfex_df['Net_Profit'] = pd.to_numeric(tfex_df['Net_Profit'], errors='coerce').fillna(0)
-                st.dataframe(tfex_df, use_container_width=True)
                 
             else:
                 st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
