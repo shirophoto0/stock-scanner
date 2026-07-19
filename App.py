@@ -1560,12 +1560,20 @@ def main():
                                       annotation_position="top right", # บังคับให้อยู่ขวาบน
                                       annotation_yshift=10)            # ขยับขึ้นเล็กน้อย
                         
+                        # 1. คำนวณค่าก่อน (ต้องแน่ใจว่าอยู่ในบล็อก if not wins.empty)
                         if not wins.empty:
-                            fig.add_vline(x=optimal_cutloss, line_dash="dashdot", line_color="#f21d2b",
-                                          annotation_text=f"Target: {optimal_cutloss:.1f}%",
-                                          annotation_position="bottom right", # บังคับให้อยู่ด้านล่าง
-                                          annotation_yshift=-10)               # ขยับลงด้านล่าง
-                                                
+                            avg_win_pct = wins['Profit_Pct'].mean()
+                            optimal_cutloss_pct = -(avg_win_pct / 2.0)
+                        else:
+                            optimal_cutloss_pct = 0 # กำหนดค่า Default หากไม่มีข้อมูลกำไร
+                        
+                        # 2. เรียกใช้ชื่อตัวแปรให้ตรงกัน (ใช้ optimal_cutloss_pct)
+                        if not wins.empty:
+                            fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b",
+                                          annotation_text=f"Target: {optimal_cutloss_pct:.1f}%",
+                                          annotation_position="bottom right", 
+                                          annotation_yshift=-10)าง
+                                                                        
                         # ปรับ Theme ให้ดูสะอาดตา
                         fig.update_layout(
                             plot_bgcolor='rgba(0,0,0,0)',
