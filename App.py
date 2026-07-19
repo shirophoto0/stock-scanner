@@ -1557,12 +1557,15 @@ def main():
                                                opacity=0.6, 
                                                color_discrete_sequence=['#3498db'])
                         
-                            # 3. Dashboard ตัวเลขด้านบน (เรียงเป็นแถว)
-                            fig.add_annotation(text=f"Mean: <b>{mean_val:.1f}%</b>", xref="paper", yref="paper", x=0.15, y=1.2, showarrow=False, font=dict(color="#12da58", size=14))
-                            fig.add_annotation(text=f"Avg Loss: <b>{avg_loss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.5, y=1.2, showarrow=False, font=dict(color="#9b59b6", size=14))
+                            # 3. Dashboard ตัวเลขด้านบนกราฟ (ย้ายมาวางแนวตั้งที่มุมซ้ายบนของกราฟ)
+                            # ปรับ x=0.05 (ชิดซ้าย) และใช้ y ลดหลั่นกันลงมา (เช่น 0.95, 0.90, 0.85)
+                            
+                            fig.add_annotation(text=f"Mean: <b>{mean_val:.1f}%</b>", xref="paper", yref="paper", x=0.05, y=0.95, showarrow=False, font=dict(color="#12da58", size=13), align="left")
+                            fig.add_annotation(text=f"Avg Loss: <b>{avg_loss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.05, y=0.88, showarrow=False, font=dict(color="#9b59b6", size=13), align="left")
+                            
                             if optimal_cutloss_pct is not None:
-                                fig.add_annotation(text=f"Target: <b>{optimal_cutloss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.85, y=1.2, showarrow=False, font=dict(color="#f21d2b", size=14))
-                        
+                                fig.add_annotation(text=f"Target: <b>{optimal_cutloss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.05, y=0.81, showarrow=False, font=dict(color="#f21d2b", size=13), align="left")
+                                
                             # 4. เส้น vline พร้อมแสดงค่า % และลดหลั่นตำแหน่ง yshift
                             fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58",
                                           annotation_text=f"Mean ({mean_val:.1f}%)", 
