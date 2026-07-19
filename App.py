@@ -2531,11 +2531,41 @@ def main():
                 monthly_perf['Cumulative_Pct'] = (monthly_perf['Net_Profit'].cumsum() / net_capital) * 100
                 
                 # วาดกราฟ Plotly Combo
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน"), secondary_y=False)
-                fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
+                # --- วาดกราฟ Plotly Combo ---
+                # สร้าง List ของสีตามเงื่อนไข Net_Profit
+                bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in monthly_perf['Net_Profit']]
                 
-                fig.update_layout(title_text="Monthly Performance", height=400, margin=dict(l=20, r=20, t=40, b=20))
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
+                
+                # เพิ่ม Bar Chart พร้อมกำหนด marker_color
+                fig.add_trace(
+                    go.Bar(
+                        x=monthly_perf['Month'], 
+                        y=monthly_perf['Net_Profit'], 
+                        name="กำไร/ขาดทุน",
+                        marker_color=bar_colors # <--- ตรงนี้คือส่วนที่เปลี่ยนสี
+                    ), 
+                    secondary_y=False
+                )
+                
+                # เพิ่มเส้น Cumulative
+                fig.add_trace(
+                    go.Scatter(
+                        x=monthly_perf['Month'], 
+                        y=monthly_perf['Cumulative_Pct'], 
+                        name="% สะสม", 
+                        mode='lines+markers', 
+                        line=dict(color='#FFA500', width=3)
+                    ), 
+                    secondary_y=True
+                )
+                
+                fig.update_layout(
+                    title_text="Monthly Performance", 
+                    height=400, 
+                    margin=dict(l=20, r=20, t=40, b=20),
+                    showlegend=True
+                )
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # ตารางสรุป
