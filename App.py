@@ -1549,17 +1549,23 @@ def main():
                         mean_val = df_filtered['Profit_Pct'].mean()
                         avg_loss_pct = losses['Profit_Pct'].mean()
                         
-                        fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
-                                      annotation_text=f"Mean: {mean_val:.1f}%")
-                        fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
-                                      annotation_text=f"Avg Loss: {avg_loss_pct:.1f}%")
+                        # แทนที่จะใช้ annotation_text แบบเดิม ให้ใช้ dict เพื่อคุมตำแหน่ง
+                        fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58",
+                                      annotation_text=f"Mean: {mean_val:.1f}%", 
+                                      annotation_position="top left", # บังคับให้อยู่ซ้ายบน
+                                      annotation_yshift=30)           # ขยับขึ้นไป 30 pixels
+                        
+                        fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6",
+                                      annotation_text=f"Avg Loss: {avg_loss_pct:.1f}%",
+                                      annotation_position="top right", # บังคับให้อยู่ขวาบน
+                                      annotation_yshift=10)            # ขยับขึ้นเล็กน้อย
                         
                         if not wins.empty:
-                            avg_win_pct = wins['Profit_Pct'].mean()
-                            optimal_cutloss = -(avg_win_pct / 2.0)
-                            fig.add_vline(x=optimal_cutloss, line_dash="dashdot", line_color="#f21d2b", 
-                                          annotation_text=f"Target: {optimal_cutloss:.1f}%")
-                        
+                            fig.add_vline(x=optimal_cutloss, line_dash="dashdot", line_color="#f21d2b",
+                                          annotation_text=f"Target: {optimal_cutloss:.1f}%",
+                                          annotation_position="bottom right", # บังคับให้อยู่ด้านล่าง
+                                          annotation_yshift=-10)               # ขยับลงด้านล่าง
+                                                
                         # ปรับ Theme ให้ดูสะอาดตา
                         fig.update_layout(
                             plot_bgcolor='rgba(0,0,0,0)',
