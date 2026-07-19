@@ -1565,7 +1565,7 @@ def main():
                         if optimal_cutloss_pct is not None:
                             fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right")
                         
-                        ffig.update_layout(
+                        fig.update_layout(
                             margin=dict(t=20, b=20, l=20, r=20), 
                             height=350, 
                             plot_bgcolor='rgba(0,0,0,0)'
@@ -1573,9 +1573,6 @@ def main():
                     
                         # บรรทัดนี้ต้องอยู่ตรงกับ fig.update_layout (เยื้องเข้ามาจากขอบซ้ายเท่ากัน)
                         st.plotly_chart(fig, use_container_width=True)
-                        
-                    else:
-                        st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
                     
                         ####################
                         # Equity Curve 
