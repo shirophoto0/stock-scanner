@@ -1586,7 +1586,7 @@ def main():
                             fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b",
                                           annotation_text=f"Target: {optimal_cutloss_pct:.1f}%",
                                           annotation_position="bottom right", 
-                                          annotation_yshift=-10)าง
+                                          annotation_yshift=-10)
                                                                         
                         # ปรับ Theme ให้ดูสะอาดตา
                         fig.update_layout(
@@ -1596,8 +1596,6 @@ def main():
                             margin=dict(l=20, r=20, t=30, b=20),
                             height=350
                         )
-                        
-                        st.plotly_chart(fig, use_container_width=True)
                         
                         st.plotly_chart(fig, use_container_width=True)
                         
