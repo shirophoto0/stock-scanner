@@ -1714,6 +1714,11 @@ def main():
                     with col_graph1:
                         st.subheader("🥧 สัดส่วนหุ้นในพอร์ต")
                         fig_pie = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.3)
+                        fig_pie.update_traces(
+                            textposition='outside', # บังคับให้ชื่อวางด้านนอก
+                            textinfo='label+percent'  # ให้แสดงทั้งชื่อหุ้นและ %
+                        )
+                        
                         fig_pie.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
                         st.plotly_chart(fig_pie, use_container_width=True)
         
