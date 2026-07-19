@@ -1563,16 +1563,22 @@ def main():
                             if optimal_cutloss_pct is not None:
                                 fig.add_annotation(text=f"Target: <b>{optimal_cutloss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.85, y=1.2, showarrow=False, font=dict(color="#f21d2b", size=14))
                         
-                            # 4. เส้น vline พร้อมลดหลั่นตำแหน่ง yshift
+                            # 4. เส้น vline พร้อมแสดงค่า % และลดหลั่นตำแหน่ง yshift
                             fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58",
-                                          annotation_text="Mean", annotation_position="top left", annotation_yshift=25)
+                                          annotation_text=f"Mean ({mean_val:.1f}%)", 
+                                          annotation_position="top left", 
+                                          annotation_yshift=25)
                             
                             fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6",
-                                          annotation_text="Avg Loss", annotation_position="top left", annotation_yshift=5)
+                                          annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", 
+                                          annotation_position="top left", 
+                                          annotation_yshift=5)
                             
                             if optimal_cutloss_pct is not None:
                                 fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b",
-                                              annotation_text="Target", annotation_position="top left", annotation_yshift=-15)
+                                              annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", 
+                                              annotation_position="top left", 
+                                              annotation_yshift=-15)
                         
                             # 5. ปรับ Layout
                             fig.update_layout(
