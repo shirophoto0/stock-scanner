@@ -1585,18 +1585,6 @@ def main():
                     
                         # บรรทัดนี้ต้องอยู่ตรงกับ fig.update_layout (เยื้องเข้ามาจากขอบซ้ายเท่ากัน)
                         st.plotly_chart(fig, use_container_width=True)
-                        
-                    else:
-                        st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
-                        
-                        fig.update_layout(
-                            margin=dict(t=20, b=20, l=20, r=20), 
-                            height=350, 
-                            plot_bgcolor='rgba(0,0,0,0)'
-                        )
-                    
-                        # บรรทัดนี้ต้องอยู่ตรงกับ fig.update_layout (เยื้องเข้ามาจากขอบซ้ายเท่ากัน)
-                        st.plotly_chart(fig, use_container_width=True)
                     
                         ####################
                         # Equity Curve 
