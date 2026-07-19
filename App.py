@@ -398,6 +398,7 @@ def backfill_portfolio_history():
     # 4. บันทึก
     # 4. บันทึก (แปลงเป็น DataFrame ก่อน)
     df_history = pd.DataFrame(history_list)
+    df_history = df_history.fillna(0)
     save_to_gsheet("Portfolio_History", df_history)
     st.rerun()
     
