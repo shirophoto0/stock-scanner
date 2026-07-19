@@ -343,26 +343,31 @@ def display_performance_dashboard():
         st.plotly_chart(fig2, use_container_width=True)
 
 def backfill_portfolio_history():
+    # 1. เตรียมข้อมูล
     df = pd.DataFrame(st.session_state.journal_data)
     df['วันที่'] = pd.to_datetime(df['วันที่'])
     df = df.sort_values('วันที่')
     
-    all_dates = pd.date_range(start=df['วันที่'].min(), end=pd.Timestamp.now())
+    # กำหนดช่วงเวลา (ให้แน่ใจว่าเป็น datetime ไม่มี timezone)
+    all_dates = pd.date_range(start=df['วันที่'].min(), end=pd.Timestamp.now().normalize())
     history_list = []
     
-    # --- เพิ่มส่วนนี้: ดึงรายชื่อหุ้นทั้งหมดที่เคยเทรด ---
+    # 2. ดึงราคาประวัติย้อนหลังเก็บไว้ใน dict
     all_tickers = df['หุ้น'].unique()
-    # ดึงราคาประวัติย้อนหลังของหุ้นทุกตัวมาเก็บไว้ใน dict เพื่อไม่ให้เสียเวลาดึงซ้ำใน loop
     price_history = {}
     for ticker in all_tickers:
-        # ดึงข้อมูลจาก yfinance แบบยาวๆ ทีเดียว
         hist = yf.Ticker(f"{ticker}.BK").history(period="max")
+        # แก้ไขจุดนี้: ปรับ Index ให้เป็น datetime และลบ timezone ออก
+        hist.index = pd.to_datetime(hist.index).tz_localize(None)
         price_history[ticker] = hist['Close']
 
+    # 3. ลูปคำนวณรายวัน
     for date in all_dates:
+        # ใช้ .normalize() เพื่อให้ date เป็นเวลา 00:00:00 เป๊ะๆ
+        date = date.normalize() 
         df_upto = df[df['วันที่'] <= date]
         
-        # 1. คำนวณจำนวนหุ้นคงเหลือ ณ วันนั้น
+        # คำนวณจำนวนหุ้น
         current_holdings = {}
         for ticker in all_tickers:
             buys = df_upto[(df_upto['หุ้น'] == ticker) & (df_upto['ประเภท'].str.contains("ซื้อ"))]['จำนวนหุ้นที่ซื้อ'].sum()
@@ -371,17 +376,16 @@ def backfill_portfolio_history():
             if shares > 0:
                 current_holdings[ticker] = shares
         
-        # 2. คำนวณ Market Value รวม ณ วันนั้น
+        # คำนวณ Market Value
         market_val = 0
         for ticker, shares in current_holdings.items():
-            # ดึงราคาปิดของหุ้นตัวนั้น ณ วันที่ date (ถ้าวันนั้นไม่มีตลาด ให้ใช้ราคาล่าสุดก่อนหน้า)
             price_series = price_history[ticker]
+            # กรองข้อมูลที่ <= date หลังจากที่แปลง index เป็น datetime แล้ว
             price_at_date = price_series[price_series.index <= date]
             if not price_at_date.empty:
                 market_val += (shares * price_at_date.iloc[-1])
         
-        # 3. คำนวณเงินสดสะสม (ถ้าคุณมีฟังก์ชันคำนวณ cash flow ย้อนหลัง ให้ใช้ตัวนั้น)
-        # หรือถ้าไม่มี ให้คิดจาก (เงินฝากทั้งหมด - เงินลงทุนทั้งหมด)
+        # คำนวณเงินลงทุน
         invested = df_upto[df_upto['ประเภท'].str.contains("ซื้อ")]['ต้นทุน (บาท)'].sum()
         
         history_list.append({
@@ -390,7 +394,9 @@ def backfill_portfolio_history():
             'Invested_Capital': invested
         })
     
+    # 4. บันทึก
     save_to_gsheet("Portfolio_History", history_list)
+    st.rerun() # เพิ่มเพื่อให้อัปเดตหน้าจอทันที
     
 def get_current_portfolio_value():
     # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
