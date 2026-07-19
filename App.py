@@ -1714,28 +1714,31 @@ def main():
                     col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
                     
                     # 1. Pie Chart: มูลค่าตลาด (25%)
-                    # 1. Pie Chart: มูลค่าตลาด (25%)
                     with col_p1:
                         st.subheader("🥧 มูลค่าตลาด")
-                        fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.3)
-                        fig_pie1.update_traces(textposition='outside', textinfo='label+percent')
-                        # เพิ่ม margin-bottom (b) จาก 10 เป็น 50 เพื่อเผื่อที่ให้ label
-                        fig_pie1.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=50), showlegend=False)
+                        fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4) # ปรับ hole เป็น 0.4 ให้โปร่งขึ้น
+                        fig_pie1.update_traces(
+                            textposition='outside', 
+                            textinfo='label+percent',
+                            textfont=dict(size=10) # ลดขนาดฟอนต์สำหรับ iPad
+                        )
+                        fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
                         st.plotly_chart(fig_pie1, use_container_width=True)
-                        # เพิ่ม <br> เพื่อดัน title ให้ห่างจากกราฟมากขึ้น
-                        st.markdown("<br><p style='text-align: center; font-size: 14px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
-    
+                        st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
+        
                     # 2. Pie Chart: มูลค่าต้นทุน (25%)
                     with col_p2:
                         st.subheader("🥧 มูลค่าต้นทุน")
-                        fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.3)
-                        fig_pie2.update_traces(textposition='outside', textinfo='label+percent')
-                        # เพิ่ม margin-bottom (b) จาก 10 เป็น 50 เพื่อเผื่อที่ให้ label
-                        fig_pie2.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=50), showlegend=False)
+                        fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4) # ปรับ hole เป็น 0.4
+                        fig_pie2.update_traces(
+                            textposition='outside', 
+                            textinfo='label+percent',
+                            textfont=dict(size=10) # ลดขนาดฟอนต์สำหรับ iPad
+                        )
+                        fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
                         st.plotly_chart(fig_pie2, use_container_width=True)
-                        # เพิ่ม <br> เพื่อดัน title ให้ห่างจากกราฟมากขึ้น
-                        st.markdown("<br><p style='text-align: center; font-size: 14px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
-        
+                        st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
+            
                     # 3. Bar Chart: กำไร/ขาดทุน (50%)
                     with col_p3:
                         st.subheader("📈 กำไร/ขาดทุนรายตัว")
@@ -1746,10 +1749,12 @@ def main():
                             x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
                             marker_color=bar_colors, text=text_labels, textposition='auto'
                         )])
+                        # ปรับ font ของ Bar Chart ให้เล็กลงเล็กน้อยเพื่อไม่ให้ล้นแท่ง
+                        fig_bar.update_traces(textfont_size=10)
                         fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
                         st.plotly_chart(fig_bar, use_container_width=True)
-                        st.markdown("<p style='text-align: center; font-size: 14px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
-    
+                        st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
+        
                 else:
                     st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตโฟลิโอครับ")
                             
