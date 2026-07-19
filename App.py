@@ -2543,9 +2543,15 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
                 
                 # ตารางสรุป
+                def color_negative_red(val):
+                    # ปรับแต่ง: ถ้าเลขเป็นบวกใช้สีเขียว, ถ้าติดลบใช้สีแดง
+                    if isinstance(val, (int, float)):
+                        color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
+                        return f'color: {color}'
+                    return None
                 # --- คำนวณรายเดือน ---
-                monthly_perf = closed_trades.groupby(closed_trades['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
-                monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
+                monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
+                monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
                 
                 # 1. คำนวณมูลค่าพอร์ตสะสม (ใช้ค่าคงที่ net_capital เป็นฐาน)
                 monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
@@ -2569,7 +2575,7 @@ def main():
                         'มูลค่าพอร์ต (บาท)': '{:,.2f}',
                         '% สะสม': '{:+.2f} %'
                     })
-                    .background_gradient(subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน'], cmap='RdYlGn'),
+                    .applymap(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']),
                     use_container_width=True
                 )
                 
