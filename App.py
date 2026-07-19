@@ -2537,7 +2537,7 @@ def main():
                         'มูลค่าพอร์ต (บาท)': '{:,.2f}',
                         '% สะสม': '{:+.2f} %'
                     })
-                    .applymap(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']),
+                    .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']),
                     use_container_width=True
                 )
                 
