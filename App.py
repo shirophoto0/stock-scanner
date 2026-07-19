@@ -2531,29 +2531,22 @@ def main():
                 monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
 
                 # --- CSS สำหรับจัดตารางให้ชิดขวา ---
-                st.markdown("""
-                    <style>
-                    /* จัดหัวตาราง (Header) ให้ชิดขวา */
-                    thead tr th {
-                        text-align: right !important;
-                    }
-                    /* จัดตัวเลขในเซลล์ให้ชิดขวา */
-                    tbody tr td {
-                        text-align: right !important;
-                    }
-                    </style>
-                """, unsafe_allow_html=True)
-                
-                st.dataframe(
-                    monthly_df.style.format({
-                        'กำไร/ขาดทุน (บาท)': '{:,.2f}',
-                        '% รายเดือน': '{:+.2f} %', 
-                        'มูลค่าพอร์ต (บาท)': '{:,.2f}',
-                        '% สะสม': '{:+.2f} %'
-                    })
-                    .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']),
-                    use_container_width=True
-                )
+                # สร้าง Style object ขึ้นมา
+                styled_df = monthly_df.style.format({
+                    'กำไร/ขาดทุน (บาท)': '{:,.2f}',
+                    '% รายเดือน': '{:+.2f} %', 
+                    'มูลค่าพอร์ต (บาท)': '{:,.2f}',
+                    '% สะสม': '{:+.2f} %'
+                }) \
+                .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']) \
+                .set_properties(**{'text-align': 'right'}) \
+                .set_table_styles([
+                    {'selector': 'th', 'props': [('text-align', 'right')]},
+                    {'selector': 'td', 'props': [('text-align', 'right')]}
+                ])
+
+                # แสดงตารางผ่าน styled_df
+                st.dataframe(styled_df, use_container_width=True)
                 
             else:
                 st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
