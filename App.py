@@ -2529,6 +2529,20 @@ def main():
     
                 monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
                 monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
+
+                # --- CSS สำหรับจัดตารางให้ชิดขวา ---
+                st.markdown("""
+                    <style>
+                    /* จัดหัวตาราง (Header) ให้ชิดขวา */
+                    thead tr th {
+                        text-align: right !important;
+                    }
+                    /* จัดตัวเลขในเซลล์ให้ชิดขวา */
+                    tbody tr td {
+                        text-align: right !important;
+                    }
+                    </style>
+                """, unsafe_allow_html=True)
                 
                 st.dataframe(
                     monthly_df.style.format({
