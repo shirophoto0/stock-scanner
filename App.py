@@ -1714,23 +1714,28 @@ def main():
                     col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
                     
                     # 1. Pie Chart: มูลค่าตลาด (25%)
+                    # 1. Pie Chart: มูลค่าตลาด (25%)
                     with col_p1:
                         st.subheader("🥧 มูลค่าตลาด")
                         fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.3)
                         fig_pie1.update_traces(textposition='outside', textinfo='label+percent')
-                        fig_pie1.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10), showlegend=False)
+                        # เพิ่ม margin-bottom (b) จาก 10 เป็น 50 เพื่อเผื่อที่ให้ label
+                        fig_pie1.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=50), showlegend=False)
                         st.plotly_chart(fig_pie1, use_container_width=True)
-                        st.markdown("<p style='text-align: center; font-size: 14px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
+                        # เพิ่ม <br> เพื่อดัน title ให้ห่างจากกราฟมากขึ้น
+                        st.markdown("<br><p style='text-align: center; font-size: 14px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
     
                     # 2. Pie Chart: มูลค่าต้นทุน (25%)
                     with col_p2:
                         st.subheader("🥧 มูลค่าต้นทุน")
                         fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.3)
                         fig_pie2.update_traces(textposition='outside', textinfo='label+percent')
-                        fig_pie2.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10), showlegend=False)
+                        # เพิ่ม margin-bottom (b) จาก 10 เป็น 50 เพื่อเผื่อที่ให้ label
+                        fig_pie2.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=50), showlegend=False)
                         st.plotly_chart(fig_pie2, use_container_width=True)
-                        st.markdown("<p style='text-align: center; font-size: 14px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
-    
+                        # เพิ่ม <br> เพื่อดัน title ให้ห่างจากกราฟมากขึ้น
+                        st.markdown("<br><p style='text-align: center; font-size: 14px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
+        
                     # 3. Bar Chart: กำไร/ขาดทุน (50%)
                     with col_p3:
                         st.subheader("📈 กำไร/ขาดทุนรายตัว")
