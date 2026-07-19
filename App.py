@@ -1717,10 +1717,12 @@ def main():
                     with col_p1:
                         st.subheader("🥧 มูลค่าตลาด")
                         fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4) # ปรับ hole เป็น 0.4 ให้โปร่งขึ้น
+                        # แก้ไขในส่วน Pie Chart ทั้ง 2 อันครับ
                         fig_pie1.update_traces(
                             textposition='outside', 
                             textinfo='label+percent',
-                            textfont=dict(size=10) # ลดขนาดฟอนต์สำหรับ iPad
+                            textfont=dict(size=9), # ลดอีกนิด
+                            automargin=True        # หัวใจสำคัญ: สั่งให้ Plotly ขยับพื้นที่เองเพื่อไม่ให้ทับซ้อน
                         )
                         fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
                         st.plotly_chart(fig_pie1, use_container_width=True)
@@ -1730,10 +1732,12 @@ def main():
                     with col_p2:
                         st.subheader("🥧 มูลค่าต้นทุน")
                         fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4) # ปรับ hole เป็น 0.4
+                        # แก้ไขในส่วน Pie Chart ทั้ง 2 อันครับ
                         fig_pie2.update_traces(
                             textposition='outside', 
                             textinfo='label+percent',
-                            textfont=dict(size=10) # ลดขนาดฟอนต์สำหรับ iPad
+                            textfont=dict(size=9), # ลดอีกนิด
+                            automargin=True        # หัวใจสำคัญ: สั่งให้ Plotly ขยับพื้นที่เองเพื่อไม่ให้ทับซ้อน
                         )
                         fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
                         st.plotly_chart(fig_pie2, use_container_width=True)
