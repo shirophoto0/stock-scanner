@@ -40,7 +40,7 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     
     # หาตำแหน่ง Row
     idx_list = df.index[df['Trade_ID'] == trade_id].tolist()
-    if not idx_list:ฟ
+    if not idx_list:
         st.error("ไม่พบ Trade ID นี้ในระบบ")
         return False
     row_index = idx_list[0] + 2 
