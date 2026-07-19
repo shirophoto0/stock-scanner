@@ -1572,7 +1572,7 @@ def main():
                             fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b",
                                           annotation_text=f"Target: {optimal_cutloss_pct:.1f}%",
                                           annotation_position="bottom right", 
-                                          annotation_yshift=-10)าง
+                                          annotation_yshift=-10)
                                                                         
                         # ปรับ Theme ให้ดูสะอาดตา
                         fig.update_layout(
