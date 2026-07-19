@@ -749,7 +749,7 @@ def main():
   # 2. โหมด GitHub (ทำงานจบในตัว)
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
         print("GitHub Mode: กำลังเริ่มสแกน...")
-        df_new = load_and_calculate_stock_data()
+        df_new = load_and_calculate_stock_data_optimized()
         save_to_gsheet(df_new)
         print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
         return # จบการทำงานทันที
