@@ -1479,7 +1479,6 @@ def main():
                         col_s1.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿ / {best_pct:.1f}%")
                         col_s2.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿ / {worst_pct:.1f}%")
                         
-                        st.markdown("---")
                         ######### กราฟรายเดือน vs พร์อตสะสม ###################
                         st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
                         c1, c2 = st.columns(2)
@@ -1487,104 +1486,61 @@ def main():
                         # --- ข้อมูลรายเดือน ---
                         df_monthly = df_filtered.copy()
                         df_monthly['Date'] = pd.to_datetime(df_monthly['วันที่'])
-                        
-                        # สร้าง Month_Label และรักษาค่าเวลาไว้สำหรับการเรียง
                         df_monthly['Month_Label'] = df_monthly['Date'].dt.strftime('%b %Y')
-                        
-                        # **หัวใจสำคัญ:** เรียงตาม 'Date' ก่อนที่จะ Groupby เพื่อให้เดือนเรียงจากอดีตไปปัจจุบัน
                         df_monthly = df_monthly.sort_values('Date') 
-                        
                         df_monthly = df_monthly.groupby('Month_Label', sort=False)['กำไร/ขาดทุน (บาท)'].sum().reset_index()
                         df_monthly.columns = ['Month_Label', 'Profit_Sum']
-                        
-                        # --- คำนวณกำไรสะสม ---
                         df_monthly['Cumulative_Profit'] = df_monthly['Profit_Sum'].cumsum()
                         df_monthly['Color'] = df_monthly['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
             
-                        c1, c2 = st.columns(2)
-            
                         with c1:
-                            # กราฟแท่ง (ใช้ sort=None เพราะเราเรียง df_monthly มาแล้ว)
                             chart_bar = alt.Chart(df_monthly).mark_bar(width=40).encode(
                                 x=alt.X('Month_Label:O', title='เดือน', sort=None), 
                                 y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
                                 color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=['#2ecc71', '#e74c3c']), legend=None),
                                 tooltip=['Month_Label', 'Profit_Sum']
                             ).properties(height=300)
-                            
                             rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
                             st.altair_chart(chart_bar + rule, use_container_width=True)
             
                         with c2:
-                            # กราฟเส้น (ใช้ sort=None เช่นกัน)
                             chart_line = alt.Chart(df_monthly).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
                                 x=alt.X('Month_Label:O', title='เดือน', sort=None),
                                 y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)'),
                                 tooltip=['Month_Label', 'Cumulative_Profit']
                             ).properties(height=300)
-                            
                             st.altair_chart(chart_line, use_container_width=True)
             
-                        ##### เร่ิมกราฟกระจายตัว ###########
-                        # --- 1. คำนวณ % ตั้งแต่เนิ่นๆ ---
-                        df_filtered = df_clean.copy() # หรือตาม logic เดิมของพี่อ้ำ
-                        # (ตรวจสอบให้แน่ใจว่าได้ filter ตามวันที่เรียบร้อยแล้วก่อนบรรทัดนี้)
-                        df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)']) * 100
-            
-                        # --- 2. ค่อยแยก wins/losses ออกมา ---
-                        wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                        losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
-            
-                        # --- 3. ส่วนวาดกราฟ ---
-                        # 🔔 Title และ Dashboard ตัวเลข
+                        ##### กราฟกระจายตัว (Histogram) ###########
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
                         
-                        # สร้างแถวของตัวเลข (Metric) วางใต้ Title ก่อนแสดงกราฟ
-                        col_m1, col_m2, col_m3 = st.columns(3)
-                        
-                        # คำนวณค่าก่อน (ดึงมาจากโค้ดเดิม)
-                        mean_val = df_filtered['Profit_Pct'].mean()
-                        avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
-                        optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
-                        
-                        with col_m1:
-                            st.metric("Mean", f"{mean_val:.1f}%")
-                        with col_m2:
-                            st.metric("Avg Loss", f"{avg_loss_pct:.1f}%")
-                        with col_m3:
+                        if not df_filtered.empty:
+                            # คำนวณ Metric และ Plot
+                            mean_val = df_filtered['Profit_Pct'].mean()
+                            avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
+                            optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
+                            
+                            col_m1, col_m2, col_m3 = st.columns(3)
+                            col_m1.metric("Mean", f"{mean_val:.1f}%")
+                            col_m2.metric("Avg Loss", f"{avg_loss_pct:.1f}%")
                             if optimal_cutloss_pct is not None:
-                                st.metric("Target Cut", f"{optimal_cutloss_pct:.1f}%")
-                        
-                        # ต่อด้วยกราฟ Plotly (ไม่ต้องใส่ add_annotation แล้ว กราฟจะโล่งและสะอาดขึ้นมาก)
-                        fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
-                        
-                        # เส้นแนวตั้ง vline (คงไว้เพื่ออ้างอิง)
-                        # เส้นแนวตั้ง vline (ปรับ yshift ให้ลดหลั่นลงมาทีละ 25-30 pixels)
-                        fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
-                                      annotation_text=f"Mean ({mean_val:.1f}%)", 
-                                      annotation_position="top right", 
-                                      annotation_yshift=30) # เส้นบนสุด
-                        
-                        fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
-                                      annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", 
-                                      annotation_position="top right", 
-                                      annotation_yshift=0)  # เส้นกลาง
-                        
-                        if optimal_cutloss_pct is not None:
-                            fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
-                                          annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", 
-                                          annotation_position="top right", 
-                                          annotation_yshift=-30) # เส้นล่างสุด
-                                                
-                        ffig.update_layout(
-                            margin=dict(t=20, b=20, l=20, r=20), 
-                            height=350, 
-                            plot_bgcolor='rgba(0,0,0,0)'
-                        )
-                    
-                        # บรรทัดนี้ต้องอยู่ตรงกับ fig.update_layout (เยื้องเข้ามาจากขอบซ้ายเท่ากัน)
-                        st.plotly_chart(fig, use_container_width=True)
+                                col_m3.metric("Target Cut", f"{optimal_cutloss_pct:.1f}%")
+                            
+                            fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
+                            
+                            fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
+                                          annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right", annotation_yshift=30)
+                            fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
+                                          annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right", annotation_yshift=0)
+                            if optimal_cutloss_pct is not None:
+                                fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
+                                              annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-30)
+                            
+                            fig.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
                     
                         ####################
                         # Equity Curve 
