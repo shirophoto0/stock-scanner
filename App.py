@@ -288,6 +288,60 @@ def load_portfolio():
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
         
+def log_portfolio_snapshot():
+    """บันทึกยอดพอร์ตรายวันลงตาราง Portfolio_History"""
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet('Portfolio_History')
+    
+    # ดึงค่าปัจจุบัน
+    current_date = datetime.now().strftime('%Y-%m-%d')
+    market_val = get_total_market_value() # พี่อ้ำมีฟังก์ชันนี้อยู่แล้ว
+    total_cash_invested = load_total_cash_balance() # พี่อ้ำมีฟังก์ชันนี้อยู่แล้ว
+    
+    # บันทึกแถวใหม่
+    sheet.append_row([current_date, market_val, total_cash_invested])    
+
+def save_portfolio_snapshot():
+    """บันทึกมูลค่าพอร์ตปัจจุบันลงไฟล์/Sheet ประวัติ"""
+    # คำนวณมูลค่าพอร์ตทั้งหมด (Cash + Market Value ของหุ้นทุกตัว)
+    total_market_val = calculate_total_portfolio_value() # พี่อ้ำน่าจะมีฟังก์ชันรวมยอดอยู่แล้ว
+    current_cash = st.session_state.cash_balance
+    total_equity = total_market_val + current_cash
+    
+    # บันทึกข้อมูลลงในตาราง Portfolio_History
+    # รูปแบบ: [วันที่, มูลค่าพอร์ตรวม, เงินต้นสะสม]
+    # สมมติว่ามีฟังก์ชันบันทึกผ่าน Google Sheets ของพี่อ้ำอยู่แล้ว
+    log_to_sheet("Portfolio_History", [str(datetime.now().date()), total_equity, total_invested_capital()])
+    
+def display_performance_dashboard():
+    # 1. โหลดข้อมูล
+    client = get_gsheet_client()
+    sheet = client.open('MyStockData').worksheet('Portfolio_History')
+    data = sheet.get_all_records()
+    df = pd.DataFrame(data)
+    
+    # ตรวจสอบว่ามีข้อมูลจริงก่อนวาดกราฟ
+    if df.empty:
+        st.info("ยังไม่มีข้อมูลในตาราง Portfolio_History ครับ")
+        return
+
+    df['Date'] = pd.to_datetime(df['Date'])
+    df['Indexed_Performance'] = (df['Market_Value'] / df['Market_Value'].iloc[0]) * 100
+    
+    # 2. แสดงผล (ย้ายส่วนแสดงผลมาไว้ในฟังก์ชันนี้)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("🚀 ความสามารถในการทำกำไร (Indexed)")
+        fig1 = px.line(df, x='Date', y='Indexed_Performance', markers=True)
+        st.plotly_chart(fig1, use_container_width=True)
+        
+    with col2:
+        st.subheader("💰 พอร์ตจริง vs เงินลงทุน")
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=df['Date'], y=df['Market_Value'], name='มูลค่าพอร์ต', fill='tozeroy'))
+        fig2.add_trace(go.Scatter(x=df['Date'], y=df['Invested_Capital'], name='เงินทุนจริง', line=dict(dash='dash')))
+        st.plotly_chart(fig2, use_container_width=True)
+    
 def get_current_portfolio_value():
     # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
     total_market_value = 0
@@ -1486,32 +1540,16 @@ def main():
                         
                         ####################
                         # Equity Curve 
-                        st.subheader("📈 Equity Curve")
-                    
-                        df_equity = get_equity_curve_data()
-                
-                        if not df_equity.empty:
-                            # พล็อตกราฟ
-                            plot_dual_equity_curve(df_equity)
+                        st.markdown("---")
+                        st.markdown("##### 📈 Equity Curve")
+                        
+                        # เรียกใช้งานฟังก์ชันที่ย้ายไปด้านบน
+                        try:
+                            display_performance_dashboard()
+                        except Exception as e:
+                            st.warning(f"ยังไม่พบข้อมูล Portfolio_History หรือเกิดข้อผิดพลาดในการโหลด: {e}")
+                                               
                             
-                            # คำนวณค่าสถิติ
-                            max_m2m = df_equity['Market_To_Market'].max()
-                            cur_m2m = df_equity['Market_To_Market'].iloc[-1]
-                            max_cash = df_equity['Cash_Base'].max()
-                            cur_cash = df_equity['Cash_Base'].iloc[-1]
-                            
-                            # แสดง Metric 4 ช่อง
-                            st.markdown("##### 📊 สรุปสถิติพอร์ต")
-                            col1, col2 = st.columns(2)
-                            col1.metric("มูลค่าพอร์ตสูงสุด (M2M)", f"{max_m2m:,.0f} ฿")
-                            col2.metric("มูลค่าพอร์ตปัจจุบัน (M2M)", f"{cur_m2m:,.0f} ฿")
-                            
-                            col3, col4 = st.columns(2)
-                            col3.metric("เงินสด+กำไรสูงสุด", f"{max_cash:,.0f} ฿")
-                            col4.metric("เงินสด+กำไรปัจจุบัน", f"{cur_cash:,.0f} ฿")
-                            
-                        else:
-                            st.info("สะสมข้อมูลการเทรดสักพัก เพื่อสร้างเส้น Equity Curve ครับ")
             #########################            
             with tab_portfolio:
                 st.markdown("#### 💼 ระบบบันทึกพอร์ตโฟลิโอส่วนตัว")
@@ -1631,6 +1669,7 @@ def main():
                             save_portfolio()
                             save_journal()
                             save_cash_balance(st.session_state.cash_balance)
+                            save_portfolio_snapshot()
                             
                             st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
                             st.rerun()
