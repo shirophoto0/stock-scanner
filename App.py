@@ -1550,6 +1550,20 @@ def main():
                         avg_loss_pct = losses['Profit_Pct'].mean()
                         
                         # แทนที่จะใช้ annotation_text แบบเดิม ให้ใช้ dict เพื่อคุมตำแหน่ง
+                        # 🔔 การกระจายตัวกำไร/ขาดทุน (%) - แบบ Plotly
+                        st.markdown("---")
+                        st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
+                        
+                        # สร้าง Histogram ด้วย Plotly
+                        fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, 
+                                           opacity=0.6, 
+                                           color_discrete_sequence=['#3498db'])
+                        
+                        # เพิ่มเส้น Mean, Avg Loss, Target Cutloss
+                        mean_val = df_filtered['Profit_Pct'].mean()
+                        avg_loss_pct = losses['Profit_Pct'].mean()
+                        
+                        # แทนที่จะใช้ annotation_text แบบเดิม ให้ใช้ dict เพื่อคุมตำแหน่ง
                         fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58",
                                       annotation_text=f"Mean: {mean_val:.1f}%", 
                                       annotation_position="top left", # บังคับให้อยู่ซ้ายบน
@@ -1572,7 +1586,7 @@ def main():
                             fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b",
                                           annotation_text=f"Target: {optimal_cutloss_pct:.1f}%",
                                           annotation_position="bottom right", 
-                                          annotation_yshift=-10)
+                                          annotation_yshift=-10)าง
                                                                         
                         # ปรับ Theme ให้ดูสะอาดตา
                         fig.update_layout(
@@ -1582,6 +1596,8 @@ def main():
                             margin=dict(l=20, r=20, t=30, b=20),
                             height=350
                         )
+                        
+                        st.plotly_chart(fig, use_container_width=True)
                         
                         st.plotly_chart(fig, use_container_width=True)
                         
