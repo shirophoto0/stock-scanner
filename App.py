@@ -396,8 +396,10 @@ def backfill_portfolio_history():
         })
     
     # 4. บันทึก
-    save_to_gsheet("Portfolio_History", history_list)
-    st.rerun() # เพิ่มเพื่อให้อัปเดตหน้าจอทันที
+    # 4. บันทึก (แปลงเป็น DataFrame ก่อน)
+    df_history = pd.DataFrame(history_list)
+    save_to_gsheet("Portfolio_History", df_history)
+    st.rerun()
     
 def get_current_portfolio_value():
     # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
