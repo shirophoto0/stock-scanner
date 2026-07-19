@@ -1536,55 +1536,40 @@ def main():
                         losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
             
                         # --- 3. ส่วนวาดกราฟ ---
-                        # 🔔 การกระจายตัวกำไร/ขาดทุน (%)
+                        # 🔔 การกระจายตัวกำไร/ขาดทุน (%) - แบบ Plotly
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
                         
-                        # ปรับ figsize ให้กะทัดรัด (กว้าง 6, สูง 3.5)
-                        fig, ax = plt.subplots(figsize=(6, 3.5))
+                        # สร้าง Histogram ด้วย Plotly
+                        fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, 
+                                           opacity=0.6, 
+                                           color_discrete_sequence=['#3498db'])
                         
-                        sns.histplot(df_filtered['Profit_Pct'], kde=True, color='#3498db', 
-                                    binwidth=1, edgecolor='none', alpha=0.3, ax=ax)
-                        
-                        # เส้นค่าเฉลี่ย
+                        # เพิ่มเส้น Mean, Avg Loss, Target Cutloss
                         mean_val = df_filtered['Profit_Pct'].mean()
-                        ax.axvline(mean_val, color="#12da58", linestyle='--', linewidth=1.5, label=f'Mean: {mean_val:.1f}%')
-                        
-                        # เส้น Average Loss
                         avg_loss_pct = losses['Profit_Pct'].mean()
-                        ax.axvline(avg_loss_pct, color='#9b59b6', linestyle=':', linewidth=2, 
-                                   label=f'Avg Loss: {avg_loss_pct:.1f}%')
                         
-                        # เส้น Optimal Cutloss (RR 2:1)
+                        fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
+                                      annotation_text=f"Mean: {mean_val:.1f}%")
+                        fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
+                                      annotation_text=f"Avg Loss: {avg_loss_pct:.1f}%")
+                        
                         if not wins.empty:
                             avg_win_pct = wins['Profit_Pct'].mean()
-                            optimal_cutloss_pct = -(avg_win_pct / 2.0)
-                            ax.axvline(optimal_cutloss_pct, color="#f21d2b", linestyle='-.', linewidth=2, 
-                                       label=f'Target Cutloss: {optimal_cutloss_pct:.1f}%')
+                            optimal_cutloss = -(avg_win_pct / 2.0)
+                            fig.add_vline(x=optimal_cutloss, line_dash="dashdot", line_color="#f21d2b", 
+                                          annotation_text=f"Target: {optimal_cutloss:.1f}%")
                         
-                        # ปรับแต่งหน้าตากราฟ
-                        ax.spines['top'].set_visible(False)
-                        ax.spines['right'].set_visible(False)
-                        ax.grid(False)
-                        ax.yaxis.set_visible(True)
+                        # ปรับ Theme ให้ดูสะอาดตา
+                        fig.update_layout(
+                            plot_bgcolor='rgba(0,0,0,0)',
+                            xaxis_title='Profit/Loss (%)',
+                            yaxis_title='No. of Trades',
+                            margin=dict(l=20, r=20, t=30, b=20),
+                            height=350
+                        )
                         
-                        from matplotlib.ticker import MultipleLocator
-                        ax.xaxis.set_major_locator(MultipleLocator(2)) # ปรับให้ห่างขึ้นเล็กน้อยเพื่อไม่ให้เลขทับกัน
-                        ax.set_xlabel('Profit/Loss (%)', fontsize=10)
-                        ax.set_ylabel('No. of Trades', fontsize=10)
-                        
-                        # ปรับ Font และ Legend ให้ขนาดพอเหมาะ
-                        plt.xticks(fontsize=8, rotation=0) 
-                        plt.yticks(fontsize=8)
-                        ax.legend(frameon=False, fontsize=8, loc='upper left')
-                        
-                        fig.tight_layout(pad=1.5)
-                        
-                        # แสดงผลแบบปรับขนาดให้อัตโนมัติ (use_container_width=True)
-                        st.pyplot(fig, use_container_width=True)
-                        
-                        # ปิด fig เพื่อคืนค่า memory
-                        plt.close(fig)
+                        st.plotly_chart(fig, use_container_width=True)
                         
                         ####################
                         # Equity Curve 
