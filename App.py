@@ -1570,6 +1570,11 @@ def main():
                         
                     
                         ####################
+                        if st.button("🔄 อัปเดตข้อมูลย้อนหลัง (Backfill)"):
+                            with st.spinner('กำลังคำนวณข้อมูลย้อนหลัง (อาจใช้เวลาสักครู่)...'):
+                                # เรียกใช้ฟังก์ชันที่เขียนไว้
+                                backfill_portfolio_history()
+                                st.success("อัปเดตเรียบร้อย! กราฟของคุณพร้อมใช้งานแล้ว")
                         # Equity Curve 
                         st.markdown("---")
                         st.markdown("##### 📈 Equity Curve")
