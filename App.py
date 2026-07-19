@@ -343,29 +343,46 @@ def display_performance_dashboard():
         st.plotly_chart(fig2, use_container_width=True)
 
 def backfill_portfolio_history():
-    # 1. ดึงข้อมูลจาก Journal
     df = pd.DataFrame(st.session_state.journal_data)
     df['วันที่'] = pd.to_datetime(df['วันที่'])
     df = df.sort_values('วันที่')
     
-    # 2. เตรียมรายการวันทั้งหมดตั้งแต่เริ่มจนถึงปัจจุบัน
     all_dates = pd.date_range(start=df['วันที่'].min(), end=pd.Timestamp.now())
-    
     history_list = []
     
-    # 3. ลูปคำนวณค่าทุกวัน (อาจจะใช้เวลาหน่อยถ้าข้อมูลเยอะ)
+    # --- เพิ่มส่วนนี้: ดึงรายชื่อหุ้นทั้งหมดที่เคยเทรด ---
+    all_tickers = df['หุ้น'].unique()
+    # ดึงราคาประวัติย้อนหลังของหุ้นทุกตัวมาเก็บไว้ใน dict เพื่อไม่ให้เสียเวลาดึงซ้ำใน loop
+    price_history = {}
+    for ticker in all_tickers:
+        # ดึงข้อมูลจาก yfinance แบบยาวๆ ทีเดียว
+        hist = yf.Ticker(f"{ticker}.BK").history(period="max")
+        price_history[ticker] = hist['Close']
+
     for date in all_dates:
-        # กรองข้อมูลถึงวันที่ปัจจุบัน
         df_upto = df[df['วันที่'] <= date]
         
-        # คำนวณเงินลงทุนสะสม (Total Invested)
-        # พี่อ้ำต้องดูว่าใน Journal มีการบันทึกการ "ฝากเงิน" ไว้ไหม
-        # ถ้าไม่มี ให้ใช้ผลรวมของมูลค่าหุ้นที่ซื้อไปเป็นเกณฑ์ขั้นต่ำ
-        invested = df_upto[df_upto['ประเภท'] == 'ซื้อ']['ต้นทุน (บาท)'].sum()
+        # 1. คำนวณจำนวนหุ้นคงเหลือ ณ วันนั้น
+        current_holdings = {}
+        for ticker in all_tickers:
+            buys = df_upto[(df_upto['หุ้น'] == ticker) & (df_upto['ประเภท'].str.contains("ซื้อ"))]['จำนวนหุ้นที่ซื้อ'].sum()
+            sells = df_upto[(df_upto['หุ้น'] == ticker) & (df_upto['ประเภท'].str.contains("ขาย"))]['จำนวนหุ้นที่ซื้อ'].sum()
+            shares = buys - sells
+            if shares > 0:
+                current_holdings[ticker] = shares
         
-        # คำนวณมูลค่าพอร์ต (ง่ายๆ คือ มูลค่าหุ้นที่ถืออยู่ + เงินสด)
-        # ตรงนี้พี่อ้ำอาจต้องปรับ logic ตามที่เก็บไว้ใน session_state
-        market_val = ... # สูตรคำนวณมูลค่าหุ้นที่ถือ ณ วันนั้น
+        # 2. คำนวณ Market Value รวม ณ วันนั้น
+        market_val = 0
+        for ticker, shares in current_holdings.items():
+            # ดึงราคาปิดของหุ้นตัวนั้น ณ วันที่ date (ถ้าวันนั้นไม่มีตลาด ให้ใช้ราคาล่าสุดก่อนหน้า)
+            price_series = price_history[ticker]
+            price_at_date = price_series[price_series.index <= date]
+            if not price_at_date.empty:
+                market_val += (shares * price_at_date.iloc[-1])
+        
+        # 3. คำนวณเงินสดสะสม (ถ้าคุณมีฟังก์ชันคำนวณ cash flow ย้อนหลัง ให้ใช้ตัวนั้น)
+        # หรือถ้าไม่มี ให้คิดจาก (เงินฝากทั้งหมด - เงินลงทุนทั้งหมด)
+        invested = df_upto[df_upto['ประเภท'].str.contains("ซื้อ")]['ต้นทุน (บาท)'].sum()
         
         history_list.append({
             'Date': date.strftime('%Y-%m-%d'),
@@ -373,10 +390,7 @@ def backfill_portfolio_history():
             'Invested_Capital': invested
         })
     
-    # 4. บันทึกลง Google Sheet (Portfolio_History)
-    # ใช้กุญแจเดิมที่พี่อ้ำใช้บันทึกปกติครับ
     save_to_gsheet("Portfolio_History", history_list)
-    st.success("สร้างประวัติพอร์ตย้อนหลังเสร็จแล้ว!")
     
 def get_current_portfolio_value():
     # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
