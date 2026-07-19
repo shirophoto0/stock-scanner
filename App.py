@@ -1635,17 +1635,24 @@ def main():
                             
                 # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
                 st.divider()
-                st.markdown("##### 📊 สรุปพอร์ตการลงทุน")
-                
+                st.subheader("📊 สรุปพอร์ตการลงทุน")
+            
                 if "my_portfolio" not in st.session_state:
                     load_portfolio()
-            
+                
                 if st.session_state.my_portfolio:
                     portfolio_list = []
                     total_invest = 0
                     total_value = 0
                     
-                    for index, row in enumerate(st.session_state.my_portfolio):
+                    # ฟังก์ชันกำหนดสีสำหรับตารางพอร์ต
+                    def color_portfolio(val):
+                        if isinstance(val, (int, float)):
+                            color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
+                            return f'color: {color}'
+                        return None
+    
+                    for row in st.session_state.my_portfolio:
                         ticker = row.get('หุ้น', '')
                         shares = float(row.get('shares', 0))
                         avg_price = float(row.get('avg_price', 0.0))
@@ -1658,7 +1665,6 @@ def main():
                         cost_value = shares * avg_price
                         market_value = shares * m_price
                         profit = market_value - cost_value
-                        # คำนวณ % กำไร/ขาดทุน
                         profit_pct = (profit / cost_value * 100) if cost_value > 0 else 0
                         
                         portfolio_list.append({
@@ -1669,60 +1675,44 @@ def main():
                             "ราคาตลาด": m_price,
                             "มูลค่าตลาด": market_value,
                             "กำไร/ขาดทุน": profit,
-                            "% กำไร/ขาดทุน": profit_pct,
-                            "สถานะ": '🟢' if profit > 0 else ('🔴' if profit < 0 else '⚪')
+                            "% กำไร/ขาดทุน": profit_pct
                         })
-                        
                         total_invest += cost_value
                         total_value += market_value
-            
-                    # สรุปยอดรวม
-                    # สรุปยอดรวม (ปรับเป็น 4 คอลัมน์)
+                    
+                    # ส่วนแสดง Metric
                     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                    
-                    # 1. เงินสดคงเหลือ
                     col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.cash_balance:,.0f} ฿")
-                    
-                    # 2. เงินลงทุนรวม (หุ้น)
                     col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
-                    
-                    # 3. มูลค่าปัจจุบัน (หุ้น)
                     col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
-                    
-                    # 4. กำไร/ขาดทุนรวม
                     diff = total_value - total_invest
-                    col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", 
-                                  delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
-            
-                    # แสดงตารางเดียวที่แก้ไขได้
+                    col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
+    
+                    # --- เปลี่ยนจาก data_editor เป็น dataframe พร้อมใส่สี ---
                     df_p = pd.DataFrame(portfolio_list)
-                    edited_df = st.data_editor(
-                        df_p, 
-                        use_container_width=True, 
-                        key="portfolio_editor",
-                        column_config={
-                            "หุ้น": st.column_config.TextColumn(disabled=True),
-                            "จำนวน": st.column_config.NumberColumn(format="%d"),
-                            "ต้นทุนเฉลี่ย": st.column_config.NumberColumn(format="%.2f"),
-                            "มูลค่าต้นทุน": st.column_config.NumberColumn(format="%,.0f", disabled=True),
-                            "ราคาตลาด": st.column_config.NumberColumn(format="%.2f", disabled=True),
-                            "มูลค่าตลาด": st.column_config.NumberColumn(format="%,.0f", disabled=True),
-                            "กำไร/ขาดทุน": st.column_config.NumberColumn(format="%,.0f", disabled=True),
-                            "% กำไร/ขาดทุน": st.column_config.NumberColumn(format="%.2f%%", disabled=True),
-                            "สถานะ": st.column_config.TextColumn(disabled=True)
-                        }
+                    
+                    st.dataframe(
+                        df_p.style.format({
+                            "จำนวน": "{:,.0f}",
+                            "ต้นทุนเฉลี่ย": "{:.2f}",
+                            "มูลค่าต้นทุน": "{:,.0f}",
+                            "ราคาตลาด": "{:.2f}",
+                            "มูลค่าตลาด": "{:,.0f}",
+                            "กำไร/ขาดทุน": "{:,.0f}",
+                            "% กำไร/ขาดทุน": "{:.2f}%"
+                        })
+                        .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
+                        .set_properties(**{'text-align': 'right'})
+                        .set_table_styles([{'selector': 'th', 'props': [('text-align', 'right')]}])
+                        , use_container_width=True
                     )
-            
-                    # อัปเดตข้อมูลเมื่อมีการแก้ไข
-                    if st.session_state.portfolio_editor["edited_rows"]:
-                        for idx, changes in st.session_state.portfolio_editor["edited_rows"].items():
-                            if "จำนวน" in changes: st.session_state.my_portfolio[idx]["shares"] = changes["จำนวน"]
-                            if "ต้นทุนเฉลี่ย" in changes: st.session_state.my_portfolio[idx]["avg_price"] = changes["ต้นทุนเฉลี่ย"]
-                        save_portfolio()
-                        st.rerun()
+                    
+                    # ถ้าต้องการแก้ไขพอร์ต ให้แยกปุ่มหรือลิงก์ไปเปิดในหน้าจัดการแยกต่างหาก
+                    if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
+                        st.session_state.edit_mode = True
                 else:
                     st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตโฟลิโอครับ")
-            
+                
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
