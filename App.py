@@ -1550,51 +1550,29 @@ def main():
                         avg_loss_pct = losses['Profit_Pct'].mean()
                         
                         # แทนที่จะใช้ annotation_text แบบเดิม ให้ใช้ dict เพื่อคุมตำแหน่ง
-                        # 🔔 การกระจายตัวกำไร/ขาดทุน (%) - แบบ Plotly
-                        st.markdown("---")
-                        st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
+                        # 1. จัดเตรียม Dashboard ตัวเลขด้านบนกราฟ (แสดงเป็นแถวเดียว)
+                        # ใช้ y=1.15 เพื่อให้ลอยอยู่เหนือกราฟ และ x กระจายตัว
+                        fig.add_annotation(text=f"Mean: <b>{mean_val:.1f}%</b>", xref="paper", yref="paper", x=0.1, y=1.15, showarrow=False, font=dict(color="#12da58", size=14))
+                        fig.add_annotation(text=f"Avg Loss: <b>{avg_loss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.5, y=1.15, showarrow=False, font=dict(color="#9b59b6", size=14))
+                        if not wins.empty:
+                            fig.add_annotation(text=f"Target: <b>{optimal_cutloss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.9, y=1.15, showarrow=False, font=dict(color="#f21d2b", size=14))
                         
-                        # สร้าง Histogram ด้วย Plotly
-                        fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, 
-                                           opacity=0.6, 
-                                           color_discrete_sequence=['#3498db'])
-                        
-                        # เพิ่มเส้น Mean, Avg Loss, Target Cutloss
-                        mean_val = df_filtered['Profit_Pct'].mean()
-                        avg_loss_pct = losses['Profit_Pct'].mean()
-                        
-                        # แทนที่จะใช้ annotation_text แบบเดิม ให้ใช้ dict เพื่อคุมตำแหน่ง
+                        # 2. ปรับเส้น vline และขยับ Annotation ลงมาให้ไม่ทับกัน (เรียงลดหลั่นลงมา)
                         fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58",
-                                      annotation_text=f"Mean: {mean_val:.1f}%", 
-                                      annotation_position="top left", # บังคับให้อยู่ซ้ายบน
-                                      annotation_yshift=30)           # ขยับขึ้นไป 30 pixels
+                                      annotation_text="Mean", annotation_position="top left", annotation_yshift=20)
                         
                         fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6",
-                                      annotation_text=f"Avg Loss: {avg_loss_pct:.1f}%",
-                                      annotation_position="top right", # บังคับให้อยู่ขวาบน
-                                      annotation_yshift=10)            # ขยับขึ้นเล็กน้อย
+                                      annotation_text="Avg Loss", annotation_position="top left", annotation_yshift=0)
                         
-                        # 1. คำนวณค่าก่อน (ต้องแน่ใจว่าอยู่ในบล็อก if not wins.empty)
-                        if not wins.empty:
-                            avg_win_pct = wins['Profit_Pct'].mean()
-                            optimal_cutloss_pct = -(avg_win_pct / 2.0)
-                        else:
-                            optimal_cutloss_pct = 0 # กำหนดค่า Default หากไม่มีข้อมูลกำไร
-                        
-                        # 2. เรียกใช้ชื่อตัวแปรให้ตรงกัน (ใช้ optimal_cutloss_pct)
                         if not wins.empty:
                             fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b",
-                                          annotation_text=f"Target: {optimal_cutloss_pct:.1f}%",
-                                          annotation_position="bottom right", 
-                                          annotation_yshift=-10)
-                                                                        
-                        # ปรับ Theme ให้ดูสะอาดตา
+                                          annotation_text="Target", annotation_position="top left", annotation_yshift=-20)
+                        
+                        # 3. ปรับ Layout ให้มีพื้นที่ด้านบนเหลือสำหรับ Dashboard
                         fig.update_layout(
-                            plot_bgcolor='rgba(0,0,0,0)',
-                            xaxis_title='Profit/Loss (%)',
-                            yaxis_title='No. of Trades',
-                            margin=dict(l=20, r=20, t=30, b=20),
-                            height=350
+                            margin=dict(t=80, b=20, l=20, r=20), # เพิ่ม margin ด้านบน (t) ให้เยอะขึ้น
+                            height=400,
+                            plot_bgcolor='rgba(0,0,0,0)'
                         )
                         
                         st.plotly_chart(fig, use_container_width=True)
