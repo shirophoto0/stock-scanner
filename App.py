@@ -1536,43 +1536,55 @@ def main():
                         losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
             
                         # --- 3. ส่วนวาดกราฟ ---
+                        # 🔔 การกระจายตัวกำไร/ขาดทุน (%)
+                        st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
-                        fig, ax = plt.subplots(figsize=(10, 4))
+                        
+                        # ปรับ figsize ให้กะทัดรัด (กว้าง 6, สูง 3.5)
+                        fig, ax = plt.subplots(figsize=(6, 3.5))
                         
                         sns.histplot(df_filtered['Profit_Pct'], kde=True, color='#3498db', 
-                                     binwidth=1, edgecolor='none', alpha=0.3, ax=ax)
+                                    binwidth=1, edgecolor='none', alpha=0.3, ax=ax)
                         
                         # เส้นค่าเฉลี่ย
                         mean_val = df_filtered['Profit_Pct'].mean()
                         ax.axvline(mean_val, color="#12da58", linestyle='--', linewidth=1.5, label=f'Mean: {mean_val:.1f}%')
-                        # เพิ่มเส้นนี้เข้าไปในกราฟครับ
+                        
+                        # เส้น Average Loss
                         avg_loss_pct = losses['Profit_Pct'].mean()
                         ax.axvline(avg_loss_pct, color='#9b59b6', linestyle=':', linewidth=2, 
-                             label=f'Actual Avg Loss: {avg_loss_pct:.1f}%')
+                                   label=f'Avg Loss: {avg_loss_pct:.1f}%')
                         
                         # เส้น Optimal Cutloss (RR 2:1)
                         if not wins.empty:
                             avg_win_pct = wins['Profit_Pct'].mean()
                             optimal_cutloss_pct = -(avg_win_pct / 2.0)
                             ax.axvline(optimal_cutloss_pct, color="#f21d2b", linestyle='-.', linewidth=2, 
-                                       label=f'Target Cutloss (RR 2:1): {optimal_cutloss_pct:.1f}%')
-            
-                        # ปรับแต่งกราฟ
+                                       label=f'Target Cutloss: {optimal_cutloss_pct:.1f}%')
+                        
+                        # ปรับแต่งหน้าตากราฟ
                         ax.spines['top'].set_visible(False)
                         ax.spines['right'].set_visible(False)
                         ax.grid(False)
                         ax.yaxis.set_visible(True)
                         
                         from matplotlib.ticker import MultipleLocator
-                        ax.xaxis.set_major_locator(MultipleLocator(1))
-                        ax.set_xlabel('Profit/Loss (%)', fontsize=12)
-                        ax.set_ylabel('no.Trades', fontsize=12)
+                        ax.xaxis.set_major_locator(MultipleLocator(2)) # ปรับให้ห่างขึ้นเล็กน้อยเพื่อไม่ให้เลขทับกัน
+                        ax.set_xlabel('Profit/Loss (%)', fontsize=10)
+                        ax.set_ylabel('No. of Trades', fontsize=10)
                         
-                        plt.xticks(fontsize=5, rotation=90) 
-                        ax.legend(frameon=False)
+                        # ปรับ Font และ Legend ให้ขนาดพอเหมาะ
+                        plt.xticks(fontsize=8, rotation=0) 
+                        plt.yticks(fontsize=8)
+                        ax.legend(frameon=False, fontsize=8, loc='upper left')
                         
-                        fig.tight_layout(pad=2.0)
-                        st.pyplot(fig)
+                        fig.tight_layout(pad=1.5)
+                        
+                        # แสดงผลแบบปรับขนาดให้อัตโนมัติ (use_container_width=True)
+                        st.pyplot(fig, use_container_width=True)
+                        
+                        # ปิด fig เพื่อคืนค่า memory
+                        plt.close(fig)
                         
                         ####################
                         # Equity Curve 
