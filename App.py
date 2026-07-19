@@ -2496,75 +2496,37 @@ def main():
                 closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
                 
                 # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
+                # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
                 st.subheader("🗓 สรุปผลรายเดือน")
                 
-                # คำนวณรายเดือน
+                # 1. จัดเตรียมและคำนวณค่าต่างๆ ให้เสร็จก่อนสร้างตาราง
                 monthly_perf = closed_trades.groupby(closed_trades['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
                 monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
-                monthly_perf['Cumulative_Pct'] = (monthly_perf['Net_Profit'].cumsum() / net_capital) * 100
                 
-                # วาดกราฟ Plotly Combo
-                # --- วาดกราฟ Plotly Combo ---
-                # สร้าง List ของสีตามเงื่อนไข Net_Profit
+                # คำนวณค่าสถิติต่างๆ
+                monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
+                monthly_perf['Portfolio_Value'] = net_capital + monthly_perf['Cumulative_Profit']
+                monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / net_capital) * 100
+                monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / net_capital) * 100
+                
+                # 2. วาดกราฟ Plotly Combo
                 bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in monthly_perf['Net_Profit']]
-                
                 fig = make_subplots(specs=[[{"secondary_y": True}]])
                 
-                # เพิ่ม Bar Chart พร้อมกำหนด marker_color
-                fig.add_trace(
-                    go.Bar(
-                        x=monthly_perf['Month'], 
-                        y=monthly_perf['Net_Profit'], 
-                        name="กำไร/ขาดทุน",
-                        marker_color=bar_colors # <--- ตรงนี้คือส่วนที่เปลี่ยนสี
-                    ), 
-                    secondary_y=False
-                )
+                fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน", marker_color=bar_colors), secondary_y=False)
+                fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
                 
-                # เพิ่มเส้น Cumulative
-                fig.add_trace(
-                    go.Scatter(
-                        x=monthly_perf['Month'], 
-                        y=monthly_perf['Cumulative_Pct'], 
-                        name="% สะสม", 
-                        mode='lines+markers', 
-                        line=dict(color='#FFA500', width=3)
-                    ), 
-                    secondary_y=True
-                )
-                
-                fig.update_layout(
-                    title_text="Monthly Performance", 
-                    height=400, 
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    showlegend=True
-                )
+                fig.update_layout(title_text="Monthly Performance", height=400, margin=dict(l=20, r=20, t=40, b=20), showlegend=True)
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # ตารางสรุป
+                # 3. สร้างตารางสรุป
                 def color_negative_red(val):
-                    # ปรับแต่ง: ถ้าเลขเป็นบวกใช้สีเขียว, ถ้าติดลบใช้สีแดง
                     if isinstance(val, (int, float)):
                         color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
                         return f'color: {color}'
                     return None
-                # --- คำนวณรายเดือน ---
-                monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
-                monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
-                
-                # 1. คำนวณมูลค่าพอร์ตสะสม (ใช้ค่าคงที่ net_capital เป็นฐาน)
-                monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
-                monthly_perf['Portfolio_Value'] = net_capital + monthly_perf['Cumulative_Profit']
-                
-                # 2. คำนวณ % รายเดือน (เทียบกำไรเดือนนั้น ต่อ เงินต้นรวม)
-                # วิธีนี้ปลอดภัยที่สุดและเลขไม่เพี้ยนครับ
-                monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / net_capital) * 100
-                
-                # 3. คำนวณ % สะสม
-                monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / net_capital) * 100
-                
-                # --- ตารางสรุป ---
+    
                 monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
                 monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
                 
