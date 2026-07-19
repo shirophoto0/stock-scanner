@@ -2531,37 +2531,19 @@ def main():
                 monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
 
                 # --- CSS สำหรับจัดตารางให้ชิดขวา ---
-                st.markdown("""
-                    <style>
-                    /* บังคับตารางทั้งหมดในหน้านี้ให้ชิดขวา */
-                    [data-testid="stDataFrame"] table {
-                        text-align: right !important;
-                    }
-                    
-                    /* บังคับ Header ให้ชิดขวา */
-                    [data-testid="stDataFrame"] thead tr th {
-                        text-align: right !important;
-                    }
-                    
-                    /* บังคับตัวเลขใน Cell ให้ชิดขวา */
-                    [data-testid="stDataFrame"] tbody tr td {
-                        text-align: right !important;
-                        justify-content: flex-end !important;
-                    }
-                    </style>
-                """, unsafe_allow_html=True)
-                
-                # แสดงตาราง (ไม่ต้องใส่ set_table_styles แล้วครับ)
-                st.dataframe(
-                    monthly_df.style.format({
-                        'กำไร/ขาดทุน (บาท)': '{:,.2f}',
-                        '% รายเดือน': '{:+.2f} %', 
-                        'มูลค่าพอร์ต (บาท)': '{:,.2f}',
-                        '% สะสม': '{:+.2f} %'
-                    })
-                    .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']),
-                    use_container_width=True
-                )
+                # สร้าง Style object ขึ้นมา
+                styled_df = monthly_df.style.format({
+                    'กำไร/ขาดทุน (บาท)': '{:,.2f}',
+                    '% รายเดือน': '{:+.2f} %', 
+                    'มูลค่าพอร์ต (บาท)': '{:,.2f}',
+                    '% สะสม': '{:+.2f} %'
+                }) \
+                .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']) \
+                .set_properties(**{'text-align': 'right'}) \
+                .set_table_styles([
+                    {'selector': 'th', 'props': [('text-align', 'right')]},
+                    {'selector': 'td', 'props': [('text-align', 'right')]}
+                ])
 
                 # แสดงตารางผ่าน styled_df
                 st.dataframe(styled_df, use_container_width=True)
