@@ -1515,7 +1515,23 @@ def main():
                         ##### กราฟกระจายตัว (Histogram) ###########
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
+
+                        # สร้างแถวของตัวเลข (Metric) วางใต้ Title ก่อนแสดงกราฟ
+                        col_m1, col_m2, col_m3 = st.columns(3)
                         
+                        # คำนวณค่าก่อน (ดึงมาจากโค้ดเดิม)
+                        mean_val = df_filtered['Profit_Pct'].mean()
+                        avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
+                        optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
+                        
+                        with col_m1:
+                            st.metric("Mean", f"{mean_val:.1f}%")
+                        with col_m2:
+                            st.metric("Avg Loss", f"{avg_loss_pct:.1f}%")
+                        with col_m3:
+                            if optimal_cutloss_pct is not None:
+                                st.metric("Target Cut", f"{optimal_cutloss_pct:.1f}%")
+                                                
                         if not df_filtered.empty:
                             # 1. สร้างคอลัมน์ให้แน่นอนก่อนแยกตาราง
                             # ตรวจสอบก่อนว่าต้นทุน > 0 เพื่อป้องกัน division by zero
