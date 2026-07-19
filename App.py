@@ -386,7 +386,8 @@ def backfill_portfolio_history():
                 market_val += (shares * price_at_date.iloc[-1])
         
         # คำนวณเงินลงทุน
-        invested = df_upto[df_upto['ประเภท'].str.contains("ซื้อ")]['ต้นทุน (บาท)'].sum()
+        df_buys = df_upto[df_upto['ประเภท'].str.contains("ซื้อ", na=False)]
+        invested = pd.to_numeric(df_buys['ต้นทุน (บาท)'], errors='coerce').fillna(0).sum()
         
         history_list.append({
             'Date': date.strftime('%Y-%m-%d'),
