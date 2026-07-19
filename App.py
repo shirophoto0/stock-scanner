@@ -2495,31 +2495,6 @@ def main():
                 closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
                 closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
                 
-                # --- แถวที่ 2: Performance Monitor ---
-                st.divider()
-                st.subheader("📊 Performance Monitor")
-                # เปลี่ยน key ให้ไม่ซ้ำเดิม
-                period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
-                selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="tfex_perf_selector")
-                
-                perf_df = closed_trades.copy()
-                days_ago = period_options[selected_period]
-                if days_ago != 9999:
-                    cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
-                    perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
-        
-                # คำนวณ Metric
-                total_trades = len(perf_df)
-                win_rate = (len(perf_df[perf_df['Net_Profit'] > 0]) / total_trades * 100) if total_trades > 0 else 0
-                avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if len(perf_df[perf_df['Net_Profit'] > 0]) > 0 else 0
-                avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if len(perf_df[perf_df['Net_Profit'] <= 0]) > 0 else 0
-                rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
-                profit_factor = (perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum() / perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()) if perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum() > 0 else 0
-        
-                p1, p2, p3 = st.columns(3)
-                p1.metric("Win Rate", f"{win_rate:.1f}%")
-                p2.metric("R:R Ratio", f"{rr_ratio:.2f}")
-                p3.metric("Profit Factor", f"{profit_factor:.2f}")
         
                 # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
