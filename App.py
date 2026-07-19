@@ -1516,51 +1516,45 @@ def main():
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
 
-                        # สร้างแถวของตัวเลข (Metric) วางใต้ Title ก่อนแสดงกราฟ
-                        col_m1, col_m2, col_m3 = st.columns(3)
-                        
-                        # คำนวณค่าก่อน (ดึงมาจากโค้ดเดิม)
-                        mean_val = df_filtered['Profit_Pct'].mean()
-                        avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
-                        optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
-                        
-                        with col_m1:
-                            st.metric("Mean", f"{mean_val:.1f}%")
-                        with col_m2:
-                            st.metric("Avg Loss", f"{avg_loss_pct:.1f}%")
-                        with col_m3:
-                            if optimal_cutloss_pct is not None:
-                                st.metric("Target Cut", f"{optimal_cutloss_pct:.1f}%")
-                                                
+                        # 1. จัดการข้อมูลให้พร้อมก่อนแสดงผล
                         if not df_filtered.empty:
-                            # 1. สร้างคอลัมน์ให้แน่นอนก่อนแยกตาราง
-                            # ตรวจสอบก่อนว่าต้นทุน > 0 เพื่อป้องกัน division by zero
                             df_filtered = df_filtered.copy()
+                            # สร้างคอลัมน์ % ป้องกันหารด้วย 0
                             df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, 1)) * 100
                             
-                            # 2. ค่อยแยก wins/losses ออกมาหลังจากมีคอลัมน์นี้แล้ว
                             wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
                             losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
                             
-                            # 3. คำนวณค่า Metric
+                            # คำนวณค่า Metric
                             mean_val = df_filtered['Profit_Pct'].mean()
                             avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
                             optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
                             
+                            # 2. แสดง Metric
+                            col_m1, col_m2, col_m3 = st.columns(3)
+                            col_m1.metric("Mean", f"{mean_val:.1f}%")
+                            col_m2.metric("Avg Loss", f"{avg_loss_pct:.1f}%")
+                            if optimal_cutloss_pct is not None:
+                                col_m3.metric("Target Cut", f"{optimal_cutloss_pct:.1f}%")
+                            
+                            # 3. วาดกราฟ
                             fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
                             
                             fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
                                           annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right", annotation_yshift=30)
                             fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
                                           annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right", annotation_yshift=0)
+                            
                             if optimal_cutloss_pct is not None:
                                 fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
                                               annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-30)
                             
                             fig.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
                             st.plotly_chart(fig, use_container_width=True)
+                            
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
+                        
                     
                         ####################
                         # Equity Curve 
