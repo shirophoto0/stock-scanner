@@ -301,6 +301,40 @@ def log_portfolio_snapshot():
     # บันทึกแถวใหม่
     sheet.append_row([current_date, market_val, total_cash_invested])    
 
+def calculate_total_portfolio_value():
+    """คำนวณมูลค่าหุ้นในพอร์ตปัจจุบัน (Market Value ของหุ้นทั้งหมด)"""
+    # 1. ดึงข้อมูล Journal มาคำนวณจำนวนหุ้นคงเหลือปัจจุบัน
+    df = pd.DataFrame(st.session_state.journal_data)
+    all_tickers = df['หุ้น'].unique()
+    
+    total_stock_value = 0
+    
+    # 2. ดึงราคาตลาดปัจจุบัน (Market Price) ของแต่ละตัว
+    for ticker in all_tickers:
+        buys = df[(df['หุ้น'] == ticker) & (df['ประเภท'].str.contains("ซื้อ", na=False))]['จำนวนหุ้นที่ซื้อ'].sum()
+        sells = df[(df['หุ้น'] == ticker) & (df['ประเภท'].str.contains("ขาย", na=False))]['จำนวนหุ้นที่ซื้อ'].sum()
+        shares = buys - sells
+        
+        if shares > 0:
+            # ดึงราคาปัจจุบัน
+            try:
+                ticker_obj = yf.Ticker(f"{ticker}.BK")
+                # ใช้ fast_info หรือ history เพื่อเอาราคาล่าสุด
+                market_price = ticker_obj.fast_info['last_price']
+                total_stock_value += (shares * market_price)
+            except:
+                # ถ้าดึงราคาไม่ได้ ให้ใช้ราคาทุนล่าสุดเพื่อไม่ให้ Error
+                total_stock_value += 0 
+                
+    return total_stock_value
+
+def total_invested_capital():
+    """คำนวณต้นทุนเงินที่ลงไปในหุ้นทั้งหมด ณ ปัจจุบัน"""
+    df = pd.DataFrame(st.session_state.journal_data)
+    buys = df[df['ประเภท'].str.contains("ซื้อ", na=False)]['ต้นทุน (บาท)'].sum()
+    sells = df[df['ประเภท'].str.contains("ขาย", na=False)]['ต้นทุน (บาท)'].sum()
+    return buys - sells
+    
 def save_portfolio_snapshot():
     """บันทึกมูลค่าพอร์ตปัจจุบันลงไฟล์/Sheet ประวัติ"""
     # คำนวณมูลค่าพอร์ตทั้งหมด (Cash + Market Value ของหุ้นทุกตัว)
