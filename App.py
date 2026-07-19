@@ -1566,7 +1566,6 @@ def main():
                             fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right")
                         
                         fig.update_layout(height=350, margin=dict(t=20, b=20, l=20, r=20), plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
                         
                             st.plotly_chart(fig, use_container_width=True)
                         else:
