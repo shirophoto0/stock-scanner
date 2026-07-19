@@ -1708,31 +1708,41 @@ def main():
                         st.session_state.edit_mode = True
     
                     # --- กราฟวางที่นี่ (นอก if/else หรืออยู่ใน if ที่ถูกต้อง) ---
+                    # --- ส่วนแสดงกราฟสรุปพอร์ต ---
                     st.divider()
-                    col_graph1, col_graph2 = st.columns(2)
-        
-                    with col_graph1:
-                        st.subheader("🥧 สัดส่วนหุ้นในพอร์ต")
-                        fig_pie = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.3)
-                        fig_pie.update_traces(
-                            textposition='outside', # บังคับให้ชื่อวางด้านนอก
-                            textinfo='label+percent'  # ให้แสดงทั้งชื่อหุ้นและ %
-                        )
-                        
-                        fig_pie.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
-                        st.plotly_chart(fig_pie, use_container_width=True)
-        
-                    with col_graph2:
-                        st.subheader("📈 กำไร/ขาดทุนรายตัว")
-                        text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} THB / {row['% กำไร/ขาดทุน']:.1f}%" for _, row in df_p.iterrows()]
-                        bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in df_p['กำไร/ขาดทุน']]
-                        
-                        fig_bar = go.Figure(data=[go.Bar(
-                            x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
-                            marker_color=bar_colors, text=text_labels, textposition='auto'
-                        )])
-                        fig_bar.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
-                        st.plotly_chart(fig_bar, use_container_width=True)
+                    
+                    # แบ่งเป็น 3 ส่วน: Pie (ตลาด), Pie (ต้นทุน), Bar (กำไร/ขาดทุน)
+                    col_p1, col_p2 = st.columns(2)
+                    
+                    # 1. Pie Chart: มูลค่าตลาด
+                    with col_p1:
+                        st.subheader("🥧 สัดส่วนมูลค่าตลาด")
+                        fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.3)
+                        fig_pie1.update_traces(textposition='outside', textinfo='label+percent')
+                        fig_pie1.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
+                        st.plotly_chart(fig_pie1, use_container_width=True)
+                        st.markdown("<p style='text-align: center; font-weight: bold;'>กราฟแสดงสัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
+    
+                    # 2. Pie Chart: มูลค่าต้นทุน
+                    with col_p2:
+                        st.subheader("🥧 สัดส่วนมูลค่าต้นทุน")
+                        fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.3)
+                        fig_pie2.update_traces(textposition='outside', textinfo='label+percent')
+                        fig_pie2.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
+                        st.plotly_chart(fig_pie2, use_container_width=True)
+                        st.markdown("<p style='text-align: center; font-weight: bold;'>กราฟแสดงสัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
+    
+                    # 3. Bar Chart: กำไร/ขาดทุน (ขยายเต็มความกว้างด้านล่าง)
+                    st.subheader("📈 กำไร/ขาดทุนรายตัว")
+                    text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} THB / {row['% กำไร/ขาดทุน']:.1f}%" for _, row in df_p.iterrows()]
+                    bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in df_p['กำไร/ขาดทุน']]
+                    
+                    fig_bar = go.Figure(data=[go.Bar(
+                        x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
+                        marker_color=bar_colors, text=text_labels, textposition='auto'
+                    )])
+                    fig_bar.update_layout(height=400, margin=dict(l=20, r=20, t=30, b=20))
+                    st.plotly_chart(fig_bar, use_container_width=True)
     
                 else:
                     st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตโฟลิโอครับ")
