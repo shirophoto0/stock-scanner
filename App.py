@@ -1512,20 +1512,24 @@ def main():
                             st.altair_chart(chart_line, use_container_width=True)
             
                         ##### กราฟกระจายตัว (Histogram) ###########
+                        ##### กราฟกระจายตัว (Histogram) ###########
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
                         
                         if not df_filtered.empty:
-                            # คำนวณ Metric และ Plot
+                            # 1. สร้างคอลัมน์ให้แน่นอนก่อนแยกตาราง
+                            # ตรวจสอบก่อนว่าต้นทุน > 0 เพื่อป้องกัน division by zero
+                            df_filtered = df_filtered.copy()
+                            df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, 1)) * 100
+                            
+                            # 2. ค่อยแยก wins/losses ออกมาหลังจากมีคอลัมน์นี้แล้ว
+                            wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                            losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
+                            
+                            # 3. คำนวณค่า Metric
                             mean_val = df_filtered['Profit_Pct'].mean()
                             avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
                             optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
-                            
-                            col_m1, col_m2, col_m3 = st.columns(3)
-                            col_m1.metric("Mean", f"{mean_val:.1f}%")
-                            col_m2.metric("Avg Loss", f"{avg_loss_pct:.1f}%")
-                            if optimal_cutloss_pct is not None:
-                                col_m3.metric("Target Cut", f"{optimal_cutloss_pct:.1f}%")
                             
                             fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
                             
