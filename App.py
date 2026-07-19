@@ -2547,15 +2547,15 @@ def main():
                 monthly_perf = closed_trades.groupby(closed_trades['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
                 monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
                 
-                # 1. คำนวณกำไรสะสมและมูลค่าพอร์ต
+                # 1. คำนวณมูลค่าพอร์ตสะสม (ใช้ค่าคงที่ net_capital เป็นฐาน)
                 monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
                 monthly_perf['Portfolio_Value'] = net_capital + monthly_perf['Cumulative_Profit']
                 
-                # 2. คำนวณ % รายเดือน (เทียบจากเงินต้นของเดือนก่อนหน้า)
-                # สำหรับเดือนแรก ให้เทียบจาก net_capital
-                monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / monthly_perf['Portfolio_Value'].shift(1, fill_value=net_capital)) * 100
+                # 2. คำนวณ % รายเดือน (เทียบกำไรเดือนนั้น ต่อ เงินต้นรวม)
+                # วิธีนี้ปลอดภัยที่สุดและเลขไม่เพี้ยนครับ
+                monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / net_capital) * 100
                 
-                # 3. คำนวณ % สะสม (เทียบจากเงินต้นเริ่มต้น)
+                # 3. คำนวณ % สะสม
                 monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / net_capital) * 100
                 
                 # --- ตารางสรุป ---
