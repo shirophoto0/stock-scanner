@@ -1536,61 +1536,37 @@ def main():
                         losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
             
                         # --- 3. ส่วนวาดกราฟ ---
-                        # 🔔 การกระจายตัวกำไร/ขาดทุน (%) - แบบ Plotly
+                        # 🔔 Title และ Dashboard ตัวเลข
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
                         
-                        # 1. ป้องกัน Error กรณีข้อมูลว่าง
-                        if not df_filtered.empty:
-                            # คำนวณค่าหลัก
-                            mean_val = df_filtered['Profit_Pct'].mean()
-                            avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
-                            
-                            # กำหนดค่าเริ่มต้นให้ optimal_cutloss_pct
-                            optimal_cutloss_pct = None
-                            if not wins.empty:
-                                avg_win_pct = wins['Profit_Pct'].mean()
-                                optimal_cutloss_pct = -(avg_win_pct / 2.0)
+                        # สร้างแถวของตัวเลข (Metric) วางใต้ Title ก่อนแสดงกราฟ
+                        col_m1, col_m2, col_m3 = st.columns(3)
                         
-                            # 2. สร้าง Histogram
-                            fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, 
-                                               opacity=0.6, 
-                                               color_discrete_sequence=['#3498db'])
+                        # คำนวณค่าก่อน (ดึงมาจากโค้ดเดิม)
+                        mean_val = df_filtered['Profit_Pct'].mean()
+                        avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
+                        optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
                         
-                            # 3. Dashboard ตัวเลขด้านบนกราฟ (ย้ายมาวางแนวตั้งที่มุมซ้ายบนของกราฟ)
-                            # ปรับ x=0.05 (ชิดซ้าย) และใช้ y ลดหลั่นกันลงมา (เช่น 0.95, 0.90, 0.85)
-                            
-                            fig.add_annotation(text=f"Mean: <b>{mean_val:.1f}%</b>", xref="paper", yref="paper", x=0.05, y=0.95, showarrow=False, font=dict(color="#12da58", size=13), align="left")
-                            fig.add_annotation(text=f"Avg Loss: <b>{avg_loss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.05, y=0.88, showarrow=False, font=dict(color="#9b59b6", size=13), align="left")
-                            
+                        with col_m1:
+                            st.metric("Mean", f"{mean_val:.1f}%")
+                        with col_m2:
+                            st.metric("Avg Loss", f"{avg_loss_pct:.1f}%")
+                        with col_m3:
                             if optimal_cutloss_pct is not None:
-                                fig.add_annotation(text=f"Target: <b>{optimal_cutloss_pct:.1f}%</b>", xref="paper", yref="paper", x=0.05, y=0.81, showarrow=False, font=dict(color="#f21d2b", size=13), align="left")
-                                
-                            # 4. เส้น vline พร้อมแสดงค่า % และลดหลั่นตำแหน่ง yshift
-                            fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58",
-                                          annotation_text=f"Mean ({mean_val:.1f}%)", 
-                                          annotation_position="top left", 
-                                          annotation_yshift=25)
-                            
-                            fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6",
-                                          annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", 
-                                          annotation_position="top left", 
-                                          annotation_yshift=5)
-                            
-                            if optimal_cutloss_pct is not None:
-                                fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b",
-                                              annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", 
-                                              annotation_position="top left", 
-                                              annotation_yshift=-15)
+                                st.metric("Target Cut", f"{optimal_cutloss_pct:.1f}%")
                         
-                            # 5. ปรับ Layout
-                            fig.update_layout(
-                                margin=dict(t=100, b=30, l=40, r=40),
-                                height=400,
-                                plot_bgcolor='rgba(0,0,0,0)',
-                                xaxis_title="Profit/Loss (%)",
-                                yaxis_title="No. of Trades"
-                            )
+                        # ต่อด้วยกราฟ Plotly (ไม่ต้องใส่ add_annotation แล้ว กราฟจะโล่งและสะอาดขึ้นมาก)
+                        fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
+                        
+                        # เส้นแนวตั้ง vline (คงไว้เพื่ออ้างอิง)
+                        fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right")
+                        fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right")
+                        if optimal_cutloss_pct is not None:
+                            fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right")
+                        
+                        fig.update_layout(height=350, margin=dict(t=20, b=20, l=20, r=20), plot_bgcolor='rgba(0,0,0,0)')
+                        st.plotly_chart(fig, use_container_width=True)
                         
                             st.plotly_chart(fig, use_container_width=True)
                         else:
