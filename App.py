@@ -1651,7 +1651,7 @@ def main():
                             color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
                             return f'color: {color}'
                         return None
-    
+        
                     for row in st.session_state.my_portfolio:
                         ticker = row.get('หุ้น', '')
                         shares = float(row.get('shares', 0))
@@ -1680,25 +1680,20 @@ def main():
                         total_invest += cost_value
                         total_value += market_value
                     
-                    # ส่วนแสดง Metric
+                    # สรุปยอดรวม
                     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
                     col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.cash_balance:,.0f} ฿")
                     col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
                     col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
                     diff = total_value - total_invest
                     col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
-    
-                    # --- เปลี่ยนจาก data_editor เป็น dataframe พร้อมใส่สี ---
+        
+                    # แสดงตาราง
                     df_p = pd.DataFrame(portfolio_list)
-                    
                     st.dataframe(
                         df_p.style.format({
-                            "จำนวน": "{:,.0f}",
-                            "ต้นทุนเฉลี่ย": "{:.2f}",
-                            "มูลค่าต้นทุน": "{:,.0f}",
-                            "ราคาตลาด": "{:.2f}",
-                            "มูลค่าตลาด": "{:,.0f}",
-                            "กำไร/ขาดทุน": "{:,.0f}",
+                            "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
+                            "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
                             "% กำไร/ขาดทุน": "{:.2f}%"
                         })
                         .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
@@ -1707,44 +1702,34 @@ def main():
                         , use_container_width=True
                     )
                     
-                    # ถ้าต้องการแก้ไขพอร์ต ให้แยกปุ่มหรือลิงก์ไปเปิดในหน้าจัดการแยกต่างหาก
                     if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                         st.session_state.edit_mode = True
-                else:
-                    st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตโฟลิโอครับ")
-
-                    # --- ส่วนแสดงกราฟสรุปพอร์ต ---
+    
+                    # --- กราฟวางที่นี่ (นอก if/else หรืออยู่ใน if ที่ถูกต้อง) ---
                     st.divider()
                     col_graph1, col_graph2 = st.columns(2)
         
-                    # 1. Pie Chart: สัดส่วนมูลค่าหุ้น
                     with col_graph1:
                         st.subheader("🥧 สัดส่วนหุ้นในพอร์ต")
                         fig_pie = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.3)
                         fig_pie.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
                         st.plotly_chart(fig_pie, use_container_width=True)
         
-                    # 2. Bar Chart: กำไร/ขาดทุน พร้อมตัวเลขกำกับ
                     with col_graph2:
                         st.subheader("📈 กำไร/ขาดทุนรายตัว")
-                        # สร้างข้อความกำกับ: "กำไร/ขาดทุน (THB) / %"
-                        text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} THB / {row['% กำไร/ขาดทุน']:.1f}%" 
-                                       for _, row in df_p.iterrows()]
-                        
+                        text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} THB / {row['% กำไร/ขาดทุน']:.1f}%" for _, row in df_p.iterrows()]
                         bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in df_p['กำไร/ขาดทุน']]
                         
-                        fig_bar = go.Figure(data=[
-                            go.Bar(
-                                x=df_p['หุ้น'], 
-                                y=df_p['กำไร/ขาดทุน'],
-                                marker_color=bar_colors,
-                                text=text_labels, # ใส่ข้อความกำกับ
-                                textposition='auto'
-                            )
-                        ])
+                        fig_bar = go.Figure(data=[go.Bar(
+                            x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
+                            marker_color=bar_colors, text=text_labels, textposition='auto'
+                        )])
                         fig_bar.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20))
                         st.plotly_chart(fig_bar, use_container_width=True)
-                        
+    
+                else:
+                    st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตโฟลิโอครับ")
+                            
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
