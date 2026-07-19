@@ -341,6 +341,42 @@ def display_performance_dashboard():
         fig2.add_trace(go.Scatter(x=df['Date'], y=df['Market_Value'], name='มูลค่าพอร์ต', fill='tozeroy'))
         fig2.add_trace(go.Scatter(x=df['Date'], y=df['Invested_Capital'], name='เงินทุนจริง', line=dict(dash='dash')))
         st.plotly_chart(fig2, use_container_width=True)
+
+def backfill_portfolio_history():
+    # 1. ดึงข้อมูลจาก Journal
+    df = pd.DataFrame(st.session_state.journal_data)
+    df['วันที่'] = pd.to_datetime(df['วันที่'])
+    df = df.sort_values('วันที่')
+    
+    # 2. เตรียมรายการวันทั้งหมดตั้งแต่เริ่มจนถึงปัจจุบัน
+    all_dates = pd.date_range(start=df['วันที่'].min(), end=pd.Timestamp.now())
+    
+    history_list = []
+    
+    # 3. ลูปคำนวณค่าทุกวัน (อาจจะใช้เวลาหน่อยถ้าข้อมูลเยอะ)
+    for date in all_dates:
+        # กรองข้อมูลถึงวันที่ปัจจุบัน
+        df_upto = df[df['วันที่'] <= date]
+        
+        # คำนวณเงินลงทุนสะสม (Total Invested)
+        # พี่อ้ำต้องดูว่าใน Journal มีการบันทึกการ "ฝากเงิน" ไว้ไหม
+        # ถ้าไม่มี ให้ใช้ผลรวมของมูลค่าหุ้นที่ซื้อไปเป็นเกณฑ์ขั้นต่ำ
+        invested = df_upto[df_upto['ประเภท'] == 'ซื้อ']['ต้นทุน (บาท)'].sum()
+        
+        # คำนวณมูลค่าพอร์ต (ง่ายๆ คือ มูลค่าหุ้นที่ถืออยู่ + เงินสด)
+        # ตรงนี้พี่อ้ำอาจต้องปรับ logic ตามที่เก็บไว้ใน session_state
+        market_val = ... # สูตรคำนวณมูลค่าหุ้นที่ถือ ณ วันนั้น
+        
+        history_list.append({
+            'Date': date.strftime('%Y-%m-%d'),
+            'Market_Value': market_val,
+            'Invested_Capital': invested
+        })
+    
+    # 4. บันทึกลง Google Sheet (Portfolio_History)
+    # ใช้กุญแจเดิมที่พี่อ้ำใช้บันทึกปกติครับ
+    save_to_gsheet("Portfolio_History", history_list)
+    st.success("สร้างประวัติพอร์ตย้อนหลังเสร็จแล้ว!")
     
 def get_current_portfolio_value():
     # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
