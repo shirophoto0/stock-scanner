@@ -2220,6 +2220,35 @@ def main():
                                             
             #######################          
                     st.markdown("---")
+
+                    st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
+
+                    # 1. คำนวณ Exposure (เงินในหุ้น / เงินทุนรวมทั้งหมด)
+                    # สมมติว่า total_market_val คือมูลค่าหุ้นปัจจุบัน และ st.session_state.cash_balance คือเงินสด
+                    total_market_val = calculate_total_portfolio_value() 
+                    current_cash = st.session_state.cash_balance
+                    total_equity = total_market_val + current_cash
+                    
+                    exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
+                    
+                    # 2. คำนวณ Expectancy
+                    # WinRate, AverageWin, AverageLoss ต้องคำนวณจาก df_filtered
+                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                    
+                    win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
+                    avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
+                    avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
+                    loss_rate = 1 - win_rate
+                    
+                    expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
+                    
+                    # 3. แสดงผลด้วย st.metric
+                    col_r1, col_r2 = st.columns(2)
+                    col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
+                    col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
+
+                
                     # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
                     def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
                         fixed_capital = initial_capital
