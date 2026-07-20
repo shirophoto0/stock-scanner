@@ -1626,13 +1626,25 @@ def main():
                         
                         # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
                         with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
-                            # 1. คำนวณสรุปรายหุ้น
-                            # สมมติว่ามีคอลัมน์ 'กำไร/ขาดทุน (บาท)', 'ต้นทุน (บาท)', 'วันที่'
-                            summary = df_filtered.groupby('หุ้น').agg({
-                                'กำไร/ขาดทุน (บาท)': 'sum',
-                                'ต้นทุน (บาท)': 'sum'
-                            })
-                            
+                            # กำหนดรูปแบบตาราง
+                            st.dataframe(
+                                display_df,
+                                use_container_width=True,
+                                column_config={
+                                    "Total Profit/Loss": st.column_config.NumberColumn(
+                                        "Total Profit/Loss",
+                                        format="%d ฿" # บังคับแสดงเป็นตัวเลขเต็มๆ ไม่มีทศนิยม
+                                    ),
+                                    "% Return": st.column_config.NumberColumn(
+                                        "% Return",
+                                        format="%.2f%%"
+                                    ),
+                                    "Holding Time": st.column_config.NumberColumn(
+                                        "Holding Time",
+                                        format="%d วัน"
+                                    )
+                                }
+                            )                          
                             # คำนวณ % Return (กำไร / ต้นทุน)
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
                             
