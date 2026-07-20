@@ -1626,35 +1626,27 @@ def main():
                         
                         # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
                         with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
-                            # 1. คำนวณสรุป (เหมือนเดิม)
+                            # คำนวณข้อมูลตามเดิม
                             summary = df_filtered.groupby('หุ้น').agg({
                                 'กำไร/ขาดทุน (บาท)': 'sum',
                                 'ต้นทุน (บาท)': 'sum'
                             })
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
+                            
                             df_filtered['วันที่'] = pd.to_datetime(df_filtered['วันที่'])
                             hold_time = df_filtered.groupby('หุ้น')['วันที่'].min()
                             summary['Holding Time'] = (pd.Timestamp.now() - hold_time).dt.days
                             
-                            # 2. ปรับโครงสร้างข้อมูล (เลือกเฉพาะคอลัมน์ที่จะโชว์ และเรียงลำดับให้ถูก)
+                            # ปรับชื่อคอลัมน์และเลือกเฉพาะที่ต้องการ
                             display_df = summary.reset_index()
-                            display_df = display_df.rename(columns={'หุ้น': 'Ticker', 'กำไร/ขาดทุน (บาท)': 'Total Profit/Loss'})
+                            display_df = display_df[['หุ้น', 'กำไร/ขาดทุน (บาท)', '% Return', 'Holding Time']]
+                            display_df.columns = ['Ticker', 'Total Profit/Loss', '% Return', 'Holding Time']
                             
-                            # สำคัญ: เลือกเฉพาะคอลัมน์ที่มีใน column_config เท่านั้น เพื่อไม่ให้คอลัมน์เกิน
-                            display_df = display_df[['Ticker', 'Total Profit/Loss', '% Return', 'Holding Time']]
+                            # แสดงตารางแบบไม่ต้องใช้ column_config ก่อน เพื่อเช็คว่าข้อมูลมาครบไหม
+                            # ถ้าวิธีนี้เห็นตัวเลข แสดงว่าปัญหาอยู่ที่ column_config ที่คุณใช้
+                            st.dataframe(display_df, use_container_width=True)
                             
-                            # 3. แสดงผล (เช็คให้แน่ใจว่าชื่อ Key ใน column_config ตรงกับชื่อคอลัมน์ใน display_df)
-                            st.dataframe(
-                                display_df,
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Ticker": st.column_config.TextColumn("Ticker"),
-                                    "Total Profit/Loss": st.column_config.NumberColumn("Total Profit/Loss", format="%d ฿"),
-                                    "% Return": st.column_config.NumberColumn("% Return", format="%.2f%%"),
-                                    "Holding Time": st.column_config.NumberColumn("Holding Time", format="%d วัน")
-                                }
-                            )
+                            # ถ้าข้อมูลในตารางนี้แสดงผลครบถ้วน ให้ค่อยๆ เพิ่ม column_config ทีละส่วนครับ
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
                             # แยกข้อมูลพอร์ต
