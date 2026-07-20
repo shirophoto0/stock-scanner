@@ -1584,7 +1584,38 @@ def main():
                         
                         # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
                         with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
-                            st.dataframe(df_summary.rename(columns={'กำไร/ขาดทุน (บาท)': 'กำไร/ขาดทุน (฿)'}), use_container_width=True)
+                            # 1. คำนวณสรุปรายหุ้น
+                            # สมมติว่ามีคอลัมน์ 'กำไร/ขาดทุน (บาท)', 'ต้นทุน (บาท)', 'วันที่'
+                            summary = df_filtered.groupby('หุ้น').agg({
+                                'กำไร/ขาดทุน (บาท)': 'sum',
+                                'ต้นทุน (บาท)': 'sum'
+                            })
+                            
+                            # คำนวณ % Return (กำไร / ต้นทุน)
+                            summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
+                            
+                            # คำนวณ Holding Time (ใช้ วันที่ปัจจุบัน - วันที่ซื้อครั้งแรก)
+                            # สมมติว่า df_filtered มีคอลัมน์ 'วันที่' (ให้แปลงเป็น datetime)
+                            df_filtered['วันที่'] = pd.to_datetime(df_filtered['วันที่'])
+                            hold_time = df_filtered.groupby('หุ้น')['วันที่'].min()
+                            summary['Holding Time (Days)'] = (pd.Timestamp.now() - hold_time).dt.days
+                            
+                            # 2. ปรับชื่อ Header ให้ตรงตามที่คุณต้องการ
+                            summary = summary.rename(columns={
+                                'กำไร/ขาดทุน (บาท)': 'Total Profit/Loss',
+                                '% Return': '% Return',
+                                'Holding Time (Days)': 'Holding Time'
+                            })
+                            
+                            # ลบคอลัมน์ต้นทุนออกก่อนแสดงผล
+                            display_df = summary[['Total Profit/Loss', '% Return', 'Holding Time']]
+                            
+                            # 3. แสดงผลตาราง
+                            st.dataframe(display_df.style.format({
+                                'Total Profit/Loss': '{:,.0f} ฿',
+                                '% Return': '{:.2f}%',
+                                'Holding Time': '{:.0f} วัน'
+                            }), use_container_width=True)
                         
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
