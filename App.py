@@ -2929,7 +2929,7 @@ def main():
             if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
                 # 1. จัดเตรียมข้อมูล
                 closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
-                closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close']))
+                closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
                 
                 # 3. ตารางแสดงราย Series (เปรียบเทียบว่า Series ไหนเทรดแล้วกำไรที่สุด)
                 st.write("📊 สรุปผลงานราย Series:")
