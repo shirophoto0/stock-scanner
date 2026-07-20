@@ -1572,8 +1572,45 @@ def main():
                                 tooltip=['Month_Label', 'Cumulative_Profit']
                             ).properties(height=300)
                             st.altair_chart(chart_line, use_container_width=True)
-            
-                        ##### กราฟกระจายตัว (Histogram) ###########
+                            
+                        ######################################
+                        # แยกหุ้นตัวเก่ง 
+                        # 1. ทำ groupby เพียงครั้งเดียว แล้วใช้ประโยชน์จากมันทั้งสองจุด
+                        df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
+                        df_summary = df_summary.sort_values(by='กำไร/ขาดทุน (บาท)', ascending=False)
+                        
+                        # 2. ดึง top_ticker จาก df_summary ที่เราเพิ่งสร้าง
+                        top_ticker = df_summary.iloc[0]['หุ้น']
+                        
+                        st.info(f"หุ้นที่ทำกำไรให้คุณมากที่สุดในปัจจุบันคือ: **{top_ticker}**")
+                        
+                        # 3. แสดงตาราง (เลือกเฉพาะที่จำเป็น)
+                        st.dataframe(df_summary.rename(columns={'กำไร/ขาดทุน (บาท)': 'กำไร/ขาดทุน (฿)'}), use_container_width=True)
+                        
+                        # 4. แยกข้อมูลพอร์ต
+                        df_top = df_filtered[df_filtered['หุ้น'] == top_ticker]
+                        df_rest = df_filtered[df_filtered['หุ้น'] != top_ticker]
+
+                        st.markdown("##### 🏆 ตารางสรุปผลงานรายหุ้น")
+                        # จัดรูปแบบตารางให้น่าอ่าน
+                        st.dataframe(df_summary.rename(columns={'กำไร/ขาดทุน (บาท)': 'กำไร/ขาดทุน (฿)'}), use_container_width=True)
+
+                        st.markdown("##### 📈 พอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก")
+                        # คำนวณ Cumulative Profit ของทั้งพอร์ต และพอร์ตที่หักตัวเก่งออก
+                        df_filtered = df_filtered.sort_values('วันที่')
+                        df_rest = df_rest.sort_values('วันที่')
+                        
+                        all_portfolio = df_filtered.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum()
+                        core_portfolio = df_rest.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum()
+                        
+                        # รวมเป็น DataFrame เพื่อ Plot กราฟ
+                        chart_data = pd.DataFrame({
+                            'พอร์ตทั้งหมด': all_portfolio,
+                            'พอร์ตหักหุ้นตัวเก่ง': core_portfolio
+                        })
+                        
+                        st.line_chart(chart_data)
+
                         ##### กราฟกระจายตัว (Histogram) ###########
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
