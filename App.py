@@ -2994,9 +2994,9 @@ def main():
                         'axis': {'range': [0, 100]},
                         'bar': {'color': "darkblue"},
                         'steps': [
-                            {'range': [0, 50], 'color': "#26A69A"},   # เขียว (ปลอดภัย)
-                            {'range': [50, 80], 'color': "#FBC02D"},  # เหลือง (ต้องระวัง)
-                            {'range': [80, 100], 'color': "#EF5350'}  # แดง (เสี่ยงสูง)
+                            {'range': [0, 50], 'color': "#26A69A"},
+                            {'range': [50, 80], 'color': "#FBC02D"},
+                            {'range': [80, 100], 'color': "#EF5350"}
                         ],
                         'threshold': {
                             'line': {'color': "white", 'width': 4},
