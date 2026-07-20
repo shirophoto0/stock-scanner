@@ -1781,7 +1781,40 @@ def main():
                                 st.success("✅ ระบบของคุณ: ทำกำไรได้รวดเร็ว (ถือหุ้นกำไรสั้นกว่าหุ้นที่ขาดทุน)")
                             else:
                                 st.warning("⚠️ ข้อสังเกต: คุณอาจจะทนถือหุ้นที่ขาดทุนนานกว่าหุ้นที่ทำกำไร (Loss Aversion)")
-                                
+
+                        #####
+                        with st.expander("📈 Opportunity Cost Matrix (หุ้นไหนควรเก็บ หุ้นไหนควรทิ้ง)"):
+                            # 1. เตรียมข้อมูลสำหรับทำกราฟ
+                            plot_df = summary.reset_index()
+                            plot_df['% Return'] = (plot_df['กำไร/ขาดทุน (บาท)'] / plot_df['ต้นทุน (บาท)']) * 100
+                            
+                            # 2. สร้างกราฟ Scatter Plot
+                            fig = px.scatter(
+                                plot_df, 
+                                x='Hold_Days', 
+                                y='% Return', 
+                                text='หุ้น',
+                                title="Holding Time vs % Return",
+                                labels={'Hold_Days': 'ระยะเวลาการถือครอง (วัน)', '% Return': 'ผลตอบแทน (%)'},
+                                size_max=60
+                            )
+                            
+                            # 3. เพิ่มเส้นแบ่ง (Quadrants) เพื่อให้ดูง่ายขึ้น
+                            fig.add_hline(y=0, line_dash="dash", line_color="red") # เส้นแบ่ง กำไร/ขาดทุน
+                            fig.add_vline(x=plot_df['Hold_Days'].mean(), line_dash="dash", line_color="gray") # เส้นแบ่ง ถือสั้น/ถือนาน
+                            
+                            fig.update_traces(textposition='top center')
+                            
+                            # 4. แสดงผล
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # 5. สรุปคำแนะนำจากกราฟ
+                            st.markdown("""
+                            **วิธีอ่านกราฟ Opportunity Cost:**
+                            *   **บน-ซ้าย (High Return, Low Holding Time):** ✅ **Super Stock** ของคุณ! ทำเงินได้เร็วและคุ้มค่าที่สุด
+                            *   **ล่าง-ขวา (Low Return, High Holding Time):** ⚠️ **Dead Money** หุ้นตัวที่กินเวลาชีวิตคุณไปนานแต่ไม่ทำกำไร (พิจารณาขายทิ้งเพื่อนำเงินไปหาโอกาสใหม่)
+                            *   **บน-ขวา (High Return, High Holding Time):** 🐢 **Value/Trend Stock** เป็นหุ้นที่ต้องถือยาวถึงจะกำไร ถ้าคุณชอบสไตล์นี้ถือว่าโอเคครับ
+                            """)
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
                             # แยกข้อมูลพอร์ต
