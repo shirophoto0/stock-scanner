@@ -1626,42 +1626,36 @@ def main():
                         
                         # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
                         with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
-                            # แปลงคอลัมน์วันที่ให้เป็น datetime
+                            # 1. เตรียมข้อมูลพื้นฐาน
                             df_filtered['วันที่ซื้อ'] = pd.to_datetime(df_filtered['วันที่ซื้อ'])
                             df_filtered['วันที่ขาย'] = pd.to_datetime(df_filtered['วันที่ขาย'])
                             
-                            # 1. คำนวณ Holding Time ทีละแถว
-                            # ถ้าวันที่ขายเป็น NaT (คือยังไม่ขาย) ให้ใช้วันปัจจุบัน
+                            # 2. คำนวณ Holding Time แบบปลอดภัย (ป้องกันค่าว่าง)
                             now = pd.Timestamp.now()
                             df_filtered['Hold_Days'] = df_filtered.apply(
-                                lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days 
-                                if pd.notnull(row['วันที่ขาย']) 
-                                else (now - row['วันที่ซื้อ']).days, 
-                                axis=1
+                                lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days if pd.notnull(row['วันที่ขาย']) 
+                                else (now - row['วันที่ซื้อ']).days, axis=1
                             )
                             
-                            # 2. คำนวณสรุปรายหุ้น
-                            # ใช้วิธีหาค่าเฉลี่ยหรือค่าที่เหมาะสมสำหรับ Holding Time ของหุ้นตัวนั้นๆ
+                            # 3. สร้างตารางสรุป
                             summary = df_filtered.groupby('หุ้น').agg({
                                 'กำไร/ขาดทุน (บาท)': 'sum',
                                 'ต้นทุน (บาท)': 'sum',
-                                'Hold_Days': 'mean' # หรือใช้ .max() หากต้องการดูว่าถือตัวที่นานสุดกี่วัน
+                                'Hold_Days': 'mean'
                             })
                             
+                            # 4. คำนวณ % Return และจัดการ Infinity/NaN
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
+                            summary = summary.replace([float('inf'), -float('inf')], 0).fillna(0)
                             
-                            # 3. เตรียมข้อมูลแสดงผล
+                            # 5. จัดเตรียมตารางแสดงผล
                             display_df = summary.reset_index()
-                            display_df = display_df.rename(columns={
-                                'หุ้น': 'Ticker', 
-                                'กำไร/ขาดทุน (บาท)': 'Total Profit/Loss',
-                                'Hold_Days': 'Holding Time'
-                            })
+                            display_df.columns = ['Ticker', 'Total Profit/Loss', 'Cost', '% Return', 'Holding Time']
                             
+                            # ดึงเฉพาะคอลัมน์ที่ต้องการโชว์
                             display_df = display_df[['Ticker', 'Total Profit/Loss', '% Return', 'Holding Time']]
-                            display_df = display_df.fillna(0)
                             
-                            # 4. แสดงผล
+                            # 6. แสดงผลด้วยการจัดการ Column Config อย่างเคร่งครัด
                             st.dataframe(
                                 display_df,
                                 use_container_width=True,
