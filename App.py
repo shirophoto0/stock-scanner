@@ -2707,24 +2707,22 @@ def main():
         c3.metric("การเติบโต", f"{growth_pct:.2f} %")
         st.divider()
     
-        # --- เริ่มแถวที่ 2: Performance Metrics ---
+        # --- เริ่มแถวที่ 2: Performance Metrics (รวมเชิงลึก) ---
         st.subheader("📊 Performance Monitor")
         
         # 1. สร้าง Filter ช่วงเวลา
         period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
         selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
         
-        # 2. กรองข้อมูลเฉพาะแถวที่ปิดสถานะแล้ว และตามช่วงเวลาที่เลือก
-        # แปลง Date_Close เป็น datetime เพื่อคำนวณระยะเวลา
-        perf_df = closed_trades.copy() # ใช้ closed_trades ที่เรากรองไว้แล้วก่อนหน้านี้
+        # 2. กรองข้อมูลตามช่วงเวลา
+        perf_df = closed_trades.copy()
         perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
-        
         days_ago = period_options[selected_period]
         if days_ago != 9999:
             cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
             perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
     
-        # 3. คำนวณค่าต่างๆ
+        # 3. คำนวณ Metrics ทั้งหมดจาก perf_df ที่กรองแล้ว
         total_trades = len(perf_df)
         win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
         win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
@@ -2738,13 +2736,40 @@ def main():
         profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
         
         expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
+        
+        # คำนวณเชิงลึก (Efficiency Analysis)
+        perf_df['Points'] = perf_df['Net_Profit'] / 200
+        avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
+        avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
+        
+        # Max Drawdown (คำนวณจากช่วงที่กรอง)
+        temp_df = perf_df.sort_values('Date_Close')
+        temp_df['Cumulative'] = temp_df['Net_Profit'].cumsum()
+        max_drawdown = (temp_df['Cumulative'] - temp_df['Cumulative'].cummax()).min() if not temp_df.empty else 0
+        
+        # ระยะเวลาถือครอง
+        perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
+        perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
+        avg_hold = perf_df['Hold_Days'].mean() if not perf_df.empty else 0
     
-        # 4. แสดงผล
-        p1, p2, p3, p4 = st.columns(4)
-        p1.metric("Win Rate", f"{win_rate:.1f}%")
-        p2.metric("R:R Ratio", f"{rr_ratio:.2f}")
-        p3.metric("Profit Factor", f"{profit_factor:.2f}")
-        p4.metric("Expectancy", f"{expectancy:,.0f}")
+        # 4. แสดงผลแบบ Grid
+        # แถวแรก
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Win Rate", f"{win_rate:.1f}%")
+        c2.metric("R:R Ratio", f"{rr_ratio:.2f}")
+        c3.metric("Profit Factor", f"{profit_factor:.2f}")
+        c4.metric("Expectancy", f"{expectancy:,.0f}")
+        
+        st.write("---") # เส้นคั่น
+        
+        # แถวสอง (เชิงลึก)
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
+        e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
+        e3.metric("Max Drawdown", f"{max_drawdown:,.0f} บาท")
+        e4.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
+        
+        st.divider()
         
         # 3. สร้าง 3 Tabs
         sub_tfex_input, sub_tfex_close, sub_tfex_cash, sub_tfex_history = st.tabs([
@@ -2904,40 +2929,7 @@ def main():
             if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
                 # 1. จัดเตรียมข้อมูล
                 closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
-                closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
-    
-                # --- เพิ่มส่วนวิเคราะห์ประสิทธิภาพ TFEX เชิงลึก ---
-                st.subheader("🎯 วิเคราะห์ประสิทธิภาพเชิงลึก (Efficiency Analysis)")
-                
-                # 1. คำนวณ Point-based Metrics
-                point_value = 200 
-                perf_df['Points'] = perf_df['Net_Profit'] / point_value
-                
-                avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
-                avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
-                
-                # 2. คำนวณ Max Drawdown (จากประวัติการเทรดทั้งหมด)
-                # คำนวณกำไรสะสมเป็นลำดับเวลา
-                perf_df = perf_df.sort_values('Date_Close')
-                perf_df['Cumulative_Profit'] = perf_df['Net_Profit'].cumsum()
-                perf_df['Peak'] = perf_df['Cumulative_Profit'].cummax()
-                perf_df['Drawdown'] = perf_df['Cumulative_Profit'] - perf_df['Peak']
-                max_drawdown = perf_df['Drawdown'].min() # ค่าที่ติดลบมากที่สุดคือ MDD
-                
-                # 3. แสดง Metrics
-                e1, e2, e3, e4 = st.columns(4)
-                e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
-                e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
-                e3.metric("Max Drawdown", f"{max_drawdown:,.0f} บาท")
-                
-                # คำนวณระยะเวลาถือเฉลี่ย
-                if 'Date_Open' in perf_df.columns:
-                    perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
-                    perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
-                    avg_hold = perf_df['Hold_Days'].mean()
-                    e4.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
-                
-                st.divider()
+                closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close']))
                 
                 # 3. ตารางแสดงราย Series (เปรียบเทียบว่า Series ไหนเทรดแล้วกำไรที่สุด)
                 st.write("📊 สรุปผลงานราย Series:")
