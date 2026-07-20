@@ -1720,48 +1720,28 @@ def main():
                                 'Hold_Days': 'mean'
                             })
                             
-                            # 4. คำนวณตัวเลขและบังคับเป็น Numeric
+                            # 4. คำนวณตัวเลข
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
                             summary['Annualized Return'] = (((1 + (summary['% Return'] / 100)) ** (365 / summary['Hold_Days'])) - 1) * 100
-                            
-                            # บังคับให้เป็นเลข 0 ถ้าคำนวณไม่ได้
                             summary = summary.replace([float('inf'), -float('inf')], 0).fillna(0)
                             
-                            # 5. รีเซ็ต Index เพื่อให้หุ้นออกมาเป็นคอลัมน์
+                            # 5. เตรียม DataFrame สำหรับแสดงผล
                             display_df = summary.reset_index()
-                            display_df.columns = ['Ticker', 'ProfitLoss', 'Cost', 'Days', 'Return_Pct', 'Annualized_Return']
                             
-                            # 6. ขั้นตอนสำคัญ: บังคับเปลี่ยนทุกคอลัมน์ที่เป็นตัวเลข ให้เป็น float จริงๆ
-                            cols_to_numeric = ['ProfitLoss', 'Return_Pct', 'Annualized_Return', 'Days']
-                            for col in cols_to_numeric:
-                                display_df[col] = pd.to_numeric(display_df[col])
-                        
-                            # 7. แสดงผล: ใช้ตารางพื้นฐานที่แสดงผลได้ชัวร์ที่สุด
-                            # หากยังมองไม่เห็น ให้ลองเปลี่ยนจาก st.dataframe เป็น st.table ดูครับ
-                            # แสดงผลพร้อมปรับแต่ง Header และทศนิยม
+                            # 6. แปลงข้อมูลเป็น String ที่จัดรูปแบบตามต้องการ (วิธีนี้แก้ปัญหาช่องว่างได้ถาวร)
+                            final_df = pd.DataFrame({
+                                "Ticker": display_df['หุ้น'],
+                                "Profit/Loss (บาท)": display_df['กำไร/ขาดทุน (บาท)'].apply(lambda x: f"{x:,.2f} ฿"),
+                                "Return (%)": display_df['% Return'].apply(lambda x: f"{x:.2f} %"),
+                                "Annualized Return (%)": display_df['Annualized Return'].apply(lambda x: f"{x:,.2f} %"),
+                                "Holding Time (วัน)": display_df['Hold_Days'].apply(lambda x: f"{int(x)} วัน")
+                            })
+                            
+                            # 7. แสดงผล
                             st.dataframe(
-                                display_df,
+                                final_df,
                                 use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Ticker": "Ticker",
-                                    "ProfitLoss": st.column_config.NumberColumn(
-                                        "Profit/Loss (บาท)", 
-                                        format="%.2f ฿"
-                                    ),
-                                    "Return_Pct": st.column_config.NumberColumn(
-                                        "Return (%)", 
-                                        format="%.2f %%"
-                                    ),
-                                    "Annualized_Return": st.column_config.NumberColumn(
-                                        "Annualized Return (%)", 
-                                        format="%.2f %%"
-                                    ),
-                                    "Days": st.column_config.NumberColumn(
-                                        "Holding Time (วัน)", 
-                                        format="%d" # วันเป็นจำนวนเต็มเหมาะสมกว่า
-                                    )
-                                }
+                                hide_index=True
                             )
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
