@@ -2910,29 +2910,6 @@ def main():
                 st.subheader("🎯 วิเคราะห์ประสิทธิภาพเชิงลึก (Efficiency Analysis)")
                 
                 # 1. คำนวณ Point-based Metrics
-                # สมมติว่าสัญญา TFEX 1 จุด = 200 บาท
-                point_value = 200 
-                perf_df['Points'] = perf_df['Net_Profit'] / point_value
-                
-                avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
-                avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
-                
-                # 2. แสดง Metrics
-                e1, e2, e3 = st.columns(3)
-                e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
-                e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
-                
-                # คำนวณระยะเวลาถือครอง (ต้องมีคอลัมน์ Date_Open ใน TFEX_History ด้วย)
-                if 'Date_Open' in perf_df.columns:
-                    perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
-                    perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
-                    avg_hold = perf_df['Hold_Days'].mean()
-                    e3.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
-
-                # --- เพิ่มส่วนวิเคราะห์ประสิทธิภาพ TFEX เชิงลึก ---
-                st.subheader("🎯 วิเคราะห์ประสิทธิภาพเชิงลึก")
-                
-                # 1. คำนวณ Point-based Metrics
                 point_value = 200 
                 perf_df['Points'] = perf_df['Net_Profit'] / point_value
                 
@@ -2958,7 +2935,7 @@ def main():
                     perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
                     perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
                     avg_hold = perf_df['Hold_Days'].mean()
-                    e4.metric("ถือเฉลี่ย", f"{avg_hold:.1f} วัน")
+                    e4.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
                 
                 st.divider()
                 
