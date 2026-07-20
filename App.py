@@ -1644,7 +1644,7 @@ def main():
                                         format="%d วัน"
                                     )
                                 }
-                            )                          
+                            )               
                             # คำนวณ % Return (กำไร / ต้นทุน)
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
                             
