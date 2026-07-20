@@ -1743,6 +1743,45 @@ def main():
                                 use_container_width=True,
                                 hide_index=True
                             )
+                        ########
+                        with st.expander("📊 วิเคราะห์ประสิทธิภาพเชิงลึก (Efficiency & Time-to-Profit)"):
+                            # คำนวณเบื้องต้น (ต่อจากของเดิม)
+                            # ... (สมมติว่ามี df_filtered อยู่แล้ว)
+                            
+                            # 1. แยกกลุ่มหุ้นทำกำไร และหุ้นขาดทุน เพื่อหา Time-to-Profit
+                            winners = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                            losers = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                            
+                            avg_win_time = winners['Hold_Days'].mean() if not winners.empty else 0
+                            avg_loss_time = losers['Hold_Days'].mean() if not losers.empty else 0
+                            
+                            # 2. คำนวณ Efficiency Ratio รายหุ้น (กำไรต่อวัน)
+                            summary['Profit Per Day'] = summary['กำไร/ขาดทุน (บาท)'] / summary['Hold_Days']
+                            
+                            # 3. เตรียมข้อมูลแสดงผลเป็นข้อความ (ป้องกัน error)
+                            analytics_df = pd.DataFrame({
+                                "Ticker": summary.index,
+                                "Profit/Loss (บาท)": summary['กำไร/ขาดทุน (บาท)'].apply(lambda x: f"{x:,.2f} ฿"),
+                                "Profit Per Day (บาท/วัน)": summary['Profit Per Day'].apply(lambda x: f"{x:,.2f} ฿"),
+                                "Avg Hold Days (วัน)": summary['Hold_Days'].apply(lambda x: f"{x:.1f} วัน")
+                            })
+                            
+                            # แสดงตารางวิเคราะห์
+                            st.dataframe(analytics_df, use_container_width=True, hide_index=True)
+                            
+                            # 4. แสดงสรุปเชิงกลยุทธ์ (Time-to-Profit Insights)
+                            st.divider()
+                            st.subheader("💡 วิเคราะห์นิสัยการเทรด (Insights)")
+                            
+                            col1, col2 = st.columns(2)
+                            col1.metric("ถือหุ้นกำไรเฉลี่ย", f"{avg_win_time:.1f} วัน")
+                            col2.metric("ถือหุ้นขาดทุนเฉลี่ย", f"{avg_loss_time:.1f} วัน")
+                            
+                            if avg_win_time < avg_loss_time:
+                                st.success("✅ ระบบของคุณ: ทำกำไรได้รวดเร็ว (ถือหุ้นกำไรสั้นกว่าหุ้นที่ขาดทุน)")
+                            else:
+                                st.warning("⚠️ ข้อสังเกต: คุณอาจจะทนถือหุ้นที่ขาดทุนนานกว่าหุ้นที่ทำกำไร (Loss Aversion)")
+                                
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
                             # แยกข้อมูลพอร์ต
