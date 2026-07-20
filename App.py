@@ -2905,9 +2905,73 @@ def main():
                 # 1. จัดเตรียมข้อมูล
                 closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
                 closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
+    
+                # --- เพิ่มส่วนวิเคราะห์ประสิทธิภาพ TFEX เชิงลึก ---
+                st.subheader("🎯 วิเคราะห์ประสิทธิภาพเชิงลึก (Efficiency Analysis)")
                 
-                # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
-                # --- แถวที่ 3: สรุปผลรายเดือนแบบ Combo Chart & Table ---
+                # 1. คำนวณ Point-based Metrics
+                # สมมติว่าสัญญา TFEX 1 จุด = 200 บาท
+                point_value = 200 
+                perf_df['Points'] = perf_df['Net_Profit'] / point_value
+                
+                avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
+                avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
+                
+                # 2. แสดง Metrics
+                e1, e2, e3 = st.columns(3)
+                e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
+                e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
+                
+                # คำนวณระยะเวลาถือครอง (ต้องมีคอลัมน์ Date_Open ใน TFEX_History ด้วย)
+                if 'Date_Open' in perf_df.columns:
+                    perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
+                    perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
+                    avg_hold = perf_df['Hold_Days'].mean()
+                    e3.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
+
+                # --- เพิ่มส่วนวิเคราะห์ประสิทธิภาพ TFEX เชิงลึก ---
+                st.subheader("🎯 วิเคราะห์ประสิทธิภาพเชิงลึก")
+                
+                # 1. คำนวณ Point-based Metrics
+                point_value = 200 
+                perf_df['Points'] = perf_df['Net_Profit'] / point_value
+                
+                avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
+                avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
+                
+                # 2. คำนวณ Max Drawdown (จากประวัติการเทรดทั้งหมด)
+                # คำนวณกำไรสะสมเป็นลำดับเวลา
+                perf_df = perf_df.sort_values('Date_Close')
+                perf_df['Cumulative_Profit'] = perf_df['Net_Profit'].cumsum()
+                perf_df['Peak'] = perf_df['Cumulative_Profit'].cummax()
+                perf_df['Drawdown'] = perf_df['Cumulative_Profit'] - perf_df['Peak']
+                max_drawdown = perf_df['Drawdown'].min() # ค่าที่ติดลบมากที่สุดคือ MDD
+                
+                # 3. แสดง Metrics
+                e1, e2, e3, e4 = st.columns(4)
+                e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
+                e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
+                e3.metric("Max Drawdown", f"{max_drawdown:,.0f} บาท")
+                
+                # คำนวณระยะเวลาถือเฉลี่ย
+                if 'Date_Open' in perf_df.columns:
+                    perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
+                    perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
+                    avg_hold = perf_df['Hold_Days'].mean()
+                    e4.metric("ถือเฉลี่ย", f"{avg_hold:.1f} วัน")
+                
+                st.divider()
+                
+                # 3. ตารางแสดงราย Series (เปรียบเทียบว่า Series ไหนเทรดแล้วกำไรที่สุด)
+                st.write("📊 สรุปผลงานราย Series:")
+                series_perf = perf_df.groupby('Series').agg({
+                    'Net_Profit': 'sum',
+                    'Trade_ID': 'count'
+                }).rename(columns={'Trade_ID': 'Trades', 'Net_Profit': 'Total PnL'})
+                
+                st.dataframe(series_perf.sort_values(by='Total PnL', ascending=False), use_container_width=True)
+                
+                # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
                 st.subheader("🗓 สรุปผลรายเดือน")
                 
