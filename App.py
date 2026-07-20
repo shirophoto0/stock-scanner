@@ -1572,13 +1572,55 @@ def main():
                                 tooltip=['Month_Label', 'Cumulative_Profit']
                             ).properties(height=300)
                             st.altair_chart(chart_line, use_container_width=True)
+                                                                
+                        ##### กราฟกระจายตัว (Histogram) ###########
+                        st.markdown("---")
+                        st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
+
+                        # 1. จัดการข้อมูลให้พร้อมก่อนแสดงผล
+                        if not df_filtered.empty:
+                            df_filtered = df_filtered.copy()
+                            df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, 1)) * 100
+                            wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                            losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
                             
-                        ######################################
+                            mean_val = df_filtered['Profit_Pct'].mean()
+                            avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
+                            optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
+
+                            # 2. แสดง Metric ด้วย HTML เพื่อคุมสีให้ตรงกับสีเส้นในกราฟ
+                            # สี: Mean=#12da58, Avg Loss=#9b59b6, Target=#f21d2b
+                            col_m1, col_m2, col_m3 = st.columns(3)
+                            col_m1.markdown(f"<div style='text-align: center; color: #12da58; font-size: 20px; font-weight: bold;'>Mean</div><div style='text-align: center; font-size: 24px;'>{mean_val:.1f}%</div>", unsafe_allow_html=True)
+                            col_m2.markdown(f"<div style='text-align: center; color: #9b59b6; font-size: 20px; font-weight: bold;'>Avg Loss</div><div style='text-align: center; font-size: 24px;'>{avg_loss_pct:.1f}%</div>", unsafe_allow_html=True)
+                            if optimal_cutloss_pct is not None:
+                                col_m3.markdown(f"<div style='text-align: center; color: #f21d2b; font-size: 20px; font-weight: bold;'>Target Cut</div><div style='text-align: center; font-size: 24px;'>{optimal_cutloss_pct:.1f}%</div>", unsafe_allow_html=True)
+                            
+                            # 3. วาดกราฟ
+                            fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
+                            
+                            # เพิ่ม annotation_yshift ให้ต่ำลงเล็กน้อย และลดระยะห่าง
+                            fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
+                                          annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right", annotation_yshift=20)
+                            fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
+                                          annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-10)
+                            if optimal_cutloss_pct is not None:
+                                fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
+                                              annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-40)
+                            
+                            # **สำคัญ:** เพิ่ม margin top เพื่อให้มีพื้นที่เหลือให้ป้ายข้อความด้านบนไม่ถูกตัด
+                            fig.update_layout(margin=dict(t=50, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                        else:
+                            st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
+
+                        #######################################
                         # 1. จัดการข้อมูล (ยังคงตรรกะเดิมไว้)
                         df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
                         df_summary = df_summary.sort_values(by='กำไร/ขาดทุน (บาท)', ascending=False)
                         top_ticker = df_summary.iloc[0]['หุ้น']
-                        
+
                         # แสดงข้อมูลหุ้นตัวเก่งแบบสรุปที่เปิดตลอดเวลา
                         st.info(f"หุ้นที่ทำกำไรให้คุณมากที่สุดในปัจจุบันคือ: **{top_ticker}**")
                         
@@ -1638,50 +1680,7 @@ def main():
                             chart_data = chart_data.fillna(0)
                             
                             st.line_chart(chart_data)
-                                                                                        
-                        ##### กราฟกระจายตัว (Histogram) ###########
-                        st.markdown("---")
-                        st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
-
-                        # 1. จัดการข้อมูลให้พร้อมก่อนแสดงผล
-                        if not df_filtered.empty:
-                            df_filtered = df_filtered.copy()
-                            df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, 1)) * 100
-                            wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                            losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
                             
-                            mean_val = df_filtered['Profit_Pct'].mean()
-                            avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
-                            optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
-
-                            # 2. แสดง Metric ด้วย HTML เพื่อคุมสีให้ตรงกับสีเส้นในกราฟ
-                            # สี: Mean=#12da58, Avg Loss=#9b59b6, Target=#f21d2b
-                            col_m1, col_m2, col_m3 = st.columns(3)
-                            col_m1.markdown(f"<div style='text-align: center; color: #12da58; font-size: 20px; font-weight: bold;'>Mean</div><div style='text-align: center; font-size: 24px;'>{mean_val:.1f}%</div>", unsafe_allow_html=True)
-                            col_m2.markdown(f"<div style='text-align: center; color: #9b59b6; font-size: 20px; font-weight: bold;'>Avg Loss</div><div style='text-align: center; font-size: 24px;'>{avg_loss_pct:.1f}%</div>", unsafe_allow_html=True)
-                            if optimal_cutloss_pct is not None:
-                                col_m3.markdown(f"<div style='text-align: center; color: #f21d2b; font-size: 20px; font-weight: bold;'>Target Cut</div><div style='text-align: center; font-size: 24px;'>{optimal_cutloss_pct:.1f}%</div>", unsafe_allow_html=True)
-                            
-                            # 3. วาดกราฟ
-                            fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
-                            
-                            # เพิ่ม annotation_yshift ให้ต่ำลงเล็กน้อย และลดระยะห่าง
-                            fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
-                                          annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right", annotation_yshift=20)
-                            fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
-                                          annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-10)
-                            if optimal_cutloss_pct is not None:
-                                fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
-                                              annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-40)
-                            
-                            # **สำคัญ:** เพิ่ม margin top เพื่อให้มีพื้นที่เหลือให้ป้ายข้อความด้านบนไม่ถูกตัด
-                            fig.update_layout(margin=dict(t=50, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                        else:
-                            st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
-                        
-                    
                         ####################
                         if st.button("🔄 อัปเดตข้อมูลย้อนหลัง (Backfill)"):
                             with st.spinner('กำลังคำนวณข้อมูลย้อนหลัง (อาจใช้เวลาสักครู่)...'):
