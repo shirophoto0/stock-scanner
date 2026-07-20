@@ -1626,9 +1626,10 @@ def main():
                             'พอร์ตทั้งหมด': all_portfolio,
                             'พอร์ตหักหุ้นตัวเก่ง': core_portfolio
                         })
-                        
-                        # ใส่ข้อมูลแทนที่ค่าว่างด้วย 0 (ถ้ามี)
-                        chart_data = chart_data.fillna(method='ffill').fillna(0)
+
+                        # ใช้ .ffill() โดยตรง และเปลี่ยนค่า NaN ที่เหลือเป็น 0
+                        chart_data = chart_data.ffill()
+                        chart_data = chart_data.fillna(0)
                         
                         st.line_chart(chart_data)
 
