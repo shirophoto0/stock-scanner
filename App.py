@@ -1634,24 +1634,28 @@ def main():
                             
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
                             
+                            # คำนวณเวลา (ใช้ .dt.days เพื่อให้ได้ตัวเลขจำนวนเต็ม)
                             df_filtered['วันที่'] = pd.to_datetime(df_filtered['วันที่'])
                             hold_time = df_filtered.groupby('หุ้น')['วันที่'].min()
                             summary['Holding Time'] = (pd.Timestamp.now() - hold_time).dt.days
                             
-                            # 2. แก้ไขตรงนี้: ใช้ .reset_index() เพื่อให้ชื่อหุ้นกลายเป็นคอลัมน์ที่มองเห็นได้
-                            display_df = summary.rename(columns={
-                                'กำไร/ขาดทุน (บาท)': 'Total Profit/Loss',
-                            }).reset_index() # <--- สำคัญมาก ต้องมีตัวนี้
+                            # 2. ปรับโครงสร้างข้อมูล
+                            display_df = summary.reset_index()
+                            display_df = display_df.rename(columns={
+                                'หุ้น': 'Ticker',
+                                'กำไร/ขาดทุน (บาท)': 'Total Profit/Loss'
+                            })
                             
-                            # เลือกเฉพาะคอลัมน์ที่จะโชว์
-                            display_df = display_df[['หุ้น', 'Total Profit/Loss', '% Return', 'Holding Time']]
+                            # 3. ตรวจสอบและเติมค่าว่าง (ป้องกันกรณีที่คำนวณออกมาเป็น NaN แล้วตารางไม่ยอมแสดงผล)
+                            display_df = display_df.fillna(0)
                             
-                            # 3. แสดงผล
+                            # 4. แสดงผลโดยอ้างอิงชื่อคอลัมน์ใหม่ที่แก้ไขแล้ว (Ticker)
                             st.dataframe(
                                 display_df,
                                 use_container_width=True,
+                                hide_index=True, # ซ่อน Index เดิมไปเลยเพื่อความสะอาด
                                 column_config={
-                                    "หุ้น": st.column_config.TextColumn("Ticker"), # เพิ่ม config ให้คอลัมน์หุ้นด้วย
+                                    "Ticker": st.column_config.TextColumn("Ticker"),
                                     "Total Profit/Loss": st.column_config.NumberColumn("Total Profit/Loss", format="%d ฿"),
                                     "% Return": st.column_config.NumberColumn("% Return", format="%.2f%%"),
                                     "Holding Time": st.column_config.NumberColumn("Holding Time", format="%d วัน")
