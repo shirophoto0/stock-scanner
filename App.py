@@ -1574,40 +1574,58 @@ def main():
                             st.altair_chart(chart_line, use_container_width=True)
                             
                         ######################################
-                        # แยกหุ้นตัวเก่ง 
-                        # 1. ทำ groupby เพียงครั้งเดียว แล้วใช้ประโยชน์จากมันทั้งสองจุด
+                        # 1. จัดการข้อมูล (ยังคงตรรกะเดิมไว้)
                         df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
                         df_summary = df_summary.sort_values(by='กำไร/ขาดทุน (บาท)', ascending=False)
-                        
-                        # 2. ดึง top_ticker จาก df_summary ที่เราเพิ่งสร้าง
                         top_ticker = df_summary.iloc[0]['หุ้น']
                         
+                        # แสดงข้อมูลหุ้นตัวเก่งแบบสรุปที่เปิดตลอดเวลา
                         st.info(f"หุ้นที่ทำกำไรให้คุณมากที่สุดในปัจจุบันคือ: **{top_ticker}**")
                         
-                        # 3. แสดงตาราง (เลือกเฉพาะที่จำเป็น)
-                        st.dataframe(df_summary.rename(columns={'กำไร/ขาดทุน (บาท)': 'กำไร/ขาดทุน (฿)'}), use_container_width=True)
+                        # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
+                        with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
+                            st.dataframe(df_summary.rename(columns={'กำไร/ขาดทุน (บาท)': 'กำไร/ขาดทุน (฿)'}), use_container_width=True)
                         
-                        # 4. แยกข้อมูลพอร์ต
-                        df_top = df_filtered[df_filtered['หุ้น'] == top_ticker]
-                        df_rest = df_filtered[df_filtered['หุ้น'] != top_ticker]
-
-                        st.markdown("##### 🏆 ตารางสรุปผลงานรายหุ้น")
-                        # จัดรูปแบบตารางให้น่าอ่าน
-                        st.dataframe(df_summary.rename(columns={'กำไร/ขาดทุน (บาท)': 'กำไร/ขาดทุน (฿)'}), use_container_width=True)
-
-                        st.markdown("##### 📈 พอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก")
+                        # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
+                        with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
+                            # แยกข้อมูลพอร์ต
+                            df_rest = df_filtered[df_filtered['หุ้น'] != top_ticker]
+                            
+                            # คำนวณกราฟ
+                            df_filtered = df_filtered.sort_values('วันที่')
+                            df_rest = df_rest.sort_values('วันที่')
+                            
+                            all_portfolio = df_filtered.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
+                            core_portfolio = df_rest.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
+                            
+                            # สร้าง DataFrame และเติมข้อมูลให้ต่อเนื่อง
+                            chart_data = pd.concat([all_portfolio, core_portfolio], axis=1)
+                            chart_data.columns = ['พอร์ตทั้งหมด', 'พอร์ตหักหุ้นตัวเก่ง']
+                            chart_data = chart_data.ffill().fillna(0)
+                            
+                            st.line_chart(chart_data)
+                                                
                         # คำนวณ Cumulative Profit ของทั้งพอร์ต และพอร์ตที่หักตัวเก่งออก
+                        # 1. เรียงวันที่ให้ถูกต้องก่อน
                         df_filtered = df_filtered.sort_values('วันที่')
                         df_rest = df_rest.sort_values('วันที่')
                         
+                        # 2. คำนวณกำไรสะสม และใช้ .groupby('วันที่').last() เพื่อจัดการค่า Index ที่ซ้ำ
+                        # .cumsum() จะได้ Series ที่มี Index เป็น 'วันที่' (ซึ่งอาจซ้ำกัน)
                         all_portfolio = df_filtered.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum()
-                        core_portfolio = df_rest.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum()
+                        all_portfolio = all_portfolio.groupby('วันที่').last() # <--- เพิ่มบรรทัดนี้
                         
-                        # รวมเป็น DataFrame เพื่อ Plot กราฟ
+                        core_portfolio = df_rest.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum()
+                        core_portfolio = core_portfolio.groupby('วันที่').last() # <--- เพิ่มบรรทัดนี้
+                        
+                        # 3. สร้าง DataFrame
                         chart_data = pd.DataFrame({
                             'พอร์ตทั้งหมด': all_portfolio,
                             'พอร์ตหักหุ้นตัวเก่ง': core_portfolio
                         })
+                        
+                        # ใส่ข้อมูลแทนที่ค่าว่างด้วย 0 (ถ้ามี)
+                        chart_data = chart_data.fillna(method='ffill').fillna(0)
                         
                         st.line_chart(chart_data)
 
