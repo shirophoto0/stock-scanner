@@ -1626,47 +1626,40 @@ def main():
                         
                         # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
                         with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
-                            # 1. เตรียมข้อมูลพื้นฐาน
+                            # แปลงคอลัมน์วันที่ให้เป็น datetime
                             df_filtered['วันที่ซื้อ'] = pd.to_datetime(df_filtered['วันที่ซื้อ'])
                             df_filtered['วันที่ขาย'] = pd.to_datetime(df_filtered['วันที่ขาย'])
                             
-                            # 2. คำนวณ Holding Time แบบปลอดภัย (ป้องกันค่าว่าง)
+                            # 1. คำนวณ Holding Time ทีละแถว
+                            # ถ้าวันที่ขายเป็น NaT (คือยังไม่ขาย) ให้ใช้วันปัจจุบัน
                             now = pd.Timestamp.now()
                             df_filtered['Hold_Days'] = df_filtered.apply(
-                                lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days if pd.notnull(row['วันที่ขาย']) 
-                                else (now - row['วันที่ซื้อ']).days, axis=1
+                                lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days 
+                                if pd.notnull(row['วันที่ขาย']) 
+                                else (now - row['วันที่ซื้อ']).days, 
+                                axis=1
                             )
-                            
-                            # 3. สร้างตารางสรุป
+                            # คำนวณข้อมูลตามเดิม
                             summary = df_filtered.groupby('หุ้น').agg({
                                 'กำไร/ขาดทุน (บาท)': 'sum',
-                                'ต้นทุน (บาท)': 'sum',
-                                'Hold_Days': 'mean'
+                                'ต้นทุน (บาท)': 'sum'
                             })
-                            
-                            # 4. คำนวณ % Return และจัดการ Infinity/NaN
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
-                            summary = summary.replace([float('inf'), -float('inf')], 0).fillna(0)
                             
-                            # 5. จัดเตรียมตารางแสดงผล
+                            df_filtered['วันที่'] = pd.to_datetime(df_filtered['วันที่'])
+                            hold_time = df_filtered.groupby('หุ้น')['วันที่'].min()
+                            summary['Holding Time'] = (pd.Timestamp.now() - hold_time).dt.days
+                            
+                            # ปรับชื่อคอลัมน์และเลือกเฉพาะที่ต้องการ
                             display_df = summary.reset_index()
-                            display_df.columns = ['Ticker', 'Total Profit/Loss', 'Cost', '% Return', 'Holding Time']
+                            display_df = display_df[['หุ้น', 'กำไร/ขาดทุน (บาท)', '% Return', 'Holding Time']]
+                            display_df.columns = ['Ticker', 'Total Profit/Loss', '% Return', 'Holding Time']
                             
-                            # ดึงเฉพาะคอลัมน์ที่ต้องการโชว์
-                            display_df = display_df[['Ticker', 'Total Profit/Loss', '% Return', 'Holding Time']]
+                            # แสดงตารางแบบไม่ต้องใช้ column_config ก่อน เพื่อเช็คว่าข้อมูลมาครบไหม
+                            # ถ้าวิธีนี้เห็นตัวเลข แสดงว่าปัญหาอยู่ที่ column_config ที่คุณใช้
+                            st.dataframe(display_df, use_container_width=True)
                             
-                            # 6. แสดงผลด้วยการจัดการ Column Config อย่างเคร่งครัด
-                            st.dataframe(
-                                display_df,
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Ticker": st.column_config.TextColumn("Ticker"),
-                                    "Total Profit/Loss": st.column_config.NumberColumn("Total Profit/Loss", format="%d ฿"),
-                                    "% Return": st.column_config.NumberColumn("% Return", format="%.2f%%"),
-                                    "Holding Time": st.column_config.NumberColumn("Holding Time", format="%d วัน")
-                                }
-                            )
+                            # ถ้าข้อมูลในตารางนี้แสดงผลครบถ้วน ให้ค่อยๆ เพิ่ม column_config ทีละส่วนครับ
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
                             # แยกข้อมูลพอร์ต
