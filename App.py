@@ -2939,7 +2939,45 @@ def main():
                 }).rename(columns={'Trade_ID': 'Trades', 'Net_Profit': 'Total PnL'})
                 
                 st.dataframe(series_perf.sort_values(by='Total PnL', ascending=False), use_container_width=True)
+
+                # --- กราฟแสดงการเติบโตของพอร์ต TFEX ---
+                st.subheader("📈 กราฟการเติบโตของพอร์ต (Portfolio Growth)")
                 
+                # 1. เตรียมข้อมูลเพื่อทำกราฟ
+                # นำข้อมูลที่ปิดสถานะแล้วมาเรียงตามวันที่ปิด
+                growth_df = perf_df.sort_values('Date_Close').copy()
+                
+                # คำนวณกำไรสะสม
+                growth_df['Cumulative_Profit'] = growth_df['Net_Profit'].cumsum()
+                
+                # นำไปรวมกับเงินต้นเริ่มต้น (net_capital)
+                growth_df['Portfolio_Value'] = net_capital + growth_df['Cumulative_Profit']
+                
+                # เพิ่มบรรทัดเริ่มที่จุดศูนย์ (วันเริ่มต้น)
+                start_date = growth_df['Date_Close'].min() - pd.Timedelta(days=1)
+                start_row = pd.DataFrame({'Date_Close': [start_date], 'Portfolio_Value': [net_capital]})
+                growth_df = pd.concat([start_row, growth_df[['Date_Close', 'Portfolio_Value']]], ignore_index=True)
+                
+                # 2. สร้างกราฟเส้นด้วย Plotly
+                fig_growth = px.line(
+                    growth_df, 
+                    x='Date_Close', 
+                    y='Portfolio_Value',
+                    markers=True,
+                    line_shape='spline' # ให้เส้นดูโค้งมนสวยงาม
+                )
+                
+                # ปรับแต่งให้ดูโปร
+                fig_growth.update_traces(line=dict(color='#26A69A', width=3))
+                fig_growth.update_layout(
+                    xaxis_title="วันที่",
+                    yaxis_title="มูลค่าพอร์ต (บาท)",
+                    margin=dict(l=20, r=20, t=30, b=20),
+                    hovermode="x unified"
+                )
+                
+                st.plotly_chart(fig_growth, use_container_width=True)
+        
                 # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
                 st.subheader("🗓 สรุปผลรายเดือน")
