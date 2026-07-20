@@ -2977,7 +2977,38 @@ def main():
                 )
                 
                 st.plotly_chart(fig_growth, use_container_width=True)
-        
+
+                # คำนวณ Margin Utilization
+                # สมมติว่ามีตัวแปร im_per_contract และจำนวนสัญญาที่ถืออยู่ (ต้องดึงมาจาก open_positions)
+                # คำนวณ Margin ที่ใช้จริง
+                total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT # IM_PER_CONTRACT คือค่า IM ต่อสัญญา
+                utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
+                
+                # 2. สร้าง Gauge Chart
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = utilization,
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    title = {'text': "Margin Utilization (%)"},
+                    gauge = {
+                        'axis': {'range': [0, 100]},
+                        'bar': {'color': "darkblue"},
+                        'steps': [
+                            {'range': [0, 50], 'color': "#26A69A"},   # เขียว (ปลอดภัย)
+                            {'range': [50, 80], 'color': "#FBC02D"},  # เหลือง (ต้องระวัง)
+                            {'range': [80, 100], 'color': "#EF5350'}  # แดง (เสี่ยงสูง)
+                        ],
+                        'threshold': {
+                            'line': {'color': "white", 'width': 4},
+                            'thickness': 0.75,
+                            'value': utilization
+                        }
+                    }
+                ))
+                
+                fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
+                st.plotly_chart(fig_gauge, use_container_width=True)
+
                 # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
                 st.subheader("🗓 สรุปผลรายเดือน")
