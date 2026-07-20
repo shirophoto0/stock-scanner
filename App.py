@@ -1699,7 +1699,60 @@ def main():
                             worst_stock = win_rate_df.iloc[-1]['Ticker']
                             st.write(f"✅ หุ้นที่วินเรทสูงที่สุด: **{best_stock}**")
                             st.write(f"⚠️ หุ้นที่วินเรทต่ำที่สุด: **{worst_stock}**")
+
+                        with st.expander("🏆 ตารางสรุปผลงานรายหุ้น (เชิงลึก)"):
+                            # 1. จัดเตรียมข้อมูลและคำนวณวัน
+                            df_filtered['วันที่ซื้อ'] = pd.to_datetime(df_filtered['วันที่ซื้อ'])
+                            df_filtered['วันที่ขาย'] = pd.to_datetime(df_filtered['วันที่ขาย'])
+                            now = pd.Timestamp.now()
                             
+                            df_filtered['Hold_Days'] = df_filtered.apply(
+                                lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days if pd.notnull(row['วันที่ขาย']) 
+                                else (now - row['วันที่ซื้อ']).days, axis=1
+                            )
+                            
+                            # คำนวณวันถือครองขั้นต่ำ 1 วัน เพื่อป้องกันการหารด้วย 0
+                            df_filtered['Hold_Days'] = df_filtered['Hold_Days'].clip(lower=1)
+                            
+                            # 2. รวมข้อมูลรายหุ้น
+                            summary = df_filtered.groupby('หุ้น').agg({
+                                'กำไร/ขาดทุน (บาท)': 'sum',
+                                'ต้นทุน (บาท)': 'sum',
+                                'Hold_Days': 'mean'
+                            })
+                            
+                            # 3. คำนวณ Performance Metrics
+                            summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
+                            
+                            # สูตร Annualized Return: ((1 + R)^ (365 / Days)) - 1
+                            # ใช้ R เป็นทศนิยม (เช่น 0.10)
+                            summary['Annualized Return'] = (((1 + (summary['% Return'] / 100)) ** (365 / summary['Hold_Days'])) - 1) * 100
+                            
+                            # จัดการค่า Infinity/NaN
+                            summary = summary.replace([float('inf'), -float('inf')], 0).fillna(0)
+                            
+                            # 4. ปรับตารางเพื่อแสดงผล
+                            display_df = summary.reset_index()
+                            display_df = display_df.rename(columns={
+                                'หุ้น': 'Ticker', 
+                                'กำไร/ขาดทุน (บาท)': 'Total Profit/Loss'
+                            })
+                            
+                            display_df = display_df[['Ticker', 'Total Profit/Loss', '% Return', 'Annualized Return', 'Hold_Days']]
+                            
+                            # 5. แสดงตาราง
+                            st.dataframe(
+                                display_df,
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Ticker": st.column_config.TextColumn("Ticker"),
+                                    "Total Profit/Loss": st.column_config.NumberColumn("Total Profit/Loss", format="%d ฿"),
+                                    "% Return": st.column_config.NumberColumn("% Return", format="%.2f%%"),
+                                    "Annualized Return": st.column_config.NumberColumn("Annualized Return (ต่อปี)", format="%.2f%%"),
+                                    "Hold_Days": st.column_config.NumberColumn("Holding Time", format="%d วัน")
+                                }
+                            )
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
                             # แยกข้อมูลพอร์ต
