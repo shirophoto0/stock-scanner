@@ -1660,6 +1660,46 @@ def main():
                             st.dataframe(display_df, use_container_width=True)
                             
                             # ถ้าข้อมูลในตารางนี้แสดงผลครบถ้วน ให้ค่อยๆ เพิ่ม column_config ทีละส่วนครับ
+                        with st.expander("🎯 Win Rate รายหุ้น (หุ้นตัวไหนแม่นที่สุด)"):
+                            # 1. เตรียมข้อมูลสำหรับคำนวณ Win Rate
+                            # แยกกำไร (>0) และ ขาดทุน (<=0)
+                            df_filtered['is_win'] = df_filtered['กำไร/ขาดทุน (บาท)'] > 0
+                            
+                            # 2. Group ข้อมูลรายหุ้น
+                            win_rate_df = df_filtered.groupby('หุ้น').agg(
+                                Total_Trades=('หุ้น', 'count'),
+                                Wins=('is_win', 'sum')
+                            )
+                            
+                            # คำนวณ % Win Rate
+                            win_rate_df['Win Rate (%)'] = (win_rate_df['Wins'] / win_rate_df['Total_Trades']) * 100
+                            
+                            # 3. จัดระเบียบตาราง
+                            win_rate_df = win_rate_df.sort_values(by='Win Rate (%)', ascending=False).reset_index()
+                            win_rate_df = win_rate_df.rename(columns={'หุ้น': 'Ticker'})
+                            
+                            # 4. แสดงตารางแบบ Basic ที่ดูง่าย
+                            st.dataframe(
+                                win_rate_df[['Ticker', 'Win Rate (%)', 'Total_Trades']],
+                                use_container_width=True,
+                                hide_index=True,
+                                column_config={
+                                    "Win Rate (%)": st.column_config.ProgressColumn(
+                                        "Win Rate (%)",
+                                        format="%.1f%%",
+                                        min_value=0,
+                                        max_value=100,
+                                    ),
+                                    "Total_Trades": "จำนวนครั้งที่เทรด"
+                                }
+                            )
+                            
+                            # 5. สรุปสั้นๆ ให้
+                            best_stock = win_rate_df.iloc[0]['Ticker']
+                            worst_stock = win_rate_df.iloc[-1]['Ticker']
+                            st.write(f"✅ หุ้นที่วินเรทสูงที่สุด: **{best_stock}**")
+                            st.write(f"⚠️ หุ้นที่วินเรทต่ำที่สุด: **{worst_stock}**")
+                            
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
                             # แยกข้อมูลพอร์ต
