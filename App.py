@@ -1650,9 +1650,18 @@ def main():
                                 display_df,
                                 use_container_width=True,
                                 column_config={
-                                    "Total Profit/Loss": st.column_config.NumberColumn("Total Profit/Loss", format="%d ฿"),
-                                    "% Return": st.column_config.NumberColumn("% Return", format="%.2f%%"),
-                                    "Holding Time": st.column_config.NumberColumn("Holding Time", format="%d วัน")
+                                    "Total Profit/Loss": st.column_config.NumberColumn(
+                                        "Total Profit/Loss",
+                                        format="%d ฿" # บังคับแสดงเป็นตัวเลขเต็มๆ ไม่มีทศนิยม
+                                    ),
+                                    "% Return": st.column_config.NumberColumn(
+                                        "% Return",
+                                        format="%.2f%%"
+                                    ),
+                                    "Holding Time": st.column_config.NumberColumn(
+                                        "Holding Time",
+                                        format="%d วัน"
+                                    )
                                 }
                             )
                         
