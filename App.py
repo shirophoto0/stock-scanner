@@ -1515,27 +1515,31 @@ def main():
                         col5.metric("Realized R:R", f"{rr_ratio_actual:.2f} : 1")
             
                         st.markdown("---")
-            
                         st.markdown("##### 🔍 สถิติการเทรดเชิงลึก")
-                        col_s1, col_s2 = st.columns(2)
+                        col_s1, col_s2, col_s3 = st.columns(3)
                         
-                        # --- แก้ KeyError: บังคับคำนวณคอลัมน์ก่อนใช้งาน ---
+                        # 1. คำนวณกำไร/ขาดทุนต่อไม้ (เพื่อหา Best/Worst)
                         df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)']) * 100
-                        
-                        # 1. หา index ของไม้ที่กำไรดีสุด และขาดทุนหนักสุด
                         idx_best = df_filtered['กำไร/ขาดทุน (บาท)'].idxmax()
                         idx_worst = df_filtered['กำไร/ขาดทุน (บาท)'].idxmin()
                         
-                        # 2. ดึงค่าเงินและ % ตาม index ที่หาได้
+                        # 2. คำนวณ Max Drawdown จากประวัติมูลค่าพอร์ตสะสม (สมมติว่าคุณมี df_history หรือคำนวณจากยอดสะสม)
+                        # กรณีนี้ผมใช้ logic หาค่า Drawdown สูงสุดจากยอดสะสมใน df_filtered
+                        cumulative_profit = df_filtered['กำไร/ขาดทุน (บาท)'].cumsum()
+                        running_max = cumulative_profit.cummax()
+                        drawdown = (cumulative_profit - running_max) / (running_max + abs(df_filtered['ต้นทุน (บาท)'].sum())) # ประมาณการ MDD
+                        max_drawdown = drawdown.min() * 100
+                        
+                        # 3. ดึงค่า Best/Worst
                         best_val = df_filtered.loc[idx_best, 'กำไร/ขาดทุน (บาท)']
                         best_pct = df_filtered.loc[idx_best, 'Profit_Pct']
-                        
                         worst_val = df_filtered.loc[idx_worst, 'กำไร/ขาดทุน (บาท)']
                         worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
-            
-                        # 3. แสดงผลในรูปแบบ "เงิน / %"
-                        col_s1.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿ / {best_pct:.1f}%")
-                        col_s2.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿ / {worst_pct:.1f}%")
+                        
+                        # 4. แสดงผล 3 ช่อง
+                        col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
+                        col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
+                        col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
                         
                         ######### กราฟรายเดือน vs พร์อตสะสม ###################
                         st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
