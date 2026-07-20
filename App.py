@@ -1738,10 +1738,30 @@ def main():
                         
                             # 7. แสดงผล: ใช้ตารางพื้นฐานที่แสดงผลได้ชัวร์ที่สุด
                             # หากยังมองไม่เห็น ให้ลองเปลี่ยนจาก st.dataframe เป็น st.table ดูครับ
+                            # แสดงผลพร้อมปรับแต่ง Header และทศนิยม
                             st.dataframe(
-                                display_df[['Ticker', 'ProfitLoss', 'Return_Pct', 'Annualized_Return', 'Days']],
+                                display_df,
                                 use_container_width=True,
-                                hide_index=True
+                                hide_index=True,
+                                column_config={
+                                    "Ticker": "Ticker",
+                                    "ProfitLoss": st.column_config.NumberColumn(
+                                        "Profit/Loss (บาท)", 
+                                        format="%.2f ฿"
+                                    ),
+                                    "Return_Pct": st.column_config.NumberColumn(
+                                        "Return (%)", 
+                                        format="%.2f %%"
+                                    ),
+                                    "Annualized_Return": st.column_config.NumberColumn(
+                                        "Annualized Return (%)", 
+                                        format="%.2f %%"
+                                    ),
+                                    "Days": st.column_config.NumberColumn(
+                                        "Holding Time (วัน)", 
+                                        format="%d" # วันเป็นจำนวนเต็มเหมาะสมกว่า
+                                    )
+                                }
                             )
                         # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
                         with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
