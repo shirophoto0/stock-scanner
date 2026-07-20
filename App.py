@@ -1626,42 +1626,35 @@ def main():
                         
                         # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
                         with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
-                            # 1. ประกาศตัวแปรสรุปก่อนใช้งานเสมอ
+                            # 1. คำนวณสรุป
                             summary = df_filtered.groupby('หุ้น').agg({
                                 'กำไร/ขาดทุน (บาท)': 'sum',
                                 'ต้นทุน (บาท)': 'sum'
                             })
                             
-                            # 2. คำนวณค่าต่างๆ
                             summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
                             
-                            # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime หรือยัง
                             df_filtered['วันที่'] = pd.to_datetime(df_filtered['วันที่'])
                             hold_time = df_filtered.groupby('หุ้น')['วันที่'].min()
                             summary['Holding Time'] = (pd.Timestamp.now() - hold_time).dt.days
                             
-                            # 3. กำหนด display_df ให้ชัดเจน
+                            # 2. แก้ไขตรงนี้: ใช้ .reset_index() เพื่อให้ชื่อหุ้นกลายเป็นคอลัมน์ที่มองเห็นได้
                             display_df = summary.rename(columns={
                                 'กำไร/ขาดทุน (บาท)': 'Total Profit/Loss',
-                            })[['Total Profit/Loss', '% Return', 'Holding Time']]
+                            }).reset_index() # <--- สำคัญมาก ต้องมีตัวนี้
                             
-                            # 4. แสดงผลโดยใช้ตัวแปรที่เพิ่งสร้างเสร็จในบรรทัดข้างบน
+                            # เลือกเฉพาะคอลัมน์ที่จะโชว์
+                            display_df = display_df[['หุ้น', 'Total Profit/Loss', '% Return', 'Holding Time']]
+                            
+                            # 3. แสดงผล
                             st.dataframe(
                                 display_df,
                                 use_container_width=True,
                                 column_config={
-                                    "Total Profit/Loss": st.column_config.NumberColumn(
-                                        "Total Profit/Loss",
-                                        format="%d ฿" # บังคับแสดงเป็นตัวเลขเต็มๆ ไม่มีทศนิยม
-                                    ),
-                                    "% Return": st.column_config.NumberColumn(
-                                        "% Return",
-                                        format="%.2f%%"
-                                    ),
-                                    "Holding Time": st.column_config.NumberColumn(
-                                        "Holding Time",
-                                        format="%d วัน"
-                                    )
+                                    "หุ้น": st.column_config.TextColumn("Ticker"), # เพิ่ม config ให้คอลัมน์หุ้นด้วย
+                                    "Total Profit/Loss": st.column_config.NumberColumn("Total Profit/Loss", format="%d ฿"),
+                                    "% Return": st.column_config.NumberColumn("% Return", format="%.2f%%"),
+                                    "Holding Time": st.column_config.NumberColumn("Holding Time", format="%d วัน")
                                 }
                             )
                         
