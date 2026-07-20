@@ -1607,32 +1607,7 @@ def main():
                             chart_data = chart_data.fillna(0)
                             
                             st.line_chart(chart_data)
-                                                                                                
-                        # คำนวณ Cumulative Profit ของทั้งพอร์ต และพอร์ตที่หักตัวเก่งออก
-                        # 1. เรียงวันที่ให้ถูกต้องก่อน
-                        df_filtered = df_filtered.sort_values('วันที่')
-                        df_rest = df_rest.sort_values('วันที่')
-                        
-                        # 2. คำนวณกำไรสะสม และใช้ .groupby('วันที่').last() เพื่อจัดการค่า Index ที่ซ้ำ
-                        # .cumsum() จะได้ Series ที่มี Index เป็น 'วันที่' (ซึ่งอาจซ้ำกัน)
-                        all_portfolio = df_filtered.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum()
-                        all_portfolio = all_portfolio.groupby('วันที่').last() # <--- เพิ่มบรรทัดนี้
-                        
-                        core_portfolio = df_rest.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum()
-                        core_portfolio = core_portfolio.groupby('วันที่').last() # <--- เพิ่มบรรทัดนี้
-                        
-                        # 3. สร้าง DataFrame
-                        chart_data = pd.DataFrame({
-                            'พอร์ตทั้งหมด': all_portfolio,
-                            'พอร์ตหักหุ้นตัวเก่ง': core_portfolio
-                        })
-
-                        # ใช้ .ffill() โดยตรง และเปลี่ยนค่า NaN ที่เหลือเป็น 0
-                        chart_data = chart_data.ffill()
-                        chart_data = chart_data.fillna(0)
-                        
-                        st.line_chart(chart_data)
-
+                                                                                        
                         ##### กราฟกระจายตัว (Histogram) ###########
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
