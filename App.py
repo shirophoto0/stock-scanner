@@ -1592,19 +1592,21 @@ def main():
                             df_rest = df_filtered[df_filtered['หุ้น'] != top_ticker]
                             
                             # คำนวณกราฟ
-                            df_filtered = df_filtered.sort_values('วันที่')
-                            df_rest = df_rest.sort_values('วันที่')
+                            df_filtered_sorted = df_filtered.sort_values('วันที่')
+                            df_rest_sorted = df_rest.sort_values('วันที่')
                             
-                            all_portfolio = df_filtered.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
-                            core_portfolio = df_rest.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
+                            all_portfolio = df_filtered_sorted.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
+                            core_portfolio = df_rest_sorted.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
                             
-                            # สร้าง DataFrame และเติมข้อมูลให้ต่อเนื่อง
+                            # สร้าง DataFrame
                             chart_data = pd.concat([all_portfolio, core_portfolio], axis=1)
                             chart_data.columns = ['พอร์ตทั้งหมด', 'พอร์ตหักหุ้นตัวเก่ง']
+                            
+                            # ใช้ .ffill() แทน .fillna(method='ffill')
                             chart_data = chart_data.ffill().fillna(0)
                             
                             st.line_chart(chart_data)
-                                                
+                                                                        
                         # คำนวณ Cumulative Profit ของทั้งพอร์ต และพอร์ตที่หักตัวเก่งออก
                         # 1. เรียงวันที่ให้ถูกต้องก่อน
                         df_filtered = df_filtered.sort_values('วันที่')
