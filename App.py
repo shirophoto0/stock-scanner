@@ -1602,11 +1602,12 @@ def main():
                             chart_data = pd.concat([all_portfolio, core_portfolio], axis=1)
                             chart_data.columns = ['พอร์ตทั้งหมด', 'พอร์ตหักหุ้นตัวเก่ง']
                             
-                            # ใช้ .ffill() แทน .fillna(method='ffill')
-                            chart_data = chart_data.ffill().fillna(0)
+                            # วิธีที่ชัวร์ที่สุดสำหรับ Pandas ทุกเวอร์ชัน
+                            chart_data = chart_data.ffill() 
+                            chart_data = chart_data.fillna(0)
                             
                             st.line_chart(chart_data)
-                                                                        
+                                                                                                
                         # คำนวณ Cumulative Profit ของทั้งพอร์ต และพอร์ตที่หักตัวเก่งออก
                         # 1. เรียงวันที่ให้ถูกต้องก่อน
                         df_filtered = df_filtered.sort_values('วันที่')
