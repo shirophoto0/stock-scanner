@@ -2804,22 +2804,27 @@ def main():
             st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
             
             c1, c2 = st.columns(2)
-            risk_amount = c1.number_input("เงินที่ยอมขาดทุนได้ (บาท)", value=2000)
+            # เปลี่ยนเป็น Slider เลือกความเสี่ยง 0% ถึง 5% (เพิ่มทีละ 0.25% เพื่อความละเอียด)
+            risk_pct = c1.slider("ความเสี่ยงที่ยอมรับได้ (% ของพอร์ต)", min_value=0.0, max_value=5.0, value=1.0, step=0.25)
             stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=2.0)
+            
+            # คำนวณเงินที่ยอมขาดทุนได้จริงจากเปอร์เซ็นต์พอร์ต (Net Worth)
+            risk_amount = net_worth * (risk_pct / 100.0)
             
             # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
             im_per_contract = IM_PER_CONTRACT 
             
             # คำนวณสัญญา
-            contract_by_risk = risk_amount / (stop_loss_points * 200)
-            contract_by_margin = net_worth / im_per_contract # net_worth ดึงมาจาก Dashboard
+            contract_by_risk = risk_amount / (stop_loss_points * 200) if (stop_loss_points * 200) > 0 else 0
+            contract_by_margin = net_worth / im_per_contract if im_per_contract > 0 else 0 # net_worth ดึงมาจาก Dashboard
             
             max_contracts = min(int(contract_by_risk), int(contract_by_margin))
             
             # แสดงผลแบบมืออาชีพ
             st.info(f"📋 ข้อมูลการคำนวณ:")
-            st.write(f"- ค่า IM ปัจจุบัน: {im_per_contract:,.0f} บาท/สัญญา")
             st.write(f"- เงินต้นรวม (Net Worth): {net_worth:,.0f} บาท")
+            st.write(f"- ยอมขาดทุนได้สูงสุด: **{risk_amount:,.2f} บาท** ({risk_pct}%)")
+            st.write(f"- ค่า IM ปัจจุบัน: {im_per_contract:,.0f} บาท/สัญญา")
             
             if max_contracts <= 0:
                 st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
@@ -2882,6 +2887,8 @@ def main():
                     size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
                     trade_id_input = st.text_input("Trade ID (ถ้าเว้นว่าง ระบบจะรันเลขให้อัตโนมัติ):") 
                 with col3:
+                    # เพิ่มช่องกรอกค่าคอมมิชชันไว้ในคอลัมน์ที่ 3
+                    comm_input = st.number_input("ค่าคอมมิชชัน + ค่าธรรมเนียม (บาท):", min_value=0.0, step=10.0, value=50.0)
                     reason = st.text_area("เหตุผลที่เข้าเทรด:")
                 
                 if st.form_submit_button("เปิดสถานะเทรด"):
@@ -2893,14 +2900,14 @@ def main():
                     new_record = {
                         "Trade_ID": final_trade_id,
                         "Date_Open": date_open.strftime("%Y-%m-%d"),
-                        "Date_Close": "",          # ว่างไว้ก่อนเพราะยังไม่ปิด
+                        "Date_Close": "",           # ว่างไว้ก่อนเพราะยังไม่ปิด
                         "Series": series,
                         "Status": Status,
                         "Size": size,
                         "Open_Price": entry,
-                        "Close_Price": 0,          # ต้องมีค่าเป็น 0 เพื่อให้ระบบเช็คได้ว่ายังไม่ปิด
-                        "Realized": 0,             
-                        "Comm": 0,                 
+                        "Close_Price": 0,           # ต้องมีค่าเป็น 0 เพื่อให้ระบบเช็คได้ว่ายังไม่ปิด
+                        "Realized": 0,            
+                        "Comm": comm_input,         # บันทึกค่าคอมมิชชันที่กรอกเข้ามา
                         "Net_Profit": 0,
                         "Win_Lose": "",            
                         "Reason": reason
