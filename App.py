@@ -329,13 +329,6 @@ def calculate_total_portfolio_value():
     return total_stock_value
 
 def total_invested_capital():
-    """คำนวณต้นทุนเงินที่ลงไปในหุ้นทั้งหมด ณ ปัจจุบัน"""
-    df = pd.DataFrame(st.session_state.journal_data)
-    buys = df[df['ประเภท'].str.contains("ซื้อ", na=False)]['ต้นทุน (บาท)'].sum()
-    sells = df[df['ประเภท'].str.contains("ขาย", na=False)]['ต้นทุน (บาท)'].sum()
-    return buys - sells
-
-def total_invested_capital():
     # ดึงข้อมูลกระแสเงินสดมาคำนวณเงินลงทุนสุทธิ
     cash_df = load_data("Cash_Flow")
     if not cash_df.empty and 'Type' in cash_df.columns and 'Amount' in cash_df.columns:
@@ -346,14 +339,13 @@ def total_invested_capital():
 
 def save_portfolio_snapshot():
     """บันทึกมูลค่าพอร์ตปัจจุบันลงไฟล์/Sheet ประวัติ"""
-    # คำนวณมูลค่าพอร์ตทั้งหมด (Cash + Market Value ของหุ้นทุกตัว)
-    total_market_val = calculate_total_portfolio_value() # พี่อ้ำน่าจะมีฟังก์ชันรวมยอดอยู่แล้ว
+    # คำนวณมูลค่าหุ้นทั้งหมดจากพอร์ตใน session_state
+    total_stock_value = sum([item['shares'] * item.get('current_price', item['avg_price']) for item in st.session_state.my_portfolio]) if "my_portfolio" in st.session_state else 0
     current_cash = st.session_state.cash_balance
-    total_equity = total_market_val + current_cash
+    total_equity = total_stock_value + current_cash
     
     # บันทึกข้อมูลลงในตาราง Portfolio_History
     # รูปแบบ: [วันที่, มูลค่าพอร์ตรวม, เงินต้นสะสม]
-    # สมมติว่ามีฟังก์ชันบันทึกผ่าน Google Sheets ของพี่อ้ำอยู่แล้ว
     log_to_sheet("Portfolio_History", [str(datetime.now().date()), total_equity, total_invested_capital()])
     
 def display_performance_dashboard():
@@ -1443,7 +1435,7 @@ def main():
         st.markdown("<div style='font-size: 40px; margin: 0px;'>💹</div>", unsafe_allow_html=True)
     
     with col2:
-        st.("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
     
     # --- ปรับขนาดเฉพาะข้อความใน Tab ---
     st.markdown("""
