@@ -69,7 +69,41 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     st.rerun()              # 2. บังคับโหลดหน้าจอใหม่เพื่อให้ข้อมูลปัจจุบันที่สุดแสดงทันที
     
     return True
-    
+
+# 1. ฟังก์ชันคำนวณค่า ATR แบบมี Cache (ปลอดภัย ไม่โดน Block บ่อย)
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_auto_atr_cached(symbol="^SET50"):
+    """ดึงข้อมูลราคาและคำนวณ ATR ย้อนหลัง 14 วัน"""
+    try:
+        # ดึงข้อมูลจาก Yahoo Finance (SET50 Index)
+        data = yf.download(symbol, period="1m", interval="1d", progress=False)
+        
+        if data.empty or len(data) < 15:
+            return 6.5  # ค่าสำรองเริ่มต้น
+        
+        high = data['High']
+        low = data['Low']
+        close = data['Close']
+        
+        # จัดการโครงสร้างข้อมูล DataFrame กรณีเป็น MultiIndex
+        if isinstance(high, pd.DataFrame):
+            high = high.iloc[:, 0]
+            low = low.iloc[:, 0]
+            close = close.iloc[:, 0]
+
+        prev_close = close.shift(1)
+        tr1 = high - low
+        tr2 = (high - prev_close).abs()
+        tr3 = (low - prev_close).abs()
+        
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr_value = tr.rolling(window=14).mean().iloc[-1]
+        
+        return round(float(atr_value), 2)
+    except Exception as e:
+        # กรณีเกิด Error หรือโดน Rate Limit ให้คืนค่าเริ่มต้นเพื่อความเสถียร
+        return 6.5
+
 def calculate_tfex_result(entry, close, size, comm, Status):
     # Multiplier ของ S50 ปกติคือ 200
     multiplier = 200
@@ -2896,7 +2930,25 @@ def main():
                 
             st.divider()
             
+            # 2. ส่วนของฟอร์มรับค่าการเทรด TFEX และการดึง ATR อัตโนมัติด้วยปุ่มกด
             with st.form("tfex_entry_form", clear_on_submit=True):
+                st.subheader("🛡 คำนวณขนาดสัญญาและระบบ ATR Stop Loss")
+                
+                # ส่วนสำหรับกดปุ่มดึงค่า ATR ล่าสุด
+                col_btn1, col_btn2 = st.columns([1, 2])
+                with col_btn1:
+                    fetch_atr_clicked = st.form_submit_button("🔄 ดึงค่า ATR ล่าสุด")
+                
+                # จัดการเก็บค่า ATR ไว้ใน session_state เมื่อมีการกดปุ่ม
+                if fetch_atr_clicked:
+                    with st.spinner("กำลังดึงข้อมูลราคาจากตลาด..."):
+                        latest_atr = get_auto_atr_cached("^SET50")
+                        st.session_state['active_atr'] = latest_atr
+                        st.success(f"ดึงค่า ATR สำเร็จ: {latest_atr} จุด")
+            
+                # กำหนดค่า ATR เริ่มต้นหากยังไม่เคยกดปุ่ม
+                current_atr = st.session_state.get('active_atr', 6.5)
+            
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     date_open = st.date_input("วันที่เปิด")
@@ -2909,21 +2961,24 @@ def main():
                 with col3:
                     comm_input = st.number_input("ค่าคอมมิชชัน + ค่าธรรมเนียม (บาท):", min_value=0.0, step=10.0, value=50.0)
                     
-                    # --- ส่วนคำนวณ ATR อัตโนมัติ (สมมติว่าคุณมีฟังก์ชันดึงข้อมูลพรีวิวราคาย้อนหลังมาใส่ตัวแปร market_df) ---
-                    # หรือกำหนดตัวคูณ ATR เพื่อหาจุด Stop Loss แนะนำ
-                    suggested_atr_points = 6.5  * 1.5 # ตัวอย่างค่า ATR ที่คำนวณได้คูณตัวคูณความเสี่ยง
-                    stop_loss_pts = st.number_input("ระยะ Stop Loss แนะนำจาก ATR (จุด):", min_value=0.5, step=0.5, value=float(suggested_atr_points))
+                    # แสดงช่อง ATR และตัวคูณเพื่อให้ระบบคำนวณจุดหนีความเสี่ยงอัตโนมัติ
+                    atr_multiplier = st.number_input("ตัวคูณ ATR (Multiplier):", min_value=0.5, step=0.1, value=1.5)
+                    calculated_sl_pts = current_atr * atr_multiplier
+                    st.write(f"📌 Stop Loss แนะนำ: **{calculated_sl_pts:.2f} จุด** (จาก ATR: {current_atr})")
                     
                     reason = st.text_area("เหตุผลที่เข้าเทรด:")
                 
-                if st.form_submit_button("เปิดสถานะเทรดพร้อมระบบ ATR"):
+                # ปุ่มยืนยันการเปิดสถานะเทรดจริง
+                submit_trade = st.form_submit_button("เปิดสถานะเทรด")
+                
+                if submit_trade:
                     final_trade_id = trade_id_input.strip()
                     if not final_trade_id:
                         final_trade_id = f"TX-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
                         
-                    # คำนวณราคา Stop Loss เป็นราคาจริงบนกระดาน เพื่อบันทึกเก็บไว้ดู
-                    calculated_sl_price = (entry - stop_loss_pts) if Status == "Long" else (entry + stop_loss_pts)
-                    
+                    # คำนวณราคา Stop Loss จริงบนกระดาน
+                    calculated_sl_price = (entry - calculated_sl_pts) if Status == "Long" else (entry + calculated_sl_pts)
+                        
                     new_record = {
                         "Trade_ID": final_trade_id,
                         "Date_Open": date_open.strftime("%Y-%m-%d"),
@@ -2937,7 +2992,7 @@ def main():
                         "Comm": comm_input,         
                         "Net_Profit": 0,
                         "Win_Lose": "",            
-                        "Reason": f"{reason} | ATR Stop Loss ที่ราคา: {calculated_sl_price:.2f}"
+                        "Reason": f"{reason} | ATR SL: {calculated_sl_price:.2f}"
                     }
                     
                     df_to_save = pd.DataFrame([new_record])
@@ -2945,7 +3000,7 @@ def main():
                     with st.spinner("⏳ กำลังเปิดสถานะและบันทึกลง Google Sheets..."):
                         if save_data_to_sheet(df_to_save, "TFEX_History"):
                             st.cache_data.clear()  
-                            st.toast(f"เปิดสถานะสำเร็จ! (ATR Stop Loss: {calculated_sl_price:.2f}) 🎉", icon="✅")
+                            st.toast("เปิดสถานะเทรดเรียบร้อย! 🎉", icon="✅")
                             st.rerun()
         
         with sub_tfex_close:
