@@ -126,7 +126,27 @@ def save_data_to_sheet(new_df, sheet_name):
     except Exception as e:
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
         return False
-        
+
+def calculate_atr(df, period=14):
+    """คำนวณค่า Average True Range (ATR) จากข้อมูลราคา"""
+    if df.empty or len(df) < period:
+        return 10.0 # ค่าสำรองเริ่มต้น (จุด) หากข้อมูลยังไม่พอ
+    
+    # สมมติ df มีคอลัมน์ High, Low, Close
+    high = df['High']
+    low = df['Low']
+    close = df['Close']
+    
+    prev_close = close.shift(1)
+    tr1 = high - low
+    tr2 = (high - prev_close).abs()
+    tr3 = (low - prev_close).abs()
+    
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+    atr = tr.rolling(window=period).mean().iloc[-1]
+    
+    return float(atr) if not pd.isna(atr) else 10.0
+    
 def save_cash_to_gsheet(df):
     """
     ฟังก์ชันเฉพาะสำหรับบันทึกรายการเงินเข้าหน้า Cash_Flow เท่านั้น
@@ -2880,47 +2900,53 @@ def main():
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     date_open = st.date_input("วันที่เปิด")
-                    series = st.text_input("Series (เช่น S50U26)")
+                    series = st.text_input("Series (เช่น S50U26)", value="S50U26")
                     Status = st.selectbox("สถานะ:", ["Long", "Short"])
                 with col2:
-                    entry = st.number_input("ราคา Open:", format="%.2f")
+                    entry = st.number_input("ราคา Open:", format="%.2f", value=950.0)
                     size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
-                    trade_id_input = st.text_input("Trade ID (ถ้าเว้นว่าง ระบบจะรันเลขให้อัตโนมัติ):") 
+                    trade_id_input = st.text_input("Trade ID (เว้นว่างเพื่อรันอัตโนมัติ):") 
                 with col3:
-                    # เพิ่มช่องกรอกค่าคอมมิชชันไว้ในคอลัมน์ที่ 3
                     comm_input = st.number_input("ค่าคอมมิชชัน + ค่าธรรมเนียม (บาท):", min_value=0.0, step=10.0, value=50.0)
+                    
+                    # --- ส่วนคำนวณ ATR อัตโนมัติ (สมมติว่าคุณมีฟังก์ชันดึงข้อมูลพรีวิวราคาย้อนหลังมาใส่ตัวแปร market_df) ---
+                    # หรือกำหนดตัวคูณ ATR เพื่อหาจุด Stop Loss แนะนำ
+                    suggested_atr_points = 6.5  * 1.5 # ตัวอย่างค่า ATR ที่คำนวณได้คูณตัวคูณความเสี่ยง
+                    stop_loss_pts = st.number_input("ระยะ Stop Loss แนะนำจาก ATR (จุด):", min_value=0.5, step=0.5, value=float(suggested_atr_points))
+                    
                     reason = st.text_area("เหตุผลที่เข้าเทรด:")
                 
-                if st.form_submit_button("เปิดสถานะเทรด"):
-                    # ตรวจสอบและตั้งชื่อ Trade_ID อัตโนมัติถ้าไม่ได้กรอก
+                if st.form_submit_button("เปิดสถานะเทรดพร้อมระบบ ATR"):
                     final_trade_id = trade_id_input.strip()
                     if not final_trade_id:
                         final_trade_id = f"TX-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
                         
+                    # คำนวณราคา Stop Loss เป็นราคาจริงบนกระดาน เพื่อบันทึกเก็บไว้ดู
+                    calculated_sl_price = (entry - stop_loss_pts) if Status == "Long" else (entry + stop_loss_pts)
+                    
                     new_record = {
                         "Trade_ID": final_trade_id,
                         "Date_Open": date_open.strftime("%Y-%m-%d"),
-                        "Date_Close": "",           # ว่างไว้ก่อนเพราะยังไม่ปิด
+                        "Date_Close": "",           
                         "Series": series,
                         "Status": Status,
                         "Size": size,
                         "Open_Price": entry,
-                        "Close_Price": 0,           # ต้องมีค่าเป็น 0 เพื่อให้ระบบเช็คได้ว่ายังไม่ปิด
+                        "Close_Price": 0,           
                         "Realized": 0,            
-                        "Comm": comm_input,         # บันทึกค่าคอมมิชชันที่กรอกเข้ามา
+                        "Comm": comm_input,         
                         "Net_Profit": 0,
                         "Win_Lose": "",            
-                        "Reason": reason
+                        "Reason": f"{reason} | ATR Stop Loss ที่ราคา: {calculated_sl_price:.2f}"
                     }
-                    # แปลงเป็น DataFrame
+                    
                     df_to_save = pd.DataFrame([new_record])
                     
-                    # บันทึกข้อมูลพร้อม Loading Spinner และล้าง Cache ทันที
                     with st.spinner("⏳ กำลังเปิดสถานะและบันทึกลง Google Sheets..."):
                         if save_data_to_sheet(df_to_save, "TFEX_History"):
-                            st.cache_data.clear()  # ล้าง Cache เพื่อดึงข้อมูลใหม่ทันที
-                            st.toast("เปิดสถานะเทรดเรียบร้อย! 🎉", icon="✅")
-                            st.rerun()             # รีเฟรชแอปเพื่ออัปเดตตารางและกราฟทันที
+                            st.cache_data.clear()  
+                            st.toast(f"เปิดสถานะสำเร็จ! (ATR Stop Loss: {calculated_sl_price:.2f}) 🎉", icon="✅")
+                            st.rerun()
         
         with sub_tfex_close:
             st.subheader("🏁 ปิดสถานะเทรด")
