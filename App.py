@@ -334,7 +334,16 @@ def total_invested_capital():
     buys = df[df['ประเภท'].str.contains("ซื้อ", na=False)]['ต้นทุน (บาท)'].sum()
     sells = df[df['ประเภท'].str.contains("ขาย", na=False)]['ต้นทุน (บาท)'].sum()
     return buys - sells
-    
+
+def total_invested_capital():
+    # ดึงข้อมูลกระแสเงินสดมาคำนวณเงินลงทุนสุทธิ
+    cash_df = load_data("Cash_Flow")
+    if not cash_df.empty and 'Type' in cash_df.columns and 'Amount' in cash_df.columns:
+        total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum()
+        total_withdraw = cash_df[cash_df['Type'].astype(str).str.lower() == 'withdraw']['Amount'].sum()
+        return total_deposit - total_withdraw
+    return 0
+
 def save_portfolio_snapshot():
     """บันทึกมูลค่าพอร์ตปัจจุบันลงไฟล์/Sheet ประวัติ"""
     # คำนวณมูลค่าพอร์ตทั้งหมด (Cash + Market Value ของหุ้นทุกตัว)
