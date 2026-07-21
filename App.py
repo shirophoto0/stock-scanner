@@ -1443,7 +1443,7 @@ def main():
         st.markdown("<div style='font-size: 40px; margin: 0px;'>💹</div>", unsafe_allow_html=True)
     
     with col2:
-        st.markdown("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
+        st.("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
     
     # --- ปรับขนาดเฉพาะข้อความใน Tab ---
     st.markdown("""
@@ -1984,6 +1984,13 @@ def main():
                             save_portfolio()
                             save_journal()
                             save_cash_balance(st.session_state.cash_balance)
+                            
+                            # --- เพิ่มการคำนวณมูลค่าพอร์ตสุทธิ (Total Equity) ตรงนี้ให้ชัวร์ ---
+                            # คำนวณมูลค่าหุ้นคงเหลือในพอร์ตปัจจุบัน
+                            total_stock_value = sum([item['shares'] * item.get('current_price', item['avg_price']) for item in st.session_state.my_portfolio]) if "my_portfolio" in st.session_state else 0
+                            total_equity = st.session_state.cash_balance + total_stock_value
+                            
+                            # เรียกบันทึก Snapshot หลังจากคำนวณค่าเสร็จแล้ว
                             save_portfolio_snapshot()
                             
                             st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
