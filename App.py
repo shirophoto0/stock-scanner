@@ -2886,9 +2886,9 @@ def main():
                 st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
             
             # 1. แสดงรายการที่ถืออยู่ (Open Positions)
+            # 1. แสดงรายการที่ถืออยู่ (Open Positions)
             st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
             
-            # ปรับปรุงระบบตรวจจับสถานะให้แม่นยำขึ้น (ครอบคลุมทั้ง 0, ค่าว่าง และ NaN)
             tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
             open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
             
@@ -2898,35 +2898,58 @@ def main():
                 st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
 
             # คำนวณ Margin Utilization
-            # สมมติว่ามีตัวแปร im_per_contract และจำนวนสัญญาที่ถืออยู่ (ต้องดึงมาจาก open_positions)
-            # คำนวณ Margin ที่ใช้จริง
-            total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT # IM_PER_CONTRACT คือค่า IM ต่อสัญญา
+            total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT 
             utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
             
-            # 2. สร้าง Gauge Chart
-            fig_gauge = go.Figure(go.Indicator(
-                mode = "gauge+number",
-                value = utilization,
-                domain = {'x': [0, 1], 'y': [0, 1]},
-                title = {'text': "Margin Utilization (%)"},
-                gauge = {
-                    'axis': {'range': [0, 100]},
-                    'bar': {'color': "darkblue"},
-                    'steps': [
-                        {'range': [0, 50], 'color': "#26A69A"},
-                        {'range': [50, 80], 'color': "#FBC02D"},
-                        {'range': [80, 100], 'color': "#EF5350"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "white", 'width': 4},
-                        'thickness': 0.75,
-                        'value': utilization
-                    }
-                }
-            ))
+            # --- แบ่งหน้าจอเป็น 2 คอลัมน์ เพื่อวางกราฟคู่กัน ---
+            col_left, col_right = st.columns(2)
             
-            fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(fig_gauge, use_container_width=True)
+            with col_left:
+                st.subheader("🎯 สถิติแพ้ / ชนะ (Win / Loss)")
+                # กรองเฉพาะรายการที่ปิดสถานะแล้ว (Close_Price > 0) มาคำนวณ Win/Loss
+                closed_positions = tfex_df[tfex_df['Close_Price_Cleaned'] > 0]
+                
+                if not closed_positions.empty and 'Win_Lose' in closed_positions.columns:
+                    win_count = len(closed_positions[closed_positions['Win_Lose'] == 'Win'])
+                    lose_count = len(closed_positions[closed_positions['Win_Lose'] == 'Lose'])
+                else:
+                    win_count, lose_count = 0, 0
+                
+                # สร้างกราฟโดนัทแสดง Win/Loss ด้วย Plotly
+                fig_winloss = go.Figure(go.Pie(
+                    labels=['Win (ชนะ)', 'Lose (แพ้)'],
+                    values=[win_count, lose_count],
+                    hole=0.5,
+                    marker_colors=['#26A69A', '#EF5350']
+                ))
+                fig_winloss.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), showlegend=True)
+                st.plotly_chart(fig_winloss, use_container_width=True)
+
+            with col_right:
+                # 2. สร้าง Gauge Chart (กราฟ Margin เดิมของคุณ)
+                fig_gauge = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = utilization,
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    title = {'text': "Margin Utilization (%)"},
+                    gauge = {
+                        'axis': {'range': [0, 100]},
+                        'bar': {'color': "darkblue"},
+                        'steps': [
+                            {'range': [0, 50], 'color': "#26A69A"},
+                            {'range': [50, 80], 'color': "#FBC02D"},
+                            {'range': [80, 100], 'color': "#EF5350"}
+                        ],
+                        'threshold': {
+                            'line': {'color': "white", 'width': 4},
+                            'thickness': 0.75,
+                            'value': utilization
+                        }
+                    }
+                ))
+                
+                fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
+                st.plotly_chart(fig_gauge, use_container_width=True)
                 
             st.divider()
             
