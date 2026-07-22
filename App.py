@@ -2251,67 +2251,76 @@ def main():
                         stats_df = calculate_journal_stats(df_journal)
                         
                         # 2. ส่วนสรุป Metric 3 ค่าด้านบน (อิงจากช่วงเวลาที่เลือก)
-                        st.markdown("##### 🎯 สถิติการเทรดจริง & การปรับจุดคัทลอส (RR 2:1)")
-                        period = st.radio("ดูค่าเฉลี่ยย้อนหลัง:", ["3 เดือน", "6 เดือน", "1 ปี"], horizontal=True, key="stats_period")
-                        
-                        # กรองข้อมูลตามช่วงเวลา
-                        # กรองข้อมูลตามช่วงเวลา
-                        months_map = {"3 เดือน": 3, "6 เดือน": 6, "1 ปี": 12}
-                        cutoff_date = pd.Timestamp.now() - pd.DateOffset(months=months_map[period])
-                        
-                        # --- ส่วนแก้ไข: เพิ่มบรรทัดนี้ก่อนเรียกใช้ 'วันที่ขาย' ---
-                        if 'วันที่ขาย' not in df_journal.columns:
-                            df_journal['วันที่ขาย'] = df_journal['วันที่'] # ถ้าไม่มีให้ใช้ 'วันที่' เดิมไปก่อน
-                        
-                        # แปลงให้เป็น datetime ทุกครั้งก่อนใช้งาน
-                        df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                        # ---------------------------------------------------
-                        
-                        df_period = df_journal[(df_journal['วันที่ขาย'] >= cutoff_date) & 
-                                      (df_journal['สถานะ'] == 'Closed (ขายแล้ว)')].copy()
-            
-                        
-                        if not df_period.empty:
-                            # 1. ตรวจสอบและสร้างคอลัมน์วันที่ (ใช้ df_period)
-                            if 'วันที่ซื้อ' not in df_period.columns:
-                                df_period['วันที่ซื้อ'] = df_period['วันที่']
-                            if 'วันที่ขาย' not in df_period.columns:
-                                df_period['วันที่ขาย'] = df_period['วันที่']
+                        with st.expander("📊 สถิติการเทรดรายเดือน", expanded=False):
+                            # 1. ส่วนคำนวณสถิติ
+                            stats_df = calculate_journal_stats(df_journal)
+                            
+                            # 2. ส่วนสรุป Metric 3 ค่าด้านบน (อิงจากช่วงเวลาที่เลือก)
+                            st.markdown("##### 🎯 สถิติการเทรดจริง & การปรับจุดคัทลอส (RR 2:1)")
+                            period = st.radio("ดูค่าเฉลี่ยย้อนหลัง:", ["3 เดือน", "6 เดือน", "1 ปี"], horizontal=True, key="stats_period")
+                            
+                            # กรองข้อมูลตามช่วงเวลา
+                            months_map = {"3 เดือน": 3, "6 เดือน": 6, "1 ปี": 12}
+                            cutoff_date = pd.Timestamp.now() - pd.DateOffset(months=months_map[period])
+                            
+                            # --- ส่วนแก้ไข: เพิ่มบรรทัดนี้ก่อนเรียกใช้ 'วันที่ขาย' ---
+                            if 'วันที่ขาย' not in df_journal.columns:
+                                df_journal['วันที่ขาย'] = df_journal['วันที่'] # ถ้าไม่มีให้ใช้ 'วันที่' เดิมไปก่อน
+                            
+                            # แปลงให้เป็น datetime ทุกครั้งก่อนใช้งาน
+                            df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
+                            # ---------------------------------------------------
+                            
+                            df_period = df_journal[(df_journal['วันที่ขาย'] >= cutoff_date) & 
+                                                    (df_journal['สถานะ'] == 'Closed (ขายแล้ว)')].copy()
+                            
+                            if not df_period.empty:
+                                # 1. ตรวจสอบและสร้างคอลัมน์วันที่ (ใช้ df_period)
+                                if 'วันที่ซื้อ' not in df_period.columns:
+                                    df_period['วันที่ซื้อ'] = df_period['วันที่']
+                                if 'วันที่ขาย' not in df_period.columns:
+                                    df_period['วันที่ขาย'] = df_period['วันที่']
+                                    
+                                # 2. แปลงเป็น datetime เสมอ
+                                df_period['วันที่ซื้อ'] = pd.to_datetime(df_period['วันที่ซื้อ'], errors='coerce')
+                                df_period['วันที่ขาย'] = pd.to_datetime(df_period['วันที่ขาย'], errors='coerce')
                                 
-                            # 2. แปลงเป็น datetime เสมอ
-                            df_period['วันที่ซื้อ'] = pd.to_datetime(df_period['วันที่ซื้อ'], errors='coerce')
-                            df_period['วันที่ขาย'] = pd.to_datetime(df_period['วันที่ขาย'], errors='coerce')
+                                # 3. คำนวณ Holding Days (ใช้ .clip เพื่อป้องกันค่าติดลบกรณีเลือกวันพลาด)
+                                df_period['Holding_Days'] = (df_period['วันที่ขาย'] - df_period['วันที่ซื้อ']).dt.days.clip(lower=0)
+                                
+                                # 4. แปลงตัวเลขสำหรับคำนวณ Metric (ใช้ชื่อคอลัมน์จริง)
+                                col_profit_loss = 'กำไร/ขาดทุน (บาท)'
+                                col_cost = 'ต้นทุน (บาท)'
+                                
+                                df_period[col_profit_loss] = pd.to_numeric(df_period[col_profit_loss], errors='coerce')
+                                df_period[col_cost] = pd.to_numeric(df_period[col_cost], errors='coerce')
+                                
+                                # คำนวณค่าจริง
+                                w_rate = (df_period[col_profit_loss] > 0).mean() * 100
+                                
+                                # --- ส่วนแก้ไขการคำนวณ Avg Profit / Avg Loss เพื่อป้องกันค่าเพี้ยน (Outlier) ---
+                                profit_mask = (df_period[col_profit_loss] > 0) & (df_period[col_cost] > 0)
+                                profit_series = (df_period.loc[profit_mask, col_profit_loss] / df_period.loc[profit_mask, col_cost]) * 100
+                                avg_profit = profit_series.clip(upper=500).mean() if not profit_series.empty else 0
+                
+                                loss_mask = (df_period[col_profit_loss] <= 0) & (df_period[col_cost] > 0)
+                                loss_series = (df_period.loc[loss_mask, col_profit_loss] / df_period.loc[loss_mask, col_cost]) * 100
+                                
+                                # กรองค่าที่ติดลบเกิน -100% ออก เพื่อไม่ให้ค่าเฉลี่ยพังกรณีต้นทุนต่ำผิดปกติ
+                                loss_series = loss_series[loss_series >= -100] 
+                                avg_loss = loss_series.mean() if not loss_series.empty else 0
+                                # --------------------------------------------------------------------------
+                                
+                                loss_adj = (avg_profit / 2) * -1
+                                
+                                # แสดง Metric
+                                c1, c2, c3 = st.columns(3)
+                                c1.metric("Win Rate", f"{w_rate:.1f} %")
+                                c2.metric("Avg P/L", f"{avg_profit:.1f}% / {avg_loss:.1f}%")
+                                c3.metric("Rec. Cut Loss (RR 2:1)", f"{loss_adj:.1f} %")
+                            else:
+                                st.info("ไม่มีข้อมูลย้อนหลังในช่วงเวลานี้")
                             
-                            # 3. คำนวณ Holding Days (ใช้ .clip เพื่อป้องกันค่าติดลบกรณีเลือกวันพลาด)
-                            df_period['Holding_Days'] = (df_period['วันที่ขาย'] - df_period['วันที่ซื้อ']).dt.days.clip(lower=0)
-                            
-                            # 4. แปลงตัวเลขสำหรับคำนวณ Metric (ใช้ชื่อคอลัมน์จริง)
-                            col_profit_loss = 'กำไร/ขาดทุน (บาท)'
-                            col_cost = 'ต้นทุน (บาท)'
-                            
-                            df_period[col_profit_loss] = pd.to_numeric(df_period[col_profit_loss], errors='coerce')
-                            df_period[col_cost] = pd.to_numeric(df_period[col_cost], errors='coerce')
-                            
-                            # คำนวณค่าจริง
-                            w_rate = (df_period[col_profit_loss] > 0).mean() * 100
-                            
-                            # คำนวณ Avg Profit / Avg Loss
-                            avg_profit = (df_period[df_period[col_profit_loss] > 0][col_profit_loss] / 
-                                          df_period[df_period[col_profit_loss] > 0][col_cost]).mean() * 100
-                                          
-                            avg_loss = (df_period[df_period[col_profit_loss] <= 0][col_profit_loss] / 
-                                        df_period[df_period[col_profit_loss] <= 0][col_cost]).mean() * 100
-                            
-                            loss_adj = (avg_profit / 2) * -1
-                            
-                            # แสดง Metric
-                            c1, c2, c3 = st.columns(3)
-                            c1.metric("Win Rate", f"{w_rate:.1f} %")
-                            c2.metric("Avg P/L", f"{avg_profit:.1f}% / {avg_loss:.1f}%")
-                            c3.metric("Rec. Cut Loss (RR 2:1)", f"{loss_adj:.1f} %")
-                        else:
-                            st.info("ไม่มีข้อมูลย้อนหลังในช่วงเวลานี้")
-            
                         st.markdown("---")
                         
                         # 3. ส่วนตารางสถิติรายเดือน
