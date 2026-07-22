@@ -2586,21 +2586,19 @@ def main():
                         # 1. ดึงค่า Default
                         wr_val = w_rate if 'w_rate' in locals() else 0
                         pr_val = avg_profit if 'avg_profit' in locals() else 0
-                        ls_val = avg_loss if 'avg_loss' in locals() else 0
                         
-                        # แปลง Win Rate และ Profit เป็นทศนิยม (0-1)
+                        # ⭐ จุดแก้ที่ 1: ใช้ abs() ครอบ avg_loss เพื่อบังคับให้เป็นค่าบวก (เพราะขาดทุนคือค่าติดลบ)
+                        ls_val = abs(avg_loss) if 'avg_loss' in locals() else 0
+                        
                         act_wr = wr_val / 100.0
                         act_profit = pr_val / 100.0
                         
-                        # จัดการ Avg Loss: ป้องกันไม่ให้ค่าสูงเกินไป (ถ้าค่ามากกว่า 100 แสดงว่าเป็นเปอร์เซ็นต์แบบเต็ม ให้หาร 100 ถ้าไม่ใช่ให้ใช้ตามจริง)
-                        # สมมติว่าค่า ls_val ที่ถูกส่งมาคือเปอร์เซ็นต์ความเสียหาย (เช่น 5% หรือ 10%)
-                        act_loss = (abs(ls_val) / 100.0) if abs(ls_val) > 1 else abs(ls_val)
+                        # ⭐ จุดแก้ที่ 2: แปลงเป็นทศนิยม (เนื่องจาก Avg Loss ในตารางเก็บมาเป็นหน่วย % เช่น 75.27 ก็หาร 100 ให้เป็น 0.75)
+                        # หมายเหตุ: ถ้าใน DataFrame ของพี่อ้ำ ค่า Profit_Pct มันเก็บเป็นสัดส่วนจริงอยู่แล้ว (เช่น -75 คือ -75% หรือ -0.75) ให้เช็คดูอีกทีครับ 
+                        # แต่ถ้าจากโค้ดข้างบน `Profit_Pct` คูณ 100 มาแล้ว `ls_val` จะเป็นตัวเลขหลักสิบหรือร้อย (เช่น -75.27%) ต้องหาร 100 ด้วยครับ
+                        act_loss = ls_val / 100.0  
                         
-                        # ถ้าค่า ls_val ของคุณหมายถึง "อัตราส่วนเทียบกับทุน" หรือ "เปอร์เซ็นต์ขาดทุนต่อไม้จริงๆ" 
-                        # ลองเช็คว่าค่าจริงควรอยู่ที่ประมาณเท่าไหร่ (ปกติไม่ควรเกิน 10-20% ต่อไม้)
-                        # ถ้าตัวเลขในระบบมันดีดไปหลักพัน แสดงว่า ls_val รับค่าผลรวมสะสมมา ให้หารลดสัดส่วนลง หรือใส่ค่าเฉลี่ยจริง เช่น 0.05 (5%) แทนชั่วคราวได้ครับ
-                        
-                        # 2. สร้าง Range สำหรับจำลองตาราง
+                        # 2. สร้าง Range
                         wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
                         pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
                         
@@ -2609,11 +2607,10 @@ def main():
                             wr_display = max(0.0, min(1.0, wr)) 
                             row = {"Win Rate": f"{wr_display*100:.1f}%"}
                             for pr in pr_range:
-                                # คำนวณ Expected Value (EV) 
-                                # สูตร: (โอกาสชนะ * กำไร) - (โอกาสแพ้ * ขาดทุน)
+                                # คำนวณ Expected Value (EV) โดยใช้ act_loss ที่เป็นบวกแล้ว
                                 ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
                                 
-                                # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%) สำหรับแสดงผลในตาราง (คูณ 100 แค่ครั้งเดียวพอบนผลลัพธ์สุดท้าย)
+                                # แปลงผลลัพธ์เป็นเปอร์เซ็นต์ (%) สำหรับแสดงในตาราง
                                 row[f"{pr*100:.1f}% Profit"] = ev * 100 
                                 
                             sim_data.append(row)
@@ -2625,13 +2622,13 @@ def main():
                         # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
                         df_numeric = df_full.astype(float)
                         
-                        # 5. สร้าง Styler และจัด Format เป็น %
+                        # 5. สร้าง Styler และจัด Format
                         st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
                         
                         # 6. แสดงผลผ่านตาราง
                         st.dataframe(st_table, use_container_width=True)
                         
-                        st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูล")
+                        st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
                     #################################################
                     # --- ตารางแสดงแผนการเทรด ---
                     with tab_plan:
