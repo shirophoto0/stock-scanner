@@ -2592,20 +2592,33 @@ def main():
                 
                     # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
                     with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-                        # 1. ดึงค่า Default จากส่วนสถิติข้างบน
-                        wr_val = w_rate if 'w_rate' in locals() else 0
-                        pr_val = avg_profit if 'avg_profit' in locals() else 0
-                        
-                        # ดึงค่า avg_loss มาแปลงเป็นค่าบวก (เพราะสูตร EV ต้องใช้ค่าความเสียหายเป็นบวก แล้วค่อยไปลบออก)
-                        ls_val = abs(avg_loss) if 'avg_loss' in locals() else 0
-                        
+                        # 1. ดึงข้อมูลจาก df_period มาคำนวณแบบสดๆ ตรงนี้เลย เพื่อความชัวร์ (ไม่ให้ไปดึงตัวแปรเก่าข้างนอกมาปน)
+                        if 'df_period' in locals() and not df_period.empty:
+                            col_pl_sim = 'กำไร/ขาดทุน (บาท)'
+                            col_cost_sim = 'ต้นทุน (บาท)'
+                            
+                            # คำนวณ Win Rate สดๆ
+                            wr_val = (df_period[col_pl_sim] > 0).mean() * 100
+                            
+                            # คำนวณ Avg Profit สดๆ
+                            p_mask = (df_period[col_pl_sim] > 0) & (df_period[col_cost_sim] > 0)
+                            p_series = (df_period.loc[p_mask, col_pl_sim] / df_period.loc[p_mask, col_cost_sim]) * 100
+                            pr_val = p_series.clip(upper=500).mean() if not p_series.empty else 10.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                            
+                            # คำนวณ Avg Loss สดๆ (และบังคับให้เป็นบวกทันทีด้วย abs)
+                            l_mask = (df_period[col_pl_sim] <= 0) & (df_period[col_cost_sim] > 0)
+                            l_series = (df_period.loc[l_mask, col_pl_sim] / df_period.loc[l_mask, col_cost_sim]) * 100
+                            l_series = l_series[l_series >= -100] # กรองค่าเพี้ยน
+                            ls_val = abs(l_series.mean()) if not l_series.empty else 5.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                        else:
+                            # ค่า Default เผื่อกรณีไม่มีข้อมูลในช่วงเวลานั้น
+                            wr_val, pr_val, ls_val = 50.0, 10.0, 5.0
+                    
                         act_wr = wr_val / 100.0
                         act_profit = pr_val / 100.0
+                        act_loss = ls_val / 100.0  # ตอนนี้ ls_val จะเป็นค่าบวกปกติ (เช่น 7.49%) หาร 100 จะได้ 0.0749
                         
-                        # แปลงค่า avg_loss ให้เป็นสัดส่วนทศนิยม (0-1) สำหรับคำนวณ
-                        act_loss = ls_val / 100.0  
-                        
-                        # 2. สร้าง Range สำหรับจำลองตาราง (Win Rate และ Profit Rate)
+                        # 2. สร้าง Range สำหรับจำลองตาราง
                         wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
                         pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
                         
@@ -2615,10 +2628,9 @@ def main():
                             row = {"Win Rate": f"{wr_display*100:.1f}%"}
                             for pr in pr_range:
                                 # คำนวณ Expected Value (EV) 
-                                # สูตร: (โอกาสชนะ * กำไร) - (โอกาสแพ้ * ขาดทุน)
                                 ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
                                 
-                                # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%) สำหรับแสดงผลในตาราง
+                                # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%)
                                 row[f"{pr*100:.1f}% Profit"] = ev * 100 
                                 
                             sim_data.append(row)
@@ -2630,7 +2642,7 @@ def main():
                         # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
                         df_numeric = df_full.astype(float)
                         
-                        # 5. สร้าง Styler และจัด Format เป็น % พร้อมใส่สี Gradient
+                        # 5. สร้าง Styler และจัด Format เป็น %
                         st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
                         
                         # 6. แสดงผลผ่านตาราง
