@@ -2592,22 +2592,20 @@ def main():
                 
                     # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
                     with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-                        # 1. ดึงค่า Default
+                        # 1. ดึงค่า Default จากส่วนสถิติข้างบน
                         wr_val = w_rate if 'w_rate' in locals() else 0
                         pr_val = avg_profit if 'avg_profit' in locals() else 0
                         
-                        # ⭐ จุดแก้ที่ 1: ใช้ abs() ครอบ avg_loss เพื่อบังคับให้เป็นค่าบวก (เพราะขาดทุนคือค่าติดลบ)
+                        # ดึงค่า avg_loss มาแปลงเป็นค่าบวก (เพราะสูตร EV ต้องใช้ค่าความเสียหายเป็นบวก แล้วค่อยไปลบออก)
                         ls_val = abs(avg_loss) if 'avg_loss' in locals() else 0
                         
                         act_wr = wr_val / 100.0
                         act_profit = pr_val / 100.0
                         
-                        # ⭐ จุดแก้ที่ 2: แปลงเป็นทศนิยม (เนื่องจาก Avg Loss ในตารางเก็บมาเป็นหน่วย % เช่น 75.27 ก็หาร 100 ให้เป็น 0.75)
-                        # หมายเหตุ: ถ้าใน DataFrame ของพี่อ้ำ ค่า Profit_Pct มันเก็บเป็นสัดส่วนจริงอยู่แล้ว (เช่น -75 คือ -75% หรือ -0.75) ให้เช็คดูอีกทีครับ 
-                        # แต่ถ้าจากโค้ดข้างบน `Profit_Pct` คูณ 100 มาแล้ว `ls_val` จะเป็นตัวเลขหลักสิบหรือร้อย (เช่น -75.27%) ต้องหาร 100 ด้วยครับ
+                        # แปลงค่า avg_loss ให้เป็นสัดส่วนทศนิยม (0-1) สำหรับคำนวณ
                         act_loss = ls_val / 100.0  
                         
-                        # 2. สร้าง Range
+                        # 2. สร้าง Range สำหรับจำลองตาราง (Win Rate และ Profit Rate)
                         wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
                         pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
                         
@@ -2616,10 +2614,11 @@ def main():
                             wr_display = max(0.0, min(1.0, wr)) 
                             row = {"Win Rate": f"{wr_display*100:.1f}%"}
                             for pr in pr_range:
-                                # คำนวณ Expected Value (EV) โดยใช้ act_loss ที่เป็นบวกแล้ว
+                                # คำนวณ Expected Value (EV) 
+                                # สูตร: (โอกาสชนะ * กำไร) - (โอกาสแพ้ * ขาดทุน)
                                 ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
                                 
-                                # แปลงผลลัพธ์เป็นเปอร์เซ็นต์ (%) สำหรับแสดงในตาราง
+                                # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%) สำหรับแสดงผลในตาราง
                                 row[f"{pr*100:.1f}% Profit"] = ev * 100 
                                 
                             sim_data.append(row)
@@ -2631,13 +2630,13 @@ def main():
                         # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
                         df_numeric = df_full.astype(float)
                         
-                        # 5. สร้าง Styler และจัด Format
+                        # 5. สร้าง Styler และจัด Format เป็น % พร้อมใส่สี Gradient
                         st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
                         
                         # 6. แสดงผลผ่านตาราง
                         st.dataframe(st_table, use_container_width=True)
                         
-                        st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss คงที่ {ls_val:.2f}%")
+                        st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูลที่ {ls_val:.2f}%")
                     #################################################
                     # --- ตารางแสดงแผนการเทรด ---
                     with tab_plan:
