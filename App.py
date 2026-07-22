@@ -2583,14 +2583,15 @@ def main():
                 
                     # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
                     with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-                        # 1. ดึงค่า Default
+                        # 1. ดึงค่า Default (สมมติว่า w_rate, avg_profit, avg_loss เก็บมาเป็น % อยู่แล้ว เช่น 51.5, 5.0, 3.0)
                         wr_val = w_rate if 'w_rate' in locals() else 0
                         pr_val = avg_profit if 'avg_profit' in locals() else 0
                         ls_val = avg_loss if 'avg_loss' in locals() else 0
                         
-                        act_wr = wr_val / 100
-                        act_profit = pr_val / 100
-                        act_loss = ls_val / 100
+                        # แปลงเป็นทศนิยมเพื่อใช้คำนวณสัดส่วน (ห้ามหาร 100 ซ้ำซ้อนถ้าค่าเดิมเป็นเปอร์เซ็นต์อยู่แล้ว)
+                        act_wr = wr_val / 100.0
+                        act_profit = pr_val / 100.0
+                        act_loss = abs(ls_val) / 100.0  # แปลงเป็นสศนิยมบวก
                         
                         # 2. สร้าง Range
                         wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
@@ -2598,10 +2599,13 @@ def main():
                         
                         sim_data = []
                         for wr in wr_range:
-                            wr_display = max(0, min(1, wr)) 
+                            wr_display = max(0.0, min(1.0, wr)) 
                             row = {"Win Rate": f"{wr_display*100:.1f}%"}
                             for pr in pr_range:
-                                ev = (wr_display * pr) - ((1 - wr_display) * abs(act_loss))
+                                # คำนวณ Expected Value (EV) ต่อไม้ในรูปสัดส่วน
+                                ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
+                                
+                                # คูณ 100 ครั้งเดียวเพื่อให้แสดงผลเป็นเปอร์เซ็นต์ที่ถูกต้อง
                                 row[f"{pr*100:.1f}% Profit"] = ev * 100 
                             sim_data.append(row)
                         
@@ -2612,7 +2616,7 @@ def main():
                         # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
                         df_numeric = df_full.astype(float)
                         
-                        # 5. สร้าง Styler และจัด Format (แก้ปัญหา Styler object Error)
+                        # 5. สร้าง Styler และจัด Format
                         st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
                         
                         # 6. แสดงผลผ่านตาราง
