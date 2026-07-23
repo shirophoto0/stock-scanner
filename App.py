@@ -2887,18 +2887,20 @@ def main():
         with sub_tfex_input:
             st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
             
+            # ดึงค่า ATR และ Multiplier ที่ใช้งานล่าสุดจาก session_state มาเป็นค่าตั้งต้น
+            current_atr = st.session_state.get('active_atr', 6.5)
+            
             c1, c2, c3 = st.columns(3)
             # เปลี่ยนเป็น Slider เลือกความเสี่ยง 0% ถึง 5% (เพิ่มทีละ 0.25% เพื่อความละเอียด)
             risk_pct = c1.slider("ความเสี่ยงที่ยอมรับได้ (% ของพอร์ต)", min_value=0.0, max_value=5.0, value=1.0, step=0.25)
             
-            # ⭐️ เพิ่มช่องกรอก ATR ให้ผู้ใช้สามารถพิมพ์แก้ไขเองได้ (อ้างอิงจาก TradingView หรือระบบ)
-            default_atr = 10.0 # ค่าตั้งต้นจากระบบ
-            user_atr = c2.number_input("ค่า ATR ปัจจุบัน (แก้ไขได้)", value=default_atr, step=0.5)
+            # ⭐️ ช่องกรอก ATR ที่เชื่อมโยงกับค่ากลาง (สามารถพิมพ์แก้ไขเพื่อดูจาก TradingView ได้เช่นกัน)
+            user_atr = c2.number_input("ค่า ATR ปัจจุบัน (แก้ไขได้)", value=float(current_atr), step=0.1)
             
-            # ช่องกรอกตัวคูณ Multiplier สำหรับ ATR (เช่น 1.5 หรือ 2 เท่า)
-            atr_multiplier = c3.number_input("ตัวคูณ ATR (Multiplier)", value=2.0, step=0.5)
+            # ช่องกรอกตัวคูณ Multiplier สำหรับ ATR
+            atr_multiplier = c3.number_input("ตัวคูณ ATR (Multiplier)", value=1.5, step=0.1)
             
-            # คำนวณระยะ Stop Loss จาก ATR ที่ผู้ใช้กรอกเข้ามา (ATR * Multiplier)
+            # คำนวณระยะ Stop Loss จาก ATR ที่ใช้งานจริง (ATR * Multiplier)
             stop_loss_points = user_atr * atr_multiplier
             st.caption(f"📍 ระยะจุดตัดขาดทุนคำนวณจาก ATR อัตโนมัติ: **{stop_loss_points:.2f} จุด** (ATR: {user_atr} x Multiplier: {atr_multiplier})")
             
@@ -2924,7 +2926,7 @@ def main():
                 st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
             else:
                 st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
-            
+                        
             # 1. แสดงรายการที่ถืออยู่ (Open Positions)
             # 1. แสดงรายการที่ถืออยู่ (Open Positions)
             st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
