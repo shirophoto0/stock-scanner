@@ -2926,24 +2926,30 @@ def main():
                 st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
             
             # 1. แสดงรายการที่ถืออยู่ (Open Positions)
+            # 1. แสดงรายการที่ถืออยู่ (Open Positions)
             st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
             
             tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
             open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
             
             if not open_positions.empty:
-                # ถ้าในข้อมูลยังไม่มีคอลัมน์ ATR ให้ดึงค่า user_atr ที่พิมพ์มากรอกใส่ หรือใช้ค่าระบบ
-                if 'ATR' not in open_positions.columns:
-                    open_positions['ATR'] = user_atr 
+                # ⭐️ เชื่อมโยงค่า ATR และ Multiplier ที่ผู้ใช้ใช้งานล่าสุด (จากฟอร์มด้านบน) มาแสดงและคำนวณในตาราง
+                open_positions['ATR'] = user_atr 
                 
                 # แปลงข้อมูลราคาเปิดและ ATR ให้เป็นตัวเลขเพื่อความปลอดภัย
                 open_positions['Open_Price'] = pd.to_numeric(open_positions['Open_Price'], errors='coerce')
                 open_positions['ATR'] = pd.to_numeric(open_positions['ATR'], errors='coerce')
                 
-                # คำนวณจุด Stop Loss จาก ATR (ใช้ตัวคูณจากช่องกรอกด้านบน)
-                open_positions['ATR_Stop_Loss'] = open_positions['Open_Price'] - (open_positions['ATR'] * atr_multiplier)
+                # คำนวณจุด Stop Loss จาก ATR แยกตามสถานะ Long / Short ของแต่ละไม้
+                # Long: ราคาเปิด - (ATR * Multiplier)
+                # Short: ราคาเปิด + (ATR * Multiplier)
+                open_positions['ATR_Stop_Loss'] = open_positions.apply(
+                    lambda row: (row['Open_Price'] - (row['ATR'] * atr_multiplier)) if row['Status'] == 'Long' 
+                    else (row['Open_Price'] + (row['ATR'] * atr_multiplier)), 
+                    axis=1
+                )
                 
-                # แสดงผลตารางพร้อมคอลัมน์ ATR และ Stop Loss ที่เพิ่มเข้ามา
+                # แสดงผลตารางพร้อมคอลัมน์ ATR และ Stop Loss ที่คำนวณสดๆ ตรงกัน
                 st.dataframe(
                     open_positions[['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price', 'ATR', 'ATR_Stop_Loss']], 
                     use_container_width=True
