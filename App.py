@@ -3022,10 +3022,10 @@ def main():
                         latest_atr = get_auto_atr_cached("^SET50")
                         st.session_state['active_atr'] = latest_atr
                         st.success(f"ดึงค่า ATR สำเร็จ: {latest_atr} จุด")
-            
-                # กำหนดค่า ATR เริ่มต้นหากยังไม่เคยกดปุ่ม
-                current_atr = st.session_state.get('active_atr', 6.5)
-            
+                
+                # กำหนดค่า ATR เริ่มต้นหากยังไม่เคยกดปุ่ม (Default เป็น 6.5 หรือค่าล่าสุดใน session)
+                default_atr = st.session_state.get('active_atr', 6.5)
+                
                 col1, col2, col3 = st.columns(3)
                 with col1:
                     date_open = st.date_input("วันที่เปิด")
@@ -3034,14 +3034,19 @@ def main():
                 with col2:
                     entry = st.number_input("ราคา Open:", format="%.2f", value=950.0)
                     size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
-                    trade_id_input = st.text_input("Trade ID (เว้นว่างเพื่อรันอัตโนมัติ):") 
+                    trade_id_input = st.text_input("Trade ID (เว้นว่างเพื่อรันอัตโนมัติ):")  
                 with col3:
                     comm_input = st.number_input("ค่าคอมมิชชัน + ค่าธรรมเนียม (บาท):", min_value=0.0, step=10.0, value=50.0)
                     
-                    # แสดงช่อง ATR และตัวคูณเพื่อให้ระบบคำนวณจุดหนีความเสี่ยงอัตโนมัติ
+                    # ⭐️ เพิ่มช่องให้พิมพ์แก้ไขค่า ATR ได้เอง (โดยดึงค่า default มาแสดง และยอมให้พิมพ์ทับได้เพื่อดูจาก TradingView)
+                    user_atr = st.number_input("ค่า ATR (แก้ไขได้):", min_value=0.1, step=0.1, value=float(default_atr))
+                    
+                    # ตัวคูณ ATR (Multiplier)
                     atr_multiplier = st.number_input("ตัวคูณ ATR (Multiplier):", min_value=0.5, step=0.1, value=1.5)
-                    calculated_sl_pts = current_atr * atr_multiplier
-                    st.write(f"📌 Stop Loss แนะนำ: **{calculated_sl_pts:.2f} จุด** (จาก ATR: {current_atr})")
+                    
+                    # คำนวณจุด SL จากค่า ATR ที่ผู้ใช้ใช้งานจริง (user_atr)
+                    calculated_sl_pts = user_atr * atr_multiplier
+                    st.write(f"📌 Stop Loss แนะนำ: **{calculated_sl_pts:.2f} จุด** (จาก ATR: {user_atr})")
                     
                     reason = st.text_area("เหตุผลที่เข้าเทรด:")
                 
@@ -3053,20 +3058,20 @@ def main():
                     if not final_trade_id:
                         final_trade_id = f"TX-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
                         
-                    # คำนวณราคา Stop Loss จริงบนกระดาน
+                    # คำนวณราคา Stop Loss จริงบนกระดาน โดยใช้ calculated_sl_pts ที่คำนวณจาก user_atr
                     calculated_sl_price = (entry - calculated_sl_pts) if Status == "Long" else (entry + calculated_sl_pts)
                         
                     new_record = {
                         "Trade_ID": final_trade_id,
                         "Date_Open": date_open.strftime("%Y-%m-%d"),
-                        "Date_Close": "",           
+                        "Date_Close": "",          
                         "Series": series,
                         "Status": Status,
                         "Size": size,
                         "Open_Price": entry,
-                        "Close_Price": 0,           
+                        "Close_Price": 0,          
                         "Realized": 0,            
-                        "Comm": comm_input,         
+                        "Comm": comm_input,        
                         "Net_Profit": 0,
                         "Win_Lose": "",            
                         "Reason": f"{reason} | ATR SL: {calculated_sl_price:.2f}"
@@ -3079,7 +3084,7 @@ def main():
                             st.cache_data.clear()  
                             st.toast("เปิดสถานะเทรดเรียบร้อย! 🎉", icon="✅")
                             st.rerun()
-        
+                            
         with sub_tfex_close:
             st.subheader("🏁 ปิดสถานะเทรด")
             
