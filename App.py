@@ -2920,13 +2920,31 @@ def main():
             st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
             
             tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
-            open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
+            open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
             
             if not open_positions.empty:
-                st.dataframe(open_positions[['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price']], use_container_width=True)
+                # สมมติฐาน: ถ้าในข้อมูลมีคอลัมน์ 'ATR' อยู่แล้ว จะนำมาใช้คำนวณทันที 
+                # แต่ถ้ายังไม่มี ให้กำหนดค่า ATR จำลองหรือดึงจากฟังก์ชันคำนวณ ATR ของคุณมาใส่แทนได้ครับ
+                if 'ATR' not in open_positions.columns:
+                    open_positions['ATR'] = 10.0  # ค่า ATR สมมติ (ปรับเปลี่ยนตามหน้างานจริงของคุณ)
+                
+                # แปลงข้อมูลราคาเปิดและ ATR ให้เป็นตัวเลขเพื่อความปลอดภัย
+                open_positions['Open_Price'] = pd.to_numeric(open_positions['Open_Price'], errors='coerce')
+                open_positions['ATR'] = pd.to_numeric(open_positions['ATR'], errors='coerce')
+                
+                # คำนวณจุด Stop Loss จาก ATR (ใช้ตัวคูณ 2 เท่าจากราคาเปิด สำหรับ Long Position)
+                # สูตร: Stop Loss = ราคาซื้อ - (ATR * Multiplier)
+                multiplier = 2.0
+                open_positions['ATR_Stop_Loss'] = open_positions['Open_Price'] - (open_positions['ATR'] * multiplier)
+                
+                # แสดงผลตารางพร้อมคอลัมน์ ATR และ Stop Loss ที่เพิ่มเข้ามา
+                st.dataframe(
+                    open_positions[['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price', 'ATR', 'ATR_Stop_Loss']], 
+                    use_container_width=True
+                )
             else:
                 st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
-
+            
             # คำนวณ Margin Utilization
             total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT 
             utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
@@ -2954,7 +2972,7 @@ def main():
                 ))
                 fig_winloss.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), showlegend=True)
                 st.plotly_chart(fig_winloss, use_container_width=True)
-
+            
             with col_right:
                 # 2. สร้าง Gauge Chart (กราฟ Margin เดิมของคุณ)
                 fig_gauge = go.Figure(go.Indicator(
@@ -2980,7 +2998,7 @@ def main():
                 
                 fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
                 st.plotly_chart(fig_gauge, use_container_width=True)
-                
+                            
             st.divider()
             
             # 2. ส่วนของฟอร์มรับค่าการเทรด TFEX และการดึง ATR อัตโนมัติด้วยปุ่มกด
