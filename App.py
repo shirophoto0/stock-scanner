@@ -2887,10 +2887,20 @@ def main():
         with sub_tfex_input:
             st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
             
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             # เปลี่ยนเป็น Slider เลือกความเสี่ยง 0% ถึง 5% (เพิ่มทีละ 0.25% เพื่อความละเอียด)
             risk_pct = c1.slider("ความเสี่ยงที่ยอมรับได้ (% ของพอร์ต)", min_value=0.0, max_value=5.0, value=1.0, step=0.25)
-            stop_loss_points = c2.number_input("ระยะห่างจุดตัดขาดทุน (จุด)", value=2.0)
+            
+            # ⭐️ เพิ่มช่องกรอก ATR ให้ผู้ใช้สามารถพิมพ์แก้ไขเองได้ (อ้างอิงจาก TradingView หรือระบบ)
+            default_atr = 10.0 # ค่าตั้งต้นจากระบบ
+            user_atr = c2.number_input("ค่า ATR ปัจจุบัน (แก้ไขได้)", value=default_atr, step=0.5)
+            
+            # ช่องกรอกตัวคูณ Multiplier สำหรับ ATR (เช่น 1.5 หรือ 2 เท่า)
+            atr_multiplier = c3.number_input("ตัวคูณ ATR (Multiplier)", value=2.0, step=0.5)
+            
+            # คำนวณระยะ Stop Loss จาก ATR ที่ผู้ใช้กรอกเข้ามา (ATR * Multiplier)
+            stop_loss_points = user_atr * atr_multiplier
+            st.caption(f"📍 ระยะจุดตัดขาดทุนคำนวณจาก ATR อัตโนมัติ: **{stop_loss_points:.2f} จุด** (ATR: {user_atr} x Multiplier: {atr_multiplier})")
             
             # คำนวณเงินที่ยอมขาดทุนได้จริงจากเปอร์เซ็นต์พอร์ต (Net Worth)
             risk_amount = net_worth * (risk_pct / 100.0)
@@ -2898,7 +2908,7 @@ def main():
             # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
             im_per_contract = IM_PER_CONTRACT 
             
-            # คำนวณสัญญา
+            # คำนวณสัญญา (สมมติ 1 จุด TFEX = 200 บาท)
             contract_by_risk = risk_amount / (stop_loss_points * 200) if (stop_loss_points * 200) > 0 else 0
             contract_by_margin = net_worth / im_per_contract if im_per_contract > 0 else 0 # net_worth ดึงมาจาก Dashboard
             
@@ -2916,26 +2926,22 @@ def main():
                 st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
             
             # 1. แสดงรายการที่ถืออยู่ (Open Positions)
-            # 1. แสดงรายการที่ถืออยู่ (Open Positions)
             st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
             
             tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
             open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
             
             if not open_positions.empty:
-                # สมมติฐาน: ถ้าในข้อมูลมีคอลัมน์ 'ATR' อยู่แล้ว จะนำมาใช้คำนวณทันที 
-                # แต่ถ้ายังไม่มี ให้กำหนดค่า ATR จำลองหรือดึงจากฟังก์ชันคำนวณ ATR ของคุณมาใส่แทนได้ครับ
+                # ถ้าในข้อมูลยังไม่มีคอลัมน์ ATR ให้ดึงค่า user_atr ที่พิมพ์มากรอกใส่ หรือใช้ค่าระบบ
                 if 'ATR' not in open_positions.columns:
-                    open_positions['ATR'] = 10.0  # ค่า ATR สมมติ (ปรับเปลี่ยนตามหน้างานจริงของคุณ)
+                    open_positions['ATR'] = user_atr 
                 
                 # แปลงข้อมูลราคาเปิดและ ATR ให้เป็นตัวเลขเพื่อความปลอดภัย
                 open_positions['Open_Price'] = pd.to_numeric(open_positions['Open_Price'], errors='coerce')
                 open_positions['ATR'] = pd.to_numeric(open_positions['ATR'], errors='coerce')
                 
-                # คำนวณจุด Stop Loss จาก ATR (ใช้ตัวคูณ 2 เท่าจากราคาเปิด สำหรับ Long Position)
-                # สูตร: Stop Loss = ราคาซื้อ - (ATR * Multiplier)
-                multiplier = 2.0
-                open_positions['ATR_Stop_Loss'] = open_positions['Open_Price'] - (open_positions['ATR'] * multiplier)
+                # คำนวณจุด Stop Loss จาก ATR (ใช้ตัวคูณจากช่องกรอกด้านบน)
+                open_positions['ATR_Stop_Loss'] = open_positions['Open_Price'] - (open_positions['ATR'] * atr_multiplier)
                 
                 # แสดงผลตารางพร้อมคอลัมน์ ATR และ Stop Loss ที่เพิ่มเข้ามา
                 st.dataframe(
