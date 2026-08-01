@@ -1730,6 +1730,22 @@ def main():
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
 
+                        ####################
+                        if st.button("🔄 อัปเดตข้อมูลย้อนหลัง (Backfill)"):
+                            with st.spinner('กำลังคำนวณข้อมูลย้อนหลัง (อาจใช้เวลาสักครู่)...'):
+                                # เรียกใช้ฟังก์ชันที่เขียนไว้
+                                backfill_portfolio_history()
+                                st.success("อัปเดตเรียบร้อย! กราฟของคุณพร้อมใช้งานแล้ว")
+                        # Equity Curve 
+                        st.markdown("---")
+                        st.markdown("##### 📈 Equity Curve")
+                        
+                        # เรียกใช้งานฟังก์ชันที่ย้ายไปด้านบน
+                        try:
+                            display_performance_dashboard()
+                        except Exception as e:
+                            st.warning(f"ยังไม่พบข้อมูล Portfolio_History หรือเกิดข้อผิดพลาดในการโหลด: {e}")
+                            
                         #######################################
                         # 1. จัดการข้อมูล (ยังคงตรรกะเดิมไว้)
                         df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
@@ -1951,23 +1967,6 @@ def main():
                             chart_data = chart_data.fillna(0)
                             
                             st.line_chart(chart_data)
-                            
-                        ####################
-                        if st.button("🔄 อัปเดตข้อมูลย้อนหลัง (Backfill)"):
-                            with st.spinner('กำลังคำนวณข้อมูลย้อนหลัง (อาจใช้เวลาสักครู่)...'):
-                                # เรียกใช้ฟังก์ชันที่เขียนไว้
-                                backfill_portfolio_history()
-                                st.success("อัปเดตเรียบร้อย! กราฟของคุณพร้อมใช้งานแล้ว")
-                        # Equity Curve 
-                        st.markdown("---")
-                        st.markdown("##### 📈 Equity Curve")
-                        
-                        # เรียกใช้งานฟังก์ชันที่ย้ายไปด้านบน
-                        try:
-                            display_performance_dashboard()
-                        except Exception as e:
-                            st.warning(f"ยังไม่พบข้อมูล Portfolio_History หรือเกิดข้อผิดพลาดในการโหลด: {e}")
-                                               
                             
             #########################            
             with tab_portfolio:
