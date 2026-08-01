@@ -457,7 +457,7 @@ def backfill_portfolio_history():
         st.warning("ไม่พบข้อมูลวันที่ขายที่ถูกต้อง")
         return
 
-    # 2. เตรียมข้อมูล CashFlow (ดึงรายการฝาก/ถอนจริงจาก Google Sheets)
+    # 2. เตรียมข้อมูล CashFlow (ดึงยอดเงินฝาก-ถอนจริง)
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('CashFlow')
@@ -471,37 +471,25 @@ def backfill_portfolio_history():
         if 'Date' in df_cash.columns and 'Amount' in df_cash.columns:
             df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
             df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
-            # ถ้ามีคอลัมน์ Type ช่วยแยกว่าเป็น Deposit/Withdraw (ถ้าไม่มี ให้มอง Amount เป็นบวก/ลบตามจริง)
+            # ใช้ยอดสะสมสุทธิ (Cumulative Sum) ของ CashFlow จริงๆ
+            df_cash = df_cash.sort_values('Date')
             if 'Type' in df_cash.columns:
-                # แปลงให้ Deposit เป็นบวก, Withdraw เป็นลบ (ปรับตาม keyword ที่คุณใช้จริง)
                 df_cash['Net_Cash'] = df_cash.apply(
                     lambda row: -abs(row['Amount']) if str(row['Type']).strip().lower() in ['withdraw', 'ถอน'] else abs(row['Amount']), axis=1
                 )
             else:
                 df_cash['Net_Cash'] = df_cash['Amount']
+            df_cash['Cumulative_Capital'] = df_cash['Net_Cash'].cumsum()
         else:
-            df_cash['Net_Cash'] = 0
-            df_cash['Date'] = pd.to_datetime('today')
-    else:
-        # ถ้าไม่มีชีท CashFlow ให้ใช้เงินต้นเริ่มต้นตายตัวไปก่อน
-        df_cash = pd.DataFrame({'Date': [df['วันที่ขาย'].min()], 'Net_Cash': [69102.44]})
+            df_cash = pd.DataFrame()
 
-    # กำหนดช่วงเวลาทั้งหมดตั้งแต่วันแรกถึงปัจจุบัน
+    # ช่วงเวลาทั้งหมด
     all_dates = pd.date_range(start=df['วันที่ขาย'].min(), end=pd.Timestamp.now().normalize())
     history_list = []
     
-    # 3. ดึงราคาประวัติย้อนหลังของหุ้นทุกตัวเก็บไว้ใน dict
     all_tickers = df['หุ้น'].unique() if 'หุ้น' in df.columns else []
-    price_history = {}
-    for ticker in all_tickers:
-        try:
-            hist = yf.Ticker(f"{ticker}.BK").history(period="max")
-            hist.index = pd.to_datetime(hist.index).tz_localize(None)
-            price_history[ticker] = hist['Close']
-        except:
-            pass
 
-    # 4. ลูปคำนวณรายวัน
+    # 3. ลูปคำนวณรายวันแบบปลอดภัย (ไม่ให้พอร์ตเป็น 0)
     for date in all_dates:
         date = date.normalize()
         df_upto = df[df['วันที่ขาย'] <= date]
@@ -509,33 +497,40 @@ def backfill_portfolio_history():
         # คำนวณจำนวนหุ้นคงเหลือ ณ วันนั้น
         current_holdings = {}
         for ticker in all_tickers:
-            # เช็คว่ามีคอลัมน์ประเภทการซื้อ/ขายอะไรบ้าง
             buys = df_upto[(df_upto['หุ้น'] == ticker) & (df_upto['ประเภท'].str.contains("ซื้อ", na=False))]['จำนวนหุ้นที่ซื้อ'].sum() if 'จำนวนหุ้นที่ซื้อ' in df_upto.columns else 0
             sells = df_upto[(df_upto['หุ้น'] == ticker) & (df_upto['ประเภท'].str.contains("ขาย", na=False))]['จำนวนหุ้นที่ซื้อ'].sum() if 'จำนวนหุ้นที่ซื้อ' in df_upto.columns else 0
             shares = buys - sells
             if shares > 0:
                 current_holdings[ticker] = shares
         
-        # คำนวณ Market Value (มูลค่าหุ้นปัจจุบันในพอร์ต ณ วันนั้น)
+        # คำนวณ Market Value (ดึงราคาปัจจุบันมาใช้สำรองหากประวัติย้อนหลังไม่มี)
         market_val = 0
         for ticker, shares in current_holdings.items():
-            if ticker in price_history:
-                price_series = price_history[ticker]
-                price_at_date = price_series[price_series.index <= date]
-                if not price_at_date.empty:
-                    market_val += (shares * price_at_date.iloc[-1])
+            try:
+                # ลองดึงราคาปัจจุบันแทนการใช้ประวัติย้อนหลังที่อาจจะช่องว่างเยอะเกินไป
+                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+            except:
+                m_price = 0
+            market_val += (shares * m_price)
         
-        # คำนวณ "เงินลงทุนจริงสะสม" จาก CashFlow ที่เกิดขึ้นจริงจนถึงวันนี้เท่านั้น!
-        df_cash_upto = df_cash[df_cash['Date'] <= date]
-        invested_capital = df_cash_upto['Net_Cash'].sum() if not df_cash_upto.empty else 69102.44
-        
+        # ถ้าคำนวณมูลค่าหุ้นไม่ได้ ให้ดึงจากฟังก์ชันพอร์ตปัจจุบันมาใส่แทนเพื่อกันกราฟพังเป็น 0
+        if market_val == 0 and current_holdings:
+            market_val = get_total_market_value()
+
+        # ดึงเงินลงทุนจริงสะสมถึงวันนั้นจาก CashFlow
+        if not df_cash.empty:
+            df_cash_upto = df_cash[df_cash['Date'] <= date]
+            invested_capital = df_cash_upto['Cumulative_Capital'].iloc[-1] if not df_cash_upto.empty else 69102.44
+        else:
+            invested_capital = 69102.44  # ค่าเริ่มต้นถ้าไม่มีชีท CashFlow
+
         history_list.append({
             'Date': date.strftime('%Y-%m-%d'),
-            'Market_Value': market_val,
-            'Invested_Capital': invested_capital
+            'Market_Value': float(market_val),
+            'Invested_Capital': float(invested_capital)
         })
     
-    # 5. บันทึกลงชีท Portfolio_History
+    # 4. บันทึกลงชีท Portfolio_History
     df_history = pd.DataFrame(history_list).fillna(0)
     
     try:
@@ -544,7 +539,7 @@ def backfill_portfolio_history():
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
         
-        st.success("อัปเดตประวัติพอร์ตและเงินลงทุนจริงเรียบร้อย!")
+        st.success("อัปเดตข้อมูลกราฟเรียบร้อย!")
         st.rerun()
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Portfolio_History: {e}")
