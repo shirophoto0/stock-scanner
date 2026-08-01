@@ -471,7 +471,6 @@ def backfill_portfolio_history():
         if 'Date' in df_cash.columns and 'Amount' in df_cash.columns:
             df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
             df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
-            # ใช้ยอดสะสมสุทธิ (Cumulative Sum) ของ CashFlow จริงๆ
             df_cash = df_cash.sort_values('Date')
             if 'Type' in df_cash.columns:
                 df_cash['Net_Cash'] = df_cash.apply(
@@ -489,7 +488,18 @@ def backfill_portfolio_history():
     
     all_tickers = df['หุ้น'].unique() if 'หุ้น' in df.columns else []
 
-    # 3. ลูปคำนวณรายวันแบบปลอดภัย (ไม่ให้พอร์ตเป็น 0)
+    # ดึงราคาปัจจุบันมารอไว้ก่อนเลย เพื่อป้องกันปัญหาราชประวัติย้อนหลังดึงไม่ได้
+    current_prices = {}
+    for ticker in all_tickers:
+        try:
+            clean_t = str(ticker).strip().upper()
+            symbol = f"{clean_t}.BK" if not clean_t.endswith(".BK") else clean_t
+            p = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
+            current_prices[clean_t] = float(p)
+        except:
+            current_prices[clean_t] = 0.0
+
+    # 3. ลูปคำนวณรายวัน
     for date in all_dates:
         date = date.normalize()
         df_upto = df[df['วันที่ขาย'] <= date]
@@ -497,24 +507,21 @@ def backfill_portfolio_history():
         # คำนวณจำนวนหุ้นคงเหลือ ณ วันนั้น
         current_holdings = {}
         for ticker in all_tickers:
-            buys = df_upto[(df_upto['หุ้น'] == ticker) & (df_upto['ประเภท'].str.contains("ซื้อ", na=False))]['จำนวนหุ้นที่ซื้อ'].sum() if 'จำนวนหุ้นที่ซื้อ' in df_upto.columns else 0
-            sells = df_upto[(df_upto['หุ้น'] == ticker) & (df_upto['ประเภท'].str.contains("ขาย", na=False))]['จำนวนหุ้นที่ซื้อ'].sum() if 'จำนวนหุ้นที่ซื้อ' in df_upto.columns else 0
+            clean_t = str(ticker).strip().upper()
+            buys = df_upto[(df_upto['หุ้น'].str.strip().str.upper() == clean_t) & (df_upto['ประเภท'].str.contains("ซื้อ", na=False))]['จำนวนหุ้นที่ซื้อ'].sum() if 'จำนวนหุ้นที่ซื้อ' in df_upto.columns else 0
+            sells = df_upto[(df_upto['หุ้น'].str.strip().str.upper() == clean_t) & (df_upto['ประเภท'].str.contains("ขาย", na=False))]['จำนวนหุ้นที่ซื้อ'].sum() if 'จำนวนหุ้นที่ซื้อ' in df_upto.columns else 0
             shares = buys - sells
             if shares > 0:
-                current_holdings[ticker] = shares
+                current_holdings[clean_t] = shares
         
-        # คำนวณ Market Value (ดึงราคาปัจจุบันมาใช้สำรองหากประวัติย้อนหลังไม่มี)
+        # คำนวณ Market Value โดยใช้ราคาปัจจุบันอ้างอิง (เพื่อให้ไม่ติดค่า 0)
         market_val = 0
         for ticker, shares in current_holdings.items():
-            try:
-                # ลองดึงราคาปัจจุบันแทนการใช้ประวัติย้อนหลังที่อาจจะช่องว่างเยอะเกินไป
-                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
-            except:
-                m_price = 0
-            market_val += (shares * m_price)
+            price = current_prices.get(ticker, 0.0)
+            market_val += (shares * price)
         
-        # ถ้าคำนวณมูลค่าหุ้นไม่ได้ ให้ดึงจากฟังก์ชันพอร์ตปัจจุบันมาใส่แทนเพื่อกันกราฟพังเป็น 0
-        if market_val == 0 and current_holdings:
+        # ถ้ายังเป็น 0 ให้ดึงจากฟังก์ชันพอร์ตปัจจุบันมาใช้แก้ขัดทันที
+        if market_val == 0:
             market_val = get_total_market_value()
 
         # ดึงเงินลงทุนจริงสะสมถึงวันนั้นจาก CashFlow
@@ -522,7 +529,7 @@ def backfill_portfolio_history():
             df_cash_upto = df_cash[df_cash['Date'] <= date]
             invested_capital = df_cash_upto['Cumulative_Capital'].iloc[-1] if not df_cash_upto.empty else 69102.44
         else:
-            invested_capital = 69102.44  # ค่าเริ่มต้นถ้าไม่มีชีท CashFlow
+            invested_capital = 69102.44
 
         history_list.append({
             'Date': date.strftime('%Y-%m-%d'),
@@ -539,7 +546,7 @@ def backfill_portfolio_history():
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
         
-        st.success("อัปเดตข้อมูลกราฟเรียบร้อย!")
+        st.success("อัปเดตข้อมูลกราฟสำเร็จ!")
         st.rerun()
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Portfolio_History: {e}")
