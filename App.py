@@ -497,11 +497,22 @@ def backfill_portfolio_history():
         })
     
     # 4. บันทึก
-    # 4. บันทึก (แปลงเป็น DataFrame ก่อน)
+    # 4. บันทึกข้อมูลลงชีท Portfolio_History โดยตรง
     df_history = pd.DataFrame(history_list)
     df_history = df_history.fillna(0)
-    save_to_gsheet("Portfolio_History", df_history)
-    st.rerun()
+    
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet('Portfolio_History')
+        
+        # ล้างข้อมูลเดิมและเขียนใหม่ทั้งหมด (Header + Data)
+        sheet.clear()
+        sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
+        
+        st.success("อัปเดตเรียบร้อย! กราฟของคุณพร้อมใช้งานแล้ว")
+        st.rerun()
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก Portfolio_History: {e}")
     
 def get_current_portfolio_value():
     # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
