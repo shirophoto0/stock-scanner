@@ -561,15 +561,7 @@ def update_stock_data(df):
     print("DEBUG: อัปเดตข้อมูลหุ้นเรียบร้อย!")
     
 # 2. ฟังก์ชันอเนกประสงค์ (เอามาแทรกตรงนี้)
-@st.cache_data(ttl=600)  
-def save_cash_balance(amount):
-    try:
-        client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
-        sheet.update('D2', [[amount]]) # เขียนเงินสดลงเซลล์ D2
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึกเงินสด: {e}")
-        
+@st.cache_data(ttl=600)          
 def log_cash_transaction(date, trans_type, amount, note):
     try:
         client = get_gsheet_client()
