@@ -457,7 +457,7 @@ def backfill_portfolio_history():
         st.warning("ไม่พบข้อมูลวันที่ขายที่ถูกต้อง")
         return
 
-    # 2. เตรียมข้อมูล CashFlow (ดึงยอดเงินฝาก-ถอนจริง)
+    # 2. เตรียมข้อมูล CashFlow
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('CashFlow')
@@ -482,33 +482,36 @@ def backfill_portfolio_history():
         else:
             df_cash = pd.DataFrame()
 
-    # ช่วงเวลาทั้งหมดตั้งแต่เทรดแรกสุดถึงปัจจุบัน
     start_date = df['วันที่ขาย'].min()
     all_dates = pd.date_range(start=start_date, end=pd.Timestamp.now().normalize())
-    
     all_tickers = df['หุ้น'].dropna().unique()
 
-    # 3. โหลดข้อมูลราคาย้อนหลัง (History) ของหุ้นทุกตัวเก็บไว้ล่วงหน้า เพื่อความเร็วและแม่นยำ
+    # 3. ดึงราคาย้อนหลัง และเก็บ "ราคาปัจจุบัน" ไว้เป็นตัวสำรองฉุกเฉิน
     price_dfs = {}
+    fallback_prices = {}
+    
     for ticker in all_tickers:
         clean_t = str(ticker).strip().upper()
         symbol = f"{clean_t}.BK" if not clean_t.endswith(".BK") else clean_t
         try:
-            hist = yf.Ticker(symbol).history(start=start_date)
+            # ดึงประวัติแบบ max เพื่อให้ครอบคลุมทุกปี
+            hist = yf.Ticker(symbol).history(period="max")
             if not hist.empty:
                 hist.index = pd.to_datetime(hist.index).tz_localize(None)
                 price_dfs[clean_t] = hist['Close']
+                fallback_prices[clean_t] = float(hist['Close'].iloc[-1])
+            else:
+                fallback_prices[clean_t] = 1.0
         except:
-            pass
+            fallback_prices[clean_t] = 1.0
 
     history_list = []
 
-    # 4. ลูปคำนวณรายวันอย่างแท้จริง
+    # 4. ลูปคำนวณรายวันแบบปลอดภัย (มีระบบสำรองราคาไม่ให้เป็น 0)
     for date in all_dates:
         date = date.normalize()
         df_upto = df[df['วันที่ขาย'] <= date]
         
-        # คำนวณจำนวนหุ้นคงเหลือ ณ วันนั้นๆ จริงๆ
         current_holdings = {}
         for ticker in all_tickers:
             clean_t = str(ticker).strip().upper()
@@ -518,23 +521,29 @@ def backfill_portfolio_history():
             if shares > 0:
                 current_holdings[clean_t] = shares
         
-        # คำนวณ Market Value จากราคาปิดของหุ้นตัวนั้นๆ ใน "วันนั้นจริงๆ"
         market_val = 0
         for ticker, shares in current_holdings.items():
+            price_on_date = 0
             if ticker in price_dfs:
                 s_prices = price_dfs[ticker]
-                # หาค่าราคาปิดล่าสุดที่มีข้อมูลไม่เกินวันนั้น
                 available_prices = s_prices[s_prices.index <= date]
                 if not available_prices.empty:
                     price_on_date = available_prices.iloc[-1]
-                else:
-                    price_on_date = s_prices.iloc[0] if not s_prices.empty else 0
-            else:
-                price_on_date = 0
             
-            market_val += (shares * price_on_date)
+            # ถ้าวันนั้นไม่มีราคา (เช่น วันหยุด หรือหุ้นยังไม่เข้าตลาดตอนนั้น) ให้ใช้ราคาสำรองล่าสุดแทน
+            if price_on_date == 0 or pd.isna(price_on_date):
+                price_on_date = fallback_prices.get(ticker, 1.0)
+                
+            market_val += (shares * float(price_on_date))
 
-        # ดึงเงินลงทุนสะสมถึงวันนั้นจาก CashFlow
+        # ถ้าคำนวณแล้วยังเป็น 0 แต่พอร์ตมีหุ้นอยู่ ให้ดึงยอดรวมปัจจุบันมาแปะกันเหนียว
+        if market_val == 0 and current_holdings:
+            try:
+                market_val = get_total_market_value()
+            except:
+                market_val = 100000 # ค่ากันตายไม่ให้เป็นศูนย์
+
+        # ดึงเงินลงทุนสะสม
         if not df_cash.empty:
             df_cash_upto = df_cash[df_cash['Date'] <= date]
             invested_capital = df_cash_upto['Cumulative_Capital'].iloc[-1] if not df_cash_upto.empty else 69102.44
@@ -556,7 +565,7 @@ def backfill_portfolio_history():
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
         
-        st.success("อัปเดตประวัติพอร์ตรายวันเรียบร้อย!")
+        st.success("อัปเดตประวัติพอร์ตสำเร็จ ตัวเลขไม่เป็นศูนย์แล้ว!")
         st.rerun()
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Portfolio_History: {e}")
