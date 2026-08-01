@@ -603,10 +603,10 @@ def load_total_cash_balance():
             total_balance = df['Amount'].dropna().sum()
             return float(total_balance)
         
-        return 69102.44 # ยอดเริ่มต้นถ้าหาคอลัมน์ไม่เจอ
+        return 1283405 # ยอดเริ่มต้นถ้าหาคอลัมน์ไม่เจอ
     except Exception as e:
         print(f"DEBUG: Error ในการโหลดเงินสด: {e}")
-        return 69102.44
+        return 1283405
         
 # ฟังก์ชัน Load ไฟล์ CSV/Excel (ยังคงใช้ได้เหมือนเดิม)
 def load_data_from_file(uploaded_file):
