@@ -504,10 +504,10 @@ def backfill_portfolio_history():
         # [จุดที่แก้ไข] คำนวณเงินลงทุนจริงจาก CashFlow สะสม (ไม่เอาเงินหมุนจากการขายมานับซ้ำ)
         if not df_cash.empty and 'Date' in df_cash.columns and 'Amount' in df_cash.columns:
             df_cash_upto = df_cash[df_cash['Date'] <= date]
-            invested = df_cash_upto['Amount'].sum() if not df_cash_upto.empty else 69102.44
+            invested = df_cash_upto['Amount'].sum() if not df_cash_upto.empty else 1283405
         else:
             # ถ้าไม่มีชีท CashFlow ให้ใช้ทุนเริ่มต้นตายตัว หรือใช้วิ่ายอดซื้อวันแรกสุดครั้งเดียว
-            invested = 69102.44 
+            invested = 1283405
         
         history_list.append({
             'Date': date.strftime('%Y-%m-%d'),
