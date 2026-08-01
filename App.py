@@ -482,29 +482,33 @@ def backfill_portfolio_history():
         else:
             df_cash = pd.DataFrame()
 
-    # ช่วงเวลาทั้งหมด
-    all_dates = pd.date_range(start=df['วันที่ขาย'].min(), end=pd.Timestamp.now().normalize())
-    history_list = []
+    # ช่วงเวลาทั้งหมดตั้งแต่เทรดแรกสุดถึงปัจจุบัน
+    start_date = df['วันที่ขาย'].min()
+    all_dates = pd.date_range(start=start_date, end=pd.Timestamp.now().normalize())
     
-    all_tickers = df['หุ้น'].unique() if 'หุ้น' in df.columns else []
+    all_tickers = df['หุ้น'].dropna().unique()
 
-    # ดึงราคาปัจจุบันมารอไว้ก่อนเลย เพื่อป้องกันปัญหาราชประวัติย้อนหลังดึงไม่ได้
-    current_prices = {}
+    # 3. โหลดข้อมูลราคาย้อนหลัง (History) ของหุ้นทุกตัวเก็บไว้ล่วงหน้า เพื่อความเร็วและแม่นยำ
+    price_dfs = {}
     for ticker in all_tickers:
+        clean_t = str(ticker).strip().upper()
+        symbol = f"{clean_t}.BK" if not clean_t.endswith(".BK") else clean_t
         try:
-            clean_t = str(ticker).strip().upper()
-            symbol = f"{clean_t}.BK" if not clean_t.endswith(".BK") else clean_t
-            p = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
-            current_prices[clean_t] = float(p)
+            hist = yf.Ticker(symbol).history(start=start_date)
+            if not hist.empty:
+                hist.index = pd.to_datetime(hist.index).tz_localize(None)
+                price_dfs[clean_t] = hist['Close']
         except:
-            current_prices[clean_t] = 0.0
+            pass
 
-    # 3. ลูปคำนวณรายวัน
+    history_list = []
+
+    # 4. ลูปคำนวณรายวันอย่างแท้จริง
     for date in all_dates:
         date = date.normalize()
         df_upto = df[df['วันที่ขาย'] <= date]
         
-        # คำนวณจำนวนหุ้นคงเหลือ ณ วันนั้น
+        # คำนวณจำนวนหุ้นคงเหลือ ณ วันนั้นๆ จริงๆ
         current_holdings = {}
         for ticker in all_tickers:
             clean_t = str(ticker).strip().upper()
@@ -514,17 +518,23 @@ def backfill_portfolio_history():
             if shares > 0:
                 current_holdings[clean_t] = shares
         
-        # คำนวณ Market Value โดยใช้ราคาปัจจุบันอ้างอิง (เพื่อให้ไม่ติดค่า 0)
+        # คำนวณ Market Value จากราคาปิดของหุ้นตัวนั้นๆ ใน "วันนั้นจริงๆ"
         market_val = 0
         for ticker, shares in current_holdings.items():
-            price = current_prices.get(ticker, 0.0)
-            market_val += (shares * price)
-        
-        # ถ้ายังเป็น 0 ให้ดึงจากฟังก์ชันพอร์ตปัจจุบันมาใช้แก้ขัดทันที
-        if market_val == 0:
-            market_val = get_total_market_value()
+            if ticker in price_dfs:
+                s_prices = price_dfs[ticker]
+                # หาค่าราคาปิดล่าสุดที่มีข้อมูลไม่เกินวันนั้น
+                available_prices = s_prices[s_prices.index <= date]
+                if not available_prices.empty:
+                    price_on_date = available_prices.iloc[-1]
+                else:
+                    price_on_date = s_prices.iloc[0] if not s_prices.empty else 0
+            else:
+                price_on_date = 0
+            
+            market_val += (shares * price_on_date)
 
-        # ดึงเงินลงทุนจริงสะสมถึงวันนั้นจาก CashFlow
+        # ดึงเงินลงทุนสะสมถึงวันนั้นจาก CashFlow
         if not df_cash.empty:
             df_cash_upto = df_cash[df_cash['Date'] <= date]
             invested_capital = df_cash_upto['Cumulative_Capital'].iloc[-1] if not df_cash_upto.empty else 69102.44
@@ -537,7 +547,7 @@ def backfill_portfolio_history():
             'Invested_Capital': float(invested_capital)
         })
     
-    # 4. บันทึกลงชีท Portfolio_History
+    # 5. บันทึกลงชีท Portfolio_History
     df_history = pd.DataFrame(history_list).fillna(0)
     
     try:
@@ -546,7 +556,7 @@ def backfill_portfolio_history():
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
         
-        st.success("อัปเดตข้อมูลกราฟสำเร็จ!")
+        st.success("อัปเดตประวัติพอร์ตรายวันเรียบร้อย!")
         st.rerun()
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Portfolio_History: {e}")
