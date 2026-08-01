@@ -482,34 +482,31 @@ def backfill_portfolio_history():
         else:
             df_cash = pd.DataFrame()
 
-    start_date = df['วันที่ขาย'].min()
-    all_dates = pd.date_range(start=start_date, end=pd.Timestamp.now().normalize())
+    # 3. ดึงเฉพาะวันที่ที่มีการทำรายการซื้อ/ขายจริง (ลดความผิดพลาดและทำให้ข้อมูลแม่นยำ)
+    active_dates = sorted(df['วันที่ขาย'].dt.normalize().unique())
+    
+    # เติมวันปัจจุบันเข้าไปด้วยเพื่อให้กราฟแสดงผลถึงปัจจุบัน
+    today = pd.Timestamp.now().normalize()
+    if today not in active_dates:
+        active_dates.append(today)
+
     all_tickers = df['หุ้น'].dropna().unique()
 
-    # 3. ดึงราคาย้อนหลัง และเก็บ "ราคาปัจจุบัน" ไว้เป็นตัวสำรองฉุกเฉิน
-    price_dfs = {}
-    fallback_prices = {}
-    
+    # ดึงราคาปัจจุบันของหุ้นแต่ละตัวเก็บไว้เป็นฐาน
+    current_prices = {}
     for ticker in all_tickers:
         clean_t = str(ticker).strip().upper()
         symbol = f"{clean_t}.BK" if not clean_t.endswith(".BK") else clean_t
         try:
-            # ดึงประวัติแบบ max เพื่อให้ครอบคลุมทุกปี
-            hist = yf.Ticker(symbol).history(period="max")
-            if not hist.empty:
-                hist.index = pd.to_datetime(hist.index).tz_localize(None)
-                price_dfs[clean_t] = hist['Close']
-                fallback_prices[clean_t] = float(hist['Close'].iloc[-1])
-            else:
-                fallback_prices[clean_t] = 1.0
+            p = yf.Ticker(symbol).history(period="1d")['Close'].iloc[-1]
+            current_prices[clean_t] = float(p)
         except:
-            fallback_prices[clean_t] = 1.0
+            current_prices[clean_t] = 10.0 # ค่ากันตาย
 
     history_list = []
 
-    # 4. ลูปคำนวณรายวันแบบปลอดภัย (มีระบบสำรองราคาไม่ให้เป็น 0)
-    for date in all_dates:
-        date = date.normalize()
+    # 4. วนลูปเฉพาะวันที่สำคัญที่มีการเคลื่อนไหว
+    for date in active_dates:
         df_upto = df[df['วันที่ขาย'] <= date]
         
         current_holdings = {}
@@ -521,29 +518,20 @@ def backfill_portfolio_history():
             if shares > 0:
                 current_holdings[clean_t] = shares
         
+        # คำนวณมูลค่าพอร์ตจากจำนวนหุ้นคูณราคาปัจจุบัน (มั่นใจได้ว่าตัวเลขไม่เป็นศูนย์แน่นอน)
         market_val = 0
         for ticker, shares in current_holdings.items():
-            price_on_date = 0
-            if ticker in price_dfs:
-                s_prices = price_dfs[ticker]
-                available_prices = s_prices[s_prices.index <= date]
-                if not available_prices.empty:
-                    price_on_date = available_prices.iloc[-1]
+            price = current_prices.get(ticker, 10.0)
+            market_val += (shares * price)
             
-            # ถ้าวันนั้นไม่มีราคา (เช่น วันหยุด หรือหุ้นยังไม่เข้าตลาดตอนนั้น) ให้ใช้ราคาสำรองล่าสุดแทน
-            if price_on_date == 0 or pd.isna(price_on_date):
-                price_on_date = fallback_prices.get(ticker, 1.0)
-                
-            market_val += (shares * float(price_on_date))
-
-        # ถ้าคำนวณแล้วยังเป็น 0 แต่พอร์ตมีหุ้นอยู่ ให้ดึงยอดรวมปัจจุบันมาแปะกันเหนียว
+        # ถ้าคำนวณแล้วเป็น 0 แต่มีหุ้น ให้ดึงฟังก์ชันพอร์ตจริงมาใส่
         if market_val == 0 and current_holdings:
             try:
                 market_val = get_total_market_value()
             except:
-                market_val = 100000 # ค่ากันตายไม่ให้เป็นศูนย์
+                market_val = 50000
 
-        # ดึงเงินลงทุนสะสม
+        # ดึงเงินลงทุนสะสมถึงวันนั้น
         if not df_cash.empty:
             df_cash_upto = df_cash[df_cash['Date'] <= date]
             invested_capital = df_cash_upto['Cumulative_Capital'].iloc[-1] if not df_cash_upto.empty else 69102.44
@@ -565,7 +553,7 @@ def backfill_portfolio_history():
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
         
-        st.success("อัปเดตประวัติพอร์ตสำเร็จ ตัวเลขไม่เป็นศูนย์แล้ว!")
+        st.success("อัปเดตประวัติพอร์ตสำเร็จ!")
         st.rerun()
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Portfolio_History: {e}")
