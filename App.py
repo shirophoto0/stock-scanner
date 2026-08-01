@@ -600,52 +600,87 @@ def load_data_from_file(uploaded_file):
 def get_equity_curve_data():
     # 1. เตรียมข้อมูล Journal
     if "journal_data" not in st.session_state or not st.session_state.journal_data:
+        # ลองโหลดจาก Google Sheets ดูก่อนถ้า session ว่าง
+        try:
+            client = get_gsheet_client()
+            sheet = client.open('MyStockData').worksheet('JournalData')
+            data = sheet.get_all_records()
+            if not data:
+                return pd.DataFrame()
+            df_j = pd.DataFrame(data)
+        except:
+            return pd.DataFrame()
+    else:
+        df_j = pd.DataFrame(st.session_state.journal_data)
+        
+    if df_j.empty:
         return pd.DataFrame()
-    
-    df_j = pd.DataFrame(st.session_state.journal_data)
+
     # ทำความสะอาดชื่อคอลัมน์ (ตัดช่องว่างหน้าหลัง)
     df_j.columns = df_j.columns.str.strip()
     
-    # ตรวจสอบชื่อคอลัมน์จริง (ใช้บรรทัดนี้ Debug ถ้ายัง Error)
-    # st.write("Columns found:", df_j.columns.tolist())
+    # ค้นหาคอลัมน์กำไร/ขาดทุนอัตโนมัติ (รองรับหลายชื่อที่เป็นไปได้)
+    pnl_col_candidates = ['กำไร/ขาดทุน', 'กำไร/ขาดทุน (บาท)', 'Net_Profit', 'Realized', 'PnL']
+    pnl_column = next((col for col in pnl_col_candidates if col in df_j.columns), None)
     
-    # เปลี่ยนชื่อคอลัมน์ให้ตรงกับที่เราเรียกใช้
-    # หากใน Sheet พี่อ้ำเขียนว่า 'กำไร/ขาดทุน' ให้ใช้ชื่อนั้นครับ
-    if 'กำไร/ขาดทุน' in df_j.columns:
-        df_j = df_j.rename(columns={'กำไร/ขาดทุน': 'PnL'})
-    elif 'กำไร/ขาดทุน (บาท)' in df_j.columns:
-        df_j = df_j.rename(columns={'กำไร/ขาดทุน (บาท)': 'PnL'})
+    if not pnl_column:
+        st.warning("⚠️ ไม่พบคอลัมน์กำไร/ขาดทุนใน JournalData กรุณาตรวจสอบชื่อคอลัมน์")
+        return pd.DataFrame()
+        
+    df_j['PnL'] = pd.to_numeric(df_j[pnl_column], errors='coerce').fillna(0)
     
-    df_j['วันที่ขาย'] = pd.to_datetime(df_j['วันที่ขาย'], errors='coerce')
+    # ค้นหาคอลัมน์วันที่ขายหรือวันที่ปิด
+    date_col_candidates = ['วันที่ขาย', 'Date_Close', 'วันที่']
+    date_column = next((col for col in date_col_candidates if col in df_j.columns), None)
+    
+    if date_column:
+        df_j['Date_Sell'] = pd.to_datetime(df_j[date_column], errors='coerce')
+    else:
+        df_j['Date_Sell'] = pd.to_datetime(pd.Timestamp.today())
 
-    # 2. เตรียมข้อมูล CashFlow
-    client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('CashFlow')
-    df_cash = pd.DataFrame(sheet.get_all_records())
-    df_cash.columns = df_cash.columns.str.strip()
-    df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
-    
-    # 3. Filter วันที่
-    start_date = pd.Timestamp('2026-04-01')
-    df_j = df_j[df_j['วันที่ขาย'] >= start_date].copy()
-    df_cash = df_cash[df_cash['Date'] >= start_date].copy()
-    
-    # 4. คำนวณ
-    daily_pnl = df_j.groupby('วันที่ขาย')['PnL'].sum().cumsum().reset_index()
+    # 2. เตรียมข้อมูล CashFlow (ป้องกันกรณีชีท CashFlow Error)
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet('CashFlow')
+        cash_data = sheet.get_all_records()
+        df_cash = pd.DataFrame(cash_data) if cash_data else pd.DataFrame()
+    except:
+        df_cash = pd.DataFrame()
+
+    if not df_cash.empty:
+        df_cash.columns = df_cash.columns.str.strip()
+        if 'Date' in df_cash.columns and 'Amount' in df_cash.columns:
+            df_cash['Date'] = pd.to_datetime(df_cash['Date'], errors='coerce')
+            df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
+            daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
+            daily_cash.columns = ['Date', 'Net_Cash_In']
+        else:
+            daily_cash = pd.DataFrame(columns=['Date', 'Net_Cash_In'])
+    else:
+        daily_cash = pd.DataFrame(columns=['Date', 'Net_Cash_In'])
+
+    # 3. คำนวณ PnL รายวัน
+    df_j['Date'] = df_j['Date_Sell'].dt.normalize()
+    daily_pnl = df_j.groupby('Date')['PnL'].sum().cumsum().reset_index()
     daily_pnl.columns = ['Date', 'Cumulative_PnL']
+
+    if daily_pnl.empty:
+        return pd.DataFrame()
+
+    # 4. รวมตาราง Equity
+    if not daily_cash.empty:
+        df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
+    else:
+        df_equity = daily_pnl.copy()
+        df_equity['Net_Cash_In'] = 0
+
+    df_equity = df_equity.sort_values('Date').dropna(subset=['Date'])
     
-    daily_cash = df_cash.groupby('Date')['Amount'].sum().cumsum().reset_index()
-    daily_cash.columns = ['Date', 'Net_Cash_In']
-    
-    # 5. รวมตาราง
-    df_equity = pd.merge(daily_pnl, daily_cash, on='Date', how='outer').fillna(0)
-    initial_balance = 69102.44 
-    
+    initial_balance = 69102.44  
     df_equity['Cash_Base'] = df_equity['Cumulative_PnL'] + df_equity['Net_Cash_In'] + initial_balance
     
-    # 6. คำนวณ M2M
+    # 5. คำนวณ M2M
     current_market_val = get_total_market_value()
-    # หัก Cumulative PnL ออกเพื่อให้เหลือเงินสดจริง แล้วบวกมูลค่าหุ้นปัจจุบัน
     df_equity['Market_To_Market'] = (df_equity['Cash_Base'] - df_equity['Cumulative_PnL']) + current_market_val
     
     return df_equity
