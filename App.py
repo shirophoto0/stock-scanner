@@ -1052,11 +1052,9 @@ def main():
     # 🌟 โหลดชีท Sector_Mapping จาก Google Sheets ไว้ล่วงหน้า
     # (เปลี่ยนชื่อฟังก์ชันโหลดให้ตรงกับฟังก์ชันที่คุณใช้เชื่อมต่อ Google Sheets เช่น gsheets_conn.read หรือ load_from_gsheet)
     try:
-        # สมมติว่ามีฟังก์ชันโหลดชีทเฉพาะ หรือใช้ตัวเชื่อมต่อเดียวกัน ลองปรับชื่อฟังก์ชันตามระบบของคุณดูนะครับ
-        # เช่น df_sector_map = load_sector_mapping_from_gsheet() หรือ conn.read(worksheet="Sector_Mapping")
-        df_sector_map = load_sector_mapping_from_gsheet() # *ปรับชื่อฟังก์ชันตามระบบจริงของคุณถ้ามี
+        df_sector_map = conn.read(worksheet="Sector_Mapping", ttl=600)
     except:
-        df_sector_map = pd.DataFrame()
+        df_sector_map = pd.DataFrame())
 
     # 2. โหมด GitHub (ทำงานจบในตัว)
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
