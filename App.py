@@ -2334,7 +2334,7 @@ def main():
                             
                             st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
                             st.rerun()
-                                
+                            
                 # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
                 st.divider()
                 st.subheader("📊 สรุปพอร์ตการลงทุน")
