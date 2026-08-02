@@ -2410,29 +2410,42 @@ def main():
                     
                     with col1:
                         options = ["  "] + portfolio_stocks
-                        select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options, key="journal_select_ticker")
                         
-                        # 🌟 กำหนด Logic การหา Sector แบบ Dictionary ใหม่ (จบในตัว ไม่ต้องใช้ชีท)
-                        current_sector = "General / Unspecified"
-                        
-                        if select_ticker != "  ":
-                            # 1. เช็คจากหุ้นในพอร์ตก่อนว่ามี Sector บันทึกไว้ไหม
-                            matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == select_ticker), None)
-                            if matched_item and matched_item.get('Sector') and matched_item.get('Sector') != "General / Unspecified":
-                                current_sector = matched_item['Sector']
+                        # 🌟 สร้างฟังก์ชัน Callback สำหรับอัปเดต Sector อัตโนมัติเมื่อเปลี่ยนตัวเลือกหุ้น
+                        def update_sector_on_select():
+                            selected = st.session_state.journal_select_ticker
+                            if selected != "  ":
+                                # 1. เช็คจากพอร์ตก่อน
+                                matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == selected), None)
+                                if matched_item and matched_item.get('Sector') and matched_item.get('Sector') != "General / Unspecified":
+                                    st.session_state.journal_p_sector = matched_item['Sector']
+                                else:
+                                    # 2. ถ้าไม่มีในพอร์ต ดึงจาก Dictionary A-Z
+                                    st.session_state.journal_p_sector = get_sector_from_mapping(selected)
                             else:
-                                # 2. ถ้าในพอร์ตไม่มี ให้ดึงจากฟังก์ชัน Dictionary (A-Z) ทันที
-                                current_sector = get_sector_from_mapping(select_ticker)
-                            
+                                st.session_state.journal_p_sector = "General / Unspecified"
+
+                        select_ticker = st.selectbox(
+                            "เลือกหุ้นจากพอร์ต:", 
+                            options, 
+                            key="journal_select_ticker",
+                            on_change=update_sector_on_select
+                        )
+                        
+                        # กำหนดค่าเริ่มต้นของ Sector ตอนโหลดครั้งแรก
+                        if "journal_p_sector" not in st.session_state:
+                            st.session_state.journal_p_sector = "General / Unspecified"
+
+                        if select_ticker != "  ":
                             p_ticker = select_ticker
                         else:
                             p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker")
-                            # ถ้าพิมพ์ชื่อหุ้นใหม่ ให้วิ่งไปหยิบจากฟังก์ชัน Dictionary ทันทีเช่นกัน
+                            # ถ้าพิมพ์ชื่อหุ้นใหม่เอง ให้เช็คจาก Dictionary แล้วอัปเดตลงช่อง Sector ทันที
                             if p_ticker:
-                                current_sector = get_sector_from_mapping(p_ticker)
+                                st.session_state.journal_p_sector = get_sector_from_mapping(p_ticker)
 
-                        # ช่องกรอก Sector (แสดงผลอัตโนมัติ และยังพิมพ์แก้เองได้)
-                        p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", value=current_sector, key="journal_p_sector")
+                        # ช่องกรอก Sector ที่ผูกกับ st.session_state.journal_p_sector โดยตรง
+                        p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", key="journal_p_sector")
                         
                         p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
                         
