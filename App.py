@@ -2412,26 +2412,26 @@ def main():
                         options = ["  "] + portfolio_stocks
                         select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options, key="journal_select_ticker")
                         
-                        # 🌟 กำหนด Logic การหา Sector แบบ Real-time
+                        # 🌟 กำหนด Logic การหา Sector แบบ Dictionary ใหม่ (จบในตัว ไม่ต้องใช้ชีท)
                         current_sector = "General / Unspecified"
                         
                         if select_ticker != "  ":
-                            # 1. เช็คจากหุ้นในพอร์ตก่อนว่ามี Sector หรือยัง
+                            # 1. เช็คจากหุ้นในพอร์ตก่อนว่ามี Sector บันทึกไว้ไหม
                             matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == select_ticker), None)
                             if matched_item and matched_item.get('Sector') and matched_item.get('Sector') != "General / Unspecified":
                                 current_sector = matched_item['Sector']
-                            elif 'df_sector_map' in locals() and not df_sector_map.empty:
-                                # 2. ถ้าในพอร์ตไม่มี ให้วิ่งไปดึงจากชีท Sector_Mapping ทันที
-                                current_sector = get_sector_from_mapping(select_ticker, df_sector_map)
+                            else:
+                                # 2. ถ้าในพอร์ตไม่มี ให้ดึงจากฟังก์ชัน Dictionary (A-Z) ทันที
+                                current_sector = get_sector_from_mapping(select_ticker)
                             
                             p_ticker = select_ticker
                         else:
                             p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker")
-                            # ถ้าพิมพ์ชื่อหุ้นใหม่ ให้เช็คจากชีท Mapping ทันทีเช่นกัน
-                            if p_ticker and 'df_sector_map' in locals() and not df_sector_map.empty:
-                                current_sector = get_sector_from_mapping(p_ticker, df_sector_map)
+                            # ถ้าพิมพ์ชื่อหุ้นใหม่ ให้วิ่งไปหยิบจากฟังก์ชัน Dictionary ทันทีเช่นกัน
+                            if p_ticker:
+                                current_sector = get_sector_from_mapping(p_ticker)
 
-                        # ช่องกรอก Sector (ใช้พารามิเตอร์ value ที่อัปเดตตามตัวแปร current_sector)
+                        # ช่องกรอก Sector (แสดงผลอัตโนมัติ และยังพิมพ์แก้เองได้)
                         p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", value=current_sector, key="journal_p_sector")
                         
                         p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
