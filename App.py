@@ -1973,7 +1973,104 @@ def main():
                             display_performance_dashboard()
                         except Exception as e:
                             st.warning(f"ยังไม่พบข้อมูล Portfolio_History หรือเกิดข้อผิดพลาดในการโหลด: {e}")
+
+                        st.markdown("---")
+
+                        # --- 2. ส่วนวิเคราะห์ Sector Performance ---
+                        st.subheader("🏢 วิเคราะห์ผลการดำเนินงานตามกลุ่มอุตสาหกรรม (Sector Performance)")
+                        
+                        # แปลง journal_data เป็น DataFrame สำหรับนำมาวิเคราะห์
+                        journal_df = pd.DataFrame(st.session_state.get('journal_data', []))
+                        closed_trades = journal_df[journal_df['สถานะ'] == 'Closed (ขายแล้ว)'] if not journal_df.empty else pd.DataFrame()
+                        
+                        if not journal_df.empty:
+                            sector_data_list = []
                             
+                            for idx, row in journal_df.iterrows():
+                                ticker = row.get('หุ้น', 'UNKNOWN')
+                                profit = row.get('กำไร/ขาดทุน (บาท)', 0)
+                                cost = row.get('ต้นทุน (บาท)', 0)
+                                sector = row.get('Sector', 'General / Unspecified')
+                                if pd.isna(sector) or sector == '': 
+                                    sector = 'General / Unspecified'
+                                    
+                                sector_data_list.append({
+                                    'Sector': sector,
+                                    'Ticker': ticker,
+                                    'Net_Profit': profit,
+                                    'Invested_Cost': cost
+                                })
+                                
+                            if len(sector_data_list) > 0:
+                                df_sector_source = pd.DataFrame(sector_data_list)
+                                
+                                df_sector_summary = df_sector_source.groupby('Sector', as_index=False).agg({
+                                    'Net_Profit': 'sum',
+                                    'Invested_Cost': 'sum',
+                                    'Ticker': lambda x: ', '.join(x.unique())
+                                })
+                                
+                                df_sector_summary['Return_Pct'] = df_sector_summary.apply(
+                                    lambda r: (r['Net_Profit'] / r['Invested_Cost'] * 100) if r['Invested_Cost'] > 0 else 0, 
+                                    axis=1
+                                )
+                                df_sector_summary = df_sector_summary.sort_values(by='Net_Profit', ascending=False)
+                        
+                                # 📊 ส่วน กราฟแท่ง (Bar Chart)
+                                st.markdown("##### 📊 กำไร/ขาดทุนสะสมแยกตามกลุ่มอุตสาหกรรม")
+                                fig_bar = px.bar(
+                                    df_sector_summary,
+                                    x='Sector',
+                                    y='Net_Profit',
+                                    text=df_sector_summary['Net_Profit'].apply(lambda x: f"{x:,.2f} ฿"),
+                                    color='Net_Profit',
+                                    color_continuous_scale=['#EF5350', '#26A69A']
+                                )
+                                fig_bar.update_traces(textposition='outside')
+                                fig_bar.update_layout(
+                                    xaxis_title="กลุ่มอุตสาหกรรม (Sector)",
+                                    yaxis_title="กำไร/ขาดทุนสุทธิ (บาท)",
+                                    height=400,
+                                    margin=dict(l=20, r=20, t=30, b=20),
+                                    coloraxis_showscale=False
+                                )
+                                st.plotly_chart(fig_bar, use_container_width=True)
+                        
+                                # 🗺️ ส่วน Treemap
+                                st.markdown("##### 🗺️ แผนผังแสดงสัดส่วนและผลงานพอร์ตตาม Sector (Treemap)")
+                                fig_tree = px.treemap(
+                                    df_sector_summary,
+                                    path=['Sector'],
+                                    values='Invested_Cost',
+                                    color='Return_Pct',
+                                    color_continuous_scale='Tealrose',
+                                    color_continuous_midpoint=0,
+                                    custom_data=['Net_Profit', 'Return_Pct', 'Ticker']
+                                )
+                                fig_tree.update_traces(
+                                    hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนรวม:</b> %{value:,.2f} ฿<br><b>กำไร/ขาดทุน:</b> %{customdata[0]:,.2f} ฿<br><b>ผลตอบแทน:</b> %{customdata[1]:+.2f} %<br><b>หุ้นในกลุ่ม:</b> %{customdata[2]}'
+                                )
+                                fig_tree.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10))
+                                st.plotly_chart(fig_tree, use_container_width=True)
+                        
+                                # 📋 ตารางสรุปข้อมูล Sector
+                                st.markdown("##### 📋 ตารางสรุปข้อมูลแยกตาม Sector")
+                                display_sector_df = df_sector_summary[['Sector', 'Invested_Cost', 'Net_Profit', 'Return_Pct', 'Ticker']].copy()
+                                display_sector_df.columns = ['กลุ่มอุตสาหกรรม (Sector)', 'เงินลงทุนรวม (บาท)', 'กำไร/ขาดทุนสุทธิ (บาท)', '% ผลตอบแทน', 'รายชื่อหุ้นที่เกี่ยวข้อง']
+                                
+                                st.dataframe(
+                                    display_sector_df.style.format({
+                                        'เงินลงทุนรวม (บาท)': '{:,.2f}',
+                                        'กำไร/ขาดทุนสุทธิ (บาท)': '{:,.2f}',
+                                        '% ผลตอบแทน': '{:+.2f} %'
+                                    }).set_properties(**{'text-align': 'right'}),
+                                    use_container_width=True
+                                )
+                            else:
+                                st.info("ยังไม่มีข้อมูลเพียงพอสำหรับการวิเคราะห์ Sector")
+                        else:
+                            st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
+                                                
                         #######################################
                         # 1. จัดการข้อมูล (ยังคงตรรกะเดิมไว้)
                         df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
@@ -2236,7 +2333,6 @@ def main():
                 
                 # 2. ฟอร์มเพิ่ม/ลดหุ้น
                 with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
-                    # ตัด st.form ออก เพื่อให้หน้าจอตอบสนองแบบ Real-time เวลาเปลี่ยนสถานะ
                     col1, col2 = st.columns(2)
                     
                     portfolio_stocks = [item['หุ้น'] for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
@@ -2244,11 +2340,22 @@ def main():
                     with col1:
                         options = ["  "] + portfolio_stocks
                         select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options, key="journal_select_ticker")
-                        p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker") if select_ticker == "  " else select_ticker
+                        
+                        # ตรวจสอบและดึง Sector อัตโนมัติถ้าเลือกหุ้นเดิมจากพอร์ต
+                        default_sector = "General / Unspecified"
+                        if select_ticker != "  ":
+                            matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == select_ticker), None)
+                            if matched_item and 'Sector' in matched_item:
+                                default_sector = matched_item['Sector']
+                            p_ticker = select_ticker
+                        else:
+                            p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker")
+                        
+                        # ช่องกรอก Sector (ถ้าเป็นหุ้นตัวเดิมจะดึงมาให้อัตโนมัติ แต่ยังแก้ไขได้)
+                        p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", value=default_sector, key="journal_p_sector")
                         
                         p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
                         
-                        # เมื่อเปลี่ยนสถานะเป็น Closed จะแสดงช่องวันที่ซื้อและวันที่ขายให้กรอกคู่กันทันที
                         if p_status == "Closed (ขายแล้ว)":
                             p_buy_date = st.date_input("📅 วันที่ซื้อหุ้น (ต้นทุนเดิม):", key="journal_p_buy_date")
                             p_sell_date = st.date_input("📅 วันที่ขายจริง (วันที่ทำรายการ):", key="journal_p_sell_date")
@@ -2273,17 +2380,16 @@ def main():
                             total_val = (p_qty * p_price)
                             ticker_upper = p_ticker.upper()
                             
-                            # --- Logic อัตโนมัติ: ถ้าเป็น Stop Loss หรือ ขาดทุน ให้บังคับเป็นค่าลบ ---
+                            # Logic อัตโนมัติ: ถ้าเป็น Stop Loss หรือ ขาดทุน ให้บังคับเป็นค่าลบ
                             final_result = float(p_result)
                             if "Stop Loss" in p_type or "ขาดทุน" in p_status:
                                 final_result = -abs(final_result) 
                             else:
                                 final_result = abs(final_result)  
                             
-                            # ใช้วันที่ทำรายการจริง (ถ้าขายใช้วันขาย ถ้าซื้อใช้วันซื้อ) ในการบันทึกกระแสเงินสด
                             transaction_date_str = str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else str(p_buy_date)
                             
-                            # 1. จัดการข้อมูล Portfolio (อัปเดตสถานะเงินสดและหุ้น)
+                            # 1. จัดการข้อมูล Portfolio
                             found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
                             
                             if "ซื้อ" in p_type and p_status != "Closed (ขายแล้ว)":
@@ -2294,11 +2400,11 @@ def main():
                                     old = st.session_state.my_portfolio[found_idx]
                                     new_shares = old['shares'] + p_qty
                                     new_cost = ((old['shares'] * old['avg_price']) + total_val) / new_shares
-                                    st.session_state.my_portfolio[found_idx] = {'หุ้น': ticker_upper, 'shares': new_shares, 'avg_price': new_cost}
+                                    st.session_state.my_portfolio[found_idx] = {'หุ้น': ticker_upper, 'shares': new_shares, 'avg_price': new_cost, 'Sector': p_sector}
                                 else:
-                                    st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price})
+                                    st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price, 'Sector': p_sector})
                             
-                            else: # กรณีขาย / ปิดสถานะ
+                            else: # กรณีขาย
                                 log_cash_transaction(date=transaction_date_str, trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
                                 st.session_state.cash_balance += (total_val - p_comm)
                                 
@@ -2307,12 +2413,16 @@ def main():
                                     if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
                                         st.session_state.my_portfolio.pop(found_idx)
                             
-                            # 2. เพิ่มข้อมูลเข้า Journal (บันทึกแยกวันที่ซื้อและวันที่ขายลง Google Sheets ให้ตรงช่องเป๊ะๆ)
+                            # 2. เพิ่มข้อมูลเข้า Journal (รวม Sector)
+                            if "journal_data" not in st.session_state:
+                                st.session_state.journal_data = []
+                                
                             new_entry = {
                                 "วันที่": transaction_date_str, 
                                 "วันที่ซื้อ": str(p_buy_date),
                                 "วันที่ขาย": str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else "",
                                 "หุ้น": ticker_upper,
+                                "Sector": p_sector,
                                 "สถานะ": p_status,
                                 "ประเภท": p_type,
                                 "กำไร/ขาดทุน (บาท)": final_result,
@@ -2323,19 +2433,15 @@ def main():
                             }
                             st.session_state.journal_data.append(new_entry)
                             
-                            # 3. บันทึกลง Google Sheets และอัปเดตหน้าจอ
+                            # 3. บันทึกข้อมูล
                             save_portfolio()
                             save_journal()
                             save_cash_balance(st.session_state.cash_balance)
-                            
-                            total_stock_value = sum([item['shares'] * item.get('current_price', item['avg_price']) for item in st.session_state.my_portfolio]) if "my_portfolio" in st.session_state else 0
-                            total_equity = st.session_state.cash_balance + total_stock_value
-                            
                             save_portfolio_snapshot()
                             
                             st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
                             st.rerun()
-                                            
+                            
                 # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
                 st.divider()
                 st.subheader("📊 สรุปพอร์ตการลงทุน")
