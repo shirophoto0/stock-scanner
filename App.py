@@ -1791,7 +1791,7 @@ def main():
                                 initial_past_profit = 85786.95 # กำไรตั้งต้น
                                 
                                 st.markdown("##### 📈 กราฟเส้นกำไรสะสมพอร์ตระยะยาว")
-                                
+
                                 if not df_closed_perf_sorted.empty:
                                     # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟเส้นโดยเฉพาะ
                                     c_f1, c_f2 = st.columns([2, 2])
@@ -1823,7 +1823,7 @@ def main():
                                         df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
                                     else:
                                         initial_past_profit_adjusted = initial_past_profit
-                        
+                                
                                     if not df_line_filtered.empty:
                                         # 2. Dynamic Aggregation: ตรวจสอบช่วงเวลา ถ้าระยะเวลามากกว่า 1 ปี ให้ยุบเป็น "รายเดือน" อัตโนมัติเพื่อกันกราฟแน่น
                                         date_span_days = (df_line_filtered['Sell_Date'].max() - df_line_filtered['Sell_Date'].min()).days
@@ -1838,10 +1838,10 @@ def main():
                                             df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
                                             df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
                                             agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
-                        
+                                
                                         with c_f2:
                                             st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
-                        
+                                
                                         # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
                                         df_line_grouped = df_line_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
                                             'กำไร/ขาดทุน (บาท)': 'sum'
@@ -1849,11 +1849,16 @@ def main():
                                         
                                         # คำนวณกำไรสะสมต่อเนื่อง
                                         df_line_grouped['Cumulative_Profit'] = initial_past_profit_adjusted + df_line_grouped['กำไร/ขาดทุน (บาท)'].cumsum()
-                        
-                                        # 3. สร้างกราฟเส้นพร้อมเปิด Interactive Zoom & Pan
+                                
+                                        # 3. คำนวณขอบเขตแกน Y ให้เผื่อพื้นที่ด้านบนเพิ่ม 15% (แก้ปัญหาเส้นชนขอบบน)
+                                        y_max = df_line_grouped['Cumulative_Profit'].max()
+                                        y_min = df_line_grouped['Cumulative_Profit'].min()
+                                        y_upper_limit = y_max * 1.15 if y_max > 0 else y_max * 0.85
+                                
+                                        # สร้างกราฟเส้นพร้อมกำหนด Scale แกน Y และเปิด Interactive Zoom & Pan
                                         chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
                                             x=alt.X('Time_Label:O', title='ช่วงเวลาที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Time_Label'])),
-                                            y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)'),
+                                            y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)', scale=alt.Scale(domain=[y_min, y_upper_limit], nice=True)),
                                             tooltip=['Time_Label', 'Cumulative_Profit']
                                         ).properties(
                                             height=350
@@ -1864,7 +1869,7 @@ def main():
                                         st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
                                 else:
                                     st.info("ยังไม่มีข้อมูลประวัติการเทรดที่ปิดสถานะ")
-                        
+                                                        
                         else:
                             # สำหรับโหมดตาราง (ใช้ปีที่เลือกจากฝั่งซ้ายมาแสดงผล)
                             selected_year = st.session_state.get('select_year_perf', available_years[0])
