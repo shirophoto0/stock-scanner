@@ -1696,62 +1696,89 @@ def main():
                         
                         ######### กราฟรายเดือน vs พร์อตสะสม ###################
                         st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
-                        # --- ข้อมูลรายเดือนและการคำนวณ % ROI ประจำเดือน ---
-                        df_monthly_base = df_filtered.copy()
-                        df_monthly_base['Date'] = pd.to_datetime(df_monthly_base['วันที่'])
-                        df_monthly_base['Month_Label'] = df_monthly_base['Date'].dt.strftime('%b %Y')
-                        df_monthly_base = df_monthly_base.sort_values('Date') 
+
+                        # --- 1. สร้าง Dropdown เลือกปี (2025, 2026 หรือตามที่มีในข้อมูลจริง) ---
+                        df_temp_all = df_filtered.copy()
+                        df_temp_all['Date_Temp'] = pd.to_datetime(df_temp_all['วันที่'], errors='coerce')
+                        available_years = sorted(df_temp_all['Date_Temp'].dt.year.dropna().unique(), reverse=True)
+                        if not available_years:
+                            available_years = [2026, 2025] # ค่าสำรองเผื่อยังไม่มีข้อมูล
                         
-                        # จัดกลุ่มรวมทั้ง กำไร/ขาดทุน (บาท) และ ต้นทุน (บาท) ของเดือนนั้นๆ
-                        df_monthly = df_monthly_base.groupby('Month_Label', sort=False).agg({
-                            'กำไร/ขาดทุน (บาท)': 'sum',
-                            'ต้นทุน (บาท)': 'sum'
-                        }).reset_index()
+                        selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงาน:", available_years, key="select_year_perf")
                         
-                        df_monthly.columns = ['Month_Label', 'Profit_Sum', 'Cost_Sum']
+                        # กรองข้อมูลเฉพาะปีที่เลือก
+                        df_filtered_year = df_temp_all[df_temp_all['Date_Temp'].dt.year == selected_year].copy()
+                        
+                        # --- 2. จัดการข้อมูลรายเดือนให้ครบ 12 เดือน (Jan - Dec) ---
+                        # สร้างตารางหลักที่ครบทั้ง 12 เดือนของปีที่เลือก
+                        months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
+                        df_full_year = pd.DataFrame({
+                            'Date': months_range,
+                            'Month_Label': months_range.strftime('%b %Y')
+                        })
+                        
+                        if not df_filtered_year.empty:
+                            df_filtered_year['Month_Label'] = df_filtered_year['Date_Temp'].dt.strftime('%b %Y')
+                            df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
+                                'กำไร/ขาดทุน (บาท)': 'sum',
+                                'ต้นทุน (บาท)': 'sum'
+                            }).reset_index()
+                            
+                            # Merge กับโครงสร้าง 12 เดือนเพื่อให้เดือนที่ไม่มีเทรดแสดงผลด้วย (เป็น 0)
+                            df_monthly = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
+                                'กำไร/ขาดทุน (บาท)': 0,
+                                'ต้นทุน (บาท)': 0
+                            })
+                        else:
+                            df_monthly = df_full_year.copy()
+                            df_monthly['กำไร/ขาดทุน (บาท)'] = 0
+                            df_monthly['ต้นทุน (บาท)'] = 0
+                        
+                        df_monthly.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
+                        df_monthly = df_monthly.sort_values('Date').reset_index(drop=True)
+                        
+                        # คำนวณค่าสะสมและ % ROI ประจำเดือน
                         df_monthly['Cumulative_Profit'] = df_monthly['Profit_Sum'].cumsum()
                         df_monthly['Color'] = df_monthly['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
-                        
-                        # คำนวณ % กำไร/ขาดทุน จากต้นทุนเฉพาะในเดือนนั้นๆ
                         df_monthly['Monthly_ROI'] = df_monthly.apply(
                             lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
                             axis=1
                         )
-                        # สร้างข้อความสำหรับกำกับบนแท่งกราฟ (เช่น +5.25% หรือ -1.50%)
                         df_monthly['ROI_Text'] = df_monthly['Monthly_ROI'].apply(lambda x: f"{x:+.2f}%")
                         
-                        # --- เพิ่มตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
-                        view_mode = st.radio("เลือกรูปแบบการแสดงผล:", ["📊 แสดงกราฟ", "📋 แสดงตารางข้อมูล"], horizontal=True, label_visibility="collapsed")
+                        # --- 3. ตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
+                        view_mode = st.radio("เลือกรูปแบบการแสดงผล:", ["📊 แสดงกราฟ", "📋 แสดงตารางข้อมูล"], horizontal=True, label_visibility="collapsed", key="view_mode_perf")
                         
                         if view_mode == "📊 แสดงกราฟ":
                             c1, c2 = st.columns(2)
                         
                             with c1:
-                                # กราฟแท่ง (Bar Chart)
-                                chart_bar = alt.Chart(df_monthly).mark_bar(width=40).encode(
-                                    x=alt.X('Month_Label:O', title='เดือน', sort=None), 
+                                # กราฟแท่ง (Bar Chart) - แสดงครบ 12 เดือน Jan - Dec
+                                chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
+                                    x=alt.X('Month_Label:O', title='เดือน', sort=['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']), 
                                     y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
                                     color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=['#2ecc71', '#e74c3c']), legend=None),
                                     tooltip=['Month_Label', 'Profit_Sum', alt.Tooltip('Monthly_ROI:Q', format='.2f', title='% ROI เดือน')]
                                 )
                                 
-                                # ตัวหนังสือสีเทาอ่อนกำกับบนแท่งกราฟ
+                                # ตัวหนังสือสีเทาอ่อนกำกับบนแท่งกราฟ (ใช้ baseline แบบเสถียร)
                                 text_labels = alt.Chart(df_monthly).mark_text(
                                     align='center',
-                                    baseline='bottom',  # ให้ตัวหนังสืออยู่เหนือจุดพิกัดพอดี
-                                    dy=-5,              # ขยับขึ้นด้านบนอีกเล็กน้อยไม่ให้ทับหัวแท่ง
-                                    color='#888888',    # สีเทาอ่อน
-                                    fontSize=11
+                                    baseline='bottom', 
+                                    dy=-5, 
+                                    color='#888888', 
+                                    fontSize=10
                                 ).encode(
                                     x=alt.X('Month_Label:O', sort=None),
                                     y=alt.Y('Profit_Sum:Q'),
                                     text='ROI_Text:N'
                                 )
+                        
                                 rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
                                 st.altair_chart((chart_bar + text_labels + rule).properties(height=300), use_container_width=True)
                         
                             with c2:
-                                # กราฟเส้นสะสม (Line Chart)
+                                # กราฟเส้นสะสม (Line Chart) - แสดงครบ 12 เดือน
                                 chart_line = alt.Chart(df_monthly).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
                                     x=alt.X('Month_Label:O', title='เดือน', sort=None),
                                     y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)'),
@@ -1760,8 +1787,8 @@ def main():
                                 st.altair_chart(chart_line, use_container_width=True)
                         
                         else:
-                            # แสดงผลเป็นตารางข้อมูล
-                            st.markdown("##### 📋 ตารางสรุปผลงานรายเดือน")
+                            # แสดงผลเป็นตารางข้อมูล (ครบ 12 เดือน)
+                            st.markdown(f"##### 📋 ตารางสรุปผลงานรายเดือน ประจำปี {selected_year}")
                             df_display = df_monthly[['Month_Label', 'Profit_Sum', 'Cost_Sum', 'Monthly_ROI', 'Cumulative_Profit']].copy()
                             df_display.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', 'ต้นทุนประจำเดือน (บาท)', '% กำไร/ขาดทุน (ROI)', 'กำไรสะสม (บาท)']
                             
@@ -1774,7 +1801,7 @@ def main():
                                 }),
                                 use_container_width=True
                             )
-                                                                                        
+                                                                                                                
                         ##### กราฟกระจายตัว (Histogram) ###########
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
