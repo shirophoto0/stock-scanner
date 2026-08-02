@@ -2248,17 +2248,18 @@ def main():
                             
                             p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"])
                             
-                            # แยกช่องใส่วันที่ให้ชัดเจนตามสถานะ
-                            if p_status == "Open (กำลังถือ)":
-                                p_buy_date = st.date_input("วันที่ซื้อ:")
-                                j_sell_date = None
+                            # --- ปรับเปลี่ยนป้ายชื่อช่องวันที่ตามสถานะที่เลือก ---
+                            if p_status == "Closed (ขายแล้ว)":
+                                p_date_input = st.date_input("วันที่ขาย (วันที่ทำรายการ):")
+                                p_buy_date_val = None      # วันที่ซื้อ (ถ้าเป็นการปิดการขายอย่างเดียว)
+                                p_sell_date_val = p_date_input # บันทึกเป็นวันที่ขาย
                             else:
-                                p_buy_date = st.date_input("วันที่ซื้อ (ต้นทุน):")
-                                j_sell_date = st.date_input("วันที่ขายจริง:")
+                                p_date_input = st.date_input("วันที่ทำรายการซื้อ:")
+                                p_buy_date_val = p_date_input # บันทึกเป็นวันที่ซื้อ
+                                p_sell_date_val = None
                             
                         with col2:
                             p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"])
-                            # เปลี่ยนเป็นรับค่ากำไร/ขาดทุนที่เป็นตัวเลขบวก/ลบธรรมดา ระบบจะปรับให้เอง
                             p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง")
                             p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f")
                             p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100)
@@ -2266,7 +2267,7 @@ def main():
                             
                         p_reason = st.text_area("เหตุผล/กลยุทธ์:")
                         submitted = st.form_submit_button("ยืนยันรายการ")
-                
+                        
                         if submitted:
                             total_val = (p_qty * p_price)
                             ticker_upper = p_ticker.upper()
@@ -2274,15 +2275,18 @@ def main():
                             # --- Logic อัตโนมัติ: ถ้าเป็น Stop Loss หรือ ขาดทุน ให้บังคับเป็นค่าลบ ---
                             final_result = float(p_result)
                             if "Stop Loss" in p_type or "ขาดทุน" in p_status:
-                                final_result = -abs(final_result) # บังคับติดลบ
+                                final_result = -abs(final_result) 
                             else:
-                                final_result = abs(final_result)  # บังคับเป็นบวกสำหรับกำไร
-                
+                                final_result = abs(final_result)  
+                            
                             # 1. จัดการข้อมูล Portfolio (อัปเดตสถานะเงินสดและหุ้น)
                             found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
                             
+                            # ใช้วันที่ทำรายการจริงในการบันทึกกระแสเงินสด
+                            transaction_date_str = str(p_date_input)
+                
                             if "ซื้อ" in p_type:
-                                log_cash_transaction(date=str(p_buy_date), trans_type="ซื้อหุ้น " + ticker_upper, amount=-(total_val + p_comm), note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}")
+                                log_cash_transaction(date=transaction_date_str, trans_type="ซื้อหุ้น " + ticker_upper, amount=-(total_val + p_comm), note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}")
                                 st.session_state.cash_balance -= (total_val + p_comm)
                                 
                                 if found_idx != -1:
@@ -2294,7 +2298,7 @@ def main():
                                     st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price})
                             
                             else: # กรณีขาย
-                                log_cash_transaction(date=str(p_buy_date), trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
+                                log_cash_transaction(date=transaction_date_str, trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
                                 st.session_state.cash_balance += (total_val - p_comm)
                                 
                                 if found_idx != -1:
@@ -2302,11 +2306,11 @@ def main():
                                     if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
                                         st.session_state.my_portfolio.pop(found_idx)
                             
-                            # 2. เพิ่มข้อมูลเข้า Journal ด้วยค่า final_result ที่จัดการเครื่องหมายเรียบร้อย
+                            # 2. เพิ่มข้อมูลเข้า Journal (แยกบันทึกวันที่ซื้อและวันที่ขายให้ตรงช่อง Google Sheets)
                             new_entry = {
-                                "วันที่": str(p_buy_date), 
-                                "วันที่ซื้อ": str(p_buy_date),
-                                "วันที่ขาย": str(j_sell_date) if j_sell_date else None,
+                                "วันที่": transaction_date_str, 
+                                "วันที่ซื้อ": str(p_buy_date_val) if p_buy_date_val else "",
+                                "วันที่ขาย": str(p_sell_date_val) if p_sell_date_val else "",
                                 "หุ้น": ticker_upper,
                                 "สถานะ": p_status,
                                 "ประเภท": p_type,
@@ -2317,23 +2321,20 @@ def main():
                                 "เหตุผล": p_reason
                             }
                             st.session_state.journal_data.append(new_entry)
-                
+                            
                             # 3. บันทึกลง Google Sheets และอัปเดตหน้าจอ
                             save_portfolio()
                             save_journal()
                             save_cash_balance(st.session_state.cash_balance)
                             
-                            # --- เพิ่มการคำนวณมูลค่าพอร์ตสุทธิ (Total Equity) ตรงนี้ให้ชัวร์ ---
-                            # คำนวณมูลค่าหุ้นคงเหลือในพอร์ตปัจจุบัน
                             total_stock_value = sum([item['shares'] * item.get('current_price', item['avg_price']) for item in st.session_state.my_portfolio]) if "my_portfolio" in st.session_state else 0
                             total_equity = st.session_state.cash_balance + total_stock_value
                             
-                            # เรียกบันทึก Snapshot หลังจากคำนวณค่าเสร็จแล้ว
                             save_portfolio_snapshot()
                             
                             st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
                             st.rerun()
-                            
+                                
                 # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
                 st.divider()
                 st.subheader("📊 สรุปพอร์ตการลงทุน")
