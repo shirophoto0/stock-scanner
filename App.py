@@ -2769,9 +2769,7 @@ def main():
                     else:
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
             #########################
-            with tab_dividend:
-                st.markdown("#### 💰 ข้อมูลและประวัติเงินปันผล (Dividend Tracker)")
-                
+            with tab_dividend:           
                 # 1. กำหนดตัวแปรเก็บข้อมูลปันผลใน session_state ถ้ายังไม่มี
                 if "dividend_data" not in st.session_state:
                     st.session_state.dividend_data = []
