@@ -1706,7 +1706,7 @@ def main():
                         
                         # แปลงวันที่ขายให้เป็น Datetime (เปลี่ยนชื่อคอลัมน์ 'วันที่' เป็นวันที่ขายจริงตามโครงสร้างชีทของคุณ เช่น 'วันที่ขาย' หรือ 'วันที่')
                         # ถ้าในชีทใช้คอลัมน์ 'วันที่' เป็นวันที่ทำรายการขาย ให้ใช้ 'วันที่' ได้เลยครับ
-                        df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่'], errors='coerce')
+                        df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่ขาย'], errors='coerce')
                         
                         # --- 1. สร้าง Dropdown เลือกปีจาก "ปีที่ขายจริง" ---
                         available_years = sorted(df_closed_perf['Sell_Date'].dt.year.dropna().unique(), reverse=True)
