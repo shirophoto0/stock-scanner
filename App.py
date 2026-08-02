@@ -1659,7 +1659,7 @@ def main():
                         
                         # ใส่ Note สีเทาอ่อนไว้ใต้ Metric ของ col1
                         col1.markdown(
-                            "<span style='color: #888888; font-size: 0.8em;'>historical profit 2018-2025 = 85,786.95</span>", 
+                            "<span style='color: #888888; font-size: 0.8em;'>historical profit 2018-2025 = 77,420.50</span>", 
                             unsafe_allow_html=True
                         )
                         col2.metric("ค่าเฉลี่ยต่อไม้ (%):", f"{df_clean['% ROI'].mean():.2f} %")
