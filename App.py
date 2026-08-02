@@ -1813,7 +1813,10 @@ def main():
                                         x=alt.X('Week_Label:O', title='สัปดาห์ที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Week_Label'])),
                                         y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)'),
                                         tooltip=['Week_Label', 'Cumulative_Profit']
-                                    ).properties(height=300)
+                                    ).properties(
+                                        height=300
+                                    ).interactive() # <--- เพิ่ม .interactive() ตรงนี้เพื่อให้ผู้ใช้สามารถซูมและเลื่อนดูช่วงเวลาต่างๆ ได้
+                                    
                                     st.altair_chart(chart_line, use_container_width=True)
                                 else:
                                     st.info("ยังไม่มีข้อมูลประวัติการเทรดที่ปิดสถานะ")
