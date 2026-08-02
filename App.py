@@ -3443,41 +3443,106 @@ def main():
 
                 # --- กราฟแสดงการเติบโตของพอร์ต TFEX ---
                 st.subheader("📈 กราฟการเติบโตของพอร์ต (Portfolio Growth)")
+
+                if not perf_df.empty:
+                    # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟ TFEX
+                    c_f1, c_f2 = st.columns([2, 2])
+                    with c_f1:
+                        tfex_view_range = st.selectbox(
+                            "⏳ เลือกช่วงเวลาแสดงผล (TFEX):",
+                            ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
+                            key="tfex_line_view_range"
+                        )
+                    
+                    # แปลงคอลัมน์วันที่ให้เป็น datetime
+                    perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'], errors='coerce')
+                    df_tfex_filtered = perf_df.dropna(subset=['Date_Close']).sort_values('Date_Close').copy()
+                    
+                    max_date = df_tfex_filtered['Date_Close'].max()
+                    initial_capital_base = net_capital  # เงินต้นเริ่มต้น
+                    
+                    # กรองข้อมูลตามช่วงเวลาที่เลือก และคำนวณกำไรย้อนหลังที่ถูกตัดออกไปรวมกับฐานเงินต้น
+                    if tfex_view_range == "3 เดือนล่าสุด":
+                        start_date = max_date - pd.DateOffset(months=3)
+                        past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
+                        initial_capital_base += past_slice['Net_Profit'].sum()
+                        df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
+                    elif tfex_view_range == "6 เดือนล่าสุด":
+                        start_date = max_date - pd.DateOffset(months=6)
+                        past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
+                        initial_capital_base += past_slice['Net_Profit'].sum()
+                        df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
+                    elif tfex_view_range == "1 ปีล่าสุด (YTD / 12M)":
+                        start_date = max_date - pd.DateOffset(years=1)
+                        past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
+                        initial_capital_base += past_slice['Net_Profit'].sum()
+                        df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
                 
-                # 1. เตรียมข้อมูลเพื่อทำกราฟ
-                # นำข้อมูลที่ปิดสถานะแล้วมาเรียงตามวันที่ปิด
-                growth_df = perf_df.sort_values('Date_Close').copy()
+                    if not df_tfex_filtered.empty:
+                        # 2. Dynamic Aggregation: ถ้าระยะเวลานานกว่า 1 ปี ให้ยุบกลุ่มเป็น "รายเดือน" เพื่อความสะอาดของกราฟ
+                        date_span_days = (df_tfex_filtered['Date_Close'].max() - df_tfex_filtered['Date_Close'].min()).days
+                        
+                        if date_span_days > 365 and tfex_view_range == "ทั้งหมด (All Time)":
+                            df_tfex_filtered['Period_Key'] = df_tfex_filtered['Date_Close'].dt.to_period('M')
+                            df_tfex_filtered['Time_Label'] = df_tfex_filtered['Period_Key'].apply(lambda r: r.strftime('%b %Y'))
+                            df_tfex_filtered['Sort_Time'] = df_tfex_filtered['Period_Key'].dt.start_time
+                            agg_freq_text = "รายเดือน (มุมมองระยะยาว)"
+                        else:
+                            df_tfex_filtered['Period_Key'] = df_tfex_filtered['Date_Close'].dt.to_period('W-MON')
+                            df_tfex_filtered['Time_Label'] = df_tfex_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
+                            df_tfex_filtered['Sort_Time'] = df_tfex_filtered['Period_Key'].dt.start_time
+                            agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
                 
-                # คำนวณกำไรสะสม
-                growth_df['Cumulative_Profit'] = growth_df['Net_Profit'].cumsum()
+                        with c_f2:
+                            st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
                 
-                # นำไปรวมกับเงินต้นเริ่มต้น (net_capital)
-                growth_df['Portfolio_Value'] = net_capital + growth_df['Cumulative_Profit']
+                        # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
+                        growth_df = df_tfex_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
+                            'Net_Profit': 'sum'
+                        }).sort_values('Sort_Time')
+                        
+                        # คำนวณมูลค่าพอร์ตสะสม
+                        growth_df['Cumulative_Profit'] = growth_df['Net_Profit'].cumsum()
+                        growth_df['Portfolio_Value'] = initial_capital_base + growth_df['Cumulative_Profit']
+                        
+                        # เพิ่มจุดเริ่มต้น (Start Point) ให้กราฟเริ่มสวยงามที่ฐานเงินต้น
+                        start_date_point = growth_df['Sort_Time'].min() - pd.Timedelta(days=1)
+                        start_row = pd.DataFrame({
+                            'Sort_Time': [start_date_point], 
+                            'Time_Label': ['จุดเริ่มต้น'], 
+                            'Portfolio_Value': [initial_capital_base]
+                        })
+                        growth_df = pd.concat([start_row, growth_df[['Sort_Time', 'Time_Label', 'Portfolio_Value']]], ignore_index=True)
+                        growth_df = growth_df.sort_values('Sort_Time').reset_index(drop=True)
                 
-                # เพิ่มบรรทัดเริ่มที่จุดศูนย์ (วันเริ่มต้น)
-                start_date = growth_df['Date_Close'].min() - pd.Timedelta(days=1)
-                start_row = pd.DataFrame({'Date_Close': [start_date], 'Portfolio_Value': [net_capital]})
-                growth_df = pd.concat([start_row, growth_df[['Date_Close', 'Portfolio_Value']]], ignore_index=True)
+                        # 3. สร้างกราฟเส้นด้วย Plotly
+                        fig_growth = px.line(
+                            growth_df, 
+                            x='Time_Label', 
+                            y='Portfolio_Value',
+                            markers=True,
+                            line_shape='spline'
+                        )
+                        
+                        # ปรับแต่งหน้าตาให้ดูมืออาชีพ พร้อมเผื่อสเกลแกน Y ด้านบนไม่ให้เส้นชนขอบ
+                        y_max = growth_df['Portfolio_Value'].max()
+                        y_min = growth_df['Portfolio_Value'].min()
+                        y_upper_margin = (y_max - y_min) * 0.15 if y_max != y_min else y_max * 0.15
                 
-                # 2. สร้างกราฟเส้นด้วย Plotly
-                fig_growth = px.line(
-                    growth_df, 
-                    x='Date_Close', 
-                    y='Portfolio_Value',
-                    markers=True,
-                    line_shape='spline' # ให้เส้นดูโค้งมนสวยงาม
-                )
-                
-                # ปรับแต่งให้ดูโปร
-                fig_growth.update_traces(line=dict(color='#26A69A', width=3))
-                fig_growth.update_layout(
-                    xaxis_title="วันที่",
-                    yaxis_title="มูลค่าพอร์ต (บาท)",
-                    margin=dict(l=20, r=20, t=30, b=20),
-                    hovermode="x unified"
-                )
-                
-                st.plotly_chart(fig_growth, use_container_width=True)
+                        fig_growth.update_traces(line=dict(color='#26A69A', width=3))
+                        fig_growth.update_layout(
+                            xaxis_title="ช่วงเวลา",
+                            yaxis_title="มูลค่าพอร์ต (บาท)",
+                            yaxis=dict(range=[y_min * 0.98, y_max + y_upper_margin]),
+                            margin=dict(l=20, r=20, t=30, b=20),
+                            hovermode="x unified"
+                        )
+                        
+                        st.plotly_chart(fig_growth, use_container_width=True)
+                    else:
+                        st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
+                else:
+                    st.info("ยังไม่มีข้อมูลประวัติการเทรด TFEX ที่ปิดสถานะ")
 
                 # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
