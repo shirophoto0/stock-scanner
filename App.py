@@ -2582,12 +2582,12 @@ def main():
                     st.subheader("🥧 การกระจายตัวของพอร์ตตามกลุ่มอุตสาหกรรม (Sector Allocation)")
                 
                     if not df_p.empty:
-                        # จัดกลุ่มรวมตาม Sector ของหุ้นในพอร์ตปัจจุบัน (รวมทั้งมูลค่าตลาดและมูลค่าต้นทุน)
+                        # จัดกลุ่มรวมตาม Sector ของหุ้นในพอร์ตปัจจุบัน (ใช้ as_index=False และ reset_index เพื่อความชัวร์)
                         df_port_sector = df_p.groupby('Sector', as_index=False).agg({
                             'มูลค่าตลาด': 'sum',
                             'มูลค่าต้นทุน': 'sum',
                             'หุ้น': lambda x: ', '.join(x.unique())
-                        })
+                        }).reset_index(drop=True)
                         
                         # 1. คำนวณสัดส่วน % ตาม "มูลค่าตลาด"
                         total_market_val = df_port_sector['มูลค่าตลาด'].sum()
@@ -2604,7 +2604,7 @@ def main():
                             df_port_sector['Cost_Weight_Pct'] = 0.0
                             
                         # เรียงลำดับตามเงินลงทุนต้นทุนจากมากไปน้อย
-                        df_port_sector = df_port_sector.sort_values(by='มูลค่าต้นทุน', ascending=False)
+                        df_port_sector = df_port_sector.sort_values(by='มูลค่าต้นทุน', ascending=False).reset_index(drop=True)
                 
                         # 📊 แบ่ง 2 คอลัมน์สำหรับกราฟโดนัท (เงินลงทุนต้นทุน VS มูลค่าตลาด)
                         col_sec1, col_sec2 = st.columns(2)
@@ -2622,7 +2622,6 @@ def main():
                                 textinfo='percent+label',
                                 hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนต้นทุน:</b> %{value:,.2f} ฿<br><b>สัดส่วนต้นทุน:</b> %{percent}'
                             )
-                            # เพิ่ม margin ด้านบนและล่าง (t=40, b=40) เพื่อไม่ให้ขอบทับตัวหนังสือ
                             fig_donut_cost.update_layout(
                                 height=380,
                                 margin=dict(l=10, r=10, t=40, b=40),
@@ -2643,7 +2642,6 @@ def main():
                                 textinfo='percent+label',
                                 hovertemplate='<b>Sector:</b> %{label}<br><b>มูลค่าตลาด:</b> %{value:,.2f} ฿<br><b>สัดส่วนตลาด:</b> %{percent}'
                             )
-                            # เพิ่ม margin ด้านบนและล่าง (t=40, b=40) เช่นเดียวกัน
                             fig_donut_market.update_layout(
                                 height=380,
                                 margin=dict(l=10, r=10, t=40, b=40),
@@ -2651,7 +2649,7 @@ def main():
                             )
                             st.plotly_chart(fig_donut_market, use_container_width=True)
                 
-                        # 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่ม (แสดงทั้งต้นทุนและราคาตลาด)
+                        # 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่ม
                         st.markdown("##### 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่มในพอร์ต")
                         display_port_sector = df_port_sector[[
                             'Sector', 'มูลค่าต้นทุน', 'Cost_Weight_Pct', 'มูลค่าตลาด', 'Market_Weight_Pct', 'หุ้น'
@@ -2678,7 +2676,7 @@ def main():
                 
                     else:
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
-                                                    
+                                                                    
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
