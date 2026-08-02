@@ -1736,24 +1736,17 @@ def main():
                                 )
                                 
                                 # ตัวหนังสือสีเทาอ่อนกำกับบนแท่งกราฟ
-                                # ตัวหนังสือสีเทาอ่อนกำกับบนแท่งกราฟ (แก้ไขเงื่อนไข baseline ให้ถูกต้องตามข้อมูลจริง)
                                 text_labels = alt.Chart(df_monthly).mark_text(
                                     align='center',
-                                    dy=-5,  # ระยะห่างจากหัวแท่งกราฟ
-                                    color='#888888',  # สีเทาอ่อน
+                                    baseline='bottom',  # ให้ตัวหนังสืออยู่เหนือจุดพิกัดพอดี
+                                    dy=-5,              # ขยับขึ้นด้านบนอีกเล็กน้อยไม่ให้ทับหัวแท่ง
+                                    color='#888888',    # สีเทาอ่อน
                                     fontSize=11
                                 ).encode(
                                     x=alt.X('Month_Label:O', sort=None),
                                     y=alt.Y('Profit_Sum:Q'),
-                                    text='ROI_Text:N',
-                                    # กำหนดตำแหน่งตัวหนังสือ: ถ้ากำไร >= 0 ให้อยู่ด้านบนแท่ง, ถ้าติดลบให้อยู่ด้านล่างแท่ง
-                                    baseline=alt.condition(
-                                        alt.datum.Profit_Sum >= 0,
-                                        alt.value('bottom'),
-                                        alt.value('top')
-                                    )
+                                    text='ROI_Text:N'
                                 )
-                        
                                 rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
                                 st.altair_chart((chart_bar + text_labels + rule).properties(height=300), use_container_width=True)
                         
