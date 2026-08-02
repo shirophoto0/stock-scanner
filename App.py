@@ -1666,8 +1666,8 @@ def main():
             st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
             
             # 1. สร้าง Tabs (จัดรวม แผนและ Alert ไว้ใน tab เดียวกัน)
-            tab_dashboard, tab_risk, tab_portfolio, tab_journal, tab_plan = st.tabs([
-                "📈 Dashboard", "🧮 คำนวณความเสี่ยง", "📊 พอร์ตโฟลิโอ", "📖 สมุดบันทึก", "📝 แผนและ Alert"
+            tab_dashboard, tab_risk, tab_portfolio, tab_dividend, tab_journal, tab_plan = st.tabs([
+                "📈 Dashboard", "🧮 คำนวณความเสี่ยง", "📊 พอร์ตโฟลิโอ", "💰 ข้อมูลปันผล", "📖 สมุดบันทึก", "📝 แผนและ Alert"
             ])
             
             ##############################
@@ -2766,7 +2766,19 @@ def main():
                                 
                     else:
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
-                                                                    
+            #########################
+            with tab_dividend:
+                st.markdown("#### 💰 ข้อมูลและประวัติเงินปันผล (Dividend Tracker)")
+                
+                # ตัวอย่างการใส่เนื้อหาเบื้องต้นในแท็บปันผล
+                if "journal_data" in st.session_state and st.session_state.journal_data:
+                    df_div = pd.DataFrame(st.session_state.journal_data)
+                    
+                    # กรองเฉพาะหุ้นที่มีการจ่ายปันผล หรือดึงข้อมูลมาแสดงตามโครงสร้างข้อมูลของคุณ
+                    st.info("ส่วนนี้อยู่ระหว่างการพัฒนา สามารถดึงข้อมูลเงินปันผลจากประวัติการเทรดหรือไฟล์นำเข้าได้ครับ")
+                else:
+                    st.info("ยังไม่มีข้อมูลในระบบ กรุณาอัปโหลดข้อมูลหรือบันทึกรายการเทรดก่อนครับ")
+                    
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
