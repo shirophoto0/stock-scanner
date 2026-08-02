@@ -2454,7 +2454,7 @@ def main():
                 # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
                 st.divider()
                 st.subheader("📊 สรุปพอร์ตการลงทุน")
-            
+                
                 if "my_portfolio" not in st.session_state:
                     load_portfolio()
                 
@@ -2469,11 +2469,12 @@ def main():
                             color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
                             return f'color: {color}'
                         return None
-        
+                
                     for row in st.session_state.my_portfolio:
                         ticker = row.get('หุ้น', '')
                         shares = float(row.get('shares', 0))
                         avg_price = float(row.get('avg_price', 0.0))
+                        sector_val = row.get('Sector', 'General / Unspecified') # ดึง Sector เผื่อไว้ใช้ต่อ
                         
                         try:
                             m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
@@ -2487,6 +2488,7 @@ def main():
                         
                         portfolio_list.append({
                             "หุ้น": ticker,
+                            "Sector": sector_val, # เก็บ Sector ไว้ใน DataFrame ด้วย
                             "จำนวน": shares,
                             "ต้นทุนเฉลี่ย": avg_price,
                             "มูลค่าต้นทุน": cost_value,
@@ -2505,11 +2507,13 @@ def main():
                     col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
                     diff = total_value - total_invest
                     col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
-        
-                    # แสดงตาราง
+                
+                    # แสดงตารางพอร์ตหลัก
                     df_p = pd.DataFrame(portfolio_list)
+                    df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
+                    
                     st.dataframe(
-                        df_p.style.format({
+                        df_display_p.style.format({
                             "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
                             "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
                             "% กำไร/ขาดทุน": "{:.2f}%"
@@ -2522,7 +2526,7 @@ def main():
                     
                     if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                         st.session_state.edit_mode = True
-    
+                
                     # --- ส่วนแสดงกราฟสรุปพอร์ต ---
                     st.divider()
                     
@@ -2532,33 +2536,31 @@ def main():
                     # 1. Pie Chart: มูลค่าตลาด (25%)
                     with col_p1:
                         st.subheader("🥧 มูลค่าตลาด")
-                        fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4) # ปรับ hole เป็น 0.4 ให้โปร่งขึ้น
-                        # แก้ไขในส่วน Pie Chart ทั้ง 2 อันครับ
+                        fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4)
                         fig_pie1.update_traces(
                             textposition='outside', 
                             textinfo='label+percent',
-                            textfont=dict(size=9), # ลดอีกนิด
-                            automargin=True        # หัวใจสำคัญ: สั่งให้ Plotly ขยับพื้นที่เองเพื่อไม่ให้ทับซ้อน
+                            textfont=dict(size=9),
+                            automargin=True
                         )
                         fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
                         st.plotly_chart(fig_pie1, use_container_width=True)
                         st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
-        
+                
                     # 2. Pie Chart: มูลค่าต้นทุน (25%)
                     with col_p2:
                         st.subheader("🥧 มูลค่าต้นทุน")
-                        fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4) # ปรับ hole เป็น 0.4
-                        # แก้ไขในส่วน Pie Chart ทั้ง 2 อันครับ
+                        fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4)
                         fig_pie2.update_traces(
                             textposition='outside', 
                             textinfo='label+percent',
-                            textfont=dict(size=9), # ลดอีกนิด
-                            automargin=True        # หัวใจสำคัญ: สั่งให้ Plotly ขยับพื้นที่เองเพื่อไม่ให้ทับซ้อน
+                            textfont=dict(size=9),
+                            automargin=True
                         )
                         fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
                         st.plotly_chart(fig_pie2, use_container_width=True)
                         st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
-            
+                    
                     # 3. Bar Chart: กำไร/ขาดทุน (50%)
                     with col_p3:
                         st.subheader("📈 กำไร/ขาดทุนรายตัว")
@@ -2569,15 +2571,65 @@ def main():
                             x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
                             marker_color=bar_colors, text=text_labels, textposition='auto'
                         )])
-                        # ปรับ font ของ Bar Chart ให้เล็กลงเล็กน้อยเพื่อไม่ให้ล้นแท่ง
                         fig_bar.update_traces(textfont_size=10)
                         fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
                         st.plotly_chart(fig_bar, use_container_width=True)
                         st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
-        
+                
+                    # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
+                    st.divider()
+                    st.subheader("🥧 การกระจายตัวของพอร์ตตามกลุ่มอุตสาหกรรม (Sector Allocation)")
+                
+                    if not df_p.empty:
+                        # จัดกลุ่มรวมตาม Sector ของหุ้นในพอร์ตปัจจุบัน
+                        df_port_sector = df_p.groupby('Sector', as_index=False).agg({
+                            'มูลค่าตลาด': 'sum',
+                            'หุ้น': lambda x: ', '.join(x.unique())
+                        })
+                        
+                        total_portfolio_value = df_port_sector['มูลค่าตลาด'].sum()
+                        if total_portfolio_value > 0:
+                            df_port_sector['Weight_Pct'] = (df_port_sector['มูลค่าตลาด'] / total_portfolio_value) * 100
+                        else:
+                            df_port_sector['Weight_Pct'] = 0.0
+                            
+                        df_port_sector = df_port_sector.sort_values(by='มูลค่าตลาด', ascending=False)
+                
+                        # 📊 กราฟโดนัทแสดงสัดส่วน Sector
+                        fig_donut = px.pie(
+                            df_port_sector,
+                            names='Sector',
+                            values='มูลค่าตลาด',
+                            hole=0.4,
+                            color_discrete_sequence=px.colors.qualitative.Set3
+                        )
+                        fig_donut.update_traces(
+                            textinfo='percent+label',
+                            hovertemplate='<b>Sector:</b> %{label}<br><b>มูลค่าตลาด:</b> %{value:,.2f} ฿<br><b>สัดส่วน:</b> %{percent}'
+                        )
+                        fig_donut.update_layout(
+                            height=380,
+                            margin=dict(l=10, r=10, t=10, b=10),
+                            showlegend=True
+                        )
+                        st.plotly_chart(fig_donut, use_container_width=True)
+                
+                        # 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่ม
+                        st.markdown("##### 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่มในพอร์ต")
+                        display_port_sector = df_port_sector[['Sector', 'มูลค่าตลาด', 'Weight_Pct', 'หุ้น']].copy()
+                        display_port_sector.columns = ['กลุ่มอุตสาหกรรม (Sector)', 'มูลค่าตลาดรวม (บาท)', 'สัดส่วนพอร์ต (%)', 'รายชื่อหุ้นในกลุ่ม']
+                        
+                        st.dataframe(
+                            display_port_sector.style.format({
+                                'มูลค่าตลาดรวม (บาท)': '{:,.2f}',
+                                'สัดส่วนพอร์ต (%)': '{:.2f} %'
+                            }).set_properties(**{'text-align': 'right'}),
+                            use_container_width=True
+                        )
+                
                 else:
                     st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตโฟลิโอครับ")
-                            
+                    
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
