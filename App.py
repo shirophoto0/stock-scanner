@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
+from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
@@ -2800,7 +2801,7 @@ def main():
                     with st.form("dividend_form", clear_on_submit=True):
                         col1, col2 = st.columns(2)
                         with col1:
-                            div_date = st.date_input("วันที่ได้รับเงินปันผล", value=datetime.date.today())
+                            div_date = st.date_input("วันที่ได้รับเงินปันผล", value=date.today()) # ใช้ date.today() ตรงๆ ได้เลย
                             ticker = st.text_input("ชื่อหุ้น (Ticker)").upper()
                             shares = st.number_input("จำนวนหุ้นที่ได้รับสิทธิ์", min_value=0.0, step=1.0)
                         
