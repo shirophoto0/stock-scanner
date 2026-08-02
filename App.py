@@ -2768,7 +2768,7 @@ def main():
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
                                                                     
             #########################
-            with tab_journal:
+           with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
                 
                 # --- ส่วนการ Upload ไฟล์ ---
@@ -2778,125 +2778,103 @@ def main():
                         if st.button("ยืนยันการนำเข้าข้อมูล"):
                             load_data_from_file(uploaded_file)
                 # --------------------------
+                
+                ################ เรียกการคำนวนนับจำนวนวันถือหุ้น #####################
+                def calculate_journal_stats(df):
+                    df = df[df['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
+                    
+                    # 1. จัดการคอลัมน์และคำนวณวันที่
+                    if 'วันที่ซื้อ' not in df.columns: df['วันที่ซื้อ'] = df['วันที่'] 
+                    if 'วันที่ขาย' not in df.columns: df['วันที่ขาย'] = df['วันที่'] 
+                    
+                    df['วันที่ซื้อ'] = pd.to_datetime(df['วันที่ซื้อ'])
+                    df['วันที่ขาย'] = pd.to_datetime(df['วันที่ขาย'])
+                    df['Holding_Days'] = (df['วันที่ขาย'] - df['วันที่ซื้อ']).dt.days.clip(lower=0)
+                    
+                    # 2. คำนวณเป็น % (Profit / Cost) * 100
+                    df['ROI_Percent'] = (df['กำไร/ขาดทุน (บาท)'] / df['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
+                    
+                    df['Year'] = df['วันที่ขาย'].dt.year
+                    df['Month'] = df['วันที่ขาย'].dt.month
+                    
+                    # 3. สรุปผลเป็น % ตามที่ต้องการ
+                    stats = df.groupby(['Year', 'Month']).agg(
+                        Avg_Profit_Pct=('ROI_Percent', lambda x: x[x>0].mean()),
+                        Avg_Loss_Pct=('ROI_Percent', lambda x: x[x<=0].mean()),
+                        Win_Rate=('ROI_Percent', lambda x: (x>0).mean() * 100),
+                        Trade_Count=('ROI_Percent', 'count'),
+                        Max_Profit_Pct=('ROI_Percent', 'max'),
+                        Max_Loss_Pct=('ROI_Percent', 'min'),
+                        Avg_Days_Win=('Holding_Days', lambda x: x[df['ROI_Percent']>0].mean()),
+                        Avg_Days_Loss=('Holding_Days', lambda x: x[df['ROI_Percent']<=0].mean())
+                    )
+                    stats = stats.round({'Avg_Days_Win': 0, 'Avg_Days_Loss': 0})
+                    stats = stats.round(2)
+                    return stats
+                ########################################################################
             
-            ################# เรียกการคำนวนนับจำนวนวันถือหุ้น #####################
-            def calculate_journal_stats(df):
-                df = df[df['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
-                
-                # 1. จัดการคอลัมน์และคำนวณวันที่
-                if 'วันที่ซื้อ' not in df.columns: df['วันที่ซื้อ'] = df['วันที่'] 
-                if 'วันที่ขาย' not in df.columns: df['วันที่ขาย'] = df['วันที่'] 
-                
-                df['วันที่ซื้อ'] = pd.to_datetime(df['วันที่ซื้อ'])
-                df['วันที่ขาย'] = pd.to_datetime(df['วันที่ขาย'])
-                df['Holding_Days'] = (df['วันที่ขาย'] - df['วันที่ซื้อ']).dt.days.clip(lower=0)
-                
-                # 2. คำนวณเป็น % (Profit / Cost) * 100
-                # ใช้ .replace(0, np.nan) เพื่อกัน Error หารด้วยศูนย์
-                df['ROI_Percent'] = (df['กำไร/ขาดทุน (บาท)'] / df['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
-                
-                df['Year'] = df['วันที่ขาย'].dt.year
-                df['Month'] = df['วันที่ขาย'].dt.month
-                
-                # 3. สรุปผลเป็น % ตามที่พี่อ้ำต้องการ
-                stats = df.groupby(['Year', 'Month']).agg(
-                    Avg_Profit_Pct=('ROI_Percent', lambda x: x[x>0].mean()),
-                    Avg_Loss_Pct=('ROI_Percent', lambda x: x[x<=0].mean()),
-                    Win_Rate=('ROI_Percent', lambda x: (x>0).mean() * 100),
-                    Trade_Count=('ROI_Percent', 'count'),
-                    Max_Profit_Pct=('ROI_Percent', 'max'),
-                    Max_Loss_Pct=('ROI_Percent', 'min'),
-                    Avg_Days_Win=('Holding_Days', lambda x: x[df['ROI_Percent']>0].mean()),
-                    Avg_Days_Loss=('Holding_Days', lambda x: x[df['ROI_Percent']<=0].mean())
-                )
-                # แยกการปัดเศษให้คอลัมน์ % เป็น 2 ตำแหน่ง และคอลัมน์จำนวนวันเป็นจำนวนเต็ม
-                stats = stats.round({'Avg_Days_Win': 0, 'Avg_Days_Loss': 0})
-                stats = stats.round(2) # ที่เหลือปัดเป็น 2 ตำแหน่ง
-                return stats
-            ########################################################################
-            ### แสดงข้อมูลสถิติ รายเดือน รายปี ####
-            if st.session_state.journal_data:
+                ### แสดงข้อมูลสถิติ รายเดือน รายปี ####
+                if st.session_state.journal_data:
                     df_journal = pd.DataFrame(st.session_state.journal_data)
+                    
                     # --- เริ่มต้น Data Migration ---
-                    # 1. เช็คว่ามีคอลัมน์สำคัญไหม ถ้าไม่มีให้สร้าง
                     cols_to_check = ['วันที่ซื้อ', 'วันที่ขาย']
                     for col in cols_to_check:
                         if col not in df_journal.columns:
-                            # ถ้าไม่มี ให้ก๊อปปี้ค่าจาก 'วันที่' (ที่เป็นค่าตั้งต้น) มาใส่
                             df_journal[col] = df_journal['วันที่']
                     
-                    # 2. แปลงทุกอย่างเป็น datetime เพื่อความปลอดภัยในการคำนวณ
                     df_journal['วันที่ซื้อ'] = pd.to_datetime(df_journal['วันที่ซื้อ'], errors='coerce')
                     df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                    
-                    # 3. อัปเดตกลับไปที่ session_state เพื่อให้บันทึกถาวรในรอบถัดไป
                     st.session_state.journal_data = df_journal.to_dict('records')
                     # --- จบการ Data Migration ---
                 
                     # 2. ส่วนสรุป Metric 3 ค่าด้านบน (อิงจากช่วงเวลาที่เลือก)
                     with st.expander("📊 สถิติการเทรดรายเดือน", expanded=False):
-                        # 1. ส่วนคำนวณสถิติ
                         stats_df = calculate_journal_stats(df_journal)
                         
-                        # 2. ส่วนสรุป Metric 3 ค่าด้านบน (อิงจากช่วงเวลาที่เลือก)
                         st.markdown("##### 🎯 สถิติการเทรดจริง & การปรับจุดคัทลอส (RR 2:1)")
                         period = st.radio("ดูค่าเฉลี่ยย้อนหลัง:", ["3 เดือน", "6 เดือน", "1 ปี"], horizontal=True, key="stats_period")
                         
-                        # กรองข้อมูลตามช่วงเวลา
                         months_map = {"3 เดือน": 3, "6 เดือน": 6, "1 ปี": 12}
                         cutoff_date = pd.Timestamp.now() - pd.DateOffset(months=months_map[period])
                         
-                        # --- ส่วนแก้ไข: เพิ่มบรรทัดนี้ก่อนเรียกใช้ 'วันที่ขาย' ---
                         if 'วันที่ขาย' not in df_journal.columns:
-                            df_journal['วันที่ขาย'] = df_journal['วันที่'] # ถ้าไม่มีให้ใช้ 'วันที่' เดิมไปก่อน
+                            df_journal['วันที่ขาย'] = df_journal['วันที่']
                         
-                        # แปลงให้เป็น datetime ทุกครั้งก่อนใช้งาน
                         df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                        # ---------------------------------------------------
                         
                         df_period = df_journal[(df_journal['วันที่ขาย'] >= cutoff_date) & 
-                                                (df_journal['สถานะ'] == 'Closed (ขายแล้ว)')].copy()
+                                               (df_journal['สถานะ'] == 'Closed (ขายแล้ว)')].copy()
                         
                         if not df_period.empty:
-                            # 1. ตรวจสอบและสร้างคอลัมน์วันที่ (ใช้ df_period)
                             if 'วันที่ซื้อ' not in df_period.columns:
                                 df_period['วันที่ซื้อ'] = df_period['วันที่']
                             if 'วันที่ขาย' not in df_period.columns:
                                 df_period['วันที่ขาย'] = df_period['วันที่']
                                 
-                            # 2. แปลงเป็น datetime เสมอ
                             df_period['วันที่ซื้อ'] = pd.to_datetime(df_period['วันที่ซื้อ'], errors='coerce')
                             df_period['วันที่ขาย'] = pd.to_datetime(df_period['วันที่ขาย'], errors='coerce')
-                            
-                            # 3. คำนวณ Holding Days (ใช้ .clip เพื่อป้องกันค่าติดลบกรณีเลือกวันพลาด)
                             df_period['Holding_Days'] = (df_period['วันที่ขาย'] - df_period['วันที่ซื้อ']).dt.days.clip(lower=0)
                             
-                            # 4. แปลงตัวเลขสำหรับคำนวณ Metric (ใช้ชื่อคอลัมน์จริง)
                             col_profit_loss = 'กำไร/ขาดทุน (บาท)'
                             col_cost = 'ต้นทุน (บาท)'
                             
                             df_period[col_profit_loss] = pd.to_numeric(df_period[col_profit_loss], errors='coerce')
                             df_period[col_cost] = pd.to_numeric(df_period[col_cost], errors='coerce')
                             
-                            # คำนวณค่าจริง
                             w_rate = (df_period[col_profit_loss] > 0).mean() * 100
                             
-                            # --- ส่วนแก้ไขการคำนวณ Avg Profit / Avg Loss เพื่อป้องกันค่าเพี้ยน (Outlier) ---
                             profit_mask = (df_period[col_profit_loss] > 0) & (df_period[col_cost] > 0)
                             profit_series = (df_period.loc[profit_mask, col_profit_loss] / df_period.loc[profit_mask, col_cost]) * 100
                             avg_profit = profit_series.clip(upper=500).mean() if not profit_series.empty else 0
-            
+                
                             loss_mask = (df_period[col_profit_loss] <= 0) & (df_period[col_cost] > 0)
                             loss_series = (df_period.loc[loss_mask, col_profit_loss] / df_period.loc[loss_mask, col_cost]) * 100
-                            
-                            # กรองค่าที่ติดลบเกิน -100% ออก เพื่อไม่ให้ค่าเฉลี่ยพังกรณีต้นทุนต่ำผิดปกติ
                             loss_series = loss_series[loss_series >= -100] 
                             avg_loss = loss_series.mean() if not loss_series.empty else 0
-                            # --------------------------------------------------------------------------
                             
                             loss_adj = (avg_profit / 2) * -1
                             
-                            # แสดง Metric
                             c1, c2, c3 = st.columns(3)
                             c1.metric("Win Rate", f"{w_rate:.1f} %")
                             c2.metric("Avg P/L", f"{avg_profit:.1f}% / {avg_loss:.1f}%")
@@ -2906,76 +2884,66 @@ def main():
                         
                         st.markdown("---")
                         
-                        # 3. ส่วนตารางสถิติรายเดือน
                         if not stats_df.empty:
                             years = sorted(stats_df.index.get_level_values('Year').unique())
                             selected_year = st.selectbox("เลือกปีที่ต้องการดูสถิติ:", years, key="stats_year")
                             
                             year_data = stats_df.loc[selected_year]
                             
-                            # ใส่ Style ให้สวยงาม
                             styled_df = year_data.style.format({
-                            'Avg_Profit_Pct': '{:.2f} %',
-                            'Avg_Loss_Pct': '{:.2f} %',
-                            'Win_Rate': '{:.2f} %',
-                            'Max_Profit_Pct': '{:.2f} %',
-                            'Max_Loss_Pct': '{:.2f} %',
-                            'Avg_Days_Win': '{:.0f} วัน',     # แก้ตรงนี้: .0f คือทศนิยม 0 ตำแหน่ง
-                            'Avg_Days_Loss': '{:.0f} วัน'    # แก้ตรงนี้: .0f คือทศนิยม 0 ตำแหน่ง
-                        })
-                        st.table(styled_df)
-        
-             
+                                'Avg_Profit_Pct': '{:.2f} %',
+                                'Avg_Loss_Pct': '{:.2f} %',
+                                'Win_Rate': '{:.2f} %',
+                                'Max_Profit_Pct': '{:.2f} %',
+                                'Max_Loss_Pct': '{:.2f} %',
+                                'Avg_Days_Win': '{:.0f} วัน', 
+                                'Avg_Days_Loss': '{:.0f} วัน'
+                            })
+                            st.table(styled_df)
+                
                     ########################################################################
                     # 3. ตารางประวัติ 
-                    if st.session_state.journal_data:
-                        df_journal = pd.DataFrame(st.session_state.journal_data)
-                        df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])             
-                        # แก้ไข Data Type วันที่ป้องกัน Error
-                        df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])
+                    df_journal = pd.DataFrame(st.session_state.journal_data)
+                    df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])            
                     
-                        # เรียงลำดับ: Open ขึ้นก่อน, ตามด้วยวันที่ใหม่ล่าสุด
-                        df_journal['temp_sort'] = df_journal['สถานะ'].apply(lambda x: 0 if "Open" in x else 1)
-                        df_journal = df_journal.sort_values(by=['temp_sort', 'วันที่'], ascending=[True, False])
-                        df_journal = df_journal.drop(columns=['temp_sort'])
-                    
-                        with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=False):
-                            # แบ่งหน้า (Pagination)
-                            items_per_page = 50
-                            total_pages = (len(df_journal) - 1) // items_per_page + 1
-                            page = st.number_input("หน้า:", min_value=1, max_value=total_pages, value=1)
+                    df_journal['temp_sort'] = df_journal['สถานะ'].apply(lambda x: 0 if "Open" in x else 1)
+                    df_journal = df_journal.sort_values(by=['temp_sort', 'วันที่'], ascending=[True, False])
+                    df_journal = df_journal.drop(columns=['temp_sort'])
+                
+                    with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=False):
+                        items_per_page = 50
+                        total_pages = (len(df_journal) - 1) // items_per_page + 1
+                        page = st.number_input("หน้า:", min_value=1, max_value=total_pages, value=1, key="journal_page")
+                        
+                        start_idx = (page - 1) * items_per_page
+                        df_display = df_journal.iloc[start_idx : start_idx + items_per_page]
+                        
+                        edited_journal = st.data_editor(df_display, use_container_width=True, key="journal_editor")
+                        
+                        if st.button("💾 อัปเดตตารางหน้านี้", key="save_journal_page"):
+                            edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] = pd.to_numeric(edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'], errors='coerce')
+                            edited_journal['จำนวนหุ้นที่ซื้อ'] = pd.to_numeric(edited_journal['จำนวนหุ้นที่ซื้อ'], errors='coerce')
+                            edited_journal['ต้นทุน (บาท)'] = edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] * edited_journal['จำนวนหุ้นที่ซื้อ']
                             
-                            start_idx = (page - 1) * items_per_page
-                            df_display = df_journal.iloc[start_idx : start_idx + items_per_page]
+                            date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
+                            for col in date_cols:
+                                if col in edited_journal.columns:
+                                    edited_journal[col] = pd.to_datetime(edited_journal[col], errors='coerce').dt.strftime('%Y-%m-%d')
                             
-                            # แก้ไขข้อมูลผ่านตาราง
-                            edited_journal = st.data_editor(df_display, use_container_width=True)
-                            
-                            if st.button("💾 อัปเดตตารางหน้านี้"):
-                                # 1. บังคับแปลงตัวเลขเพื่อคำนวณต้นทุนใหม่
-                                edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] = pd.to_numeric(edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'], errors='coerce')
-                                edited_journal['จำนวนหุ้นที่ซื้อ'] = pd.to_numeric(edited_journal['จำนวนหุ้นที่ซื้อ'], errors='coerce')
-                                edited_journal['ต้นทุน (บาท)'] = edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] * edited_journal['จำนวนหุ้นที่ซื้อ']
-                                
-                                # 2. บังคับแปลงวันที่ให้เป็น String รูปแบบ YYYY-MM-DD เพื่อป้องกัน Error ตอนบันทึก JSON
-                                date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
-                                for col in date_cols:
-                                    if col in edited_journal.columns:
-                                        # ใช้ errors='coerce' เพื่อให้ค่าที่ไม่ใช่วันที่กลายเป็น NaT และแปลงเป็น String
-                                        edited_journal[col] = pd.to_datetime(edited_journal[col], errors='coerce').dt.strftime('%Y-%m-%d')
-                                
-                                # 3. อัปเดตลง session_state และบันทึก
-                                st.session_state.journal_data = edited_journal.to_dict('records')
-                                save_journal()
-                                st.success("บันทึกข้อมูลเรียบร้อยแล้วครับ!")
-                            
-                            # ปุ่ม Export
-                            csv = df_journal.to_csv(index=False).encode('utf-8-sig')
-                            st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv")
+                            st.session_state.journal_data = edited_journal.to_dict('records')
+                            save_journal()
+                            st.success("บันทึกข้อมูลเรียบร้อยแล้วครับ!")
+                        
+                        csv = df_journal.to_csv(index=False).encode('utf-8-sig')
+                        st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv", key="export_journal_csv")
+                else:
+                    st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
             
-            ############################        
+            # ==========================================
+            # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
+            # ==========================================
             with tab_risk:
-                    st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
+                st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
 
                     # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
                     cash_balance = load_total_cash_balance()
