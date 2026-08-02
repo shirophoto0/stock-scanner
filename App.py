@@ -2768,7 +2768,7 @@ def main():
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
                                                                     
             #########################
-           with tab_journal:
+            with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
                 
                 # --- ส่วนการ Upload ไฟล์ ---
