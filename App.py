@@ -1651,7 +1651,7 @@ def main():
                         
                         col1, col2, col3, col4, col5 = st.columns(5)
                         # กำหนดยอดกำไรในอดีตที่ต้องการบวกเพิ่ม
-                        historical_profit = 85786.95
+                        historical_profit = 77420.5
                         total_net_profit = df_filtered['กำไร/ขาดทุน (บาท)'].sum() + historical_profit
                         
                         # แสดง Metric กำไร/ขาดทุนสุทธิ
@@ -1788,7 +1788,7 @@ def main():
                                 # ==========================================
                                 # ส่วนที่ 2: สำหรับกราฟเส้น (รองรับหลายปี + ตัวเลือกช่วงเวลา + Dynamic Aggregation + Zoom)
                                 # ==========================================
-                                initial_past_profit = 85786.95 # กำไรตั้งต้น
+                                initial_past_profit = 77420.5 # กำไรตั้งต้น
                                 
                                 st.markdown("##### 📈 กราฟเส้นกำไรสะสมพอร์ตระยะยาว")
 
