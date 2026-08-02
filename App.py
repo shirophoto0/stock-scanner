@@ -2671,9 +2671,10 @@ def main():
                                 'มูลค่าตลาดรวม (บาท)': '{:,.2f}',
                                 'สัดส่วนตลาด (%)': '{:.2f} %'
                             }).set_properties(**{'text-align': 'right'}),
-                            use_container_width=True
+                            use_container_width=True,
+                            hide_index=True  # เพิ่มคำสั่งนี้เพื่อซ่อนคอลัมน์ Index ที่เกินมาครับ
                         )
-                
+                                
                     else:
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
                                                                     
