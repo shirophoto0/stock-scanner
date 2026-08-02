@@ -2390,74 +2390,74 @@ def main():
                         else:
                             st.info("ไม่มีข้อมูลย้อนหลังในช่วงเวลานี้")
                         
-                    st.markdown("---")
-                    
-                    # 3. ส่วนตารางสถิติรายเดือน
-                    if not stats_df.empty:
-                        years = sorted(stats_df.index.get_level_values('Year').unique())
-                        selected_year = st.selectbox("เลือกปีที่ต้องการดูสถิติ:", years, key="stats_year")
+                        st.markdown("---")
                         
-                        year_data = stats_df.loc[selected_year]
-                        
-                        # ใส่ Style ให้สวยงาม
-                        styled_df = year_data.style.format({
-                        'Avg_Profit_Pct': '{:.2f} %',
-                        'Avg_Loss_Pct': '{:.2f} %',
-                        'Win_Rate': '{:.2f} %',
-                        'Max_Profit_Pct': '{:.2f} %',
-                        'Max_Loss_Pct': '{:.2f} %',
-                        'Avg_Days_Win': '{:.0f} วัน',     # แก้ตรงนี้: .0f คือทศนิยม 0 ตำแหน่ง
-                        'Avg_Days_Loss': '{:.0f} วัน'    # แก้ตรงนี้: .0f คือทศนิยม 0 ตำแหน่ง
-                    })
-                    st.table(styled_df)
+                        # 3. ส่วนตารางสถิติรายเดือน
+                        if not stats_df.empty:
+                            years = sorted(stats_df.index.get_level_values('Year').unique())
+                            selected_year = st.selectbox("เลือกปีที่ต้องการดูสถิติ:", years, key="stats_year")
+                            
+                            year_data = stats_df.loc[selected_year]
+                            
+                            # ใส่ Style ให้สวยงาม
+                            styled_df = year_data.style.format({
+                            'Avg_Profit_Pct': '{:.2f} %',
+                            'Avg_Loss_Pct': '{:.2f} %',
+                            'Win_Rate': '{:.2f} %',
+                            'Max_Profit_Pct': '{:.2f} %',
+                            'Max_Loss_Pct': '{:.2f} %',
+                            'Avg_Days_Win': '{:.0f} วัน',     # แก้ตรงนี้: .0f คือทศนิยม 0 ตำแหน่ง
+                            'Avg_Days_Loss': '{:.0f} วัน'    # แก้ตรงนี้: .0f คือทศนิยม 0 ตำแหน่ง
+                        })
+                        st.table(styled_df)
         
              
-            ########################################################################
-            # 3. ตารางประวัติ 
-            if st.session_state.journal_data:
-                df_journal = pd.DataFrame(st.session_state.journal_data)
-                df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])             
-                # แก้ไข Data Type วันที่ป้องกัน Error
-                df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])
-            
-                # เรียงลำดับ: Open ขึ้นก่อน, ตามด้วยวันที่ใหม่ล่าสุด
-                df_journal['temp_sort'] = df_journal['สถานะ'].apply(lambda x: 0 if "Open" in x else 1)
-                df_journal = df_journal.sort_values(by=['temp_sort', 'วันที่'], ascending=[True, False])
-                df_journal = df_journal.drop(columns=['temp_sort'])
-            
-                with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=False):
-                    # แบ่งหน้า (Pagination)
-                    items_per_page = 50
-                    total_pages = (len(df_journal) - 1) // items_per_page + 1
-                    page = st.number_input("หน้า:", min_value=1, max_value=total_pages, value=1)
+                    ########################################################################
+                    # 3. ตารางประวัติ 
+                    if st.session_state.journal_data:
+                        df_journal = pd.DataFrame(st.session_state.journal_data)
+                        df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])             
+                        # แก้ไข Data Type วันที่ป้องกัน Error
+                        df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])
                     
-                    start_idx = (page - 1) * items_per_page
-                    df_display = df_journal.iloc[start_idx : start_idx + items_per_page]
+                        # เรียงลำดับ: Open ขึ้นก่อน, ตามด้วยวันที่ใหม่ล่าสุด
+                        df_journal['temp_sort'] = df_journal['สถานะ'].apply(lambda x: 0 if "Open" in x else 1)
+                        df_journal = df_journal.sort_values(by=['temp_sort', 'วันที่'], ascending=[True, False])
+                        df_journal = df_journal.drop(columns=['temp_sort'])
                     
-                    # แก้ไขข้อมูลผ่านตาราง
-                    edited_journal = st.data_editor(df_display, use_container_width=True)
-                    
-                    if st.button("💾 อัปเดตตารางหน้านี้"):
-                        # 1. บังคับแปลงตัวเลขเพื่อคำนวณต้นทุนใหม่
-                        edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] = pd.to_numeric(edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'], errors='coerce')
-                        edited_journal['จำนวนหุ้นที่ซื้อ'] = pd.to_numeric(edited_journal['จำนวนหุ้นที่ซื้อ'], errors='coerce')
-                        edited_journal['ต้นทุน (บาท)'] = edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] * edited_journal['จำนวนหุ้นที่ซื้อ']
-                        
-                        # 2. บังคับแปลงวันที่ให้เป็น String รูปแบบ YYYY-MM-DD เพื่อป้องกัน Error ตอนบันทึก JSON
-                        date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
-                        for col in date_cols:
-                            if col in edited_journal.columns:
-                                # ใช้ errors='coerce' เพื่อให้ค่าที่ไม่ใช่วันที่กลายเป็น NaT และแปลงเป็น String
-                                edited_journal[col] = pd.to_datetime(edited_journal[col], errors='coerce').dt.strftime('%Y-%m-%d')
-                        
-                        # 3. อัปเดตลง session_state และบันทึก
-                        st.session_state.journal_data = edited_journal.to_dict('records')
-                        save_journal()
-                        st.success("บันทึกข้อมูลเรียบร้อยแล้วครับ!")
-                    
-                    # ปุ่ม Export
-                    csv = df_journal.to_csv(index=False).encode('utf-8-sig')
-                    st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv")
+                        with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=False):
+                            # แบ่งหน้า (Pagination)
+                            items_per_page = 50
+                            total_pages = (len(df_journal) - 1) // items_per_page + 1
+                            page = st.number_input("หน้า:", min_value=1, max_value=total_pages, value=1)
+                            
+                            start_idx = (page - 1) * items_per_page
+                            df_display = df_journal.iloc[start_idx : start_idx + items_per_page]
+                            
+                            # แก้ไขข้อมูลผ่านตาราง
+                            edited_journal = st.data_editor(df_display, use_container_width=True)
+                            
+                            if st.button("💾 อัปเดตตารางหน้านี้"):
+                                # 1. บังคับแปลงตัวเลขเพื่อคำนวณต้นทุนใหม่
+                                edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] = pd.to_numeric(edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'], errors='coerce')
+                                edited_journal['จำนวนหุ้นที่ซื้อ'] = pd.to_numeric(edited_journal['จำนวนหุ้นที่ซื้อ'], errors='coerce')
+                                edited_journal['ต้นทุน (บาท)'] = edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] * edited_journal['จำนวนหุ้นที่ซื้อ']
+                                
+                                # 2. บังคับแปลงวันที่ให้เป็น String รูปแบบ YYYY-MM-DD เพื่อป้องกัน Error ตอนบันทึก JSON
+                                date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
+                                for col in date_cols:
+                                    if col in edited_journal.columns:
+                                        # ใช้ errors='coerce' เพื่อให้ค่าที่ไม่ใช่วันที่กลายเป็น NaT และแปลงเป็น String
+                                        edited_journal[col] = pd.to_datetime(edited_journal[col], errors='coerce').dt.strftime('%Y-%m-%d')
+                                
+                                # 3. อัปเดตลง session_state และบันทึก
+                                st.session_state.journal_data = edited_journal.to_dict('records')
+                                save_journal()
+                                st.success("บันทึกข้อมูลเรียบร้อยแล้วครับ!")
+                            
+                            # ปุ่ม Export
+                            csv = df_journal.to_csv(index=False).encode('utf-8-sig')
+                            st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv")
             
             ############################        
             with tab_risk:
