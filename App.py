@@ -2945,391 +2945,391 @@ def main():
             with tab_risk:
                 st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
 
-                    # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
-                    cash_balance = load_total_cash_balance()
-                    market_value = get_total_market_value()
-                    total_equity = cash_balance + market_value
-                    
-                    st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
-                    col_a, col_b, col_c = st.columns(3)
-                    col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
-                    col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
-                    col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
-                    
-                    st.divider()
-                    
-                    # 2. ส่วนการคำนวณ
-                    r_col1, r_col2 = st.columns([1, 1])
-
-                    with r_col1:
-                        total_cap = st.number_input(
-                            "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
-                            min_value=1000, 
-                            value=int(total_equity), # นี่คือค่าเริ่มต้นที่ดึงมาจากพอร์ตจริง
-                            step=1000,
-                            help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
-                        )
-                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
-                    
-                    with r_col2:
-                        latest_p = float(latest_price_single)
-                        
-                        sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
-                            f"เส้น EMA 10 ({chart_combined['EMA10'].iloc[-1]:.2f} บาท)",
-                            f"เส้น EMA 20 ({chart_combined['EMA20'].iloc[-1]:.2f} บาท)",
-                            "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
-                            "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
-                        ])
-                        
-                        # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
-                        if "EMA 10" in sl_type:
-                            sl_price = float(chart_combined['EMA10'].iloc[-1])
-                        elif "EMA 20" in sl_type:
-                            sl_price = float(chart_combined['EMA20'].iloc[-1])
-                        elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                            fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
-                            sl_price = latest_p * (1 - (fixed_sl_pct / 100))
-                        else: # Manual Price
-                            sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93, step=0.25)
-                    
-                    # 3. คำนวณผลลัพธ์
-                    max_risk_money = total_cap * (risk_pct / 100)
-                    risk_per_share = latest_p - sl_price
-                    
-                    # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
-                    if risk_per_share <= 0:
-                        st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
-                    else:
-                        shares_to_buy = int(max_risk_money / risk_per_share)
-                        total_buy_value = shares_to_buy * latest_p
-                        
-                        st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
-                        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-                        res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
-                        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
-                        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
-                        res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
-                                            
-            #######################          
-                    st.markdown("---")
-
-                    st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
-
-                    # 1. คำนวณ Exposure (เงินในหุ้น / เงินทุนรวมทั้งหมด)
-                    # สมมติว่า total_market_val คือมูลค่าหุ้นปัจจุบัน และ st.session_state.cash_balance คือเงินสด
-                    total_market_val = calculate_total_portfolio_value() 
-                    current_cash = st.session_state.cash_balance
-                    total_equity = total_market_val + current_cash
-                    
-                    exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
-                    
-                    # 2. คำนวณ Expectancy
-                    # WinRate, AverageWin, AverageLoss ต้องคำนวณจาก df_filtered
-                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
-                    
-                    win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
-                    avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
-                    avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
-                    loss_rate = 1 - win_rate
-                    
-                    expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
-                    
-                    # 3. แสดงผลด้วย st.metric
-                    col_r1, col_r2 = st.columns(2)
-                    col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
-                    col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
-
+                # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
+                cash_balance = load_total_cash_balance()
+                market_value = get_total_market_value()
+                total_equity = cash_balance + market_value
                 
-                    # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
-                    def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
-                        fixed_capital = initial_capital
-                        fixed_balance = initial_capital
-                        comp_balance = initial_capital
-                        
-                        for i in range(trades):
-                            win = np.random.rand() < win_rate
-                            # คำนวณแบบไม่ทบต้น
-                            fixed_profit = (profit_pct * fixed_capital) if win else (-loss_pct * fixed_capital)
-                            fixed_balance += fixed_profit
-                            # คำนวณแบบทบต้น
-                            comp_profit = (profit_pct * comp_balance) if win else (-loss_pct * comp_balance)
-                            comp_balance += comp_profit
-                            
-                        return fixed_balance, comp_balance
-                    
-                    def show_strategy_analysis():
-                        st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
-                        initial_cap = 100000
-                        loss_pct = 0.08
-                        trades = 30
-                        win_rates = [0.4, 0.5, 0.6]
-                        profit_pcts = [0.10, 0.12, 0.14, 0.16]
-                    
-                        data = []
-                        for wr in win_rates:
-                            for pr in profit_pcts:
-                                wins = trades * wr
-                                losses = trades * (1 - wr)
-                                fixed_profit = (wins * pr * initial_cap) - (losses * loss_pct * initial_cap)
-                                
-                                comp_cap = initial_cap
-                                for i in range(trades):
-                                    if np.random.rand() < wr: comp_cap *= (1 + pr)
-                                    else: comp_cap *= (1 - loss_pct)
-                                
-                                data.append({
-                                    "Win Rate": f"{int(wr*100)}%",
-                                    "Profit %": f"{int(pr*100)}%",
-                                    "ไม่ทบต้น (กำไร)": f"{fixed_profit:,.0f}",
-                                    "ทบต้น (กำไร)": f"{comp_cap - initial_cap:,.0f}",
-                                    "กลยุทธ์ที่แนะนำ": "ทบต้น" if comp_cap > (initial_cap + fixed_profit) else "ไม่ทบต้น"
-                                })
-                        st.table(pd.DataFrame(data))
-                    
-                    # --- ส่วนแสดงผลความเสี่ยง ทบต้น VS ไม่ทบต้น ---
-                    st.markdown("---")
-                    
-                    st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
+                st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
+                col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
+                col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
                 
-                    # เพิ่มส่วนเลือกช่วงเวลา
-                    time_period = st.radio(
-                        "เลือกช่วงเวลาที่ต้องการวิเคราะห์:",
-                        ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "Overall"],
-                        horizontal=True
+                st.divider()
+                
+                # 2. ส่วนการคำนวณ
+                r_col1, r_col2 = st.columns([1, 1])
+
+                with r_col1:
+                    total_cap = st.number_input(
+                        "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
+                        min_value=1000, 
+                        value=int(total_equity), # นี่คือค่าเริ่มต้นที่ดึงมาจากพอร์ตจริง
+                        step=1000,
+                        help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
                     )
-                    
-                    if "journal_data" in st.session_state and st.session_state.journal_data:
-                        df_journal = pd.DataFrame(st.session_state.journal_data)
-                        # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime
-                        df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                        
-                        # คำนวณวันย้อนหลังตามช่วงเวลา
-                        today = pd.Timestamp.now()
-                        if time_period == "1 เดือน": filter_date = today - pd.Timedelta(days=30)
-                        elif time_period == "3 เดือน": filter_date = today - pd.Timedelta(days=90)
-                        elif time_period == "6 เดือน": filter_date = today - pd.Timedelta(days=180)
-                        elif time_period == "1 ปี": filter_date = today - pd.Timedelta(days=365)
-                        else: filter_date = pd.Timestamp('1900-01-01') # Overall
-                        
-                        # กรองข้อมูล
-                        df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date].copy()
-                        
-                        if not df_filtered.empty:
-                            # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
-                            # คำนวณ ROI% เองโดยตรงจาก df_filtered
-                            df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
-                            
-                            total_trades = len(df_filtered)
-                            win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
-                            loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
-                            
-                            win_rate_val = (len(win_trades) / total_trades) * 100
-                            avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
-                            avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
-                            rr_ratio = (avg_profit_val / avg_loss_val) if avg_loss_val != 0 else 0
-                            
-                            # แสดงผล
-                            col1, col2, col3 = st.columns(3)
-                            col1.metric("Win Rate", f"{win_rate_val:.1f}%")
-                            col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
-                            col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
-                            
-                            st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
-                        else:
-                            st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
-                            
-                    st.divider()
+                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
                 
-                    # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
-                    with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-                        # 1. ดึงข้อมูลจาก df_period มาคำนวณแบบสดๆ ตรงนี้เลย เพื่อความชัวร์ (ไม่ให้ไปดึงตัวแปรเก่าข้างนอกมาปน)
-                        if 'df_period' in locals() and not df_period.empty:
-                            col_pl_sim = 'กำไร/ขาดทุน (บาท)'
-                            col_cost_sim = 'ต้นทุน (บาท)'
-                            
-                            # คำนวณ Win Rate สดๆ
-                            wr_val = (df_period[col_pl_sim] > 0).mean() * 100
-                            
-                            # คำนวณ Avg Profit สดๆ
-                            p_mask = (df_period[col_pl_sim] > 0) & (df_period[col_cost_sim] > 0)
-                            p_series = (df_period.loc[p_mask, col_pl_sim] / df_period.loc[p_mask, col_cost_sim]) * 100
-                            pr_val = p_series.clip(upper=500).mean() if not p_series.empty else 10.0 # ค่าสำรองถ้าไม่มีข้อมูล
-                            
-                            # คำนวณ Avg Loss สดๆ (และบังคับให้เป็นบวกทันทีด้วย abs)
-                            l_mask = (df_period[col_pl_sim] <= 0) & (df_period[col_cost_sim] > 0)
-                            l_series = (df_period.loc[l_mask, col_pl_sim] / df_period.loc[l_mask, col_cost_sim]) * 100
-                            l_series = l_series[l_series >= -100] # กรองค่าเพี้ยน
-                            ls_val = abs(l_series.mean()) if not l_series.empty else 5.0 # ค่าสำรองถ้าไม่มีข้อมูล
-                        else:
-                            # ค่า Default เผื่อกรณีไม่มีข้อมูลในช่วงเวลานั้น
-                            wr_val, pr_val, ls_val = 50.0, 10.0, 5.0
+                with r_col2:
+                    latest_p = float(latest_price_single)
                     
-                        act_wr = wr_val / 100.0
-                        act_profit = pr_val / 100.0
-                        act_loss = ls_val / 100.0  # ตอนนี้ ls_val จะเป็นค่าบวกปกติ (เช่น 7.49%) หาร 100 จะได้ 0.0749
+                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
+                        f"เส้น EMA 10 ({chart_combined['EMA10'].iloc[-1]:.2f} บาท)",
+                        f"เส้น EMA 20 ({chart_combined['EMA20'].iloc[-1]:.2f} บาท)",
+                        "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
+                        "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
+                    ])
+                    
+                    # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
+                    if "EMA 10" in sl_type:
+                        sl_price = float(chart_combined['EMA10'].iloc[-1])
+                    elif "EMA 20" in sl_type:
+                        sl_price = float(chart_combined['EMA20'].iloc[-1])
+                    elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
+                        fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
+                        sl_price = latest_p * (1 - (fixed_sl_pct / 100))
+                    else: # Manual Price
+                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93, step=0.25)
+                
+                # 3. คำนวณผลลัพธ์
+                max_risk_money = total_cap * (risk_pct / 100)
+                risk_per_share = latest_p - sl_price
+                
+                # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
+                if risk_per_share <= 0:
+                    st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
+                else:
+                    shares_to_buy = int(max_risk_money / risk_per_share)
+                    total_buy_value = shares_to_buy * latest_p
+                    
+                    st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
+                    res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+                    res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
+                    res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
+                    res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
+                    res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
+                                        
+        #######################          
+                st.markdown("---")
+
+                st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
+
+                # 1. คำนวณ Exposure (เงินในหุ้น / เงินทุนรวมทั้งหมด)
+                # สมมติว่า total_market_val คือมูลค่าหุ้นปัจจุบัน และ st.session_state.cash_balance คือเงินสด
+                total_market_val = calculate_total_portfolio_value() 
+                current_cash = st.session_state.cash_balance
+                total_equity = total_market_val + current_cash
+                
+                exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
+                
+                # 2. คำนวณ Expectancy
+                # WinRate, AverageWin, AverageLoss ต้องคำนวณจาก df_filtered
+                wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                
+                win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
+                avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
+                avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
+                loss_rate = 1 - win_rate
+                
+                expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
+                
+                # 3. แสดงผลด้วย st.metric
+                col_r1, col_r2 = st.columns(2)
+                col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
+                col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
+
+            
+                # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
+                def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
+                    fixed_capital = initial_capital
+                    fixed_balance = initial_capital
+                    comp_balance = initial_capital
+                    
+                    for i in range(trades):
+                        win = np.random.rand() < win_rate
+                        # คำนวณแบบไม่ทบต้น
+                        fixed_profit = (profit_pct * fixed_capital) if win else (-loss_pct * fixed_capital)
+                        fixed_balance += fixed_profit
+                        # คำนวณแบบทบต้น
+                        comp_profit = (profit_pct * comp_balance) if win else (-loss_pct * comp_balance)
+                        comp_balance += comp_profit
                         
-                        # 2. สร้าง Range สำหรับจำลองตาราง
-                        wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
-                        pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
-                        
-                        sim_data = []
-                        for wr in wr_range:
-                            wr_display = max(0.0, min(1.0, wr)) 
-                            row = {"Win Rate": f"{wr_display*100:.1f}%"}
-                            for pr in pr_range:
-                                # คำนวณ Expected Value (EV) 
-                                ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
-                                
-                                # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%)
-                                row[f"{pr*100:.1f}% Profit"] = ev * 100 
-                                
-                            sim_data.append(row)
-                        
-                        # 3. เตรียมข้อมูลและเซต Index
-                        df_full = pd.DataFrame(sim_data)
-                        df_full = df_full.set_index("Win Rate")
-                        
-                        # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
-                        df_numeric = df_full.astype(float)
-                        
-                        # 5. สร้าง Styler และจัด Format เป็น %
-                        st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
-                        
-                        # 6. แสดงผลผ่านตาราง
-                        st.dataframe(st_table, use_container_width=True)
-                        
-                        st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูลที่ {ls_val:.2f}%")
-                    #################################################
-                    # --- ตารางแสดงแผนการเทรด ---
-                    with tab_plan:
-                        st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
-                        
-                        # 1. ส่วนฟอร์มเพิ่มหุ้นใหม่
-                        with st.form("trading_plan_form", clear_on_submit=True):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
-                                entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
-                                stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
-                                support = st.number_input("แนวรับ:", min_value=0.0, format="%.2f", value=0.0)
-                            with col2:
-                                resistance = st.number_input("แนวต้าน:", min_value=0.0, format="%.2f", value=0.0)
-                                take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
-                                image_url = st.text_input("วาง Link รูปภาพ (URL):")
+                    return fixed_balance, comp_balance
+                
+                def show_strategy_analysis():
+                    st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
+                    initial_cap = 100000
+                    loss_pct = 0.08
+                    trades = 30
+                    win_rates = [0.4, 0.5, 0.6]
+                    profit_pcts = [0.10, 0.12, 0.14, 0.16]
+                
+                    data = []
+                    for wr in win_rates:
+                        for pr in profit_pcts:
+                            wins = trades * wr
+                            losses = trades * (1 - wr)
+                            fixed_profit = (wins * pr * initial_cap) - (losses * loss_pct * initial_cap)
                             
-                            submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
+                            comp_cap = initial_cap
+                            for i in range(trades):
+                                if np.random.rand() < wr: comp_cap *= (1 + pr)
+                                else: comp_cap *= (1 - loss_pct)
+                            
+                            data.append({
+                                "Win Rate": f"{int(wr*100)}%",
+                                "Profit %": f"{int(pr*100)}%",
+                                "ไม่ทบต้น (กำไร)": f"{fixed_profit:,.0f}",
+                                "ทบต้น (กำไร)": f"{comp_cap - initial_cap:,.0f}",
+                                "กลยุทธ์ที่แนะนำ": "ทบต้น" if comp_cap > (initial_cap + fixed_profit) else "ไม่ทบต้น"
+                            })
+                    st.table(pd.DataFrame(data))
+                
+                # --- ส่วนแสดงผลความเสี่ยง ทบต้น VS ไม่ทบต้น ---
+                st.markdown("---")
+                
+                st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
+            
+                # เพิ่มส่วนเลือกช่วงเวลา
+                time_period = st.radio(
+                    "เลือกช่วงเวลาที่ต้องการวิเคราะห์:",
+                    ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "Overall"],
+                    horizontal=True
+                )
+                
+                if "journal_data" in st.session_state and st.session_state.journal_data:
+                    df_journal = pd.DataFrame(st.session_state.journal_data)
+                    # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime
+                    df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
+                    
+                    # คำนวณวันย้อนหลังตามช่วงเวลา
+                    today = pd.Timestamp.now()
+                    if time_period == "1 เดือน": filter_date = today - pd.Timedelta(days=30)
+                    elif time_period == "3 เดือน": filter_date = today - pd.Timedelta(days=90)
+                    elif time_period == "6 เดือน": filter_date = today - pd.Timedelta(days=180)
+                    elif time_period == "1 ปี": filter_date = today - pd.Timedelta(days=365)
+                    else: filter_date = pd.Timestamp('1900-01-01') # Overall
+                    
+                    # กรองข้อมูล
+                    df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date].copy()
+                    
+                    if not df_filtered.empty:
+                        # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
+                        # คำนวณ ROI% เองโดยตรงจาก df_filtered
+                        df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
                         
-                        if submit_button:
-                            if not ticker:
-                                st.error("กรุณาระบุชื่อหุ้นครับ!")
-                            else:
-                                from datetime import datetime
-                                
-                                # 1. สร้าง Dictionary ของหุ้นใหม่
-                                new_data = {
-                                    'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
-                                    'Stop_Loss': stop_loss, 'แนวรับ': support, 'แนวต้าน': resistance, 
-                                    'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
-                                    'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                    'Image_URL': image_url, 'Alert_Date': ''
-                                }
-                                
-                                # 2. โหลดข้อมูลปัจจุบันจาก Google Sheet ออกมาก่อน
-                                current_df = load_data("TradingPlan")
-                                
-                                # ถ้าตารางว่าง ให้สร้าง DataFrame ใหม่ขึ้นมาเลย
-                                if current_df is None or current_df.empty:
-                                    final_df = pd.DataFrame([new_data])
-                                else:
-                                    # รวมหุ้นเดิมกับหุ้นใหม่เข้าด้วยกัน
-                                    new_df = pd.DataFrame([new_data])
-                                    final_df = pd.concat([current_df, new_df], ignore_index=True)
-                                    
-                                # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน clear_and_save_data
-                                # (เพราะฟังก์ชันนี้ลบของเก่าแล้วเขียนทับใหม่ เราจึงต้องส่ง 'ข้อมูลก้อนใหม่' ที่รวมตัวเก่าไปให้)
-                                if clear_and_save_data(final_df, "TradingPlan"):
-                                    st.success("บันทึกแผนเรียบร้อย!")
-                                    st.cache_data.clear()
-                                    st.rerun()
-                                else:
-                                    st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ")
-                 
-                        # 2. ส่วนตารางแสดงผล
-                        st.divider()
-                        st.subheader("📊 ตารางแผนการเทรดของฉัน")
-                        plan_df = load_data("TradingPlan")
+                        total_trades = len(df_filtered)
+                        win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
+                        loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
                         
-                        # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
-                        cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
+                        win_rate_val = (len(win_trades) / total_trades) * 100
+                        avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
+                        avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
+                        rr_ratio = (avg_profit_val / avg_loss_val) if avg_loss_val != 0 else 0
                         
-                        if plan_df.empty or 'Ticker' not in plan_df.columns:
-                            plan_df = pd.DataFrame(columns=cols)
+                        # แสดงผล
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Win Rate", f"{win_rate_val:.1f}%")
+                        col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
+                        col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+                        
+                        st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
+                    else:
+                        st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
+                        
+                st.divider()
+            
+                # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
+                with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
+                    # 1. ดึงข้อมูลจาก df_period มาคำนวณแบบสดๆ ตรงนี้เลย เพื่อความชัวร์ (ไม่ให้ไปดึงตัวแปรเก่าข้างนอกมาปน)
+                    if 'df_period' in locals() and not df_period.empty:
+                        col_pl_sim = 'กำไร/ขาดทุน (บาท)'
+                        col_cost_sim = 'ต้นทุน (บาท)'
+                        
+                        # คำนวณ Win Rate สดๆ
+                        wr_val = (df_period[col_pl_sim] > 0).mean() * 100
+                        
+                        # คำนวณ Avg Profit สดๆ
+                        p_mask = (df_period[col_pl_sim] > 0) & (df_period[col_cost_sim] > 0)
+                        p_series = (df_period.loc[p_mask, col_pl_sim] / df_period.loc[p_mask, col_cost_sim]) * 100
+                        pr_val = p_series.clip(upper=500).mean() if not p_series.empty else 10.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                        
+                        # คำนวณ Avg Loss สดๆ (และบังคับให้เป็นบวกทันทีด้วย abs)
+                        l_mask = (df_period[col_pl_sim] <= 0) & (df_period[col_cost_sim] > 0)
+                        l_series = (df_period.loc[l_mask, col_pl_sim] / df_period.loc[l_mask, col_cost_sim]) * 100
+                        l_series = l_series[l_series >= -100] # กรองค่าเพี้ยน
+                        ls_val = abs(l_series.mean()) if not l_series.empty else 5.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                    else:
+                        # ค่า Default เผื่อกรณีไม่มีข้อมูลในช่วงเวลานั้น
+                        wr_val, pr_val, ls_val = 50.0, 10.0, 5.0
+                
+                    act_wr = wr_val / 100.0
+                    act_profit = pr_val / 100.0
+                    act_loss = ls_val / 100.0  # ตอนนี้ ls_val จะเป็นค่าบวกปกติ (เช่น 7.49%) หาร 100 จะได้ 0.0749
+                    
+                    # 2. สร้าง Range สำหรับจำลองตาราง
+                    wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
+                    pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
+                    
+                    sim_data = []
+                    for wr in wr_range:
+                        wr_display = max(0.0, min(1.0, wr)) 
+                        row = {"Win Rate": f"{wr_display*100:.1f}%"}
+                        for pr in pr_range:
+                            # คำนวณ Expected Value (EV) 
+                            ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
+                            
+                            # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%)
+                            row[f"{pr*100:.1f}% Profit"] = ev * 100 
+                            
+                        sim_data.append(row)
+                    
+                    # 3. เตรียมข้อมูลและเซต Index
+                    df_full = pd.DataFrame(sim_data)
+                    df_full = df_full.set_index("Win Rate")
+                    
+                    # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
+                    df_numeric = df_full.astype(float)
+                    
+                    # 5. สร้าง Styler และจัด Format เป็น %
+                    st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
+                    
+                    # 6. แสดงผลผ่านตาราง
+                    st.dataframe(st_table, use_container_width=True)
+                    
+                    st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูลที่ {ls_val:.2f}%")
+                #################################################
+                # --- ตารางแสดงแผนการเทรด ---
+                with tab_plan:
+                    st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
+                    
+                    # 1. ส่วนฟอร์มเพิ่มหุ้นใหม่
+                    with st.form("trading_plan_form", clear_on_submit=True):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
+                            entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
+                            stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
+                            support = st.number_input("แนวรับ:", min_value=0.0, format="%.2f", value=0.0)
+                        with col2:
+                            resistance = st.number_input("แนวต้าน:", min_value=0.0, format="%.2f", value=0.0)
+                            take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
+                            image_url = st.text_input("วาง Link รูปภาพ (URL):")
+                        
+                        submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
+                    
+                    if submit_button:
+                        if not ticker:
+                            st.error("กรุณาระบุชื่อหุ้นครับ!")
                         else:
-                            plan_df.columns = plan_df.columns.str.strip()
-                        
-                        # คำนวณข้อมูล
-                        if not plan_df.empty and 'Ticker' in plan_df.columns:
-                            plan_df.columns = plan_df.columns.str.strip()
+                            from datetime import datetime
                             
-                            # แปลงคอลัมน์ตัวเลข
-                            target_cols = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
-                            for c in target_cols:
-                                if c in plan_df.columns:
-                                    plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
-                                else:
-                                    plan_df[c] = 0.0
+                            # 1. สร้าง Dictionary ของหุ้นใหม่
+                            new_data = {
+                                'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
+                                'Stop_Loss': stop_loss, 'แนวรับ': support, 'แนวต้าน': resistance, 
+                                'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
+                                'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                'Image_URL': image_url, 'Alert_Date': ''
+                            }
                             
-                            # ดึงราคาตลาด (Batch)
-                            tickers = [f"{t}.BK" for t in plan_df['Ticker'].unique()]
-                            try:
-                                price_data = yf.download(tickers, period="1d", group_by='ticker', progress=False)['Close']
-                                def get_price(t):
-                                    symbol = f"{t}.BK"
-                                    try:
-                                        if isinstance(price_data, pd.DataFrame): return float(price_data[symbol].iloc[-1])
-                                        return float(price_data.iloc[-1])
-                                    except: return 0.0
-                                plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(get_price)
-                            except:
-                                plan_df['ราคาตลาด'] = 0.0
-                        
-                            # คำนวณห่างจาก SL และสถานะ
-                            plan_df['ห่างจาก_SL(%)'] = np.where(plan_df['ราคาตลาด'] > 0, ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100), 0.0).round(2)
-                            plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                        
-                        # แสดงตาราง (ลบ Alert_Date ออกจาก column_config แล้ว)
-                        edited_df = st.data_editor(
-                            plan_df[cols],
-                            column_config={
-                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
-                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
-                                "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
-                                "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
-                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
-                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
-                                "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
-                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
-                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"),
-                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
-                            },
-                            use_container_width=True, 
-                            key="fixed_plan_editor_v2", 
-                            num_rows="dynamic"
-                        )
-                        
-                        if st.button("💾 บันทึกการแก้ไข"):
-                            final_df = edited_df.copy()
-                            final_df['สถานะ'] = "" # ล้างค่าให้ระบบคำนวณใหม่
+                            # 2. โหลดข้อมูลปัจจุบันจาก Google Sheet ออกมาก่อน
+                            current_df = load_data("TradingPlan")
                             
-                            for c in cols:
-                                if c not in final_df.columns: final_df[c] = ""
-                                    
-                            if clear_and_save_data(final_df[cols], "TradingPlan"):
-                                st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
+                            # ถ้าตารางว่าง ให้สร้าง DataFrame ใหม่ขึ้นมาเลย
+                            if current_df is None or current_df.empty:
+                                final_df = pd.DataFrame([new_data])
+                            else:
+                                # รวมหุ้นเดิมกับหุ้นใหม่เข้าด้วยกัน
+                                new_df = pd.DataFrame([new_data])
+                                final_df = pd.concat([current_df, new_df], ignore_index=True)
+                                
+                            # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน clear_and_save_data
+                            # (เพราะฟังก์ชันนี้ลบของเก่าแล้วเขียนทับใหม่ เราจึงต้องส่ง 'ข้อมูลก้อนใหม่' ที่รวมตัวเก่าไปให้)
+                            if clear_and_save_data(final_df, "TradingPlan"):
+                                st.success("บันทึกแผนเรียบร้อย!")
                                 st.cache_data.clear()
                                 st.rerun()
-            
+                            else:
+                                st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ")
+             
+                    # 2. ส่วนตารางแสดงผล
+                    st.divider()
+                    st.subheader("📊 ตารางแผนการเทรดของฉัน")
+                    plan_df = load_data("TradingPlan")
+                    
+                    # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
+                    cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
+                    
+                    if plan_df.empty or 'Ticker' not in plan_df.columns:
+                        plan_df = pd.DataFrame(columns=cols)
+                    else:
+                        plan_df.columns = plan_df.columns.str.strip()
+                    
+                    # คำนวณข้อมูล
+                    if not plan_df.empty and 'Ticker' in plan_df.columns:
+                        plan_df.columns = plan_df.columns.str.strip()
+                        
+                        # แปลงคอลัมน์ตัวเลข
+                        target_cols = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
+                        for c in target_cols:
+                            if c in plan_df.columns:
+                                plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
+                            else:
+                                plan_df[c] = 0.0
+                        
+                        # ดึงราคาตลาด (Batch)
+                        tickers = [f"{t}.BK" for t in plan_df['Ticker'].unique()]
+                        try:
+                            price_data = yf.download(tickers, period="1d", group_by='ticker', progress=False)['Close']
+                            def get_price(t):
+                                symbol = f"{t}.BK"
+                                try:
+                                    if isinstance(price_data, pd.DataFrame): return float(price_data[symbol].iloc[-1])
+                                    return float(price_data.iloc[-1])
+                                except: return 0.0
+                            plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(get_price)
+                        except:
+                            plan_df['ราคาตลาด'] = 0.0
+                    
+                        # คำนวณห่างจาก SL และสถานะ
+                        plan_df['ห่างจาก_SL(%)'] = np.where(plan_df['ราคาตลาด'] > 0, ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100), 0.0).round(2)
+                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
+                    
+                    # แสดงตาราง (ลบ Alert_Date ออกจาก column_config แล้ว)
+                    edited_df = st.data_editor(
+                        plan_df[cols],
+                        column_config={
+                            "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
+                            "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
+                            "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
+                            "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
+                            "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
+                            "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
+                            "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
+                            "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
+                            "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"),
+                            "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
+                        },
+                        use_container_width=True, 
+                        key="fixed_plan_editor_v2", 
+                        num_rows="dynamic"
+                    )
+                    
+                    if st.button("💾 บันทึกการแก้ไข"):
+                        final_df = edited_df.copy()
+                        final_df['สถานะ'] = "" # ล้างค่าให้ระบบคำนวณใหม่
+                        
+                        for c in cols:
+                            if c not in final_df.columns: final_df[c] = ""
+                                
+                        if clear_and_save_data(final_df[cols], "TradingPlan"):
+                            st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
+                            st.cache_data.clear()
+                            st.rerun()
+        
     ###################################################################
     # # --- ฟังก์ชัน Main tap stock Finish---
     ###################################################################
