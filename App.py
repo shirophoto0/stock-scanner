@@ -1650,7 +1650,13 @@ def main():
                         rr_ratio_actual = avg_win / avg_loss
                         
                         col1, col2, col3, col4, col5 = st.columns(5)
-                        col1.metric("กำไร/ขาดทุนสุทธิ", f"{df_filtered['กำไร/ขาดทุน (บาท)'].sum():,.0f} ฿")
+                        # กำหนดยอดกำไรในอดีตที่ต้องการบวกเพิ่มเข้าไปแสดงผล
+                        historical_profit = 85786.95
+                        
+                        # เอาผลรวมจากตารางปัจจุบัน มาบวกกับกำไรในอดีต
+                        total_net_profit = df_filtered['กำไร/ขาดทุน (บาท)'].sum() + historical_profit
+                        
+                        col1.metric("กำไร/ขาดทุนสุทธิ", f"{total_net_profit:,.2f} ฿")
                         col2.metric("ค่าเฉลี่ยต่อไม้ (%):", f"{df_clean['% ROI'].mean():.2f} %")
                         col3.metric("Win Rate", f"{(len(wins)/len(df_filtered)*100):.1f}%" if not df_filtered.empty else "0%")
                         col4.metric("Profit Factor", f"{(wins['กำไร/ขาดทุน (บาท)'].sum() / abs(losses['กำไร/ขาดทุน (บาท)'].sum())):.2f}" if not losses.empty and losses['กำไร/ขาดทุน (บาท)'].sum() != 0 else "N/A")
