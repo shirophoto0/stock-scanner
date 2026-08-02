@@ -1703,7 +1703,7 @@ def main():
                         else:
                             df_closed_perf = df_filtered.copy()
                         
-                        df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่'], errors='coerce')
+                        df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่ขาย'], errors='coerce')
                         df_closed_perf['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed_perf['กำไร/ขาดทุน (บาท)'], errors='coerce').fillna(0)
                         df_closed_perf['ต้นทุน (บาท)'] = pd.to_numeric(df_closed_perf['ต้นทุน (บาท)'], errors='coerce').fillna(0)
                         
