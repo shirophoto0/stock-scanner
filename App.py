@@ -856,17 +856,6 @@ def load_from_gsheet():
         st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
         return None
 
-def get_sector_from_mapping(ticker, df_mapping):
-    """
-    ฟังก์ชันค้นหา Sector จาก DataFrame ของชีท Sector_Mapping
-    """
-    ticker = str(ticker).strip().upper()
-    # ค้นหา Ticker ที่ตรงกัน (ไม่สนตัวพิมพ์เล็ก-ใหญ่)
-    matched = df_mapping[df_mapping['Ticker'].str.strip().str.upper() == ticker]
-    if not matched.empty:
-        return matched.iloc[0]['Sector']
-    return "อื่น ๆ"  # ค่าเผื่อกรณีหาไม่เจอ
-
 @st.cache_data(ttl=86400) # เก็บข้อมูลไว้วันละครั้งเพื่อความเร็ว
 def load_and_calculate_stock_data_optimized():
     status_text = st.empty()
@@ -2407,24 +2396,27 @@ def main():
                         options = ["  "] + portfolio_stocks
                         select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options, key="journal_select_ticker")
                         
-                        # ตรวจสอบและดึง Sector อัตโนมัติถ้าเลือกหุ้นเดิมจากพอร์ต
-                        default_sector = "General / Unspecified"
+                        # 🌟 กำหนด Logic การหา Sector แบบ Real-time
+                        current_sector = "General / Unspecified"
+                        
                         if select_ticker != "  ":
+                            # 1. เช็คจากหุ้นในพอร์ตก่อนว่ามี Sector หรือยัง
                             matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == select_ticker), None)
-                            if matched_item and 'Sector' in matched_item:
-                                default_sector = matched_item['Sector']
+                            if matched_item and matched_item.get('Sector') and matched_item.get('Sector') != "General / Unspecified":
+                                current_sector = matched_item['Sector']
+                            elif 'df_sector_map' in locals() and not df_sector_map.empty:
+                                # 2. ถ้าในพอร์ตไม่มี ให้วิ่งไปดึงจากชีท Sector_Mapping ทันที
+                                current_sector = get_sector_from_mapping(select_ticker, df_sector_map)
+                            
                             p_ticker = select_ticker
                         else:
                             p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker")
-                            
-                            # 🌟 เพิ่มความฉลาด: ถ้าผู้ใช้พิมพ์ชื่อหุ้นใหม่ ให้ลองวิ่งไปเช็คจาก df_sector_map ทันที
+                            # ถ้าพิมพ์ชื่อหุ้นใหม่ ให้เช็คจากชีท Mapping ทันทีเช่นกัน
                             if p_ticker and 'df_sector_map' in locals() and not df_sector_map.empty:
-                                auto_mapped_sector = get_sector_from_mapping(p_ticker, df_sector_map)
-                                if auto_mapped_sector != "อื่น ๆ":
-                                    default_sector = auto_mapped_sector
+                                current_sector = get_sector_from_mapping(p_ticker, df_sector_map)
 
-                        # ช่องกรอก Sector (ดึงค่าอัตโนมัติจากพอร์ต หรือจากชีท Mapping แต่ยังแก้ไขทับได้)
-                        p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", value=default_sector, key="journal_p_sector")
+                        # ช่องกรอก Sector (ใช้พารามิเตอร์ value ที่อัปเดตตามตัวแปร current_sector)
+                        p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", value=current_sector, key="journal_p_sector")
                         
                         p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
                         
