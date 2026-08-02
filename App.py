@@ -1696,7 +1696,6 @@ def main():
                         
                         ######### กราฟรายเดือน vs พร์อตสะสม ###################
                         st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
-
                         # --- 0. เตรียมข้อมูลรายการที่ขายแล้ว (Closed) และยึด "วันที่ขาย" เป็นหลัก ---
                         if 'journal_data' in st.session_state and st.session_state.journal_data:
                             df_j_all = pd.DataFrame(st.session_state.journal_data)
@@ -1704,12 +1703,12 @@ def main():
                         else:
                             df_closed_perf = df_filtered.copy()
                         
-                        df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่ขาย'], errors='coerce')
+                        df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่'], errors='coerce')
                         df_closed_perf['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed_perf['กำไร/ขาดทุน (บาท)'], errors='coerce').fillna(0)
                         df_closed_perf['ต้นทุน (บาท)'] = pd.to_numeric(df_closed_perf['ต้นทุน (บาท)'], errors='coerce').fillna(0)
                         
                         # ==========================================
-                        # ส่วนที่ 1: สำหรับกราฟแท่ง (มี Dropdown เลือกปีตามปกติ)
+                        # ส่วนที่ 1: สำหรับกราฟแท่งและตาราง (รายเดือน มี Dropdown เลือกปี)
                         # ==========================================
                         available_years = sorted(df_closed_perf['Sell_Date'].dt.year.dropna().unique(), reverse=True)
                         if not available_years:
@@ -1717,7 +1716,6 @@ def main():
                         
                         selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงานกราฟแท่ง (ตามวันที่ขาย):", available_years, key="select_year_perf")
                         
-                        # คำนวณรายเดือนเฉพาะปีที่เลือก (สำหรับกราฟแท่ง)
                         df_closed_perf_sorted = df_closed_perf.sort_values('Sell_Date')
                         df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
                         
@@ -1754,23 +1752,26 @@ def main():
                         
                         
                         # ==========================================
-                        # ส่วนที่ 2: สำหรับกราฟเส้น (แสดงต่อเนื่องทุกเดือนที่มีการเทรดจริง ไม่สนปี)
+                        # ส่วนที่ 2: สำหรับกราฟเส้น (แสดงผลเป็นราย Week เฉพาะที่มีการเคลื่อนไหว)
                         # ==========================================
                         initial_past_profit = 85786.95 # กำไรตั้งต้น
                         
                         if not df_closed_perf_sorted.empty:
-                            df_closed_perf_sorted['Month_Year'] = df_closed_perf_sorted['Sell_Date'].dt.strftime('%b %Y')
-                            df_closed_perf_sorted['Sort_Date'] = df_closed_perf_sorted['Sell_Date'].dt.to_period('M').dt.to_timestamp()
+                            # แปลงวันที่ขายให้อยู่ในรูปแบบสัปดาห์ (ใช้จุดเริ่มต้นสัปดาห์ เช่น วันจันทร์ หรือสัปดาห์ที่เท่าไหร่ของปี)
+                            # ใช้ dt.to_period('W-MON') เพื่อจัดกลุ่มเป็นรายสัปดาห์ (เริ่มวันจันทร์)
+                            df_closed_perf_sorted['Week_Period'] = df_closed_perf_sorted['Sell_Date'].dt.to_period('W-MON')
+                            df_closed_perf_sorted['Week_Label'] = df_closed_perf_sorted['Week_Period'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
+                            df_closed_perf_sorted['Sort_Week'] = df_closed_perf_sorted['Week_Period'].dt.start_time
                             
-                            # รวมกำไรเป็นรายเดือนตามลำดับเวลาจริง
-                            df_line_grouped = df_closed_perf_sorted.groupby(['Sort_Date', 'Month_Year'], as_index=False).agg({
+                            # รวมกำไรเป็นรายสัปดาห์ เฉพาะสัปดาห์ที่มีการเทรดขายจริง
+                            df_line_grouped = df_closed_perf_sorted.groupby(['Sort_Week', 'Week_Label'], as_index=False).agg({
                                 'กำไร/ขาดทุน (บาท)': 'sum'
-                            }).sort_values('Sort_Date')
+                            }).sort_values('Sort_Week')
                             
                             # คำนวณกำไรสะสมต่อเนื่อง โดยเริ่มบวกจากกำไรตั้งต้น 85,786.95 บาท
                             df_line_grouped['Cumulative_Profit'] = initial_past_profit + df_line_grouped['กำไร/ขาดทุน (บาท)'].cumsum()
                         else:
-                            df_line_grouped = pd.DataFrame(columns=['Sort_Date', 'Month_Year', 'Cumulative_Profit'])
+                            df_line_grouped = pd.DataFrame(columns=['Sort_Week', 'Week_Label', 'Cumulative_Profit'])
                         
                         
                         # --- 3. ตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
@@ -1806,12 +1807,12 @@ def main():
                                 st.altair_chart((chart_bar + text_labels + rule).properties(height=300), use_container_width=True)
                         
                             with c2:
-                                st.markdown("**📈 กราฟเส้นกำไรสะสมต่อเนื่อง (ทุกช่วงเวลา)**")
+                                st.markdown("**📈 กราฟเส้นกำไรสะสม (รายสัปดาห์ที่มีการขาย)**")
                                 if not df_line_grouped.empty:
                                     chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
-                                        x=alt.X('Month_Year:O', title='เดือน/ปี (ที่มีการเคลื่อนไหว)', sort=list(df_line_grouped['Month_Year'])),
+                                        x=alt.X('Week_Label:O', title='สัปดาห์ที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Week_Label'])),
                                         y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)'),
-                                        tooltip=['Month_Year', 'Cumulative_Profit']
+                                        tooltip=['Week_Label', 'Cumulative_Profit']
                                     ).properties(height=300)
                                     st.altair_chart(chart_line, use_container_width=True)
                                 else:
@@ -1830,7 +1831,7 @@ def main():
                                 }),
                                 use_container_width=True
                             )
-                                                    
+                                                                            
                         ##### กราฟกระจายตัว (Histogram) ###########
                         st.markdown("---")
                         st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
