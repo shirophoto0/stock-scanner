@@ -3547,57 +3547,92 @@ def main():
                 # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
                 st.subheader("🗓 สรุปผลรายเดือน")
-                
-                # 1. จัดเตรียมและคำนวณค่าต่างๆ ให้เสร็จก่อนสร้างตาราง
-                monthly_perf = closed_trades.groupby(closed_trades['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
-                monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
-                
-                # คำนวณค่าสถิติต่างๆ
-                monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
-                monthly_perf['Portfolio_Value'] = net_capital + monthly_perf['Cumulative_Profit']
-                monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / net_capital) * 100
-                monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / net_capital) * 100
-                
-                # 2. วาดกราฟ Plotly Combo
-                bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in monthly_perf['Net_Profit']]
-                fig = make_subplots(specs=[[{"secondary_y": True}]])
-                
-                fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน", marker_color=bar_colors), secondary_y=False)
-                fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
-                
-                fig.update_layout(title_text="Monthly Performance", height=400, margin=dict(l=20, r=20, t=40, b=20), showlegend=True)
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # 3. สร้างตารางสรุป
-                def color_negative_red(val):
-                    if isinstance(val, (int, float)):
-                        color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
-                        return f'color: {color}'
-                    return None
-    
-                monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
-                monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
 
-                # --- CSS สำหรับจัดตารางให้ชิดขวา ---
-                # สร้าง Style object ขึ้นมา
-                styled_df = monthly_df.style.format({
-                    'กำไร/ขาดทุน (บาท)': '{:,.2f}',
-                    '% รายเดือน': '{:+.2f} %', 
-                    'มูลค่าพอร์ต (บาท)': '{:,.2f}',
-                    '% สะสม': '{:+.2f} %'
-                }) \
-                .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']) \
-                .set_properties(**{'text-align': 'right'}) \
-                .set_table_styles([
-                    {'selector': 'th', 'props': [('text-align', 'right')]},
-                    {'selector': 'td', 'props': [('text-align', 'right')]}
-                ])
-
-                # แสดงตารางผ่าน styled_df
-                st.dataframe(styled_df, use_container_width=True)
+                if not closed_trades.empty:
+                    # 1. เพิ่มตัวเลือกช่วงเวลา (Quick Filter) สำหรับสรุปผลรายเดือน
+                    col_f1, col_f2 = st.columns([2, 2])
+                    with col_f1:
+                        monthly_view_range = st.selectbox(
+                            "⏳ เลือกช่วงเวลาแสดงผล (สรุปรายเดือน):",
+                            ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
+                            key="monthly_view_range"
+                        )
+                    
+                    # แปลงคอลัมน์วันที่ให้เป็น datetime และสำเนาข้อมูล
+                    closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'], errors='coerce')
+                    df_monthly_filtered = closed_trades.dropna(subset=['Date_Close']).sort_values('Date_Close').copy()
+                    
+                    max_date = df_monthly_filtered['Date_Close'].max()
+                    capital_base_for_monthly = net_capital  # เงินต้นเริ่มต้น
+                    
+                    # กรองข้อมูลตามช่วงเวลาที่ผู้ใช้เลือก
+                    if monthly_view_range == "3 เดือนล่าสุด":
+                        start_date = max_date - pd.DateOffset(months=3)
+                        past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
+                        capital_base_for_monthly += past_slice['Net_Profit'].sum()
+                        df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
+                    elif monthly_view_range == "6 เดือนล่าสุด":
+                        start_date = max_date - pd.DateOffset(months=6)
+                        past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
+                        capital_base_for_monthly += past_slice['Net_Profit'].sum()
+                        df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
+                    elif monthly_view_range == "1 ปีล่าสุด (YTD / 12M)":
+                        start_date = max_date - pd.DateOffset(years=1)
+                        past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
+                        capital_base_for_monthly += past_slice['Net_Profit'].sum()
+                        df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
                 
-            else:
-                st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
+                    if not df_monthly_filtered.empty:
+                        # 2. จัดเตรียมและคำนวณค่าต่างๆ ตามข้อมูลที่ถูกกรอง
+                        monthly_perf = df_monthly_filtered.groupby(df_monthly_filtered['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
+                        monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
+                        
+                        # คำนวณค่าสถิติต่างๆ ต่อเนื่อง
+                        monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
+                        monthly_perf['Portfolio_Value'] = capital_base_for_monthly + monthly_perf['Cumulative_Profit']
+                        monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / capital_base_for_monthly) * 100
+                        monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / capital_base_for_monthly) * 100
+                        
+                        # 3. วาดกราฟ Plotly Combo
+                        bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in monthly_perf['Net_Profit']]
+                        fig = make_subplots(specs=[[{"secondary_y": True}]])
+                        
+                        fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน", marker_color=bar_colors), secondary_y=False)
+                        fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
+                        
+                        fig.update_layout(title_text=f"Monthly Performance ({monthly_view_range})", height=400, margin=dict(l=20, r=20, t=40, b=20), showlegend=True)
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        # 4. สร้างตารางสรุป
+                        def color_negative_red(val):
+                            if isinstance(val, (int, float)):
+                                color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
+                                return f'color: {color}'
+                            return None
+                
+                        monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
+                        monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
+                
+                        # --- CSS สำหรับจัดตารางให้ชิดขวา ---
+                        styled_df = monthly_df.style.format({
+                            'กำไร/ขาดทุน (บาท)': '{:,.2f}',
+                            '% รายเดือน': '{:+.2f} %', 
+                            'มูลค่าพอร์ต (บาท)': '{:,.2f}',
+                            '% สะสม': '{:+.2f} %'
+                        }) \
+                        .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']) \
+                        .set_properties(**{'text-align': 'right'}) \
+                        .set_table_styles([
+                            {'selector': 'th', 'props': [('text-align', 'right')]},
+                            {'selector': 'td', 'props': [('text-align', 'right')]}
+                        ])
+                
+                        # แสดงตารางผ่าน styled_df
+                        st.dataframe(styled_df, use_container_width=True)
+                    else:
+                        st.warning("ไม่มีข้อมูลรายการเทรดในช่วงเวลาที่เลือกครับ")
+                else:
+                    st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
 
 # ------------------------------
 if __name__ == "__main__":
