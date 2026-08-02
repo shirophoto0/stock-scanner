@@ -2119,23 +2119,26 @@ def main():
                                     color_continuous_midpoint=0, 
                                     custom_data=['Net_Profit', 'Return_Pct', 'Ticker']
                                 )
-                                # ปรับ format ของ % ผลตอบแทนใน Hover ให้แสดงทศนิยม 2 ตำแหน่ง (.2f)
                                 fig_tree.update_traces(
                                     hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนรวม:</b> %{value:,.2f} ฿<br><b>กำไร/ขาดทุน:</b> %{customdata[0]:,.2f} ฿<br><b>ผลตอบแทน:</b> %{customdata[1]:+.2f}%<br><b>หุ้นในกลุ่ม:</b> %{customdata[2]}'
                                 )
                                 fig_tree.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10))
                                 st.plotly_chart(fig_tree, use_container_width=True)
                                 
-                                # 📋 ตารางสรุปข้อมูล Sector
+                                # 📋 ตารางสรุปข้อมูล Sector (ปัดเศษทศนิยม 2 ตำแหน่งจริง ๆ ก่อนแสดงผล)
                                 st.markdown("##### 📋 ตารางสรุปข้อมูลแยกตาม Sector")
                                 display_sector_df = df_sector_summary[['Sector', 'Invested_Cost', 'Net_Profit', 'Return_Pct', 'Ticker']].copy()
+                                
+                                # ปัดเศษทศนิยม 2 ตำแหน่งให้คอลัมน์ Return_Pct ตรงนี้เลย
+                                display_sector_df['Return_Pct'] = display_sector_df['Return_Pct'].round(2)
+                                
                                 display_sector_df.columns = ['กลุ่มอุตสาหกรรม (Sector)', 'เงินลงทุนรวม (บาท)', 'กำไร/ขาดทุนสุทธิ (บาท)', '% ผลตอบแทน', 'รายชื่อหุ้นที่เกี่ยวข้อง']
                                 
                                 st.dataframe(
                                     display_sector_df.style.format({
                                         'เงินลงทุนรวม (บาท)': '{:,.2f}',
                                         'กำไร/ขาดทุนสุทธิ (บาท)': '{:,.2f}',
-                                        '% ผลตอบแทน': '{:+.2f}%'  # บังคับแสดงทศนิยม 2 ตำแหน่งและเครื่องหมาย +/-
+                                        '% ผลตอบแทน': '{:+.2f}%'
                                     }).set_properties(**{'text-align': 'right'}), 
                                     use_container_width=True
                                 )
