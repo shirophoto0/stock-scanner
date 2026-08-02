@@ -1762,6 +1762,10 @@ def main():
                         
                             with c1:
                                 st.markdown(f"**📊 ผลงานรายเดือน ประจำปี {selected_year}**")
+                                
+                                # เพิ่มพื้นที่ว่างล่องหน (Spacer) ขนาดเล็กด้านบนของฝั่งซ้าย เพื่อดันกราฟลงมาให้ขอบบนและแกน X ขนานกับฝั่งขวาพอดี
+                                st.markdown("<div style='height: 62px;'></div>", unsafe_allow_html=True)
+                        
                                 chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
                                     x=alt.X('Month_Label:O', title='เดือน (ตามวันที่ขาย)', sort=None), 
                                     y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
@@ -1782,7 +1786,9 @@ def main():
                                 )
                         
                                 rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
-                                st.altair_chart((chart_bar + text_labels + rule).properties(height=300), use_container_width=True)
+                                
+                                # ปรับความสูงให้เป็น 350 เท่ากับกราฟเส้นฝั่งขวา
+                                st.altair_chart((chart_bar + text_labels + rule).properties(height=350), use_container_width=True)
                         
                             with c2:
                                 # ==========================================
