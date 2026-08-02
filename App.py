@@ -1976,33 +1976,43 @@ def main():
 
                         st.markdown("---")
 
-                        # --- 2. ส่วนวิเคราะห์ Sector Performance ---
-                        st.subheader("🏢 วิเคราะห์ผลการดำเนินงานตามกลุ่มอุตสาหกรรม (Sector Performance)")
-                        
-                        # แปลง journal_data เป็น DataFrame สำหรับนำมาวิเคราะห์
+                        # --- 2. ส่วนวิเคราะห์ Sector Performance (แก้ไขป้องกัน Error ประเภทข้อมูล) ---
                         journal_df = pd.DataFrame(st.session_state.get('journal_data', []))
                         closed_trades = journal_df[journal_df['สถานะ'] == 'Closed (ขายแล้ว)'] if not journal_df.empty else pd.DataFrame()
-                        
+                    
                         if not journal_df.empty:
                             sector_data_list = []
-                            
                             for idx, row in journal_df.iterrows():
                                 ticker = row.get('หุ้น', 'UNKNOWN')
-                                profit = row.get('กำไร/ขาดทุน (บาท)', 0)
-                                cost = row.get('ต้นทุน (บาท)', 0)
+                                
+                                # ป้องกันค่าที่เป็น String หรือค่าว่าง ให้แปลงเป็น float ทันที
+                                try:
+                                    profit = float(row.get('กำไร/ขาดทุน (บาท)', 0))
+                                except (ValueError, TypeError):
+                                    profit = 0.0
+                                    
+                                try:
+                                    cost = float(row.get('ต้นทุน (บาท)', 0))
+                                except (ValueError, TypeError):
+                                    cost = 0.0
+                                    
                                 sector = row.get('Sector', 'General / Unspecified')
-                                if pd.isna(sector) or sector == '': 
+                                if pd.isna(sector) or str(sector).strip() == '': 
                                     sector = 'General / Unspecified'
                                     
                                 sector_data_list.append({
-                                    'Sector': sector,
-                                    'Ticker': ticker,
+                                    'Sector': str(sector).strip(),
+                                    'Ticker': str(ticker).strip(),
                                     'Net_Profit': profit,
                                     'Invested_Cost': cost
                                 })
                                 
                             if len(sector_data_list) > 0:
                                 df_sector_source = pd.DataFrame(sector_data_list)
+                                
+                                # บังคับแปลงชนิดข้อมูลให้เป็นตัวเลขชัวร์ๆ อีกรอบก่อน Groupby
+                                df_sector_source['Net_Profit'] = pd.to_numeric(df_sector_source['Net_Profit'], errors='coerce').fillna(0)
+                                df_sector_source['Invested_Cost'] = pd.to_numeric(df_sector_source['Invested_Cost'], errors='coerce').fillna(0)
                                 
                                 df_sector_summary = df_sector_source.groupby('Sector', as_index=False).agg({
                                     'Net_Profit': 'sum',
@@ -2015,36 +2025,36 @@ def main():
                                     axis=1
                                 )
                                 df_sector_summary = df_sector_summary.sort_values(by='Net_Profit', ascending=False)
-                        
+                    
                                 # 📊 ส่วน กราฟแท่ง (Bar Chart)
                                 st.markdown("##### 📊 กำไร/ขาดทุนสะสมแยกตามกลุ่มอุตสาหกรรม")
                                 fig_bar = px.bar(
-                                    df_sector_summary,
-                                    x='Sector',
-                                    y='Net_Profit',
-                                    text=df_sector_summary['Net_Profit'].apply(lambda x: f"{x:,.2f} ฿"),
-                                    color='Net_Profit',
+                                    df_sector_summary, 
+                                    x='Sector', 
+                                    y='Net_Profit', 
+                                    text=df_sector_summary['Net_Profit'].apply(lambda x: f"{x:,.2f} ฿"), 
+                                    color='Net_Profit', 
                                     color_continuous_scale=['#EF5350', '#26A69A']
                                 )
                                 fig_bar.update_traces(textposition='outside')
                                 fig_bar.update_layout(
-                                    xaxis_title="กลุ่มอุตสาหกรรม (Sector)",
-                                    yaxis_title="กำไร/ขาดทุนสุทธิ (บาท)",
-                                    height=400,
-                                    margin=dict(l=20, r=20, t=30, b=20),
+                                    xaxis_title="กลุ่มอุตสาหกรรม (Sector)", 
+                                    yaxis_title="กำไร/ขาดทุนสุทธิ (บาท)", 
+                                    height=400, 
+                                    margin=dict(l=20, r=20, t=30, b=20), 
                                     coloraxis_showscale=False
                                 )
                                 st.plotly_chart(fig_bar, use_container_width=True)
-                        
+                    
                                 # 🗺️ ส่วน Treemap
                                 st.markdown("##### 🗺️ แผนผังแสดงสัดส่วนและผลงานพอร์ตตาม Sector (Treemap)")
                                 fig_tree = px.treemap(
-                                    df_sector_summary,
-                                    path=['Sector'],
-                                    values='Invested_Cost',
-                                    color='Return_Pct',
-                                    color_continuous_scale='Tealrose',
-                                    color_continuous_midpoint=0,
+                                    df_sector_summary, 
+                                    path=['Sector'], 
+                                    values='Invested_Cost', 
+                                    color='Return_Pct', 
+                                    color_continuous_scale='Tealrose', 
+                                    color_continuous_midpoint=0, 
                                     custom_data=['Net_Profit', 'Return_Pct', 'Ticker']
                                 )
                                 fig_tree.update_traces(
@@ -2052,25 +2062,24 @@ def main():
                                 )
                                 fig_tree.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10))
                                 st.plotly_chart(fig_tree, use_container_width=True)
-                        
+                    
                                 # 📋 ตารางสรุปข้อมูล Sector
                                 st.markdown("##### 📋 ตารางสรุปข้อมูลแยกตาม Sector")
                                 display_sector_df = df_sector_summary[['Sector', 'Invested_Cost', 'Net_Profit', 'Return_Pct', 'Ticker']].copy()
                                 display_sector_df.columns = ['กลุ่มอุตสาหกรรม (Sector)', 'เงินลงทุนรวม (บาท)', 'กำไร/ขาดทุนสุทธิ (บาท)', '% ผลตอบแทน', 'รายชื่อหุ้นที่เกี่ยวข้อง']
-                                
                                 st.dataframe(
                                     display_sector_df.style.format({
                                         'เงินลงทุนรวม (บาท)': '{:,.2f}',
                                         'กำไร/ขาดทุนสุทธิ (บาท)': '{:,.2f}',
                                         '% ผลตอบแทน': '{:+.2f} %'
-                                    }).set_properties(**{'text-align': 'right'}),
+                                    }).set_properties(**{'text-align': 'right'}), 
                                     use_container_width=True
                                 )
                             else:
                                 st.info("ยังไม่มีข้อมูลเพียงพอสำหรับการวิเคราะห์ Sector")
                         else:
                             st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
-                                                
+                                                                    
                         #######################################
                         # 1. จัดการข้อมูล (ยังคงตรรกะเดิมไว้)
                         df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
