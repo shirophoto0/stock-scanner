@@ -1054,7 +1054,7 @@ def main():
     try:
         df_sector_map = conn.read(worksheet="Sector_Mapping", ttl=600)
     except:
-        df_sector_map = pd.DataFrame())
+        df_sector_map = pd.DataFrame()
 
     # 2. โหมด GitHub (ทำงานจบในตัว)
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
