@@ -3547,7 +3547,6 @@ def main():
                 # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
                 st.divider()
                 st.subheader("🗓 สรุปผลรายเดือน")
-
                 if not closed_trades.empty:
                     # 1. เพิ่มตัวเลือกช่วงเวลา (Quick Filter) สำหรับสรุปผลรายเดือน
                     col_f1, col_f2 = st.columns([2, 2])
@@ -3593,17 +3592,42 @@ def main():
                         monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / capital_base_for_monthly) * 100
                         monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / capital_base_for_monthly) * 100
                         
-                        # 3. วาดกราฟ Plotly Combo
+                        # 3. คำนวณสเกลแกน Y ให้เผื่อ Gap ทั้งบนและล่าง (ป้องกันแท่งกราฟชนขอบ)
+                        y1_min = monthly_perf['Net_Profit'].min()
+                        y1_max = monthly_perf['Net_Profit'].max()
+                        # เผื่อสเกลแกน Y ฝั่งซ้าย (Net Profit) ขึ้น/ลง 20%
+                        y1_padding = (y1_max - y1_min) * 0.2 if y1_max != y1_min else abs(y1_max) * 0.2
+                        if y1_padding == 0: y1_padding = 1000
+                        y1_range = [min(0, y1_min) - y1_padding, y1_max + y1_padding]
+                
+                        y2_min = monthly_perf['Cumulative_Pct'].min()
+                        y2_max = monthly_perf['Cumulative_Pct'].max()
+                        # เผื่อสเกลแกน Y ฝั่งขวา (% สะสม) ขึ้น/ลง 20%
+                        y2_padding = (y2_max - y2_min) * 0.2 if y2_max != y2_min else abs(y2_max) * 0.2
+                        if y2_padding == 0: y2_padding = 5
+                        y2_range = [min(0, y2_min) - y2_padding, y2_max + y2_padding]
+                
+                        # 4. วาดกราฟ Plotly Combo
                         bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in monthly_perf['Net_Profit']]
                         fig = make_subplots(specs=[[{"secondary_y": True}]])
                         
                         fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน", marker_color=bar_colors), secondary_y=False)
                         fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
                         
-                        fig.update_layout(title_text=f"Monthly Performance ({monthly_view_range})", height=400, margin=dict(l=20, r=20, t=40, b=20), showlegend=True)
+                        fig.update_layout(
+                            title_text=f"Monthly Performance ({monthly_view_range})", 
+                            height=400, 
+                            margin=dict(l=20, r=20, t=40, b=20), 
+                            showlegend=True
+                        )
+                        
+                        # กำหนดช่วงสเกลแกน Y ทั้งสองฝั่งให้มีระยะห่าง (Gap)
+                        fig.update_yaxes(title_text="กำไร/ขาดทุน (บาท)", range=y1_range, secondary_y=False)
+                        fig.update_yaxes(title_text="% สะสม", range=y2_range, secondary_y=True)
+                
                         st.plotly_chart(fig, use_container_width=True)
                         
-                        # 4. สร้างตารางสรุป
+                        # 5. สร้างตารางสรุป
                         def color_negative_red(val):
                             if isinstance(val, (int, float)):
                                 color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
