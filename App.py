@@ -855,7 +855,18 @@ def load_from_gsheet():
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
         return None
-        
+
+def get_sector_from_mapping(ticker, df_mapping):
+    """
+    ฟังก์ชันค้นหา Sector จาก DataFrame ของชีท Sector_Mapping
+    """
+    ticker = str(ticker).strip().upper()
+    # ค้นหา Ticker ที่ตรงกัน (ไม่สนตัวพิมพ์เล็ก-ใหญ่)
+    matched = df_mapping[df_mapping['Ticker'].str.strip().str.upper() == ticker]
+    if not matched.empty:
+        return matched.iloc[0]['Sector']
+    return "อื่น ๆ"  # ค่าเผื่อกรณีหาไม่เจอ
+
 @st.cache_data(ttl=86400) # เก็บข้อมูลไว้วันละครั้งเพื่อความเร็ว
 def load_and_calculate_stock_data_optimized():
     status_text = st.empty()
@@ -1029,17 +1040,44 @@ SET100_TICKERS = [
     
 # --- Initialize Session State ---
 
-# ตั้งค่าหน้าจอ
+
+
+# 1. ตั้งค่าหน้าเว็บต้องอยู่บรรทัดบนสุดเสมอ
 st.set_page_config(layout="wide")
+
+# ฟังก์ชันสำหรับค้นหา Sector จาก Mapping ที่เราทำไว้
+def get_sector_from_mapping(ticker, df_mapping):
+    if df_mapping is None or df_mapping.empty:
+        return "อื่น ๆ"
+    ticker = str(ticker).strip().upper()
+    matched = df_mapping[df_mapping['Ticker'].str.strip().str.upper() == ticker]
+    if not matched.empty:
+        return matched.iloc[0]['Sector']
+    return "อื่น ๆ"
+
 def main():
     # 1. ประกาศตัวแปรเริ่มต้น
     df_all_stocks = pd.DataFrame() 
     filtered_df = None
+    
+    # 🌟 โหลดชีท Sector_Mapping จาก Google Sheets ไว้ล่วงหน้า
+    # (เปลี่ยนชื่อฟังก์ชันโหลดให้ตรงกับฟังก์ชันที่คุณใช้เชื่อมต่อ Google Sheets เช่น gsheets_conn.read หรือ load_from_gsheet)
+    try:
+        # สมมติว่ามีฟังก์ชันโหลดชีทเฉพาะ หรือใช้ตัวเชื่อมต่อเดียวกัน ลองปรับชื่อฟังก์ชันตามระบบของคุณดูนะครับ
+        # เช่น df_sector_map = load_sector_mapping_from_gsheet() หรือ conn.read(worksheet="Sector_Mapping")
+        df_sector_map = load_sector_mapping_from_gsheet() # *ปรับชื่อฟังก์ชันตามระบบจริงของคุณถ้ามี
+    except:
+        df_sector_map = pd.DataFrame()
 
-  # 2. โหมด GitHub (ทำงานจบในตัว)
+    # 2. โหมด GitHub (ทำงานจบในตัว)
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
         print("GitHub Mode: กำลังเริ่มสแกน...")
         df_new = load_and_calculate_stock_data_optimized()
+        
+        # 🟢 เติม Sector อัตโนมัติใน GitHub Mode (ถ้ามีคอลัมน์หุ้นหรือ Ticker)
+        if not df_new.empty and 'Sector' in df_new.columns and not df_sector_map.empty:
+            df_new['Sector'] = df_new['หุ้น'].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+            
         save_to_gsheet(df_new)
         print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
         return # จบการทำงานทันที
@@ -1048,6 +1086,13 @@ def main():
     if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
         with st.spinner("กำลังดึงข้อมูล..."):
             df_all_stocks = load_and_calculate_stock_data()
+            
+            # 🟢 เติม Sector อัตโนมัติหลังกดอัปเดตจาก Yahoo
+            if not df_all_stocks.empty and not df_sector_map.empty:
+                target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else 'Ticker'
+                if target_col in df_all_stocks.columns:
+                    df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+            
             save_to_gsheet(df_all_stocks)
             st.success("อัปเดตข้อมูลจาก Yahoo สำเร็จ!")
     else:
@@ -1058,8 +1103,20 @@ def main():
         if df_all_stocks is None or df_all_stocks.empty:
             st.warning("ไม่พบข้อมูลใน Sheet กำลังดึงจาก Yahoo ใหม่...")
             df_all_stocks = load_and_calculate_stock_data()
+            
+            if not df_all_stocks.empty and not df_sector_map.empty:
+                target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else 'Ticker'
+                if target_col in df_all_stocks.columns:
+                    df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+                    
             save_to_gsheet(df_all_stocks)
-    
+
+    # 🟢 เติม Sector อัตโนมัติให้ df_all_stocks (และ df_p สำหรับพอร์ตปัจจุบัน) ทันทีที่โหลดข้อมูลเสร็จ
+    if not df_all_stocks.empty and not df_sector_map.empty:
+        target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else ('Ticker' if 'Ticker' in df_all_stocks.columns else None)
+        if target_col:
+            df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+
     # ตรวจสอบก่อนแสดงผล
     if not df_all_stocks.empty:
         # ใช้ filtered_df ถ้ามี (เช่นจากการ Filter ของผู้ใช้) ถ้าไม่มีก็ใช้ df_all_stocks
@@ -2359,8 +2416,14 @@ def main():
                             p_ticker = select_ticker
                         else:
                             p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker")
-                        
-                        # ช่องกรอก Sector (ถ้าเป็นหุ้นตัวเดิมจะดึงมาให้อัตโนมัติ แต่ยังแก้ไขได้)
+                            
+                            # 🌟 เพิ่มความฉลาด: ถ้าผู้ใช้พิมพ์ชื่อหุ้นใหม่ ให้ลองวิ่งไปเช็คจาก df_sector_map ทันที
+                            if p_ticker and 'df_sector_map' in locals() and not df_sector_map.empty:
+                                auto_mapped_sector = get_sector_from_mapping(p_ticker, df_sector_map)
+                                if auto_mapped_sector != "อื่น ๆ":
+                                    default_sector = auto_mapped_sector
+
+                        # ช่องกรอก Sector (ดึงค่าอัตโนมัติจากพอร์ต หรือจากชีท Mapping แต่ยังแก้ไขทับได้)
                         p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", value=default_sector, key="journal_p_sector")
                         
                         p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
