@@ -2577,6 +2577,7 @@ def main():
                         st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
                 
                     # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
+                    # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
                     st.divider()
                     st.subheader("🥧 การกระจายตัวของพอร์ตตามกลุ่มอุตสาหกรรม (Sector Allocation)")
                 
@@ -2621,9 +2622,10 @@ def main():
                                 textinfo='percent+label',
                                 hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนต้นทุน:</b> %{value:,.2f} ฿<br><b>สัดส่วนต้นทุน:</b> %{percent}'
                             )
+                            # เพิ่ม margin ด้านบนและล่าง (t=40, b=40) เพื่อไม่ให้ขอบทับตัวหนังสือ
                             fig_donut_cost.update_layout(
-                                height=340,
-                                margin=dict(l=10, r=10, t=10, b=10),
+                                height=380,
+                                margin=dict(l=10, r=10, t=40, b=40),
                                 showlegend=False
                             )
                             st.plotly_chart(fig_donut_cost, use_container_width=True)
@@ -2641,9 +2643,10 @@ def main():
                                 textinfo='percent+label',
                                 hovertemplate='<b>Sector:</b> %{label}<br><b>มูลค่าตลาด:</b> %{value:,.2f} ฿<br><b>สัดส่วนตลาด:</b> %{percent}'
                             )
+                            # เพิ่ม margin ด้านบนและล่าง (t=40, b=40) เช่นเดียวกัน
                             fig_donut_market.update_layout(
-                                height=340,
-                                margin=dict(l=10, r=10, t=10, b=10),
+                                height=380,
+                                margin=dict(l=10, r=10, t=40, b=40),
                                 showlegend=True
                             )
                             st.plotly_chart(fig_donut_market, use_container_width=True)
@@ -2675,7 +2678,7 @@ def main():
                 
                     else:
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
-                                    
+                                                    
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
