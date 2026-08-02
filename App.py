@@ -856,6 +856,16 @@ def load_from_gsheet():
         st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
         return None
 
+# ฟังก์ชันสำหรับค้นหา Sector จาก Mapping ที่เราทำไว้
+def get_sector_from_mapping(ticker, df_mapping):
+    if df_mapping is None or df_mapping.empty:
+        return "อื่น ๆ"
+    ticker = str(ticker).strip().upper()
+    matched = df_mapping[df_mapping['Ticker'].str.strip().str.upper() == ticker]
+    if not matched.empty:
+        return matched.iloc[0]['Sector']
+    return "อื่น ๆ"
+    
 @st.cache_data(ttl=86400) # เก็บข้อมูลไว้วันละครั้งเพื่อความเร็ว
 def load_and_calculate_stock_data_optimized():
     status_text = st.empty()
@@ -1033,16 +1043,6 @@ SET100_TICKERS = [
 
 # 1. ตั้งค่าหน้าเว็บต้องอยู่บรรทัดบนสุดเสมอ
 st.set_page_config(layout="wide")
-
-# ฟังก์ชันสำหรับค้นหา Sector จาก Mapping ที่เราทำไว้
-def get_sector_from_mapping(ticker, df_mapping):
-    if df_mapping is None or df_mapping.empty:
-        return "อื่น ๆ"
-    ticker = str(ticker).strip().upper()
-    matched = df_mapping[df_mapping['Ticker'].str.strip().str.upper() == ticker]
-    if not matched.empty:
-        return matched.iloc[0]['Sector']
-    return "อื่น ๆ"
 
 def main():
     # 1. ประกาศตัวแปรเริ่มต้น
