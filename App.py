@@ -2769,7 +2769,7 @@ def main():
                     else:
                         st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
             #########################
-            with tab_dividend:           
+            with tab_dividend:
                 # 1. กำหนดตัวแปรเก็บข้อมูลปันผลใน session_state ถ้ายังไม่มี
                 if "dividend_data" not in st.session_state:
                     st.session_state.dividend_data = []
@@ -2799,22 +2799,20 @@ def main():
                     with st.form("dividend_form", clear_on_submit=True):
                         col1, col2 = st.columns(2)
                         with col1:
-                            div_date = st.date_input("วันที่ได้รับเงินปันผล", value=date.today()) # ใช้ date.today() ตรงๆ ได้เลย
+                            div_date = st.date_input("วันที่ได้รับเงินปันผล", value=date.today())
                             ticker = st.text_input("ชื่อหุ้น (Ticker)").upper()
                             shares = st.number_input("จำนวนหุ้นที่ได้รับสิทธิ์", min_value=0.0, step=1.0)
                         
                         with col2:
                             dps = st.number_input("เงินปันผลต่อหุ้น (บาท/หุ้น)", min_value=0.0000, format="%.4f", step=0.01)
-                            # คำนวณ Gross อัตโนมัติจาก จำนวนหุ้น × ปันผลต่อหุ้น
                             auto_gross = shares * dps
                             gross_div = st.number_input("เงินปันผลรวมก่อนภาษี (บาท)", value=auto_gross, format="%.2f", step=1.0)
                             
-                            # หักภาษี ณ ที่จ่าย 10% อัตโนมัติ
                             tax_wht = gross_div * 0.10
                             net_div = gross_div - tax_wht
                             
                             st.caption(f"💡 คำนวณให้อัตโนมัติ: ภาษีหัก ณ ที่จ่าย 10% = {tax_wht:,.2f} ฿ | รับสุทธิ = {net_div:,.2f} ฿")
-                
+                        
                         notes = st.text_input("หมายเหตุ (เช่น ปันผล Q2/2026)")
                         
                         submitted = st.form_submit_button("💾 บันทึกเงินปันผล")
@@ -2831,12 +2829,12 @@ def main():
                                     "หมายเหตุ": notes
                                 }
                                 st.session_state.dividend_data.append(new_entry)
-                                st.success(f"บันทึกเงินปันผลของหุ้น {ticker}เรียบร้อยแล้วครับ!")
+                                st.success(f"บันทึกเงินปันผลของหุ้น {ticker} เรียบร้อยแล้วครับ!")
                                 st.rerun()
                             else:
                                 st.warning("กรุณากรอกชื่อหุ้น (Ticker)")
-            
-                # --- ส่วนที่ 3: แสดงตารางข้อมูลปันผลทั้งหมด & สรุปยอด (แบบเปิด-ปิดได้) ---
+                
+                # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                 st.markdown("---")
                 st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
                 
@@ -2855,7 +2853,6 @@ def main():
                     
                     # ส่วนตารางและปุ่มจัดการ (นำมาไว้ใน Expander แบบเปิด-ปิดซ่อนได้)
                     with st.expander("📂 ดูตารางประวัติและแก้ไขข้อมูลปันผล", expanded=False):
-                        # แสดงตารางแบบ Data Editor ให้แก้ไขหรือลบได้
                         edited_div_df = st.data_editor(df_div, use_container_width=True, key="div_editor")
                         
                         if st.button("💾 อัปเดตการแก้ไขตารางปันผล", key="update_div_btn"):
@@ -2863,20 +2860,18 @@ def main():
                             st.success("อัปเดตข้อมูลสำเร็จ!")
                             st.rerun()
                             
-                        # ปุ่ม Export เป็น CSV
                         csv_div = df_div.to_csv(index=False).encode('utf-8-sig')
                         st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
                 else:
                     st.info("ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์ได้เลยครับ")
-
-                # --- ส่วนที่ 3: กราฟวิเคราะห์และสรุปยอดเงินปันผลรับ ---
+            
+                # --- ส่วนที่ 4: กราฟวิเคราะห์และสรุปยอดเงินปันผลรับ ---
                 st.markdown("---")
                 st.markdown("##### 📊 วิเคราะห์ข้อมูลเงินปันผล (Dividend Analytics)")
                 
                 if st.session_state.dividend_data:
                     df_div = pd.DataFrame(st.session_state.dividend_data)
                     
-                    # แปลงคอลัมน์วันที่ให้เป็น datetime เพื่อดึงปีและเดือนมาใช้กรอง
                     if 'วันที่ได้รับ' in df_div.columns:
                         df_div['วันที่ได้รับ'] = pd.to_datetime(df_div['วันที่ได้รับ'], errors='coerce')
                         df_div['Year'] = df_div['วันที่ได้รับ'].dt.year.fillna(0).astype(int)
@@ -2884,24 +2879,21 @@ def main():
                     # --- Filter เลือกช่วงเวลา ---
                     col_f1, col_f2 = st.columns([2, 2])
                     with col_f1:
-                        # ดึงรายชื่อปีที่มีทั้งหมดในข้อมูล + ตัวเลือก All Time
                         available_years = sorted([y for y in df_div['Year'].unique() if y > 0], reverse=True)
                         year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_years]
                         selected_period = st.selectbox("📅 กรองช่วงเวลา (ปี):", year_options, key="div_year_filter")
                     
-                    # กรองข้อมูลตามที่ผู้ใช้เลือก
                     df_filtered_div = df_div.copy()
                     if selected_period != "All Time (ทั้งหมด)":
                         df_filtered_div = df_filtered_div[df_filtered_div['Year'] == int(selected_period)]
-                
+            
                     if not df_filtered_div.empty:
-                        # คำนวณ Metric สรุปยอดรวมตามช่วงเวลาที่กรอง
-                        total_received = df_filtered_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_filtered_div.columns else 0
-                        total_tax = df_filtered_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_filtered_div.columns else 0
+                        total_received_filtered = df_filtered_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_filtered_div.columns else 0
+                        total_tax_filtered = df_filtered_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_filtered_div.columns else 0
                         
-                        m1, m2 = st.columns(2)
-                        m1.metric(f"💰 เงินปันผลรับสุทธิ ({selected_period})", f"{total_received:,.2f} ฿")
-                        m2.metric(f"ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax:,.2f} ฿")
+                        mf1, mf2 = st.columns(2)
+                        mf1.metric(f"💰 เงินปันผลรับสุทธิ ({selected_period})", f"{total_received_filtered:,.2f} ฿")
+                        mf2.metric(f"ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿")
                         
                         st.markdown("<br>", unsafe_allow_html=True)
                         
@@ -2909,7 +2901,7 @@ def main():
                         st.markdown("##### 📈 ยอดปันผลรับสุทธิแยกตามรายชื่อหุ้น (Ticker)")
                         if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
                             df_ticker_sum = df_filtered_div.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
-                            df_ticker_sum = df_ticker_sum.sort_values(by='ยอดรับสุทธิ', ascending=True) # เรียงจากน้อยไปมากเพื่อให้กราฟแท่งนอนสวยงาม หรือสลับได้
+                            df_ticker_sum = df_ticker_sum.sort_values(by='ยอดรับสุทธิ', ascending=True)
                             
                             fig_ticker = px.bar(
                                 df_ticker_sum,
@@ -2924,14 +2916,13 @@ def main():
                             fig_ticker.update_layout(
                                 xaxis_title="ยอดปันผลรับสุทธิ (บาท)",
                                 yaxis_title="ชื่อหุ้น (Ticker)",
-                                height=max(300, len(df_ticker_sum) * 40), # ปรับความสูงตามจำนวนหุ้น
+                                height=max(300, len(df_ticker_sum) * 40),
                                 margin=dict(l=10, r=20, t=20, b=20),
                                 coloraxis_showscale=False
                             )
                             st.plotly_chart(fig_ticker, use_container_width=True)
-                
+            
                         # --- 2. กราฟแสดงยอดปันผลสะสมรายปี (Yearly Bar Chart) ---
-                        # หมายเหตุ: กราฟนี้จะแสดงผลเต็มรูปแบบเมื่อเลือก All Time เพื่อให้เห็นเปรียบเทียบแต่ละปี
                         st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
                         if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
                             df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
@@ -2954,24 +2945,11 @@ def main():
                                 coloraxis_showscale=False
                             )
                             st.plotly_chart(fig_yearly, use_container_width=True)
-                
                     else:
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
-                
-                    # --- ส่วนที่ 4: ตารางประวัติและแก้ไขข้อมูล (อยู่ใน Expander เดิม) ---
-                    with st.expander("📂 ตารางประวัติและจัดการข้อมูลปันผลทั้งหมด", expanded=False):
-                        edited_div_df = st.data_editor(df_div, use_container_width=True, key="div_editor")
-                        
-                        if st.button("💾 อัปเดตการแก้ไขตารางปันผล", key="update_div_btn"):
-                            st.session_state.dividend_data = edited_div_df.to_dict('records')
-                            st.success("อัปเดตข้อมูลสำเร็จ!")
-                            st.rerun()
-                            
-                        csv_div = df_div.to_csv(index=False).encode('utf-8-sig')
-                        st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
                 else:
-                    st.info("ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์ได้เลยครับ")
-                    
+                    st.info("ยังไม่มีข้อมูลสำหรับสร้างกราฟวิเคราะห์")
+                                
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
