@@ -2235,40 +2235,41 @@ def main():
                             st.rerun()
                 
                 # 2. ฟอร์มเพิ่ม/ลดหุ้น
-                with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
-                    with st.form("portfolio_journal_form", clear_on_submit=True):
-                        col1, col2 = st.columns(2)
+               with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
+                    # ตัด st.form ออก เพื่อให้หน้าจอตอบสนองแบบ Real-time เวลาเปลี่ยนสถานะ
+                    col1, col2 = st.columns(2)
+                    
+                    portfolio_stocks = [item['หุ้น'] for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
+                    
+                    with col1:
+                        options = ["  "] + portfolio_stocks
+                        select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options, key="journal_select_ticker")
+                        p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker") if select_ticker == "  " else select_ticker
                         
-                        portfolio_stocks = [item['หุ้น'] for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
+                        p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
                         
-                        with col1:
-                            options = ["  "] + portfolio_stocks
-                            select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options)
-                            p_ticker = st.text_input("ชื่อหุ้น:") if select_ticker == "  " else select_ticker
-                            
-                            # ใช้ Radio หรือ Selectbox ปกติ แต่เนื่องจากอยู่ใน Form หน้าจอจะไม่ Rerun ทันที
-                            # แนวทางที่ดีที่สุดสำหรับ Form ใน Streamlit คือให้มีช่องกรอกทั้ง "วันที่ซื้อ" และ "วันที่ขาย" แสดงขึ้นมาตามเงื่อนไข หรือเปลี่ยนป้ายตามค่าที่เลือกโดยใช้คีย์บอร์ดรีเฟรช
-                            p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="form_p_status")
-                            
-                            # แก้ไขปัญหานี้โดยการแสดงช่องวันที่ทั้งสองอัน หรือใช้ตรรกะแยกให้ชัดเจนไปเลย
-                            if p_status == "Closed (ขายแล้ว)":
-                                p_buy_date = st.date_input("วันที่ซื้อ (ต้นทุนเดิม):")
-                                p_date_input = st.date_input("วันที่ขายจริง:")
-                            else:
-                                p_buy_date = st.date_input("วันที่ทำรายการซื้อ:")
-                                p_date_input = p_buy_date
-                            
-                        with col2:
-                            p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"])
-                            p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง")
-                            p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f")
-                            p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100)
-                            p_comm = st.number_input("ค่าธรรมเนียม:", min_value=0.0, step=1.0)
-                            
-                        p_reason = st.text_area("เหตุผล/กลยุทธ์:")
-                        submitted = st.form_submit_button("ยืนยันรายการ")
+                        # เมื่อเปลี่ยนสถานะเป็น Closed จะแสดงช่องวันที่ซื้อและวันที่ขายให้กรอกคู่กันทันที
+                        if p_status == "Closed (ขายแล้ว)":
+                            p_buy_date = st.date_input("📅 วันที่ซื้อหุ้น (ต้นทุนเดิม):", key="journal_p_buy_date")
+                            p_sell_date = st.date_input("📅 วันที่ขายจริง (วันที่ทำรายการ):", key="journal_p_sell_date")
+                        else:
+                            p_buy_date = st.date_input("📅 วันที่ทำรายการซื้อ:", key="journal_open_date")
+                            p_sell_date = None
                         
-                        if submitted:
+                    with col2:
+                        p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"], key="journal_p_type")
+                        p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง", key="journal_p_result")
+                        p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f", key="journal_p_price")
+                        p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100, key="journal_p_qty")
+                        p_comm = st.number_input("ค่าธรรมเนียม:", min_value=0.0, step=1.0, key="journal_p_comm")
+                        
+                    p_reason = st.text_area("เหตุผล/กลยุทธ์:", key="journal_p_reason")
+                    submitted = st.button("ยืนยันรายการบันทึก", type="primary")
+                    
+                    if submitted:
+                        if not p_ticker or p_ticker.strip() == "":
+                            st.error("กรุณาระบุชื่อหุ้นให้เรียบร้อยครับ")
+                        else:
                             total_val = (p_qty * p_price)
                             ticker_upper = p_ticker.upper()
                             
@@ -2279,25 +2280,25 @@ def main():
                             else:
                                 final_result = abs(final_result)  
                             
+                            # ใช้วันที่ทำรายการจริง (ถ้าขายใช้วันขาย ถ้าซื้อใช้วันซื้อ) ในการบันทึกกระแสเงินสด
+                            transaction_date_str = str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else str(p_buy_date)
+                            
                             # 1. จัดการข้อมูล Portfolio (อัปเดตสถานะเงินสดและหุ้น)
                             found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
                             
-                            # ใช้วันที่ขายจริงเป็นหลักในการตัดเงินสดกรณีขาย
-                            transaction_date_str = str(p_date_input)
-                
-                            if "ซื้อ" in p_type:
+                            if "ซื้อ" in p_type and p_status != "Closed (ขายแล้ว)":
                                 log_cash_transaction(date=transaction_date_str, trans_type="ซื้อหุ้น " + ticker_upper, amount=-(total_val + p_comm), note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}")
                                 st.session_state.cash_balance -= (total_val + p_comm)
                                 
                                 if found_idx != -1:
                                     old = st.session_state.my_portfolio[found_idx]
                                     new_shares = old['shares'] + p_qty
-                                    new_cost = ((old['shares'] + old['avg_price']) + total_val) / new_shares # แก้ไขจุดคำนวณต้นทุนเดิมเล็กน้อย
+                                    new_cost = ((old['shares'] * old['avg_price']) + total_val) / new_shares
                                     st.session_state.my_portfolio[found_idx] = {'หุ้น': ticker_upper, 'shares': new_shares, 'avg_price': new_cost}
                                 else:
                                     st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price})
                             
-                            else: # กรณีขาย
+                            else: # กรณีขาย / ปิดสถานะ
                                 log_cash_transaction(date=transaction_date_str, trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
                                 st.session_state.cash_balance += (total_val - p_comm)
                                 
@@ -2306,11 +2307,11 @@ def main():
                                     if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
                                         st.session_state.my_portfolio.pop(found_idx)
                             
-                            # 2. เพิ่มข้อมูลเข้า Journal 
+                            # 2. เพิ่มข้อมูลเข้า Journal (บันทึกแยกวันที่ซื้อและวันที่ขายลง Google Sheets ให้ตรงช่องเป๊ะๆ)
                             new_entry = {
                                 "วันที่": transaction_date_str, 
-                                "วันที่ซื้อ": str(p_buy_date) if p_status == "Closed (ขายแล้ว)" else str(p_date_input),
-                                "วันที่ขาย": str(p_date_input) if p_status == "Closed (ขายแล้ว)" else "",
+                                "วันที่ซื้อ": str(p_buy_date),
+                                "วันที่ขาย": str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else "",
                                 "หุ้น": ticker_upper,
                                 "สถานะ": p_status,
                                 "ประเภท": p_type,
