@@ -2245,9 +2245,16 @@ def main():
                             options = ["  "] + portfolio_stocks
                             select_ticker = st.selectbox("เลือกหุ้นจากพอร์ต:", options)
                             p_ticker = st.text_input("ชื่อหุ้น:") if select_ticker == "  " else select_ticker
-                            p_buy_date = st.date_input("วันที่ทำรายการ:")
+                            
                             p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"])
-                            j_sell_date = st.date_input("วันที่ขาย (ถ้าขายแล้ว):") if p_status == "Closed (ขายแล้ว)" else None
+                            
+                            # แยกช่องใส่วันที่ให้ชัดเจนตามสถานะ
+                            if p_status == "Open (กำลังถือ)":
+                                p_buy_date = st.date_input("วันที่ซื้อ:")
+                                j_sell_date = None
+                            else:
+                                p_buy_date = st.date_input("วันที่ซื้อ (ต้นทุน):")
+                                j_sell_date = st.date_input("วันที่ขายจริง:")
                             
                         with col2:
                             p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"])
