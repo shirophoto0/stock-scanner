@@ -2235,7 +2235,7 @@ def main():
                             st.rerun()
                 
                 # 2. ฟอร์มเพิ่ม/ลดหุ้น
-               with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
+                with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
                     # ตัด st.form ออก เพื่อให้หน้าจอตอบสนองแบบ Real-time เวลาเปลี่ยนสถานะ
                     col1, col2 = st.columns(2)
                     
