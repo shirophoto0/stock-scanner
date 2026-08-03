@@ -2795,9 +2795,9 @@ def main():
                             os.remove(DATA_FILE)  # ถ้าไม่มีข้อมูล ให้ลบไฟล์ทิ้ง
                             
                 st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
-                
-                # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV (พร้อมระบบกรองข้อมูลซ้ำอัตโนมัติ) ---
-                with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD (Excel/CSV)"):
+        
+                # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV (รองรับต้นทุนหุ้น) ---
+                with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD หรือไฟล์ Excel/CSV"):
                     uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
                     if uploaded_div_file:
                         if st.button("ยืนยันการนำเข้าไฟล์ปันผล"):
@@ -2838,6 +2838,15 @@ def main():
                                         
                                         net_receive = total_div_before_tax - total_tax
                                         
+                                        # ดึงค่าต้นทุนถ้ามีในไฟล์ (ถ้าไม่มีกำหนดเป็น 0.0 เพื่อให้ไปเติมทีหลังได้)
+                                        cost_val = 0.0
+                                        for cost_col in ['ต้นทุน', 'Cost', 'ทุนรวม', 'มูลค่าลงทุน']:
+                                            if cost_col in df_upload.columns:
+                                                try:
+                                                    cost_val = float(row.get(cost_col, 0))
+                                                except:
+                                                    pass
+                                        
                                         processed_rows.append({
                                             "วันที่ได้รับ": pay_date,
                                             "Ticker": ticker,
@@ -2846,9 +2855,13 @@ def main():
                                             "ยอดรวมก่อนภาษี": total_div_before_tax,
                                             "ภาษีหัก ณ ที่จ่าย": total_tax,
                                             "ยอดรับสุทธิ": net_receive,
+                                            "ต้นทุนหุ้น": cost_val,
                                             "หมายเหตุ": "นำเข้าจาก TSD Portal"
                                         })
                                 else:
+                                    # ตรวจสอบคอลัมน์มาตรฐาน ถ้าไม่มีคอลัมน์ 'ต้นทุนหุ้น' ให้เติมค่าเริ่มต้น 0.0
+                                    if 'ต้นทุนหุ้น' not in df_upload.columns:
+                                        df_upload['ต้นทุนหุ้น'] = 0.0
                                     processed_rows = df_upload.to_dict('records')
                                 
                                 # --- ระบบกรองข้อมูลซ้ำ (Deduplication Check) ---
@@ -2877,7 +2890,7 @@ def main():
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
                                 
-                # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
+                # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual (เพิ่มช่องต้นทุนหุ้น) ---
                 with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=True):
                     with st.form("dividend_form", clear_on_submit=True):
                         col1, col2 = st.columns(2)
@@ -2885,6 +2898,7 @@ def main():
                             div_date = st.date_input("วันที่ได้รับเงินปันผล", value=date.today())
                             ticker = st.text_input("ชื่อหุ้น (Ticker)").upper()
                             shares = st.number_input("จำนวนหุ้นที่ได้รับสิทธิ์", min_value=0.0, step=1.0)
+                            total_cost = st.number_input("ต้นทุนหุ้นรวม (บาท)", min_value=0.0, step=100.0, format="%.2f", help="มูลค่าเงินลงทุนหรือต้นทุนรวมของหุ้นตัวนี้")
                         
                         with col2:
                             dps = st.number_input("เงินปันผลต่อหุ้น (บาท/หุ้น)", min_value=0.0000, format="%.4f", step=0.01)
@@ -2910,6 +2924,7 @@ def main():
                                     "ยอดรวมก่อนภาษี": gross_div,
                                     "ภาษีหัก ณ ที่จ่าย": tax_wht,
                                     "ยอดรับสุทธิ": net_div,
+                                    "ต้นทุนหุ้น": total_cost,
                                     "หมายเหตุ": notes
                                 }
                                 st.session_state.dividend_data.append(new_entry)
@@ -2918,7 +2933,7 @@ def main():
                                 st.rerun()
                             else:
                                 st.warning("⚠️ กรุณากรอกชื่อหุ้น (Ticker)")
-                
+                            
                 # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                 st.markdown("---")
                 st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
