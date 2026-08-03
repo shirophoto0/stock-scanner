@@ -2921,6 +2921,34 @@ def main():
                             
                         csv_div = df_div.to_csv(index=False).encode('utf-8-sig')
                         st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
+
+                    # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm) ---
+                    st.markdown("---")
+                    with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
+                        st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
+                        
+                        # ใช้ st.session_state เพื่อจัดการสถานะการเปิด/ปิด Pop-up ยืนยัน
+                        if "confirm_clear_div" not in st.session_state:
+                            st.session_state.confirm_clear_div = False
+                            
+                        if not st.session_state.confirm_clear_div:
+                            if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary"):
+                                st.session_state.confirm_clear_div = True
+                                st.rerun()
+                        else:
+                            st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
+                            col_c1, col_c2, _ = st.columns([1, 1, 2])
+                            with col_c1:
+                                if st.button("✔️ ยืนยันการลบ", type="primary"):
+                                    st.session_state.dividend_data = []
+                                    st.session_state.confirm_clear_div = False
+                                    st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
+                                    st.rerun()
+                            with col_c2:
+                                if st.button("❌ ยกเลิก"):
+                                    st.session_state.confirm_clear_div = False
+                                    st.rerun()
+                                    
                 else:
                     st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
                 
