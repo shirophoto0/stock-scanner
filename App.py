@@ -3021,88 +3021,6 @@ def main():
                         mf2.metric(f"🏛️ ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿")
                         
                         st.markdown("<br>", unsafe_allow_html=True)
-                        
-                        # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี พร้อมแสดง % และยอดเงิน) ---
-                        st.markdown("---")
-                        st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (เรียงจากยอดมากไปน้อย แบ่งตามปีที่ได้รับ)")
-                        
-                        # ใช้ df_filtered_div เพื่อให้สอดคล้องกับปีที่ผู้ใช้เลือกกรองด้านบน
-                        if 'Ticker' in df_filtered_div.columns and 'Year' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
-                            # 1. จัดกลุ่มคำนวณยอดเงินแยกตาม Ticker และ Year จากข้อมูลที่กรองแล้ว
-                            df_stacked = df_filtered_div[df_filtered_div['Year'] > 0].groupby(['Ticker', 'Year'])['ยอดรับสุทธิ'].sum().reset_index()
-                            
-                            if not df_stacked.empty:
-                                # 2. คำนวณหายอดรวมทั้งหมดของแต่ละหุ้น เพื่อใช้สำหรับเรียงลำดับ (Sorting)
-                                df_ticker_totals = df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
-                                df_ticker_totals = df_ticker_totals.sort_values(by='ยอดรับสุทธิ', ascending=True) # น้อยไปมากเพื่อให้ Plotly แสดงแท่งมากไว้บนสุด
-                                sorted_tickers = df_ticker_totals['Ticker'].tolist()
-                                
-                                # 3. คำนวณหาเปอร์เซ็นต์ (%) สัดส่วนของแต่ละปีในหุ้นตัวนั้น
-                                df_stacked['Total_Stock_Sum'] = df_stacked['Ticker'].map(df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum())
-                                df_stacked['Percentage'] = (df_stacked['ยอดรับสุทธิ'] / df_stacked['Total_Stock_Sum']) * 100
-                                
-                                # 4. แปลง Year เป็น string เพื่อให้ Plotly มองเป็นหมวดหมู่สี
-                                df_stacked['Year_Str'] = df_stacked['Year'].astype(str)
-                                
-                                # 5. สร้าง Label สำหรับแสดงบนแท่งกราฟ (แสดงเฉพาะส่วนที่มากกว่า 5% เพื่อความสะอาดตา)
-                                df_stacked['Text_Label'] = df_stacked.apply(
-                                    lambda row: f"{row['ยอดรับสุทธิ']:,.0f} ฿ ({row['Percentage']:.1f}%)" if row['Percentage'] > 5 else "", 
-                                    axis=1
-                                )
-                                
-                                fig_stacked_bar = px.bar(
-                                    df_stacked,
-                                    x='ยอดรับสุทธิ',
-                                    y='Ticker',
-                                    color='Year_Str',
-                                    orientation='h',
-                                    text='Text_Label',
-                                    barmode='stack',
-                                    category_orders={'Ticker': sorted_tickers}, # บังคับลำดับแกน Y ให้เรียงตามยอดรวม
-                                    color_discrete_sequence=px.colors.qualitative.Bold
-                                )
-                                
-                                fig_stacked_bar.update_traces(
-                                    textposition='inside', 
-                                    insidetextanchor='middle'
-                                )
-                                
-                                fig_stacked_bar.update_layout(
-                                    xaxis_title="ยอดปันผลรับสุทธิรวม (บาท)",
-                                    yaxis_title="ชื่อหุ้น (Ticker)",
-                                    height=max(350, len(sorted_tickers) * 45),
-                                    margin=dict(l=10, r=20, t=20, b=20),
-                                    legend_title="ปีที่ได้รับ (Year)"
-                                )
-                                st.plotly_chart(fig_stacked_bar, use_container_width=True)
-                            else:
-                                st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
-                                
-            
-                        # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
-                        st.markdown("---")
-                        st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
-                        if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
-                            df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
-                            df_yearly_sum['Year'] = df_yearly_sum['Year'].astype(str)
-                            
-                            fig_yearly = px.bar(
-                                df_yearly_sum,
-                                x='Year',
-                                y='ยอดรับสุทธิ',
-                                text=df_yearly_sum['ยอดรับสุทธิ'].apply(lambda x: f"{x:,.2f} ฿"),
-                                color='ยอดรับสุทธิ',
-                                color_continuous_scale='Blues'
-                            )
-                            fig_yearly.update_traces(textposition='outside')
-                            fig_yearly.update_layout(
-                                xaxis_title="ปี (Year)",
-                                yaxis_title="ยอดปันผลรับสุทธิ (บาท)",
-                                height=380,
-                                margin=dict(l=10, r=10, t=20, b=20),
-                                coloraxis_showscale=False
-                            )
-                            st.plotly_chart(fig_yearly, use_container_width=True)
 
                         # --- ส่วนที่ 5: วิเคราะห์ Dividend Yield on Cost (%) แยกตามปีและตัวกรอง ---
                         st.markdown("---")
@@ -3201,7 +3119,88 @@ def main():
                                 st.info(f"💡 ไม่มีข้อมูลปันผลหรือต้นทุนหุ้นในช่วงเวลา {selected_period}")
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
-                                                                                                            
+
+                        # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี พร้อมแสดง % และยอดเงิน) ---
+                        st.markdown("---")
+                        st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (เรียงจากยอดมากไปน้อย แบ่งตามปีที่ได้รับ)")
+                        
+                        # ใช้ df_filtered_div เพื่อให้สอดคล้องกับปีที่ผู้ใช้เลือกกรองด้านบน
+                        if 'Ticker' in df_filtered_div.columns and 'Year' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
+                            # 1. จัดกลุ่มคำนวณยอดเงินแยกตาม Ticker และ Year จากข้อมูลที่กรองแล้ว
+                            df_stacked = df_filtered_div[df_filtered_div['Year'] > 0].groupby(['Ticker', 'Year'])['ยอดรับสุทธิ'].sum().reset_index()
+                            
+                            if not df_stacked.empty:
+                                # 2. คำนวณหายอดรวมทั้งหมดของแต่ละหุ้น เพื่อใช้สำหรับเรียงลำดับ (Sorting)
+                                df_ticker_totals = df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
+                                df_ticker_totals = df_ticker_totals.sort_values(by='ยอดรับสุทธิ', ascending=True) # น้อยไปมากเพื่อให้ Plotly แสดงแท่งมากไว้บนสุด
+                                sorted_tickers = df_ticker_totals['Ticker'].tolist()
+                                
+                                # 3. คำนวณหาเปอร์เซ็นต์ (%) สัดส่วนของแต่ละปีในหุ้นตัวนั้น
+                                df_stacked['Total_Stock_Sum'] = df_stacked['Ticker'].map(df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum())
+                                df_stacked['Percentage'] = (df_stacked['ยอดรับสุทธิ'] / df_stacked['Total_Stock_Sum']) * 100
+                                
+                                # 4. แปลง Year เป็น string เพื่อให้ Plotly มองเป็นหมวดหมู่สี
+                                df_stacked['Year_Str'] = df_stacked['Year'].astype(str)
+                                
+                                # 5. สร้าง Label สำหรับแสดงบนแท่งกราฟ (แสดงเฉพาะส่วนที่มากกว่า 5% เพื่อความสะอาดตา)
+                                df_stacked['Text_Label'] = df_stacked.apply(
+                                    lambda row: f"{row['ยอดรับสุทธิ']:,.0f} ฿ ({row['Percentage']:.1f}%)" if row['Percentage'] > 5 else "", 
+                                    axis=1
+                                )
+                                
+                                fig_stacked_bar = px.bar(
+                                    df_stacked,
+                                    x='ยอดรับสุทธิ',
+                                    y='Ticker',
+                                    color='Year_Str',
+                                    orientation='h',
+                                    text='Text_Label',
+                                    barmode='stack',
+                                    category_orders={'Ticker': sorted_tickers}, # บังคับลำดับแกน Y ให้เรียงตามยอดรวม
+                                    color_discrete_sequence=px.colors.qualitative.Bold
+                                )
+                                
+                                fig_stacked_bar.update_traces(
+                                    textposition='inside', 
+                                    insidetextanchor='middle'
+                                )
+                                
+                                fig_stacked_bar.update_layout(
+                                    xaxis_title="ยอดปันผลรับสุทธิรวม (บาท)",
+                                    yaxis_title="ชื่อหุ้น (Ticker)",
+                                    height=max(350, len(sorted_tickers) * 45),
+                                    margin=dict(l=10, r=20, t=20, b=20),
+                                    legend_title="ปีที่ได้รับ (Year)"
+                                )
+                                st.plotly_chart(fig_stacked_bar, use_container_width=True)
+                            else:
+                                st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
+
+                            # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
+                            st.markdown("---")
+                            st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
+                            if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
+                                df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
+                                df_yearly_sum['Year'] = df_yearly_sum['Year'].astype(str)
+                                
+                                fig_yearly = px.bar(
+                                    df_yearly_sum,
+                                    x='Year',
+                                    y='ยอดรับสุทธิ',
+                                    text=df_yearly_sum['ยอดรับสุทธิ'].apply(lambda x: f"{x:,.2f} ฿"),
+                                    color='ยอดรับสุทธิ',
+                                    color_continuous_scale='Blues'
+                                )
+                                fig_yearly.update_traces(textposition='outside')
+                                fig_yearly.update_layout(
+                                    xaxis_title="ปี (Year)",
+                                    yaxis_title="ยอดปันผลรับสุทธิ (บาท)",
+                                    height=380,
+                                    margin=dict(l=10, r=10, t=20, b=20),
+                                    coloraxis_showscale=False
+                                )
+                                st.plotly_chart(fig_yearly, use_container_width=True)
+                                
                     else:
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
                 else:
