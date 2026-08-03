@@ -2948,7 +2948,6 @@ def main():
                         st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
             
                     # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm) ---
-                    st.markdown("---")
                     with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
                         st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
                         
