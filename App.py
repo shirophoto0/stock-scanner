@@ -3155,27 +3155,34 @@ def main():
                             # คัดลอก DataFrame มาคำนวณ
                             df_calc = df_filtered_div.copy()
                             
-                            # จัดกลุ่มคำนวณ: 
-                            # 1. ยอดปันผลรับสะสมรวม (sum)
-                            # 2. จำนวนหุ้นรวมทั้งหมด (sum) -> เผื่อกรณีบันทึกหลายครั้ง
-                            # 3. ต้นทุนเฉลี่ยต่อหุ้น (ใช้ค่าล่าสุดหรือค่า max ที่กรอกมา)
-                            df_grouped = df_calc.groupby('Ticker').agg({
-                                'ยอดรับสุทธิ': 'sum',
-                                'จำนวนหุ้น': 'sum',
-                                'ต้นทุนหุ้น': 'max' # สมมติว่าค่าที่กรอกคือราคาต้นทุนเฉลี่ยต่อหุ้น
+                            # จัดกลุ่มคำนวณยอดปันผลสะสม (sum) ของทุกงวด
+                            df_div_sum = df_calc.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
+                            
+                            # ดึง "จำนวนหุ้นล่าสุด" และ "ต้นทุนเฉลี่ยต่อหุ้นล่าสุด" ของแต่ละ Ticker (โดยเรียงตามวันที่ล่าสุด)
+                            if 'วันที่ได้รับ' in df_calc.columns:
+                                df_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_calc['วันที่ได้รับ'], errors='coerce')
+                                df_calc = df_calc.sort_values(by='วันที่ได้รับ_dt', ascending=True)
+                                
+                            # ใช้ค่าจากรายการล่าสุด (Last) ของแต่ละหุ้น เพื่อให้ได้จำนวนหุ้นและต้นทุนที่ถูกต้องตามปัจจุบัน
+                            df_latest = df_calc.groupby('Ticker').agg({
+                                'จำนวนหุ้น': 'last',   # ใช้จำนวนหุ้นล่าสุด
+                                'ต้นทุนหุ้น': 'last'   # ใช้ราคาต้นทุนเฉลี่ยล่าสุด
                             }).reset_index()
                             
-                            # คำนวณ "ต้นทุนรวมทั้งหมด" = ราคาต้นทุนเฉลี่ยต่อหุ้น × จำนวนหุ้นรวม
-                            df_grouped['Total_Cost'] = df_grouped['ต้นทุนหุ้น'] * df_grouped['จำนวนหุ้น']
+                            # รวมตารางยอดปันผลสะสม เข้ากับข้อมูลล่าสุด
+                            df_yield_analysis = pd.merge(df_div_sum, df_latest, on='Ticker')
+                            
+                            # คำนวณ "ต้นทุนรวมทั้งหมด" = ราคาต้นทุนเฉลี่ยต่อหุ้นล่าสุด × จำนวนหุ้นล่าสุด
+                            df_yield_analysis['Total_Cost'] = df_yield_analysis['ต้นทุนหุ้น'] * df_yield_analysis['จำนวนหุ้น']
                             
                             # คำนวณ Dividend Yield on Cost (%) = (ปันผลรับสะสมรวม / ต้นทุนรวมทั้งหมด) * 100
-                            df_grouped['Yield_on_Cost'] = df_grouped.apply(
+                            df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
                                 lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0, 
                                 axis=1
                             )
                             
                             # กรองเฉพาะหุ้นที่มีต้นทุนรวมมากกว่า 0 และ Yield สมเหตุสมผล (ไม่เกิน 1,000%)
-                            valid_cost_df = df_grouped[(df_grouped['Total_Cost'] > 0) & (df_grouped['Yield_on_Cost'] <= 1000)]
+                            valid_cost_df = df_yield_analysis[(df_yield_analysis['Total_Cost'] > 0) & (df_yield_analysis['Yield_on_Cost'] <= 1000)]
                             
                             if not valid_cost_df.empty:
                                 total_portfolio_cost = valid_cost_df['Total_Cost'].sum()
@@ -3234,7 +3241,7 @@ def main():
                                 st.info("💡 ยังไม่มีการบันทึกข้อมูล 'ต้นทุนหุ้น' หรือ 'จำนวนหุ้น' ที่ถูกต้องในระบบ กรุณาตรวจสอบข้อมูลให้อีกครั้งครับ")
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
-                                                                    
+                                                                                        
                     else:
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
                 else:
