@@ -3150,24 +3150,35 @@ def main():
                         st.markdown("---")
                         st.markdown("##### 🎯 วิเคราะห์ผลตอบแทนจากเงินปันผลเทียบกับต้นทุนหุ้น (Dividend Yield on Cost)")
                         
-                        if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns and 'ต้นทุนหุ้น' in df_filtered_div.columns:
-                            # จัดกลุ่มคำนวณยอดปันผลสะสม และต้นทุนรวมของแต่ละหุ้น
-                            df_yield_analysis = df_filtered_div.groupby('Ticker').agg({
+                        if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns and 'ต้นทุนหุ้น' in df_filtered_div.columns and 'จำนวนหุ้น' in df_filtered_div.columns:
+                            
+                            # คัดลอก DataFrame มาคำนวณ
+                            df_calc = df_filtered_div.copy()
+                            
+                            # จัดกลุ่มคำนวณ: 
+                            # 1. ยอดปันผลรับสะสมรวม (sum)
+                            # 2. จำนวนหุ้นรวมทั้งหมด (sum) -> เผื่อกรณีบันทึกหลายครั้ง
+                            # 3. ต้นทุนเฉลี่ยต่อหุ้น (ใช้ค่าล่าสุดหรือค่า max ที่กรอกมา)
+                            df_grouped = df_calc.groupby('Ticker').agg({
                                 'ยอดรับสุทธิ': 'sum',
-                                'ต้นทุนหุ้น': 'max' # ใช้ค่าต้นทุนล่าสุดหรือสูงสุดที่บันทึกไว้ของหุ้นตัวนั้น
+                                'จำนวนหุ้น': 'sum',
+                                'ต้นทุนหุ้น': 'max' # สมมติว่าค่าที่กรอกคือราคาต้นทุนเฉลี่ยต่อหุ้น
                             }).reset_index()
                             
-                            # คำนวณ Dividend Yield on Cost (%) = (ปันผลสะสม / ต้นทุนหุ้น) * 100
-                            df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
-                                lambda row: (row['ยอดรับสุทธิ'] / row['ต้นทุนหุ้น'] * 100) if row['ต้นทุนหุ้น'] > 0 else 0.0, 
+                            # คำนวณ "ต้นทุนรวมทั้งหมด" = ราคาต้นทุนเฉลี่ยต่อหุ้น × จำนวนหุ้นรวม
+                            df_grouped['Total_Cost'] = df_grouped['ต้นทุนหุ้น'] * df_grouped['จำนวนหุ้น']
+                            
+                            # คำนวณ Dividend Yield on Cost (%) = (ปันผลรับสะสมรวม / ต้นทุนรวมทั้งหมด) * 100
+                            df_grouped['Yield_on_Cost'] = df_grouped.apply(
+                                lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0, 
                                 axis=1
                             )
                             
-                            # กรองเฉพาะหุ้นที่มีต้นทุนมากกว่า 0 เพื่อคำนวณค่าเฉลี่ยพอร์ต
-                            valid_cost_df = df_yield_analysis[df_yield_analysis['ต้นทุนหุ้น'] > 0]
+                            # กรองเฉพาะหุ้นที่มีต้นทุนรวมมากกว่า 0 และ Yield สมเหตุสมผล (ไม่เกิน 1,000%)
+                            valid_cost_df = df_grouped[(df_grouped['Total_Cost'] > 0) & (df_grouped['Yield_on_Cost'] <= 1000)]
                             
                             if not valid_cost_df.empty:
-                                total_portfolio_cost = valid_cost_df['ต้นทุนหุ้น'].sum()
+                                total_portfolio_cost = valid_cost_df['Total_Cost'].sum()
                                 total_portfolio_dividend = valid_cost_df['ยอดรับสุทธิ'].sum()
                                 avg_yield_on_cost = (total_portfolio_dividend / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
                                 
@@ -3180,9 +3191,9 @@ def main():
                                 st.markdown("<br>", unsafe_allow_html=True)
                                 
                                 # เรียงลำดับจาก Yield สูงสุด ไปต่ำสุด
-                                df_yield_sorted = valid_cost_df.sort_values(by='Yield_on_Cost', ascending=True) # น้อยไปมากเพื่อให้ Plotly แสดงค่ามากไว้บนสุด
+                                df_yield_sorted = valid_cost_df.sort_values(by='Yield_on_Cost', ascending=True)
                                 
-                                # 2. กราฟแท่งแนวนอนเปรียบเทียบ Yield on Cost (Horizontal Bar Chart)
+                                # 2. กราฟแท่งแนวนอนเปรียบเทียบ Yield on Cost
                                 st.markdown("##### 🚀 เครื่องผลิตเงินสด (Yield on Cost สูงสุด -> ต่ำสุด)")
                                 
                                 df_yield_sorted['Text_Label'] = df_yield_sorted['Yield_on_Cost'].apply(lambda x: f"{x:.2f}%")
@@ -3208,31 +3219,22 @@ def main():
                                 st.plotly_chart(fig_yield_bar, use_container_width=True)
                                 
                                 # 3. ตารางสรุปผลตอบแทนแยกตาม Ticker
-                                # 3. ตารางสรุปผลตอบแทนแยกตาม Ticker
                                 st.markdown("##### 📋 ตารางสรุป Yield on Cost แยกตามรายชื่อหุ้น")
                                 
-                                # คัดลอก DataFrame และรีเซ็ต Index ก่อนตั้งชื่อคอลัมน์ใหม่
-                                df_table_display = df_yield_sorted.copy()
-                                
-                                # ตั้งชื่อคอลัมน์และจัดฟอร์แมตข้อมูลตัวเลขให้สวยงาม
-                                df_table_display = df_table_display[['Ticker', 'ยอดรับสุทธิ', 'ต้นทุนหุ้น', 'Yield_on_Cost']].rename(columns={
-                                    'Ticker': 'ชื่อหุ้น (Ticker)',
-                                    'ยอดรับสุทธิ': 'ปันผลรับสะสมรวม (บาท)',
-                                    'ต้นทุนหุ้น': 'ต้นทุนรวม (บาท)',
-                                    'Yield_on_Cost': 'Dividend Yield on Cost (%)'
-                                })
+                                df_table_display = df_yield_sorted[['Ticker', 'ยอดรับสุทธิ', 'Total_Cost', 'Yield_on_Cost']].copy()
+                                df_table_display.columns = ['ชื่อหุ้น (Ticker)', 'ปันผลรับสะสมรวม (บาท)', 'ต้นทุนรวมทั้งหมด (บาท)', 'Dividend Yield on Cost (%)']
                                 
                                 df_table_display['ปันผลรับสะสมรวม (บาท)'] = df_table_display['ปันผลรับสะสมรวม (บาท)'].apply(lambda x: f"{x:,.2f}")
-                                df_table_display['ต้นทุนรวม (บาท)'] = df_table_display['ต้นทุนรวม (บาท)'].apply(lambda x: f"{x:,.2f}")
+                                df_table_display['ต้นทุนรวมทั้งหมด (บาท)'] = df_table_display['ต้นทุนรวมทั้งหมด (บาท)'].apply(lambda x: f"{x:,.2f}")
                                 df_table_display['Dividend Yield on Cost (%)'] = df_table_display['Dividend Yield on Cost (%)'].apply(lambda x: f"{x:.2f}%")
                                 
                                 st.dataframe(df_table_display.reset_index(drop=True), use_container_width=True)
                                 
                             else:
-                                st.info("💡 ยังไม่มีการบันทึกข้อมูล 'ต้นทุนหุ้น' ในระบบ กรุณาอัปเดตข้อมูลต้นทุนผ่านไฟล์ Excel หรือเพิ่มข้อมูลแบบ Manual เพื่อใช้งานฟังก์ชัน Yield on Cost ครับ")
+                                st.info("💡 ยังไม่มีการบันทึกข้อมูล 'ต้นทุนหุ้น' หรือ 'จำนวนหุ้น' ที่ถูกต้องในระบบ กรุณาตรวจสอบข้อมูลให้อีกครั้งครับ")
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
-                                                
+                                                                    
                     else:
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
                 else:
