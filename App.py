@@ -3145,6 +3145,85 @@ def main():
                                 coloraxis_showscale=False
                             )
                             st.plotly_chart(fig_yearly, use_container_width=True)
+
+                        # --- ส่วนที่ 5: วิเคราะห์ Dividend Yield on Cost (%) ---
+                        st.markdown("---")
+                        st.markdown("##### 🎯 วิเคราะห์ผลตอบแทนจากเงินปันผลเทียบกับต้นทุนหุ้น (Dividend Yield on Cost)")
+                        
+                        if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns and 'ต้นทุนหุ้น' in df_filtered_div.columns:
+                            # จัดกลุ่มคำนวณยอดปันผลสะสม และต้นทุนรวมของแต่ละหุ้น
+                            df_yield_analysis = df_filtered_div.groupby('Ticker').agg({
+                                'ยอดรับสุทธิ': 'sum',
+                                'ต้นทุนหุ้น': 'max' # ใช้ค่าต้นทุนล่าสุดหรือสูงสุดที่บันทึกไว้ของหุ้นตัวนั้น
+                            }).reset_index()
+                            
+                            # คำนวณ Dividend Yield on Cost (%) = (ปันผลสะสม / ต้นทุนหุ้น) * 100
+                            df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
+                                lambda row: (row['ยอดรับสุทธิ'] / row['ต้นทุนหุ้น'] * 100) if row['ต้นทุนหุ้น'] > 0 else 0.0, 
+                                axis=1
+                            )
+                            
+                            # กรองเฉพาะหุ้นที่มีต้นทุนมากกว่า 0 เพื่อคำนวณค่าเฉลี่ยพอร์ต
+                            valid_cost_df = df_yield_analysis[df_yield_analysis['ต้นทุนหุ้น'] > 0]
+                            
+                            if not valid_cost_df.empty:
+                                total_portfolio_cost = valid_cost_df['ต้นทุนหุ้น'].sum()
+                                total_portfolio_dividend = valid_cost_df['ยอดรับสุทธิ'].sum()
+                                avg_yield_on_cost = (total_portfolio_dividend / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
+                                
+                                # 1. KPI Card แสดงภาพรวมพอร์ต
+                                kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+                                kpi_col1.metric("📊 Average Yield on Cost ทั้งพอร์ต", f"{avg_yield_on_cost:.2f}% ต่อปี")
+                                kpi_col2.metric("💰 ปันผลรับสะสมรวม (ที่คำนวณ)", f"{total_portfolio_dividend:,.2f} ฿")
+                                kpi_col3.metric("🏛️ ต้นทุนพอร์ตหุ้นรวม", f"{total_portfolio_cost:,.2f} ฿")
+                                
+                                st.markdown("<br>", unsafe_allow_html=True)
+                                
+                                # เรียงลำดับจาก Yield สูงสุด ไปต่ำสุด
+                                df_yield_sorted = valid_cost_df.sort_values(by='Yield_on_Cost', ascending=True) # น้อยไปมากเพื่อให้ Plotly แสดงค่ามากไว้บนสุด
+                                
+                                # 2. กราฟแท่งแนวนอนเปรียบเทียบ Yield on Cost (Horizontal Bar Chart)
+                                st.markdown("##### 🚀 เครื่องผลิตเงินสด (Yield on Cost สูงสุด -> ต่ำสุด)")
+                                
+                                df_yield_sorted['Text_Label'] = df_yield_sorted['Yield_on_Cost'].apply(lambda x: f"{x:.2f}%")
+                                
+                                fig_yield_bar = px.bar(
+                                    df_yield_sorted,
+                                    x='Yield_on_Cost',
+                                    y='Ticker',
+                                    orientation='h',
+                                    text='Text_Label',
+                                    color='Yield_on_Cost',
+                                    color_continuous_scale='Tealgrn'
+                                )
+                                
+                                fig_yield_bar.update_traces(textposition='outside')
+                                fig_yield_bar.update_layout(
+                                    xaxis_title="Dividend Yield on Cost (%)",
+                                    yaxis_title="ชื่อหุ้น (Ticker)",
+                                    height=max(320, len(df_yield_sorted) * 40),
+                                    margin=dict(l=10, r=20, t=20, b=20),
+                                    coloraxis_showscale=False
+                                )
+                                st.plotly_chart(fig_yield_bar, use_container_width=True)
+                                
+                                # 3. ตารางสรุปผลตอบแทนแยกตาม Ticker
+                                st.markdown("##### 📋 ตารางสรุป Yield on Cost แยกตามรายชื่อหุ้น")
+                                
+                                # จัดรูปแบบตารางให้สวยงามและอ่านง่าย
+                                df_table_display = df_yield_sorted.sort_values(by='Yield_on_Cost', ascending=False).copy()
+                                df_table_display.columns = ['ชื่อหุ้น (Ticker)', 'ปันผลรับสะสมรวม (บาท)', 'ต้นทุนรวม (บาท)', 'Dividend Yield on Cost (%)']
+                                df_table_display['ปันผลรับสะสมรวม (บาท)'] = df_table_display['ปันผลรับสะสมรวม (บาท)'].apply(lambda x: f"{x:,.2f}")
+                                df_table_display['ต้นทุนรวม (บาท)'] = df_table_display['ต้นทุนรวม (บาท)'].apply(lambda x: f"{x:,.2f}")
+                                df_table_display['Dividend Yield on Cost (%)'] = df_table_display['Dividend Yield on Cost (%)'].apply(lambda x: f"{x:.2f}%")
+                                
+                                st.dataframe(df_table_display.reset_index(drop=True), use_container_width=True)
+                                
+                            else:
+                                st.info("💡 ยังไม่มีการบันทึกข้อมูล 'ต้นทุนหุ้น' ในระบบ กรุณาอัปเดตข้อมูลต้นทุนผ่านไฟล์ Excel หรือเพิ่มข้อมูลแบบ Manual เพื่อใช้งานฟังก์ชัน Yield on Cost ครับ")
+                        else:
+                            st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
+                                                
                     else:
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
                 else:
