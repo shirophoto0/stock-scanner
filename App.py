@@ -2771,13 +2771,31 @@ def main():
                         
             #########################
             with tab_dividend:
-                # 1. กำหนดตัวแปรเก็บข้อมูลปันผลใน session_state ถ้ายังไม่มี
-                if "dividend_data" not in st.session_state:
-                    st.session_state.dividend_data = []
+                # กำหนดชื่อไฟล์สำหรับเก็บข้อมูลสำรอง
+                DATA_FILE = "dividend_database.csv"
                 
+                # 1. กำหนดตัวแปรและโหลดข้อมูลเดิมจากไฟล์ (ถ้ามี) มาใส่ session_state ตอนเริ่มต้นครั้งเดียว
+                if "dividend_data" not in st.session_state:
+                    if os.path.exists(DATA_FILE):
+                        try:
+                            df_saved = pd.read_csv(DATA_FILE)
+                            st.session_state.dividend_data = df_saved.to_dict('records')
+                        except Exception:
+                            st.session_state.dividend_data = []
+                    else:
+                        st.session_state.dividend_data = []
+            
+                # ฟังก์ชันช่วยบันทึกข้อมูลลงไฟล์ CSV ทุกครั้งที่มีการเปลี่ยนแปลง
+                def save_dividend_data():
+                    if st.session_state.dividend_data:
+                        df_save = pd.DataFrame(st.session_state.dividend_data)
+                        df_save.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+                    else:
+                        if os.path.exists(DATA_FILE):
+                            os.remove(DATA_FILE)  # ถ้าไม่มีข้อมูล ให้ลบไฟล์ทิ้ง
+                            
                 st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
                 
-                # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal (รองรับ Header ยาวอัตโนมัติ) ---
                 # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV (พร้อมระบบกรองข้อมูลซ้ำอัตโนมัติ) ---
                 with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD (Excel/CSV)"):
                     uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
@@ -2837,13 +2855,18 @@ def main():
                                 existing_df = pd.DataFrame(st.session_state.dividend_data)
                                 new_df = pd.DataFrame(processed_rows)
                                 
-                                combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
-                                    subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], 
-                                    keep='first'
-                                )
-                                
-                                added_count = len(combined_df) - len(existing_df)
+                                if not existing_df.empty:
+                                    combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
+                                        subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], 
+                                        keep='first'
+                                    )
+                                    added_count = len(combined_df) - len(existing_df)
+                                else:
+                                    combined_df = new_df.drop_duplicates(subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], keep='first')
+                                    added_count = len(combined_df)
+            
                                 st.session_state.dividend_data = combined_df.to_dict('records')
+                                save_dividend_data()  # บันทึกลงไฟล์ CSV ทันที
                                 
                                 if added_count > 0:
                                     st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
@@ -2890,6 +2913,7 @@ def main():
                                     "หมายเหตุ": notes
                                 }
                                 st.session_state.dividend_data.append(new_entry)
+                                save_dividend_data()  # บันทึกลงไฟล์ CSV ทันที
                                 st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} เรียบร้อยแล้วครับ!")
                                 st.rerun()
                             else:
@@ -2916,18 +2940,18 @@ def main():
                         
                         if st.button("💾 อัปเดตการแก้ไขตารางปันผล", key="update_div_btn"):
                             st.session_state.dividend_data = edited_div_df.to_dict('records')
+                            save_dividend_data()  # บันทึกลงไฟล์ CSV ทันที
                             st.success("✅ อัปเดตข้อมูลสำเร็จ!")
                             st.rerun()
                             
                         csv_div = df_div.to_csv(index=False).encode('utf-8-sig')
                         st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
-
+            
                     # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm) ---
                     st.markdown("---")
                     with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
                         st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
                         
-                        # ใช้ st.session_state เพื่อจัดการสถานะการเปิด/ปิด Pop-up ยืนยัน
                         if "confirm_clear_div" not in st.session_state:
                             st.session_state.confirm_clear_div = False
                             
@@ -2941,6 +2965,7 @@ def main():
                             with col_c1:
                                 if st.button("✔️ ยืนยันการลบ", type="primary"):
                                     st.session_state.dividend_data = []
+                                    save_dividend_data()  # อัปเดตไฟล์ CSV (จะทำการลบไฟล์ทิ้งอัตโนมัติ)
                                     st.session_state.confirm_clear_div = False
                                     st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
                                     st.rerun()
@@ -3035,7 +3060,7 @@ def main():
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับสร้างกราฟวิเคราะห์")
-                                            
+                    
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
