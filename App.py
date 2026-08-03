@@ -3007,7 +3007,7 @@ def main():
                         
                         st.markdown("<br>", unsafe_allow_html=True)
                         
-                        # --- จัดวางกราฟ 2 อันในแถวเดียวกัน (สัดส่วน Donut 1.33 : Treemap 1.66) ---
+                        # --- จัดวางกราฟ Donut (1.33) และ Treemap (1.66) ในแถวเดียวกัน ---
                         col_chart1, col_chart2 = st.columns([1.33, 1.66])
                         
                         with col_chart1:
@@ -3033,7 +3033,6 @@ def main():
                         with col_chart2:
                             st.markdown("##### 🗺️ แผนภาพสัดส่วน (Treemap)")
                             if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
-                                # จัดกลุ่มข้อมูลราย Ticker ก่อนทำ Treemap เพื่อป้องกัน Error ค่าว่างหรือข้อมูลซ้ำซ้อน
                                 df_tree = df_filtered_div.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
                                 
                                 fig_tree = px.treemap(
@@ -3050,7 +3049,53 @@ def main():
                                 )
                                 st.plotly_chart(fig_tree, use_container_width=True)
                         
-                        # --- 3. กราฟแสดงยอดปันผลสะสมรายปี (Yearly Bar Chart) เต็มความกว้างด้านล่าง ---
+                        # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี พร้อมแสดง % และยอดเงิน) ---
+                        st.markdown("---")
+                        st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (แบ่งตามปีที่ได้รับ)")
+                        
+                        if 'Ticker' in df_div.columns and 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
+                            # จัดกลุ่มคำนวณยอดเงินแยกตาม Ticker และ Year
+                            df_stacked = df_div[df_div['Year'] > 0].groupby(['Ticker', 'Year'])['ยอดรับสุทธิ'].sum().reset_index()
+                            
+                            # คำนวณหายอดรวมของแต่ละหุ้น เพื่อเอาไปเทียบหาค่าเปอร์เซ็นต์ (%)
+                            df_ticker_totals = df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].transform('sum')
+                            df_stacked['Percentage'] = (df_stacked['ยอดรับสุทธิ'] / df_ticker_totals) * 100
+                            
+                            # แปลง Year เป็น string เพื่อให้ Plotly มองเป็นหมวดหมู่สี (Discrete Color)
+                            df_stacked['Year_Str'] = df_stacked['Year'].astype(str)
+                            
+                            # สร้าง Label สำหรับแสดงบนแท่งกราฟ (แสดงทั้งยอดเงินและเปอร์เซ็นต์)
+                            df_stacked['Text_Label'] = df_stacked.apply(
+                                lambda row: f"{row['ยอดรับสุทธิ']:,.0f} ฿ ({row['Percentage']:.1f}%)" if row['Percentage'] > 5 else "", 
+                                axis=1
+                            )
+                            
+                            fig_stacked_bar = px.bar(
+                                df_stacked,
+                                x='ยอดรับสุทธิ',
+                                y='Ticker',
+                                color='Year_Str',
+                                orientation='h',
+                                text='Text_Label',
+                                barmode='stack',
+                                color_discrete_sequence=px.colors.qualitative.Bold
+                            )
+                            
+                            fig_stacked_bar.update_traces(
+                                textposition='inside', 
+                                insidetextanchor='middle'
+                            )
+                            
+                            fig_stacked_bar.update_layout(
+                                xaxis_title="ยอดปันผลรับสุทธิรวม (บาท)",
+                                yaxis_title="ชื่อหุ้น (Ticker)",
+                                height=max(350, len(df_stacked['Ticker'].unique()) * 45),
+                                margin=dict(l=10, r=20, t=20, b=20),
+                                legend_title="ปีที่ได้รับ (Year)"
+                            )
+                            st.plotly_chart(fig_stacked_bar, use_container_width=True)
+            
+                        # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
                         st.markdown("---")
                         st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
                         if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
