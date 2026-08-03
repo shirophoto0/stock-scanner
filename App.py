@@ -3120,6 +3120,31 @@ def main():
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
 
+                        # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
+                        st.markdown("---")
+                        st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
+                        if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
+                            df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
+                            df_yearly_sum['Year'] = df_yearly_sum['Year'].astype(str)
+                            
+                            fig_yearly = px.bar(
+                                df_yearly_sum,
+                                x='Year',
+                                y='ยอดรับสุทธิ',
+                                text=df_yearly_sum['ยอดรับสุทธิ'].apply(lambda x: f"{x:,.2f} ฿"),
+                                color='ยอดรับสุทธิ',
+                                color_continuous_scale='Blues'
+                            )
+                            fig_yearly.update_traces(textposition='outside')
+                            fig_yearly.update_layout(
+                                xaxis_title="ปี (Year)",
+                                yaxis_title="ยอดปันผลรับสุทธิ (บาท)",
+                                height=380,
+                                margin=dict(l=10, r=10, t=20, b=20),
+                                coloraxis_showscale=False
+                            )
+                            st.plotly_chart(fig_yearly, use_container_width=True)
+                            
                         # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี พร้อมแสดง % และยอดเงิน) ---
                         st.markdown("---")
                         st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (เรียงจากยอดมากไปน้อย แบ่งตามปีที่ได้รับ)")
@@ -3175,31 +3200,6 @@ def main():
                                 st.plotly_chart(fig_stacked_bar, use_container_width=True)
                             else:
                                 st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
-
-                            # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
-                            st.markdown("---")
-                            st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
-                            if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
-                                df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
-                                df_yearly_sum['Year'] = df_yearly_sum['Year'].astype(str)
-                                
-                                fig_yearly = px.bar(
-                                    df_yearly_sum,
-                                    x='Year',
-                                    y='ยอดรับสุทธิ',
-                                    text=df_yearly_sum['ยอดรับสุทธิ'].apply(lambda x: f"{x:,.2f} ฿"),
-                                    color='ยอดรับสุทธิ',
-                                    color_continuous_scale='Blues'
-                                )
-                                fig_yearly.update_traces(textposition='outside')
-                                fig_yearly.update_layout(
-                                    xaxis_title="ปี (Year)",
-                                    yaxis_title="ยอดปันผลรับสุทธิ (บาท)",
-                                    height=380,
-                                    margin=dict(l=10, r=10, t=20, b=20),
-                                    coloraxis_showscale=False
-                                )
-                                st.plotly_chart(fig_yearly, use_container_width=True)
                                 
                     else:
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
