@@ -3208,11 +3208,20 @@ def main():
                                 st.plotly_chart(fig_yield_bar, use_container_width=True)
                                 
                                 # 3. ตารางสรุปผลตอบแทนแยกตาม Ticker
+                                # 3. ตารางสรุปผลตอบแทนแยกตาม Ticker
                                 st.markdown("##### 📋 ตารางสรุป Yield on Cost แยกตามรายชื่อหุ้น")
                                 
-                                # จัดรูปแบบตารางให้สวยงามและอ่านง่าย
-                                df_table_display = df_yield_sorted.sort_values(by='Yield_on_Cost', ascending=False).copy()
-                                df_table_display.columns = ['ชื่อหุ้น (Ticker)', 'ปันผลรับสะสมรวม (บาท)', 'ต้นทุนรวม (บาท)', 'Dividend Yield on Cost (%)']
+                                # คัดลอก DataFrame และรีเซ็ต Index ก่อนตั้งชื่อคอลัมน์ใหม่
+                                df_table_display = df_yield_sorted.copy()
+                                
+                                # ตั้งชื่อคอลัมน์และจัดฟอร์แมตข้อมูลตัวเลขให้สวยงาม
+                                df_table_display = df_table_display[['Ticker', 'ยอดรับสุทธิ', 'ต้นทุนหุ้น', 'Yield_on_Cost']].rename(columns={
+                                    'Ticker': 'ชื่อหุ้น (Ticker)',
+                                    'ยอดรับสุทธิ': 'ปันผลรับสะสมรวม (บาท)',
+                                    'ต้นทุนหุ้น': 'ต้นทุนรวม (บาท)',
+                                    'Yield_on_Cost': 'Dividend Yield on Cost (%)'
+                                })
+                                
                                 df_table_display['ปันผลรับสะสมรวม (บาท)'] = df_table_display['ปันผลรับสะสมรวม (บาท)'].apply(lambda x: f"{x:,.2f}")
                                 df_table_display['ต้นทุนรวม (บาท)'] = df_table_display['ต้นทุนรวม (บาท)'].apply(lambda x: f"{x:,.2f}")
                                 df_table_display['Dividend Yield on Cost (%)'] = df_table_display['Dividend Yield on Cost (%)'].apply(lambda x: f"{x:.2f}%")
