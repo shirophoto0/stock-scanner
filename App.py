@@ -2778,20 +2778,21 @@ def main():
                 st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
                 
                 # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal (รองรับ Header ยาวอัตโนมัติ) ---
+                # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV (พร้อมระบบกรองข้อมูลซ้ำอัตโนมัติ) ---
                 with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD (Excel/CSV)"):
-                    uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล TSD", type=['csv', 'xlsx', 'xls'], key="div_file")
+                    uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
                     if uploaded_div_file:
-                        if st.button("ยืนยันการนำเข้าไฟล์ปันผล TSD"):
+                        if st.button("ยืนยันการนำเข้าไฟล์ปันผล"):
                             try:
                                 if uploaded_div_file.name.endswith('.csv'):
                                     df_upload = pd.read_csv(uploaded_div_file)
                                 else:
                                     df_upload = pd.read_excel(uploaded_div_file)
                                 
+                                processed_rows = []
+                                
                                 # ตรวจสอบว่าเป็นไฟล์ TSD หรือไฟล์ฟอร์แมตปกติ
                                 if 'ชื่อย่อหลักทรัพย์' in df_upload.columns and 'วันที่จ่าย' in df_upload.columns:
-                                    # แปลงข้อมูลจากโครงสร้าง TSD ที่มีหัวคอลัมน์ยาวๆ ให้เข้ากับตารางมาตรฐาน
-                                    processed_rows = []
                                     for idx, row in df_upload.iterrows():
                                         ticker = str(row.get('ชื่อย่อหลักทรัพย์', '')).strip().upper()
                                         if not ticker or ticker == 'NAN':
@@ -2829,22 +2830,30 @@ def main():
                                             "ยอดรับสุทธิ": net_receive,
                                             "หมายเหตุ": "นำเข้าจาก TSD Portal"
                                         })
-                                    
-                                    if processed_rows:
-                                        st.session_state.dividend_data.extend(processed_rows)
-                                        st.success(f"✅ นำเข้าข้อมูล TSD สำเร็จ! (เพิ่มขึ้น {len(processed_rows)} รายการ)")
-                                        st.rerun()
-                                    else:
-                                        st.warning("⚠️ ไม่พบข้อมูลหลักทรัพย์ในไฟล์")
                                 else:
-                                    # กรณีเป็นไฟล์ฟอร์แมตมาตรฐานทั่วไปที่เคยเซฟไว้
-                                    st.session_state.dividend_data.extend(df_upload.to_dict('records'))
-                                    st.success("✅ นำเข้าข้อมูลเงินปันผลสำเร็จ!")
-                                    st.rerun()
+                                    processed_rows = df_upload.to_dict('records')
+                                
+                                # --- ระบบกรองข้อมูลซ้ำ (Deduplication Check) ---
+                                existing_df = pd.DataFrame(st.session_state.dividend_data)
+                                new_df = pd.DataFrame(processed_rows)
+                                
+                                combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
+                                    subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], 
+                                    keep='first'
+                                )
+                                
+                                added_count = len(combined_df) - len(existing_df)
+                                st.session_state.dividend_data = combined_df.to_dict('records')
+                                
+                                if added_count > 0:
+                                    st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
+                                else:
+                                    st.info("ℹ️ ข้อมูลในไฟล์นี้มีอยู่แล้วในระบบทั้งหมด จึงไม่มีการเพิ่มรายการซ้ำ")
+                                st.rerun()
                                     
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
-                
+                                
                 # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
                 with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=True):
                     with st.form("dividend_form", clear_on_submit=True):
