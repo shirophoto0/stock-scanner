@@ -3007,32 +3007,51 @@ def main():
                         
                         st.markdown("<br>", unsafe_allow_html=True)
                         
-                        # --- 1. กราฟแสดงยอดปันผลหุ้นรายตัว (Bar Chart) ---
-                        st.markdown("##### 📈 ยอดปันผลรับสุทธิแยกตามรายชื่อหุ้น (Ticker)")
-                        if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
-                            df_ticker_sum = df_filtered_div.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
-                            df_ticker_sum = df_ticker_sum.sort_values(by='ยอดรับสุทธิ', ascending=True)
-                            
-                            fig_ticker = px.bar(
-                                df_ticker_sum,
-                                x='ยอดรับสุทธิ',
-                                y='Ticker',
-                                orientation='h',
-                                text=df_ticker_sum['ยอดรับสุทธิ'].apply(lambda x: f"{x:,.2f} ฿"),
-                                color='ยอดรับสุทธิ',
-                                color_continuous_scale='Teal'
-                            )
-                            fig_ticker.update_traces(textposition='outside')
-                            fig_ticker.update_layout(
-                                xaxis_title="ยอดปันผลรับสุทธิ (บาท)",
-                                yaxis_title="ชื่อหุ้น (Ticker)",
-                                height=max(300, len(df_ticker_sum) * 40),
-                                margin=dict(l=10, r=20, t=20, b=20),
-                                coloraxis_showscale=False
-                            )
-                            st.plotly_chart(fig_ticker, use_container_width=True)
+                        # --- จัดวางกราฟ 2 อันในแถวเดียวกัน (สัดส่วน Donut 1.33 : Treemap 1.66) ---
+                        col_chart1, col_chart2 = st.columns([1.33, 1.66])
                         
-                        # --- 2. กราฟแสดงยอดปันผลสะสมรายปี (Yearly Bar Chart) ---
+                        with col_chart1:
+                            st.markdown("##### 🍩 สัดส่วนปันผลรายหุ้น")
+                            if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
+                                df_pie = df_filtered_div.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
+                                
+                                fig_donut = px.pie(
+                                    df_pie, 
+                                    names='Ticker', 
+                                    values='ยอดรับสุทธิ', 
+                                    hole=0.4, 
+                                    color_discrete_sequence=px.colors.qualitative.Prism
+                                )
+                                fig_donut.update_traces(textposition='inside', textinfo='percent+label')
+                                fig_donut.update_layout(
+                                    height=380,
+                                    margin=dict(l=10, r=10, t=10, b=10),
+                                    showlegend=False
+                                )
+                                st.plotly_chart(fig_donut, use_container_width=True)
+                        
+                        with col_chart2:
+                            st.markdown("##### 🗺️ แผนภาพสัดส่วน (Treemap)")
+                            if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
+                                # จัดกลุ่มข้อมูลราย Ticker ก่อนทำ Treemap เพื่อป้องกัน Error ค่าว่างหรือข้อมูลซ้ำซ้อน
+                                df_tree = df_filtered_div.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
+                                
+                                fig_tree = px.treemap(
+                                    df_tree,
+                                    path=['Ticker'],
+                                    values='ยอดรับสุทธิ',
+                                    color='ยอดรับสุทธิ',
+                                    color_continuous_scale='Mint'
+                                )
+                                fig_tree.update_layout(
+                                    height=380,
+                                    margin=dict(l=10, r=10, t=10, b=10),
+                                    coloraxis_showscale=False
+                                )
+                                st.plotly_chart(fig_tree, use_container_width=True)
+                        
+                        # --- 3. กราฟแสดงยอดปันผลสะสมรายปี (Yearly Bar Chart) เต็มความกว้างด้านล่าง ---
+                        st.markdown("---")
                         st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
                         if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
                             df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
@@ -3055,49 +3074,11 @@ def main():
                                 coloraxis_showscale=False
                             )
                             st.plotly_chart(fig_yearly, use_container_width=True)
-
-                            # --- 1. กราฟ Donut แสดงสัดส่วนเงินปันผลรายหุ้น ---
-                            st.markdown("##### 🍩 สัดส่วนเงินปันผลรับตามรายชื่อหุ้น (Portfolio Dividend Share)")
-                            if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
-                                df_pie = df_filtered_div.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
-                                
-                                fig_donut = px.pie(
-                                    df_pie, 
-                                    names='Ticker', 
-                                    values='ยอดรับสุทธิ', 
-                                    hole=0.4, # ทำเป็นทรงโดนัท
-                                    color_discrete_sequence=px.colors.qualitative.Prism
-                                )
-                                fig_donut.update_traces(textposition='inside', textinfo='percent+label')
-                                fig_donut.update_layout(
-                                    height=400,
-                                    margin=dict(l=10, r=10, t=20, b=20),
-                                    showlegend=False
-                                )
-                                st.plotly_chart(fig_donut, use_container_width=True)
-                            
-                            # --- 2. กราฟ Treemap แสดงความหนาแน่นและขนาดเงินปันผล ---
-                            st.markdown("##### 🗺️ แผนภาพสัดส่วนเงินปันผล (Dividend Treemap)")
-                            if not df_filtered_div.empty:
-                                fig_tree = px.treemap(
-                                    df_filtered_div,
-                                    path=['Ticker', 'หมายเหตุ'],
-                                    values='ยอดรับสุทธิ',
-                                    color='ยอดรับสุทธิ',
-                                    color_continuous_scale='Mint'
-                                )
-                                fig_tree.update_layout(
-                                    height=350,
-                                    margin=dict(l=10, r=10, t=20, b=20),
-                                    coloraxis_showscale=False
-                                )
-                                st.plotly_chart(fig_tree, use_container_width=True)
-                                
                     else:
                         st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
-                    
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับสร้างกราฟวิเคราะห์")
+                    
                     
             #########################
             with tab_journal:
