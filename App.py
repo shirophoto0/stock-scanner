@@ -1013,7 +1013,7 @@ if 'dividend_data' not in st.session_state:
 if 'cash_balance' not in st.session_state:
     st.session_state.cash_balance = 0.0  # หรือใส่จำนวนเงินสดเริ่มต้นของคุณ เช่น 100000.0
 
-st.title("📈 Application UM-Wealth")
+st.title("📈 Application NJ-Wealth")
 st.write("ระบบสแกนหุ้นพร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
 
 # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
