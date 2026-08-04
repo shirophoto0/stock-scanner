@@ -3387,7 +3387,7 @@ def main():
                     st.markdown("---")
                     with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
                         st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
-                                            
+                        
                         if "confirm_clear_div" not in st.session_state:
                             st.session_state.confirm_clear_div = False
                             
@@ -3439,30 +3439,23 @@ def main():
                             )
                             st.plotly_chart(fig_yearly, use_container_width=True)
                             
-                            
                         # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี พร้อมแสดง % และยอดเงิน) ---
                         st.markdown("---")
                         st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (เรียงจากยอดมากไปน้อย แบ่งตามปีที่ได้รับ)")
                         
                         # ใช้ df_filtered_div เพื่อให้สอดคล้องกับปีที่ผู้ใช้เลือกกรองด้านบน
                         if 'Ticker' in df_filtered_div.columns and 'Year' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
-                            # 1. จัดกลุ่มคำนวณยอดเงินแยกตาม Ticker และ Year จากข้อมูลที่กรองแล้ว
                             df_stacked = df_filtered_div[df_filtered_div['Year'] > 0].groupby(['Ticker', 'Year'])['ยอดรับสุทธิ'].sum().reset_index()
                             
                             if not df_stacked.empty:
-                                # 2. คำนวณหายอดรวมทั้งหมดของแต่ละหุ้น เพื่อใช้สำหรับเรียงลำดับ (Sorting)
                                 df_ticker_totals = df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
-                                df_ticker_totals = df_ticker_totals.sort_values(by='ยอดรับสุทธิ', ascending=True) # น้อยไปมากเพื่อให้ Plotly แสดงแท่งมากไว้บนสุด
+                                df_ticker_totals = df_ticker_totals.sort_values(by='ยอดรับสุทธิ', ascending=True)
                                 sorted_tickers = df_ticker_totals['Ticker'].tolist()
                                 
-                                # 3. คำนวณหาเปอร์เซ็นต์ (%) สัดส่วนของแต่ละปีในหุ้นตัวนั้น
                                 df_stacked['Total_Stock_Sum'] = df_stacked['Ticker'].map(df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum())
                                 df_stacked['Percentage'] = (df_stacked['ยอดรับสุทธิ'] / df_stacked['Total_Stock_Sum']) * 100
-                                
-                                # 4. แปลง Year เป็น string เพื่อให้ Plotly มองเป็นหมวดหมู่สี
                                 df_stacked['Year_Str'] = df_stacked['Year'].astype(str)
                                 
-                                # 5. สร้าง Label สำหรับแสดงบนแท่งกราฟ (แสดงเฉพาะส่วนที่มากกว่า 5% เพื่อความสะอาดตา)
                                 df_stacked['Text_Label'] = df_stacked.apply(
                                     lambda row: f"{row['ยอดรับสุทธิ']:,.0f} ฿ ({row['Percentage']:.1f}%)" if row['Percentage'] > 5 else "", 
                                     axis=1
@@ -3476,7 +3469,7 @@ def main():
                                     orientation='h',
                                     text='Text_Label',
                                     barmode='stack',
-                                    category_orders={'Ticker': sorted_tickers}, # บังคับลำดับแกน Y ให้เรียงตามยอดรวม
+                                    category_orders={'Ticker': sorted_tickers},
                                     color_discrete_sequence=px.colors.qualitative.Bold
                                 )
                                 
@@ -3495,109 +3488,91 @@ def main():
                                 st.plotly_chart(fig_stacked_bar, use_container_width=True)
                             else:
                                 st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
+                        else:
+                            st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปีที่เลือก")
+                    
+                        # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost ต่อปี ---
+                        st.markdown("---")
+                        st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
+                        
+                        if 'dividend_data' in st.session_state and st.session_state.dividend_data:
+                            df_div_local = pd.DataFrame(st.session_state.dividend_data)
+                        else:
+                            df_div_local = pd.DataFrame()
+                        
+                        if not df_div_local.empty and 'Ticker' in df_div_local.columns and 'ยอดรับสุทธิ' in df_div_local.columns and 'ต้นทุนหุ้น' in df_div_local.columns and 'จำนวนหุ้น' in df_div_local.columns:
+                            df_stack_calc = df_div_local.copy()
+                            
+                            if 'วันที่ได้รับ' in df_stack_calc.columns:
+                                df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], errors='coerce')
+                                df_stack_calc['Year'] = df_stack_calc['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
+                            else:
+                                df_stack_calc['Year'] = 0
                                 
-                        else:
-                            st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปี {selected_period}")
-                    else:
-                        st.info("ยังไม่มีข้อมูลสำหรับสร้างกราฟวิเคราะห์")
-                    
-                    # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost ต่อปี (มีตัวกรองปีและ All Time แยกอิสระ) ---
-                    st.markdown("---")
-                    st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
-                    
-                    # 1. ป้องกัน UnboundLocalError โดยดึงข้อมูลจาก Session State มาเป็น df_div โดยตรง ณ จุดนี้เลย
-                    if 'dividend_data' in st.session_state and st.session_state.dividend_data:
-                        df_div = pd.DataFrame(st.session_state.dividend_data)
-                    else:
-                        df_div = pd.DataFrame()
-                    
-                    if not df_div.empty and 'Ticker' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns and 'ต้นทุนหุ้น' in df_div.columns and 'จำนวนหุ้น' in df_div.columns:
-                        
-                        # คัดลอกข้อมูลทั้งหมดของตารางปันผล
-                        df_stack_calc = df_div.copy()
-                        
-                        # แปลงวันที่เพื่อดึงข้อมูล "ปี" (Year)
-                        if 'วันที่ได้รับ' in df_stack_calc.columns:
-                            df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], errors='coerce')
-                            df_stack_calc['Year'] = df_stack_calc['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
-                        else:
-                            df_stack_calc['Year'] = 0
+                            available_stack_years = sorted([y for y in df_stack_calc['Year'].unique() if y > 0], reverse=True)
+                            stack_year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_stack_years]
                             
-                        # สร้างตัวกรองเฉพาะสำหรับกราฟนี้ (แยกอิสระ)
-                        available_stack_years = sorted([y for y in df_stack_calc['Year'].unique() if y > 0], reverse=True)
-                        stack_year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_stack_years]
-                        
-                        # วาง Selectbox สำหรับเลือกปีของกราฟนี้
-                        selected_stack_period = st.selectbox(
-                            "📅 กรองช่วงเวลากราฟ Stacked Bar:", 
-                            stack_year_options, 
-                            key="stack_bar_year_filter"
-                        )
-                        
-                        # กรองข้อมูลตามที่ผู้ใช้เลือกในกราฟนี้
-                        if selected_stack_period != "All Time (ทั้งหมด)":
-                            df_stack_filtered = df_stack_calc[df_stack_calc['Year'] == int(selected_stack_period)].copy()
-                        else:
-                            df_stack_filtered = df_stack_calc.copy()
-                            
-                        if not df_stack_filtered.empty:
-                            # แปลง Year กลับเป็น string สำหรับทำสี Stack ใน Plotly
-                            df_stack_filtered['Year_Str'] = df_stack_filtered['Year'].astype(str)
-                            
-                            # ดึงต้นทุนและจำนวนหุ้นล่าสุดของแต่ละ Ticker มาคำนวณต้นทุนรวมปัจจุบัน
-                            df_latest = df_stack_calc.groupby('Ticker').agg({
-                                'จำนวนหุ้น': 'last',
-                                'ต้นทุนหุ้น': 'last'
-                            }).reset_index()
-                            df_latest['Total_Cost'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
-                            
-                            # จัดกลุ่มหายอดปันผลแยกตาม Ticker และ Year ตามข้อมูลที่กรอง
-                            df_grouped_yearly = df_stack_filtered.groupby(['Ticker', 'Year_Str'])['ยอดรับสุทธิ'].sum().reset_index()
-                            
-                            # รวมเข้ากับต้นทุนรวมของหุ้นตัวนั้น
-                            df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'Total_Cost']], on='Ticker')
-                            
-                            # คำนวณ % Yield on Cost แยกตามปี = (ปันผลในปีนั้น / ต้นทุนรวมทั้งหมด) * 100
-                            df_merged_yearly['Yield_on_Cost_Annual'] = df_merged_yearly.apply(
-                                lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
-                                axis=1
+                            selected_stack_period = st.selectbox(
+                                "📅 กรองช่วงเวลากราฟ Stacked Bar:", 
+                                stack_year_options, 
+                                key="stack_bar_year_filter"
                             )
                             
-                            if not df_merged_yearly.empty:
-                                # คำนวณ Yield รวมทั้งหมดในมุมมองปัจจุบัน เพื่อใช้เรียงลำดับในกราฟ (จากมากไปน้อย)
-                                df_total_yield = df_merged_yearly.groupby('Ticker')['Yield_on_Cost_Annual'].sum().reset_index()
-                                sorted_tickers = df_total_yield.sort_values(by='Yield_on_Cost_Annual', ascending=True)['Ticker'].tolist()
-                                
-                                # สร้าง Stacked Bar Chart ด้วย Plotly
-                                fig_stacked = px.bar(
-                                    df_merged_yearly,
-                                    x='Yield_on_Cost_Annual',
-                                    y='Ticker',
-                                    color='Year_Str',
-                                    orientation='h',
-                                    category_orders={'Ticker': sorted_tickers}, # เรียงลำดับหุ้นจากมากไปน้อย
-                                    labels={'Yield_on_Cost_Annual': 'Dividend Yield on Cost (%)', 'Ticker': 'ชื่อหุ้น (Ticker)', 'Year_Str': 'ปี (Year)'},
-                                    color_discrete_sequence=px.colors.qualitative.Prism # โทนสีสวยงาม
-                                )
-                                
-                                fig_stacked.update_layout(
-                                    barmode='stack',
-                                    xaxis_title=f"Dividend Yield on Cost (%) - [{selected_stack_period}]",
-                                    yaxis_title="ชื่อหุ้น (Ticker)",
-                                    height=max(350, len(sorted_tickers) * 45),
-                                    margin=dict(l=10, r=20, t=30, b=20),
-                                    legend_title="ปีที่ได้รับปันผล"
-                                )
-                                
-                                fig_stacked.update_traces(texttemplate='%{x:.2f}%', textposition='inside')
-                                
-                                st.plotly_chart(fig_stacked, use_container_width=True)
+                            if selected_stack_period != "All Time (ทั้งหมด)":
+                                df_stack_filtered = df_stack_calc[df_stack_calc['Year'] == int(selected_stack_period)].copy()
                             else:
-                                st.info(f"💡 ไม่มีข้อมูลปันผลในช่วงเวลา {selected_stack_period}")
+                                df_stack_filtered = df_stack_calc.copy()
+                                
+                            if not df_stack_filtered.empty:
+                                df_stack_filtered['Year_Str'] = df_stack_filtered['Year'].astype(str)
+                                
+                                df_latest = df_stack_calc.groupby('Ticker').agg({
+                                    'จำนวนหุ้น': 'last',
+                                    'ต้นทุนหุ้น': 'last'
+                                }).reset_index()
+                                df_latest['Total_Cost'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
+                                
+                                df_grouped_yearly = df_stack_filtered.groupby(['Ticker', 'Year_Str'])['ยอดรับสุทธิ'].sum().reset_index()
+                                df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'Total_Cost']], on='Ticker')
+                                
+                                df_merged_yearly['Yield_on_Cost_Annual'] = df_merged_yearly.apply(
+                                    lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
+                                    axis=1
+                                )
+                                
+                                if not df_merged_yearly.empty:
+                                    df_total_yield = df_merged_yearly.groupby('Ticker')['Yield_on_Cost_Annual'].sum().reset_index()
+                                    sorted_tickers_yield = df_total_yield.sort_values(by='Yield_on_Cost_Annual', ascending=True)['Ticker'].tolist()
+                                    
+                                    fig_stacked = px.bar(
+                                        df_merged_yearly,
+                                        x='Yield_on_Cost_Annual',
+                                        y='Ticker',
+                                        color='Year_Str',
+                                        orientation='h',
+                                        category_orders={'Ticker': sorted_tickers_yield},
+                                        labels={'Yield_on_Cost_Annual': 'Dividend Yield on Cost (%)', 'Ticker': 'ชื่อหุ้น (Ticker)', 'Year_Str': 'ปี (Year)'},
+                                        color_discrete_sequence=px.colors.qualitative.Prism
+                                    )
+                                    
+                                    fig_stacked.update_layout(
+                                        barmode='stack',
+                                        xaxis_title=f"Dividend Yield on Cost (%) - [{selected_stack_period}]",
+                                        yaxis_title="ชื่อหุ้น (Ticker)",
+                                        height=max(350, len(sorted_tickers_yield) * 45),
+                                        margin=dict(l=10, r=20, t=30, b=20),
+                                        legend_title="ปีที่ได้รับปันผล"
+                                    )
+                                    
+                                    fig_stacked.update_traces(texttemplate='%{x:.2f}%', textposition='inside')
+                                    st.plotly_chart(fig_stacked, use_container_width=True)
+                                else:
+                                    st.info(f"💡 ไม่มีข้อมูลปันผลในช่วงเวลา {selected_stack_period}")
+                            else:
+                                st.info(f"💡 ไม่มีข้อมูลในช่วงเวลา {selected_stack_period}")
                         else:
-                            st.info(f"💡 ไม่มีข้อมูลในช่วงเวลา {selected_stack_period}")
-                    else:
-                        st.info("ยังไม่มีข้อมูลประวัติเงินปันผลในระบบ กรุณานำเข้าไฟล์หรือเพิ่มข้อมูลก่อนครับ")
+                            st.info("ยังไม่มีข้อมูลประวัติเงินปันผลในระบบ กรุณานำเข้าไฟล์หรือเพิ่มข้อมูลก่อนครับ")
+                            
                                             
             #########################
             with tab_journal:
