@@ -3220,7 +3220,13 @@ def main():
                 st.markdown("---")
                 st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
                 
-                if 'Ticker' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns and 'ต้นทุนหุ้น' in df_div.columns and 'จำนวนหุ้น' in df_div.columns:
+                # 1. ป้องกัน UnboundLocalError โดยดึงข้อมูลจาก Session State มาเป็น df_div โดยตรง ณ จุดนี้เลย
+                if 'dividend_data' in st.session_state and st.session_state.dividend_data:
+                    df_div = pd.DataFrame(st.session_state.dividend_data)
+                else:
+                    df_div = pd.DataFrame()
+            
+                if not df_div.empty and 'Ticker' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns and 'ต้นทุนหุ้น' in df_div.columns and 'จำนวนหุ้น' in df_div.columns:
                     
                     # คัดลอกข้อมูลทั้งหมดของตารางปันผล
                     df_stack_calc = df_div.copy()
@@ -3306,8 +3312,8 @@ def main():
                     else:
                         st.info(f"💡 ไม่มีข้อมูลในช่วงเวลา {selected_stack_period}")
                 else:
-                    st.info("ยังไม่มีข้อมูลคอลัมน์ที่จำเป็นสำหรับวิเคราะห์ Yield on Cost")
-                                
+                    st.info("ยังไม่มีข้อมูลประวัติเงินปันผลในระบบ กรุณานำเข้าไฟล์หรือเพิ่มข้อมูลก่อนครับ")
+                                            
             #########################
             with tab_journal:
                 st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
