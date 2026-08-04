@@ -173,6 +173,35 @@ def save_data_to_sheet(new_df, sheet_name):
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
         return False
 
+DATA_FILE = "dividend_database.csv"
+
+def save_dividend_data_global():
+    try:
+        if "dividend_data" in st.session_state and st.session_state.dividend_data:
+            df_save = pd.DataFrame(st.session_state.dividend_data)
+            df_save.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+        else:
+            pd.DataFrame(columns=[
+                "วันที่ได้รับ", "Ticker", "จำนวนหุ้น", "ปันผลต่อหุ้น", 
+                "ยอดรวมก่อนภาษี", "ภาษีหัก ณ ที่จ่าย", "ยอดรับสุทธิ", "ต้นทุนหุ้น", "หมายเหตุ"
+            ]).to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+    except Exception as e:
+        print(f"Error saving file: {e}")
+
+# โหลดข้อมูลเข้า session_state ตั้งแต่เริ่มเปิดแอป
+if "dividend_data" not in st.session_state:
+    if os.path.exists(DATA_FILE):
+        try:
+            df_saved = pd.read_csv(DATA_FILE)
+            if not df_saved.empty:
+                st.session_state.dividend_data = df_saved.to_dict('records')
+            else:
+                st.session_state.dividend_data = []
+        except Exception:
+            st.session_state.dividend_data = []
+    else:
+        st.session_state.dividend_data = []
+        
 def calculate_atr(df, period=14):
     """คำนวณค่า Average True Range (ATR) จากข้อมูลราคา"""
     if df.empty or len(df) < period:
@@ -229,11 +258,6 @@ def load_dividend_data():
         except:
             return []
     return []
-
-def save_dividend_data():
-    if 'dividend_data' in st.session_state and st.session_state.dividend_data:
-        df = pd.DataFrame(st.session_state.dividend_data)
-        df.to_csv(DIVIDEND_FILE, index=False)
         
 @st.cache_data(ttl=60)
 def load_data(sheet_name):
@@ -3107,20 +3131,6 @@ def main():
                             st.session_state.dividend_data = []
                     else:
                         st.session_state.dividend_data = []
-                            
-                # ฟังก์ชันช่วยบันทึกข้อมูลลงไฟล์ CSV
-                def save_dividend_data():
-                    try:
-                        if st.session_state.dividend_data:
-                            df_save = pd.DataFrame(st.session_state.dividend_data)
-                            df_save.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
-                        else:
-                            pd.DataFrame(columns=[
-                                "วันที่ได้รับ", "Ticker", "จำนวนหุ้น", "ปันผลต่อหุ้น", 
-                                "ยอดรวมก่อนภาษี", "ภาษีหัก ณ ที่จ่าย", "ยอดรับสุทธิ", "ต้นทุนหุ้น", "หมายเหตุ"
-                            ]).to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
-                    except Exception as e:
-                        print(f"Error saving file: {e}")
                         
                 st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
                 
