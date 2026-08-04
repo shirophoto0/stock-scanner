@@ -1009,7 +1009,7 @@ if "journal_data" not in st.session_state:
 if 'dividend_data' not in st.session_state:
     st.session_state.dividend_data = load_dividend_data()
 
-st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
+st.title("📈 Application UM-Wealth")
 st.write("ระบบสแกนหุ้นพร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
 
 # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
