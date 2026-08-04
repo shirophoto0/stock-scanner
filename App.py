@@ -208,7 +208,23 @@ def save_cash_to_gsheet(df):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Cash_Flow: {e}")
         return False        
 ####################
+DIVIDEND_FILE = "dividend_data.csv"
 
+# --- 1. ฟังก์ชันโหลดและบันทึกข้อมูลถาวร ---
+def load_dividend_data():
+    if os.path.exists(DIVIDEND_FILE):
+        try:
+            df = pd.read_csv(DIVIDEND_FILE)
+            return df.to_dict('records')
+        except:
+            return []
+    return []
+
+def save_dividend_data():
+    if 'dividend_data' in st.session_state and st.session_state.dividend_data:
+        df = pd.DataFrame(st.session_state.dividend_data)
+        df.to_csv(DIVIDEND_FILE, index=False)
+        
 @st.cache_data(ttl=60)
 def load_data(sheet_name):
     try:
@@ -989,6 +1005,9 @@ if "my_portfolio" not in st.session_state:
 
 if "journal_data" not in st.session_state:
     load_journal()
+
+if 'dividend_data' not in st.session_state:
+    st.session_state.dividend_data = load_dividend_data()
 
 st.title("📈 แอปพลิเคชันวิเคราะห์หุ้นไทย")
 st.write("ระบบสแกนหุ้นพร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
