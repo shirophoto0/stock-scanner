@@ -3257,7 +3257,7 @@ def main():
                             
                 # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                 st.markdown("---")
-                # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm) ---
+                # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm แบบกำหนด key ป้องกันซ้ำ) ---
                 with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
                     st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
                     
@@ -3265,21 +3265,21 @@ def main():
                         st.session_state.confirm_clear_div = False
                         
                     if not st.session_state.confirm_clear_div:
-                        if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary"):
+                        if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary", key="btn_clear_dividend_main"):
                             st.session_state.confirm_clear_div = True
                             st.rerun()
                     else:
                         st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
                         col_c1, col_c2, _ = st.columns([1, 1, 2])
                         with col_c1:
-                            if st.button("✔️ ยืนยันการลบ", type="primary"):
+                            if st.button("✔️ ยืนยันการลบ", type="primary", key="btn_confirm_clear_div"):
                                 st.session_state.dividend_data = []
                                 save_dividend_data()  # อัปเดตไฟล์ CSV (บันทึกเป็นไฟล์ว่าง)
                                 st.session_state.confirm_clear_div = False
                                 st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
                                 st.rerun()
                         with col_c2:
-                            if st.button("❌ ยกเลิก"):
+                            if st.button("❌ ยกเลิก", key="btn_cancel_clear_div"):
                                 st.session_state.confirm_clear_div = False
                                 st.rerun()
                                 
