@@ -1682,7 +1682,17 @@ def main():
                     df_filtered = df_div_local.copy()
                 else:
                     df_filtered = pd.DataFrame()
-                            
+
+                # ตรวจสอบว่ามีคอลัมน์ 'กำไร/ขาดทุน (บาท)' อยู่ในตารางหรือไม่ก่อนนำไปกรอง
+                if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
+                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
+                    # โค้ดคำนวณสถิติเทรดของคุณต่อตรงนี้ได้เลย...
+                else:
+                    wins = pd.DataFrame()
+                    losses = pd.DataFrame()
+                    st.info("💡 ยังไม่พบข้อมูลคอลัมน์ 'กำไร/ขาดทุน (บาท)' ในตาราง กรุณาตรวจสอบหัวตารางข้อมูลของคุณอีกครั้งครับ")
+                                        
                 # 1. คำนวณ Exposure (เงินในหุ้น / เงินทุนรวมทั้งหมด)
                 # สมมติว่า total_market_val คือมูลค่าหุ้นปัจจุบัน และ st.session_state.cash_balance คือเงินสด
                 total_market_val = calculate_total_portfolio_value() 
