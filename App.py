@@ -1667,42 +1667,36 @@ def main():
                                         
         #######################          
                 st.markdown("---")
-
                 st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
 
-                # ดึงข้อมูลจาก journal_data (ประวัติการเทรดจริง) มาแปลงเป็น DataFrame
+                # 1. ดึงข้อมูลจาก journal_data มาแปลงเป็น DataFrame
                 if 'journal_data' in st.session_state and st.session_state.journal_data:
                     df_filtered = pd.DataFrame(st.session_state.journal_data)
                 else:
                     df_filtered = pd.DataFrame()
 
-                # ตรวจสอบว่ามีคอลัมน์ 'กำไร/ขาดทุน (บาท)' อยู่ในตารางหรือไม่ก่อนนำไปกรอง
+                # แปลงคอลัมน์ 'กำไร/ขาดทุน (บาท)' ให้เป็นตัวเลขอย่างปลอดภัย (กันกรณีมีคอมมาหรือข้อความปน)
                 if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
-                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
-                else:
-                    wins = pd.DataFrame()
-                    losses = pd.DataFrame()
-                    if df_filtered.empty:
-                        st.info("💡 ยังไม่พบข้อมูลในตารางบันทึกการเทรด (Journal) กรุณาเพิ่มข้อมูลการเทรดก่อนครับ")
-                    else:
-                        st.info("💡 ยังไม่พบข้อมูลคอลัมน์ 'กำไร/ขาดทุน (บาท)' ในตาราง กรุณาตรวจสอบหัวตารางข้อมูลของคุณอีกครั้งครับ")
-                                        
-                # 1. คำนวณ Exposure (เงินในหุ้น / เงินทุนรวมทั้งหมด)
+                    df_filtered['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(
+                        df_filtered['กำไร/ขาดทุน (บาท)'].astype(str).str.replace(',', ''), 
+                        errors='coerce'
+                    ).fillna(0)
+
+                # 2. คำนวณ Exposure
                 total_market_val = calculate_total_portfolio_value() 
                 current_cash = st.session_state.get('cash_balance', 0.0)
                 total_equity = total_market_val + current_cash
                 
                 exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
                 
-                # 2. คำนวณ Expectancy (ปลอดภัยจาก KeyError 100%)
+                # 3. คำนวณ Expectancy และแยกไม้ชนะ/แพ้
                 if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
-                    wins_exp = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                    losses_exp = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
                     
-                    win_rate = len(wins_exp) / len(df_filtered) if len(df_filtered) > 0 else 0
-                    avg_win = wins_exp['กำไร/ขาดทุน (บาท)'].mean() if len(wins_exp) > 0 else 0
-                    avg_loss = abs(losses_exp['กำไร/ขาดทุน (บาท)'].mean()) if len(losses_exp) > 0 else 0
+                    win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
+                    avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
+                    avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
                     loss_rate = 1 - win_rate
                     
                     expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
