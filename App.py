@@ -140,6 +140,16 @@ def log_to_sheet(sheet_name, row_data):
         print(f"Error logging to {sheet_name}: {e}")
         return False
         
+# ฟังก์ชันสำหรับบันทึกยอดเงินสดคงเหลือลงไฟล์ (หรือ session_state)
+def save_cash_balance(balance):
+    try:
+        st.session_state.cash_balance = float(balance)
+        # ถ้าโปรแกรมของคุณมีการบันทึกไฟล์ cash balance ลง CSV หรือ JSON ด้วย สามารถเพิ่มโค้ดบันทึกตรงนี้ได้ครับ
+        # ตัวอย่างเช่น:
+        # pd.DataFrame([{"cash_balance": balance}]).to_csv("cash_balance.csv", index=False)
+    except Exception as e:
+        print(f"Error saving cash balance: {e}")
+        
 def save_data_to_sheet(new_df, sheet_name):
     try:
         client = get_gsheet_client()
