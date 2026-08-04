@@ -1701,17 +1701,24 @@ def main():
                 
                 exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
                 
-                # 2. คำนวณ Expectancy
-                # WinRate, AverageWin, AverageLoss ต้องคำนวณจาก df_filtered
-                wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
-                
-                win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
-                avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
-                avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
-                loss_rate = 1 - win_rate
-                
-                expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
+                # 2. คำนวณ Expectancy (ปลอดภัยจาก KeyError 100%)
+                if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
+                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                    
+                    win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
+                    avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
+                    avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
+                    loss_rate = 1 - win_rate
+                    
+                    expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
+                else:
+                    win_rate = 0.0
+                    avg_win = 0.0
+                    avg_loss = 0.0
+                    loss_rate = 0.0
+                    expectancy = 0.0
+                    st.info("💡 ยังไม่พบคอลัมน์ 'กำไร/ขาดทุน (บาท)' ในข้อมูลปัจจุบัน ระบบจึงแสดงค่า Expectancy เป็น 0 ไปก่อนครับ")
                 
                 # 3. แสดงผลด้วย st.metric
                 col_r1, col_r2 = st.columns(2)
