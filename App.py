@@ -3090,7 +3090,6 @@ def main():
                     if os.path.exists(DATA_FILE):
                         try:
                             df_saved = pd.read_csv(DATA_FILE)
-                            # ตรวจสอบว่าไฟล์ CSV ไม่ว่างเปล่า
                             if not df_saved.empty:
                                 st.session_state.dividend_data = df_saved.to_dict('records')
                             else:
@@ -3099,25 +3098,24 @@ def main():
                             st.session_state.dividend_data = []
                     else:
                         st.session_state.dividend_data = []
-            
-                # ฟังก์ชันช่วยบันทึกข้อมูลลงไฟล์ CSV (เอาคำสั่ง os.remove ออก เพื่อป้องกันข้อมูลหายยามฉุกเฉิน)
+                
+                # ฟังก์ชันช่วยบันทึกข้อมูลลงไฟล์ CSV
                 def save_dividend_data():
                     try:
                         if st.session_state.dividend_data:
                             df_save = pd.DataFrame(st.session_state.dividend_data)
                             df_save.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
                         else:
-                            # ถ้าไม่มีข้อมูล ให้บันทึกเป็นไฟล์ว่างแทนการลบทิ้ง เพื่อป้องกันไฟล์หายจากการรีเฟรชผิดจังหวะ
                             pd.DataFrame(columns=[
                                 "วันที่ได้รับ", "Ticker", "จำนวนหุ้น", "ปันผลต่อหุ้น", 
                                 "ยอดรวมก่อนภาษี", "ภาษีหัก ณ ที่จ่าย", "ยอดรับสุทธิ", "ต้นทุนหุ้น", "หมายเหตุ"
                             ]).to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
                     except Exception as e:
                         print(f"Error saving file: {e}")
-                                        
+                        
                 st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
-        
-                # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV (รองรับต้นทุนหุ้น) ---
+                
+                # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV ---
                 with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD หรือไฟล์ Excel/CSV"):
                     uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
                     if uploaded_div_file:
@@ -3130,7 +3128,6 @@ def main():
                                 
                                 processed_rows = []
                                 
-                                # ตรวจสอบว่าเป็นไฟล์ TSD หรือไฟล์ฟอร์แมตปกติ
                                 if 'ชื่อย่อหลักทรัพย์' in df_upload.columns and 'วันที่จ่าย' in df_upload.columns:
                                     for idx, row in df_upload.iterrows():
                                         ticker = str(row.get('ชื่อย่อหลักทรัพย์', '')).strip().upper()
@@ -3140,7 +3137,6 @@ def main():
                                             ticker = f"{ticker}.BK"
                                             
                                         pay_date = str(row.get('วันที่จ่าย', ''))[:10]
-                                        
                                         total_div_before_tax = 0.0
                                         total_tax = 0.0
                                         
@@ -3159,7 +3155,6 @@ def main():
                                         
                                         net_receive = total_div_before_tax - total_tax
                                         
-                                        # ดึงค่าต้นทุนถ้ามีในไฟล์ (ถ้าไม่มีกำหนดเป็น 0.0 เพื่อให้ไปเติมทีหลังได้)
                                         cost_val = 0.0
                                         for cost_col in ['ต้นทุน', 'Cost', 'ทุนรวม', 'มูลค่าลงทุน']:
                                             if cost_col in df_upload.columns:
@@ -3180,12 +3175,10 @@ def main():
                                             "หมายเหตุ": "นำเข้าจาก TSD Portal"
                                         })
                                 else:
-                                    # ตรวจสอบคอลัมน์มาตรฐาน ถ้าไม่มีคอลัมน์ 'ต้นทุนหุ้น' ให้เติมค่าเริ่มต้น 0.0
                                     if 'ต้นทุนหุ้น' not in df_upload.columns:
                                         df_upload['ต้นทุนหุ้น'] = 0.0
                                     processed_rows = df_upload.to_dict('records')
                                 
-                                # --- ระบบกรองข้อมูลซ้ำ (Deduplication Check) ---
                                 existing_df = pd.DataFrame(st.session_state.dividend_data)
                                 new_df = pd.DataFrame(processed_rows)
                                 
@@ -3198,9 +3191,9 @@ def main():
                                 else:
                                     combined_df = new_df.drop_duplicates(subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], keep='first')
                                     added_count = len(combined_df)
-            
+                                
                                 st.session_state.dividend_data = combined_df.to_dict('records')
-                                save_dividend_data()  # บันทึกลงไฟล์ CSV ทันที
+                                save_dividend_data()
                                 
                                 if added_count > 0:
                                     st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
@@ -3211,7 +3204,7 @@ def main():
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
                                 
-                # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual (เพิ่มช่องต้นทุนหุ้น) ---
+                # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
                 with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=True):
                     with st.form("dividend_form", clear_on_submit=True):
                         col1, col2 = st.columns(2)
@@ -3232,8 +3225,8 @@ def main():
                             st.caption(f"💡 คำนวณอัตโนมัติ: ภาษีหัก ณ ที่จ่าย 10% = {tax_wht:,.2f} ฿ | รับสุทธิ = {net_div:,.2f} ฿")
                         
                         notes = st.text_input("หมายเหตุ (เช่น ปันผล Q2/2026)")
-                        
                         submitted = st.form_submit_button("💾 บันทึกเงินปันผล")
+                        
                         if submitted:
                             if ticker:
                                 formatted_ticker = ticker if ticker.endswith('.BK') else f"{ticker}.BK"
@@ -3249,40 +3242,14 @@ def main():
                                     "หมายเหตุ": notes
                                 }
                                 st.session_state.dividend_data.append(new_entry)
-                                save_dividend_data()  # บันทึกลงไฟล์ CSV ทันที
+                                save_dividend_data()
                                 st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} เรียบร้อยแล้วครับ!")
                                 st.rerun()
                             else:
                                 st.warning("⚠️ กรุณากรอกชื่อหุ้น (Ticker)")
-                            
+                                
                 # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                 st.markdown("---")
-                # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm แบบกำหนด key ป้องกันซ้ำ) ---
-                with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
-                    st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
-                    
-                    if "confirm_clear_div" not in st.session_state:
-                        st.session_state.confirm_clear_div = False
-                        
-                    if not st.session_state.confirm_clear_div:
-                        if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary", key="btn_clear_dividend_main"):
-                            st.session_state.confirm_clear_div = True
-                            st.rerun()
-                    else:
-                        st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
-                        col_c1, col_c2, _ = st.columns([1, 1, 2])
-                        with col_c1:
-                            if st.button("✔️ ยืนยันการลบ", type="primary", key="btn_confirm_clear_div"):
-                                st.session_state.dividend_data = []
-                                save_dividend_data()  # อัปเดตไฟล์ CSV (บันทึกเป็นไฟล์ว่าง)
-                                st.session_state.confirm_clear_div = False
-                                st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
-                                st.rerun()
-                        with col_c2:
-                            if st.button("❌ ยกเลิก", key="btn_cancel_clear_div"):
-                                st.session_state.confirm_clear_div = False
-                                st.rerun()
-                                
                 st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
                 
                 if st.session_state.dividend_data:
@@ -3302,48 +3269,16 @@ def main():
                         
                         if st.button("💾 อัปเดตการแก้ไขตารางปันผล", key="update_div_btn"):
                             st.session_state.dividend_data = edited_div_df.to_dict('records')
-                            save_dividend_data()  # บันทึกลงไฟล์ CSV ทันที
+                            save_dividend_data()
                             st.success("✅ อัปเดตข้อมูลสำเร็จ!")
                             st.rerun()
                             
                         csv_div = df_div.to_csv(index=False).encode('utf-8-sig')
                         st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
-            
-                    # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm) ---
-                    with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
-                        st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
-                        
-                        if "confirm_clear_div" not in st.session_state:
-                            st.session_state.confirm_clear_div = False
-                            
-                        if not st.session_state.confirm_clear_div:
-                            if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary"):
-                                st.session_state.confirm_clear_div = True
-                                st.rerun()
-                        else:
-                            st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
-                            col_c1, col_c2, _ = st.columns([1, 1, 2])
-                            with col_c1:
-                                if st.button("✔️ ยืนยันการลบ", type="primary"):
-                                    st.session_state.dividend_data = []
-                                    save_dividend_data()  # อัปเดตไฟล์ CSV (จะทำการลบไฟล์ทิ้งอัตโนมัติ)
-                                    st.session_state.confirm_clear_div = False
-                                    st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
-                                    st.rerun()
-                            with col_c2:
-                                if st.button("❌ ยกเลิก"):
-                                    st.session_state.confirm_clear_div = False
-                                    st.rerun()
-                                    
-                else:
-                    st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
-                
-                # --- ส่วนที่ 4: กราฟวิเคราะห์และสรุปยอดเงินปันผลรับ ---
-                st.markdown("---")
-                st.markdown("##### 📊 วิเคราะห์ข้อมูลเงินปันผล (Dividend Analytics)")
-                
-                if st.session_state.dividend_data:
-                    df_div = pd.DataFrame(st.session_state.dividend_data)
+                    
+                    # --- ส่วนที่ 4: กราฟวิเคราะห์และสรุปยอดเงินปันผลรับ ---
+                    st.markdown("---")
+                    st.markdown("##### 📊 วิเคราะห์ข้อมูลเงินปันผล (Dividend Analytics)")
                     
                     if 'วันที่ได้รับ' in df_div.columns:
                         df_div['วันที่ได้รับ'] = pd.to_datetime(df_div['วันที่ได้รับ'], errors='coerce')
@@ -3368,38 +3303,28 @@ def main():
                         mf2.metric(f"🏛️ ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿")
                         
                         st.markdown("<br>", unsafe_allow_html=True)
-
-                        # --- ส่วนที่ 5: วิเคราะห์ Dividend Yield on Cost (%) แยกตามปีและตัวกรอง ---
+            
+                        # --- ส่วนที่ 5: วิเคราะห์ Dividend Yield on Cost (%) ---
                         st.markdown("---")
                         st.markdown(f"##### 🎯 วิเคราะห์ผลตอบแทนจากเงินปันผลเทียบกับต้นทุนหุ้น (Dividend Yield on Cost) - [{selected_period}]")
                         
                         if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns and 'ต้นทุนหุ้น' in df_filtered_div.columns and 'จำนวนหุ้น' in df_filtered_div.columns:
-                            
                             df_calc = df_filtered_div.copy()
                             
-                            # จัดกลุ่มคำนวณ:
-                            # หากเลือก All Time จะรวมปันผลทุกปี แต่ถ้าเลือกปีเฉพาะ จะรวมปันผลเฉพาะในปีนั้นๆ
-                            # และดึงจำนวนหุ้นกับต้นทุนเฉลี่ยล่าสุดมาใช้คำนวณต้นทุนรวม
                             if 'วันที่ได้รับ' in df_calc.columns:
                                 df_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_calc['วันที่ได้รับ'], errors='coerce')
                                 df_calc = df_calc.sort_values(by='วันที่ได้รับ_dt', ascending=True)
-                                
-                            # ยอดปันผลรวมตามเงื่อนไขตัวกรองปัจจุบัน (ถ้าเลือก All Time = รวมทั้งหมด, ถ้าเลือกปี = รวมเฉพาะปีนั้น)
+                            
                             df_div_sum = df_calc.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
                             
-                            # ดึงจำนวนหุ้นและต้นทุนล่าสุด
                             df_latest = df_calc.groupby('Ticker').agg({
                                 'จำนวนหุ้น': 'last',
                                 'ต้นทุนหุ้น': 'last'
                             }).reset_index()
                             
-                            # รวมตาราง
                             df_yield_analysis = pd.merge(df_div_sum, df_latest, on='Ticker')
-                            
-                            # คำนวณต้นทุนรวม
                             df_yield_analysis['Total_Cost'] = df_yield_analysis['ต้นทุนหุ้น'] * df_yield_analysis['จำนวนหุ้น']
                             
-                            # คำนวณ Yield on Cost (%) ตามช่วงเวลาที่เลือก
                             df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
                                 lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0, 
                                 axis=1
@@ -3412,7 +3337,6 @@ def main():
                                 total_portfolio_dividend = valid_cost_df['ยอดรับสุทธิ'].sum()
                                 avg_yield_on_cost = (total_portfolio_dividend / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
                                 
-                                # 1. KPI Card แสดงภาพรวมพอร์ตตามช่วงเวลาที่เลือก
                                 kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
                                 kpi_col1.metric(f"📊 Avg. Yield on Cost ({selected_period})", f"{avg_yield_on_cost:.2f}%")
                                 kpi_col2.metric(f"💰 ปันผลรับรวม ({selected_period})", f"{total_portfolio_dividend:,.2f} ฿")
@@ -3421,10 +3345,6 @@ def main():
                                 st.markdown("<br>", unsafe_allow_html=True)
                                 
                                 df_yield_sorted = valid_cost_df.sort_values(by='Yield_on_Cost', ascending=True)
-                                
-                                # 2. กราฟแท่งแนวนอนเปรียบเทียบ Yield on Cost
-                                st.markdown(f"##### 🚀 เครื่องผลิตเงินสดรายหุ้น ({selected_period})")
-                                
                                 df_yield_sorted['Text_Label'] = df_yield_sorted['Yield_on_Cost'].apply(lambda x: f"{x:.2f}%")
                                 
                                 fig_yield_bar = px.bar(
@@ -3447,12 +3367,9 @@ def main():
                                 )
                                 st.plotly_chart(fig_yield_bar, use_container_width=True)
                                 
-                                # 3. ตารางสรุปผลตอบแทนแยกตาม Ticker
                                 st.markdown(f"##### 📋 ตารางสรุป Yield on Cost ({selected_period})")
-                                
                                 df_table_display = df_yield_sorted[['Ticker', 'ยอดรับสุทธิ', 'Total_Cost', 'Yield_on_Cost']].copy()
                                 
-                                # เปลี่ยนชื่อคอลัมน์ให้สื่อความหมายตามปีที่เลือก
                                 div_col_name = f"เงินปันผลรับรวม ({selected_period}) (บาท)"
                                 df_table_display.columns = ['ชื่อหุ้น (Ticker)', div_col_name, 'ต้นทุนรวมทั้งหมด (บาท)', 'Dividend Yield on Cost (%)']
                                 
@@ -3461,11 +3378,40 @@ def main():
                                 df_table_display['Dividend Yield on Cost (%)'] = df_table_display['Dividend Yield on Cost (%)'].apply(lambda x: f"{x:.2f}%")
                                 
                                 st.dataframe(df_table_display.reset_index(drop=True), use_container_width=True)
-                                
                             else:
                                 st.info(f"💡 ไม่มีข้อมูลปันผลหรือต้นทุนหุ้นในช่วงเวลา {selected_period}")
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
+                            
+                    # --- ส่วนที่ 6: ปุ่มล้างข้อมูลทั้งหมด (Danger Zone - รวมไว้ที่จุดเดียวตอนท้ายสุด) ---
+                    st.markdown("---")
+                    with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
+                        st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
+                        
+                        if "confirm_clear_div" not in st.session_state:
+                            st.session_state.confirm_clear_div = False
+                            
+                        if not st.session_state.confirm_clear_div:
+                            if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary", key="btn_clear_dividend_main"):
+                                st.session_state.confirm_clear_div = True
+                                st.rerun()
+                        else:
+                            st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
+                            col_c1, col_c2, _ = st.columns([1, 1, 2])
+                            with col_c1:
+                                if st.button("✔️ ยืนยันการลบ", type="primary", key="btn_confirm_clear_div"):
+                                    st.session_state.dividend_data = []
+                                    save_dividend_data()
+                                    st.session_state.confirm_clear_div = False
+                                    st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
+                                    st.rerun()
+                            with col_c2:
+                                if st.button("❌ ยกเลิก", key="btn_cancel_clear_div"):
+                                    st.session_state.confirm_clear_div = False
+                                    st.rerun()
+                else:
+                    st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
+                    
 
                         # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
                         st.markdown("---")
