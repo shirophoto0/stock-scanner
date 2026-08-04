@@ -3524,6 +3524,24 @@ def main():
                 
                 st.divider()
                 
+                # --- ส่วนป้องกัน Error: ดึงค่า EMA และตรวจสอบตาราง chart_combined อย่างปลอดภัย ---
+                has_chart = 'chart_combined' in locals() and isinstance(chart_combined, pd.DataFrame) and not chart_combined.empty
+                
+                if has_chart and 'EMA10' in chart_combined.columns:
+                    ema10_val = float(chart_combined['EMA10'].iloc[-1])
+                    ema10_str = f"เส้น EMA 10 ({ema10_val:.2f} บาท)"
+                else:
+                    ema10_val = 0.0
+                    ema10_str = "เส้น EMA 10 (ไม่มีข้อมูล)"
+
+                if has_chart and 'EMA20' in chart_combined.columns:
+                    ema20_val = float(chart_combined['EMA20'].iloc[-1])
+                    ema20_str = f"เส้น EMA 20 ({ema20_val:.2f} บาท)"
+                else:
+                    ema20_val = 0.0
+                    ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
+                # -------------------------------------------------------------
+
                 # 2. ส่วนการคำนวณ
                 r_col1, r_col2 = st.columns([1, 1])
 
@@ -3545,22 +3563,24 @@ def main():
                         latest_p = 0.0
                     
                     sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
-                        f"เส้น EMA 10 ({chart_combined['EMA10'].iloc[-1]:.2f} บาท)",
-                        f"เส้น EMA 20 ({chart_combined['EMA20'].iloc[-1]:.2f} บาท)",
+                        ema10_str,
+                        ema20_str,
                         "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
                         "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
                     ])
                     
                     # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
-                    if "EMA 10" in sl_type:
-                        sl_price = float(chart_combined['EMA10'].iloc[-1])
-                    elif "EMA 20" in sl_type:
-                        sl_price = float(chart_combined['EMA20'].iloc[-1])
+                    if "EMA 10" in sl_type and ema10_val > 0:
+                        sl_price = ema10_val
+                    elif "EMA 20" in sl_type and ema20_val > 0:
+                        sl_price = ema20_val
                     elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
                         fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
                         sl_price = latest_p * (1 - (fixed_sl_pct / 100))
-                    else: # Manual Price
-                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93, step=0.25)
+                    else: # Manual Price หรือกรณี EMA ไม่มีข้อมูล
+                        if "EMA" in sl_type and ema10_val == 0:
+                            st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
+                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
                 
                 # 3. คำนวณผลลัพธ์
                 max_risk_money = total_cap * (risk_pct / 100)
