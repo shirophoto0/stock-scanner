@@ -1009,6 +1009,10 @@ if "journal_data" not in st.session_state:
 if 'dividend_data' not in st.session_state:
     st.session_state.dividend_data = load_dividend_data()
 
+# กำหนดค่าเริ่มต้นเงินสดในพอร์ต หากยังไม่มีใน session_state
+if 'cash_balance' not in st.session_state:
+    st.session_state.cash_balance = 0.0  # หรือใส่จำนวนเงินสดเริ่มต้นของคุณ เช่น 100000.0
+
 st.title("📈 Application UM-Wealth")
 st.write("ระบบสแกนหุ้นพร้อมกราฟเปรียบเทียบความแข็งแกร่งกับตลาดภาพรวม (SET Index)")
 
@@ -1079,16 +1083,11 @@ SET100_TICKERS = [
 # 4. ดึงข้อมูลและคำนวณฐานข้อมูลกลุ่ม SET100 โค้ดส่วนสแกนหุ้น (load_and_calculate_stock_data) และการทำ Filter
 # ============================================================
 
-
 #####################################
 # Def Main ส่วนครอบ code ทั้งหมด
 ######################################
         
-
-    
 # --- Initialize Session State ---
-
-
 
 # 1. ตั้งค่าหน้าเว็บต้องอยู่บรรทัดบนสุดเสมอ
 st.set_page_config(layout="wide")
