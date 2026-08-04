@@ -1170,7 +1170,6 @@ def main():
 
     # ส่วนวิเคราะห์แสกนกราฟหุ้น#
     with tab_tech:
-        st.markdown("#### 🔍 1. วิเคราะห์กราฟเทคนิคอลอัจฉริยะ (Multi-Timeframe & RS vs SET Index)")
 
         ################################
         # 1. Slidebar (ตัวกรอง)
@@ -1671,15 +1670,9 @@ def main():
 
                 st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
 
-                # สร้างตัวแปรเริ่มต้นป้องกัน Error กรณีที่ข้อมูลยังไม่ถูกโหลดหรือยังไม่มีการกรอง
-                if 'dividend_data' in st.session_state and st.session_state.dividend_data:
-                    df_div_local = pd.DataFrame(st.session_state.dividend_data)
-                else:
-                    df_div_local = pd.DataFrame()
-            
-                # ตรวจสอบและกำหนดค่า df_filtered เบื้องต้น
-                if not df_div_local.empty and 'Ticker' in df_div_local.columns:
-                    df_filtered = df_div_local.copy()
+                # ดึงข้อมูลจาก journal_data (ประวัติการเทรดจริง) มาแปลงเป็น DataFrame
+                if 'journal_data' in st.session_state and st.session_state.journal_data:
+                    df_filtered = pd.DataFrame(st.session_state.journal_data)
                 else:
                     df_filtered = pd.DataFrame()
 
@@ -1687,28 +1680,29 @@ def main():
                 if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
                     wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
                     losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
-                    # โค้ดคำนวณสถิติเทรดของคุณต่อตรงนี้ได้เลย...
                 else:
                     wins = pd.DataFrame()
                     losses = pd.DataFrame()
-                    st.info("💡 ยังไม่พบข้อมูลคอลัมน์ 'กำไร/ขาดทุน (บาท)' ในตาราง กรุณาตรวจสอบหัวตารางข้อมูลของคุณอีกครั้งครับ")
+                    if df_filtered.empty:
+                        st.info("💡 ยังไม่พบข้อมูลในตารางบันทึกการเทรด (Journal) กรุณาเพิ่มข้อมูลการเทรดก่อนครับ")
+                    else:
+                        st.info("💡 ยังไม่พบข้อมูลคอลัมน์ 'กำไร/ขาดทุน (บาท)' ในตาราง กรุณาตรวจสอบหัวตารางข้อมูลของคุณอีกครั้งครับ")
                                         
                 # 1. คำนวณ Exposure (เงินในหุ้น / เงินทุนรวมทั้งหมด)
-                # สมมติว่า total_market_val คือมูลค่าหุ้นปัจจุบัน และ st.session_state.cash_balance คือเงินสด
                 total_market_val = calculate_total_portfolio_value() 
-                current_cash = st.session_state.cash_balance
+                current_cash = st.session_state.get('cash_balance', 0.0)
                 total_equity = total_market_val + current_cash
                 
                 exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
                 
                 # 2. คำนวณ Expectancy (ปลอดภัยจาก KeyError 100%)
                 if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
-                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                    wins_exp = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                    losses_exp = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
                     
-                    win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
-                    avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
-                    avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
+                    win_rate = len(wins_exp) / len(df_filtered) if len(df_filtered) > 0 else 0
+                    avg_win = wins_exp['กำไร/ขาดทุน (บาท)'].mean() if len(wins_exp) > 0 else 0
+                    avg_loss = abs(losses_exp['กำไร/ขาดทุน (บาท)'].mean()) if len(losses_exp) > 0 else 0
                     loss_rate = 1 - win_rate
                     
                     expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
@@ -1718,7 +1712,6 @@ def main():
                     avg_loss = 0.0
                     loss_rate = 0.0
                     expectancy = 0.0
-                    st.info("💡 ยังไม่พบคอลัมน์ 'กำไร/ขาดทุน (บาท)' ในข้อมูลปัจจุบัน ระบบจึงแสดงค่า Expectancy เป็น 0 ไปก่อนครับ")
                 
                 # 3. แสดงผลด้วย st.metric
                 col_r1, col_r2 = st.columns(2)
