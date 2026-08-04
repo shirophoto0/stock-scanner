@@ -3409,10 +3409,11 @@ def main():
                                 if st.button("❌ ยกเลิก", key="btn_cancel_clear_div"):
                                     st.session_state.confirm_clear_div = False
                                     st.rerun()
-                    else:
-                        st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
-                        
                     
+                    # ตรวจสอบว่ามีข้อมูลในระบบหรือไม่ ถ้าไม่มีให้แสดงข้อความแนะนำ
+                    if df_div.empty:
+                        st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
+                    else:
                         # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
                         st.markdown("---")
                         st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
@@ -3437,6 +3438,7 @@ def main():
                                 coloraxis_showscale=False
                             )
                             st.plotly_chart(fig_yearly, use_container_width=True)
+                            
                             
                         # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี พร้อมแสดง % และยอดเงิน) ---
                         st.markdown("---")
