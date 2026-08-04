@@ -3303,7 +3303,7 @@ def main():
                         mf2.metric(f"🏛️ ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿")
                         
                         st.markdown("<br>", unsafe_allow_html=True)
-            
+                    
                         # --- ส่วนที่ 5: วิเคราะห์ Dividend Yield on Cost (%) ---
                         st.markdown("---")
                         st.markdown(f"##### 🎯 วิเคราะห์ผลตอบแทนจากเงินปันผลเทียบกับต้นทุนหุ้น (Dividend Yield on Cost) - [{selected_period}]")
@@ -3383,7 +3383,7 @@ def main():
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
                             
-                    # --- ส่วนที่ 6: ปุ่มล้างข้อมูลทั้งหมด (Danger Zone - รวมไว้ที่จุดเดียวตอนท้ายสุด) ---
+                    # --- ส่วนที่ 6: ปุ่มล้างข้อมูลทั้งหมด (Danger Zone) ---
                     st.markdown("---")
                     with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
                         st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
@@ -3439,11 +3439,10 @@ def main():
                             )
                             st.plotly_chart(fig_yearly, use_container_width=True)
                             
-                        # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี พร้อมแสดง % และยอดเงิน) ---
+                        # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี) ---
                         st.markdown("---")
                         st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (เรียงจากยอดมากไปน้อย แบ่งตามปีที่ได้รับ)")
                         
-                        # ใช้ df_filtered_div เพื่อให้สอดคล้องกับปีที่ผู้ใช้เลือกกรองด้านบน
                         if 'Ticker' in df_filtered_div.columns and 'Year' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
                             df_stacked = df_filtered_div[df_filtered_div['Year'] > 0].groupby(['Ticker', 'Year'])['ยอดรับสุทธิ'].sum().reset_index()
                             
@@ -3490,8 +3489,8 @@ def main():
                                 st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
                         else:
                             st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปีที่เลือก")
-                    
-                        # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost ต่อปี ---
+                        
+                        # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost รายปี (ที่เคยขาดหายไป) ---
                         st.markdown("---")
                         st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
                         
@@ -3544,35 +3543,42 @@ def main():
                                     df_total_yield = df_merged_yearly.groupby('Ticker')['Yield_on_Cost_Annual'].sum().reset_index()
                                     sorted_tickers_yield = df_total_yield.sort_values(by='Yield_on_Cost_Annual', ascending=True)['Ticker'].tolist()
                                     
+                                    df_merged_yearly['Text_Label'] = df_merged_yearly['Yield_on_Cost_Annual'].apply(
+                                        lambda x: f"{x:.2f}%" if x > 0.5 else ""
+                                    )
+            
                                     fig_stacked = px.bar(
                                         df_merged_yearly,
                                         x='Yield_on_Cost_Annual',
                                         y='Ticker',
                                         color='Year_Str',
                                         orientation='h',
+                                        barmode='stack',
                                         category_orders={'Ticker': sorted_tickers_yield},
-                                        labels={'Yield_on_Cost_Annual': 'Dividend Yield on Cost (%)', 'Ticker': 'ชื่อหุ้น (Ticker)', 'Year_Str': 'ปี (Year)'},
+                                        text='Text_Label',
                                         color_discrete_sequence=px.colors.qualitative.Prism
                                     )
                                     
-                                    fig_stacked.update_layout(
-                                        barmode='stack',
-                                        xaxis_title=f"Dividend Yield on Cost (%) - [{selected_stack_period}]",
-                                        yaxis_title="ชื่อหุ้น (Ticker)",
-                                        height=max(350, len(sorted_tickers_yield) * 45),
-                                        margin=dict(l=10, r=20, t=30, b=20),
-                                        legend_title="ปีที่ได้รับปันผล"
+                                    fig_stacked.update_traces(
+                                        textposition='inside', 
+                                        insidetextanchor='middle'
                                     )
                                     
-                                    fig_stacked.update_traces(texttemplate='%{x:.2f}%', textposition='inside')
+                                    fig_stacked.update_layout(
+                                        xaxis_title=f"Annual Dividend Yield on Cost (%) [{selected_stack_period}]",
+                                        yaxis_title="ชื่อหุ้น (Ticker)",
+                                        height=max(350, len(sorted_tickers_yield) * 45),
+                                        margin=dict(l=10, r=20, t=20, b=20),
+                                        legend_title="ปีที่ได้รับ (Year)"
+                                    )
                                     st.plotly_chart(fig_stacked, use_container_width=True)
                                 else:
-                                    st.info(f"💡 ไม่มีข้อมูลปันผลในช่วงเวลา {selected_stack_period}")
+                                    st.info("ไม่มีข้อมูลเพียงพอสำหรับกราฟ Stacked Bar รายปีนี้")
                             else:
-                                st.info(f"💡 ไม่มีข้อมูลในช่วงเวลา {selected_stack_period}")
-                        else:
-                            st.info("ยังไม่มีข้อมูลประวัติเงินปันผลในระบบ กรุณานำเข้าไฟล์หรือเพิ่มข้อมูลก่อนครับ")
-                            
+                                st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือกสำหรับกราฟนี้")
+                else:
+                    st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
+                                        
                                             
             #########################
             with tab_journal:
