@@ -1671,6 +1671,18 @@ def main():
 
                 st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
 
+                # สร้างตัวแปรเริ่มต้นป้องกัน Error กรณีที่ข้อมูลยังไม่ถูกโหลดหรือยังไม่มีการกรอง
+                if 'dividend_data' in st.session_state and st.session_state.dividend_data:
+                    df_div_local = pd.DataFrame(st.session_state.dividend_data)
+                else:
+                    df_div_local = pd.DataFrame()
+            
+                # ตรวจสอบและกำหนดค่า df_filtered เบื้องต้น
+                if not df_div_local.empty and 'Ticker' in df_div_local.columns:
+                    df_filtered = df_div_local.copy()
+                else:
+                    df_filtered = pd.DataFrame()
+                            
                 # 1. คำนวณ Exposure (เงินในหุ้น / เงินทุนรวมทั้งหมด)
                 # สมมติว่า total_market_val คือมูลค่าหุ้นปัจจุบัน และ st.session_state.cash_balance คือเงินสด
                 total_market_val = calculate_total_portfolio_value() 
