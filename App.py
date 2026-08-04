@@ -1162,7 +1162,12 @@ def main():
         st.error("ไม่สามารถโหลดข้อมูลหุ้นได้เลย กรุณาตรวจสอบการเชื่อมต่อ Google Sheets")
 
     ###### ส่วนการสร้าง TAB หลัก ##################
-    tab_stock, tab_tfex, tab_tech = st.tabs(["📉 วิเคราะห์กราฟเทคนิคอล", "📊 หุ้น (Stock)", "📈 TFEX"])
+    tab_stock, tab_tfex, tab_tech, tab_risk = st.tabs([
+        "📊 หุ้น (Stock)", 
+        "📈 TFEX", 
+        "📉 วิเคราะห์กราฟเทคนิคอล", 
+        "🛡️ Risk Management"
+    ])
 
     # ส่วนวิเคราะห์แสกนกราฟหุ้น#
     with tab_tech:
