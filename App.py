@@ -222,9 +222,19 @@ def load_data(sheet_name):
         return pd.DataFrame()
         
 @st.cache_data(ttl=3600) # จำข้อมูลไว้ 1 ชม. ค่อยดึงใหม่
+@st.cache_data(ttl=3600)  # แคชข้อมูลไว้ 1 ชั่วโมงเพื่อลดการเรียกซ้ำ
 def get_cached_stock_info(ticker):
-    stock = yf.Ticker(ticker)
-    return stock.info  
+    try:
+        stock = yf.Ticker(ticker)
+        # ลองดึงข้อมูล info พร้อมป้องกัน Error Rate Limit
+        info = stock.info
+        if not info or len(info) <= 1:
+            return {}
+        return info
+    except Exception as e:
+        # หากติด Rate Limit หรือ Error ให้คืนค่าว่างแทนที่จะทำให้แอปพัง (Crash)
+        print(f"Warning: Could not fetch info for {ticker} due to: {e}")
+        return {}
     
 def clear_and_save_data(df, sheet_name):
     try:
