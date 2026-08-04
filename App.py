@@ -3092,10 +3092,9 @@ def main():
                         
             #########################
             with tab_dividend:
-                # กำหนดชื่อไฟล์สำหรับเก็บข้อมูลสำรอง
                 DATA_FILE = "dividend_database.csv"
                 
-                # 1. กำหนดตัวแปรและโหลดข้อมูลเดิมจากไฟล์ (ถ้ามี) มาใส่ session_state อย่างปลอดภัย
+                # โหลดข้อมูลจากไฟล์ CSV เข้า session_state ทุกครั้งที่เปิดหรือรีเฟรชแอป
                 if "dividend_data" not in st.session_state:
                     if os.path.exists(DATA_FILE):
                         try:
@@ -3108,7 +3107,7 @@ def main():
                             st.session_state.dividend_data = []
                     else:
                         st.session_state.dividend_data = []
-                
+                            
                 # ฟังก์ชันช่วยบันทึกข้อมูลลงไฟล์ CSV
                 def save_dividend_data():
                     try:
