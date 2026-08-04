@@ -3085,26 +3085,36 @@ def main():
                 # กำหนดชื่อไฟล์สำหรับเก็บข้อมูลสำรอง
                 DATA_FILE = "dividend_database.csv"
                 
-                # 1. กำหนดตัวแปรและโหลดข้อมูลเดิมจากไฟล์ (ถ้ามี) มาใส่ session_state ตอนเริ่มต้นครั้งเดียว
+                # 1. กำหนดตัวแปรและโหลดข้อมูลเดิมจากไฟล์ (ถ้ามี) มาใส่ session_state อย่างปลอดภัย
                 if "dividend_data" not in st.session_state:
                     if os.path.exists(DATA_FILE):
                         try:
                             df_saved = pd.read_csv(DATA_FILE)
-                            st.session_state.dividend_data = df_saved.to_dict('records')
+                            # ตรวจสอบว่าไฟล์ CSV ไม่ว่างเปล่า
+                            if not df_saved.empty:
+                                st.session_state.dividend_data = df_saved.to_dict('records')
+                            else:
+                                st.session_state.dividend_data = []
                         except Exception:
                             st.session_state.dividend_data = []
                     else:
                         st.session_state.dividend_data = []
             
-                # ฟังก์ชันช่วยบันทึกข้อมูลลงไฟล์ CSV ทุกครั้งที่มีการเปลี่ยนแปลง
+                # ฟังก์ชันช่วยบันทึกข้อมูลลงไฟล์ CSV (เอาคำสั่ง os.remove ออก เพื่อป้องกันข้อมูลหายยามฉุกเฉิน)
                 def save_dividend_data():
-                    if st.session_state.dividend_data:
-                        df_save = pd.DataFrame(st.session_state.dividend_data)
-                        df_save.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
-                    else:
-                        if os.path.exists(DATA_FILE):
-                            os.remove(DATA_FILE)  # ถ้าไม่มีข้อมูล ให้ลบไฟล์ทิ้ง
-                            
+                    try:
+                        if st.session_state.dividend_data:
+                            df_save = pd.DataFrame(st.session_state.dividend_data)
+                            df_save.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+                        else:
+                            # ถ้าไม่มีข้อมูล ให้บันทึกเป็นไฟล์ว่างแทนการลบทิ้ง เพื่อป้องกันไฟล์หายจากการรีเฟรชผิดจังหวะ
+                            pd.DataFrame(columns=[
+                                "วันที่ได้รับ", "Ticker", "จำนวนหุ้น", "ปันผลต่อหุ้น", 
+                                "ยอดรวมก่อนภาษี", "ภาษีหัก ณ ที่จ่าย", "ยอดรับสุทธิ", "ต้นทุนหุ้น", "หมายเหตุ"
+                            ]).to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+                    except Exception as e:
+                        print(f"Error saving file: {e}")
+                                        
                 st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
         
                 # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV (รองรับต้นทุนหุ้น) ---
@@ -3247,6 +3257,32 @@ def main():
                             
                 # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                 st.markdown("---")
+                # --- ส่วนที่ 5: ปุ่มล้างข้อมูลทั้งหมด (พร้อมระบบ Confirm) ---
+                with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
+                    st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
+                    
+                    if "confirm_clear_div" not in st.session_state:
+                        st.session_state.confirm_clear_div = False
+                        
+                    if not st.session_state.confirm_clear_div:
+                        if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary"):
+                            st.session_state.confirm_clear_div = True
+                            st.rerun()
+                    else:
+                        st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
+                        col_c1, col_c2, _ = st.columns([1, 1, 2])
+                        with col_c1:
+                            if st.button("✔️ ยืนยันการลบ", type="primary"):
+                                st.session_state.dividend_data = []
+                                save_dividend_data()  # อัปเดตไฟล์ CSV (บันทึกเป็นไฟล์ว่าง)
+                                st.session_state.confirm_clear_div = False
+                                st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
+                                st.rerun()
+                        with col_c2:
+                            if st.button("❌ ยกเลิก"):
+                                st.session_state.confirm_clear_div = False
+                                st.rerun()
+                                
                 st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
                 
                 if st.session_state.dividend_data:
