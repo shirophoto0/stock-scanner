@@ -3538,7 +3538,11 @@ def main():
                     risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
                 
                 with r_col2:
-                    latest_p = float(latest_price_single)
+                    # กำหนดค่าเริ่มต้นให้ปลอดภัยก่อน ถ้าตัวแปรไม่มีค่าให้เป็น 0.0
+                    try:
+                        latest_p = float(latest_price_single) if 'latest_price_single' in locals() and latest_price_single is not None else 0.0
+                    except (ValueError, TypeError):
+                        latest_p = 0.0
                     
                     sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
                         f"เส้น EMA 10 ({chart_combined['EMA10'].iloc[-1]:.2f} บาท)",
