@@ -1981,34 +1981,6 @@ def main():
                             st.rerun()
                             
         st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
-    
-        # สร้าง Columns โดยระบุให้จัดกึ่งกลางแนวตั้ง
-        # ปรับสัดส่วนคอลัมน์ให้ชิดขึ้นอีก (0.08 คือพื้นที่ของไอคอน)
-        # ปรับสัดส่วนให้สมดุลขึ้น
-        # ปรับสัดส่วนให้สมดุล
-        col1, col2 = st.columns([0.07, 0.93], vertical_alignment="center")
-        
-        with col1:
-            st.markdown("<div style='font-size: 40px; margin: 0px;'>💹</div>", unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("<h2 style='margin: 0px;'>Stock and TFEX Management</h2>", unsafe_allow_html=True)
-        
-        # --- ปรับขนาดเฉพาะข้อความใน Tab ---
-        st.markdown("""
-            <style>
-            /* ปรับขนาดตัวหนังสือใน Tab โดยเฉพาะ */
-            div[data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-                font-size: 60px !important;
-                font-weight: bold !important;
-            }
-            
-            /* ปรับความสูงของ Tab ให้รับกับตัวหนังสือที่ใหญ่ขึ้น */
-            button[data-baseweb="tab"] {
-                padding: 30px 70px !important;
-            }
-            </style>
-        """, unsafe_allow_html=True)
         
     # 1. ส่วนหุ้น
     with tab_stock:
