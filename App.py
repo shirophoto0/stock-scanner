@@ -140,15 +140,24 @@ def log_to_sheet(sheet_name, row_data):
         print(f"Error logging to {sheet_name}: {e}")
         return False
         
-# ฟังก์ชันสำหรับบันทึกยอดเงินสดคงเหลือลงไฟล์ (หรือ session_state)
+# --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
+if "cash_balance" not in st.session_state:
+    st.session_state.cash_balance = load_total_cash_balance()
+
+# --- ปรับปรุงฟังก์ชัน save_cash_balance ให้สอดคล้องกับระบบ Google Sheets ---
 def save_cash_balance(balance):
     try:
+        # อัปเดตค่าใน session_state ทันที
         st.session_state.cash_balance = float(balance)
-        # ถ้าโปรแกรมของคุณมีการบันทึกไฟล์ cash balance ลง CSV หรือ JSON ด้วย สามารถเพิ่มโค้ดบันทึกตรงนี้ได้ครับ
+        
+        # หากต้องการบันทึกรายการเปลี่ยนแปลงลง Google Sheets (CashFlow)
+        # ให้เรียกใช้ log_cash_transaction ที่คุณมีอยู่แล้วในโค้ดได้เลยครับ
         # ตัวอย่างเช่น:
-        # pd.DataFrame([{"cash_balance": balance}]).to_csv("cash_balance.csv", index=False)
+        # log_cash_transaction(str(datetime.now().date()), 'ปรับปรุงยอดเงินสด', balance, 'Update via App')
+        
+        st.toast(f"บันทึกยอดเงินสดคงเหลือสำเร็จ: {balance:,.2f} บาท", icon="✅")
     except Exception as e:
-        print(f"Error saving cash balance: {e}")
+        st.error(f"Error saving cash balance: {e}")
         
 def save_data_to_sheet(new_df, sheet_name):
     try:
