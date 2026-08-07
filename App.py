@@ -39,7 +39,7 @@ def extract_pvd_from_image(image_file, year_be):
         genai.configure(api_key=api_key)
         # ใช้โมเดล gemini-1.5-flash ที่รองรับ Vision
         # เพิ่มโค้ดนี้ลงใน main() ชั่วคราวเพื่อเช็คโมเดลที่ใช้งานได้
-        import google.generativeai as genai
+
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         
         for m in genai.list_models():
