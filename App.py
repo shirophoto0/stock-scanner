@@ -612,30 +612,78 @@ def log_portfolio_snapshot():
 
 def calculate_total_portfolio_value():
     """คำนวณมูลค่าหุ้นในพอร์ตปัจจุบัน (Market Value ของหุ้นทั้งหมด)"""
-    # 1. ดึงข้อมูล Journal มาคำนวณจำนวนหุ้นคงเหลือปัจจุบัน
-    df = pd.DataFrame(st.session_state.journal_data)
-    all_tickers = df['หุ้น'].unique()
-    
-    total_stock_value = 0
-    
-    # 2. ดึงราคาตลาดปัจจุบัน (Market Price) ของแต่ละตัว
-    for ticker in all_tickers:
-        buys = df[(df['หุ้น'] == ticker) & (df['ประเภท'].str.contains("ซื้อ", na=False))]['จำนวนหุ้นที่ซื้อ'].sum()
-        sells = df[(df['หุ้น'] == ticker) & (df['ประเภท'].str.contains("ขาย", na=False))]['จำนวนหุ้นที่ซื้อ'].sum()
-        shares = buys - sells
+    # ตรวจสอบว่ามีข้อมูลใน session_state หรือไม่ และไม่เป็นค่าว่าง
+    if 'journal_data' not in st.session_state or not st.session_state.journal_data:
+        return 0.0
         
-        if shares > 0:
-            # ดึงราคาปัจจุบัน
-            try:
-                ticker_obj = yf.Ticker(f"{ticker}.BK")
-                # ใช้ fast_info หรือ history เพื่อเอาราคาล่าสุด
-                market_price = ticker_obj.fast_info['last_price']
-                total_stock_value += (shares * market_price)
-            except:
-                # ถ้าดึงราคาไม่ได้ ให้ใช้ราคาทุนล่าสุดเพื่อไม่ให้ Error
-                total_stock_value += 0 
+    try:
+        df = pd.DataFrame(st.session_state.journal_data)
+        if df.empty:
+            return 0.0
+            
+        # ค้นหาชื่อคอลัมน์ที่เป็นตัวแทนของหุ้น/Ticker ป้องกัน KeyError
+        stock_col = None
+        for col in ['หุ้น', 'Ticker', 'Symbol', 'Stock']:
+            if col in df.columns:
+                stock_col = col
+                break
                 
-    return total_stock_value
+        type_col = None
+        for col in ['ประเภท', 'Type', 'Transaction']:
+            if col in df.columns:
+                type_col = col
+                break
+                
+        shares_col = None
+        for col in ['จำนวนหุ้นที่ซื้อ', 'จำนวน', 'Shares', 'Volume']:
+            if col in df.columns:
+                shares_col = col
+                break
+                
+        # ถ้าหาคอลัมน์สำคัญไม่ครบ ให้คืนค่า 0 เพื่อป้องกันแอปพัง
+        if not stock_col or not type_col or not shares_col:
+            return 0.0
+
+        all_tickers = df[stock_col].unique()
+        total_stock_value = 0
+        
+        # วนลูปคำนวณมูลค่าหุ้นแต่ละตัว
+        for ticker in all_tickers:
+            if not ticker or pd.isna(ticker):
+                continue
+                
+            buys = df[(df[stock_col] == ticker) & (df[type_col].astype(str).str.contains("ซื้อ", na=False))][shares_col].sum()
+            sells = df[(df[stock_col] == ticker) & (df[type_col].astype(str).str.contains("ขาย", na=False))][shares_col].sum()
+            
+            try:
+                shares = float(buys) - float(sells)
+            except:
+                shares = 0
+            
+            if shares > 0:
+                try:
+                    # ดึงราคาตลาดปัจจุบันจาก Yahoo Finance
+                    ticker_obj = yf.Ticker(f"{ticker}.BK")
+                    market_price = ticker_obj.fast_info.get('last_price', 0)
+                    
+                    if not market_price or pd.isna(market_price):
+                        # ลองใช้วิธีดึงผ่าน history แทนถ้า fast_info ไม่มา
+                        hist = ticker_obj.history(period="1d")
+                        if not hist.empty:
+                            market_price = hist['Close'].iloc[-1]
+                        else:
+                            market_price = 0
+                            
+                    total_stock_value += (shares * float(market_price))
+                except:
+                    # ถ้าดึงราคาไม่ได้ ข้ามไปก่อนเพื่อไม่ให้ติด Error
+                    pass
+                    
+        return total_stock_value
+        
+    except Exception as e:
+        # ดักจับข้อผิดพลาดทั้งหมดเพื่อให้แอปยังรันต่อไปได้
+        return 0.0
 
 def total_invested_capital():
     # ดึงข้อมูลกระแสเงินสดมาคำนวณเงินลงทุนสุทธิ
