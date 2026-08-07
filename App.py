@@ -612,11 +612,11 @@ def log_portfolio_snapshot():
 def calculate_total_portfolio_value():
     """คำนวณมูลค่าหุ้นในพอร์ตปัจจุบัน (Market Value ของหุ้นทั้งหมด)"""
     # ตรวจสอบว่ามีข้อมูลใน session_state หรือไม่ และไม่เป็นค่าว่าง
-    if 'JournalData' not in st.session_state or not st.session_state.JournalData:
+    if 'journal_data' not in st.session_state or not st.session_state.journal_data:
         return 0.0
         
     try:
-        df = pd.DataFrame(st.session_state.JournalData)
+        df = pd.DataFrame(st.session_state.journal_data)
         if df.empty:
             return 0.0
             
@@ -683,7 +683,7 @@ def calculate_total_portfolio_value():
     except Exception as e:
         # ดักจับข้อผิดพลาดทั้งหมดเพื่อให้แอปยังรันต่อไปได้
         return 0.0
-
+        
 def total_invested_capital():
     # ดึงข้อมูลกระแสเงินสดมาคำนวณเงินลงทุนสุทธิ
     cash_df = load_data("Cash_Flow")
@@ -1210,7 +1210,16 @@ def calculate_rsi(series, period=14):
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
-
+# 📌 ตรวจสอบและดึงข้อมูลจากแท็บ JournalData มาเก็บไว้ใน session_state
+    if 'journal_data' not in st.session_state or not st.session_state.journal_data:
+        try:
+            client = get_gsheet_client()
+            # ดึงข้อมูลจากชีท JournalData ที่คุณใช้งานอยู่
+            sheet_journal = client.open('MyStockData').worksheet('JournalData') 
+            st.session_state.journal_data = sheet_journal.get_all_records()
+        except Exception as e:
+            st.session_state.journal_data = []
+            
 if "journal_data" not in st.session_state:
     load_journal()   # <--- ใส่บรรทัดนี้ลงไปครับ! มันจะช่วยดึงข้อมูลจากไฟล์มาโชว์ตอนเปิดแอป
 
