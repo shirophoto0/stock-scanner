@@ -4722,17 +4722,16 @@ def main():
             # ==========================================
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
-                # 1. ดึงข้อมูล
+                # 1. ดึงข้อมูลเหมือนเดิม
                 client = get_gsheet_client()
                 df_pvd = pd.DataFrame(client.open('MyStockData').worksheet('Provident_Fund').get_all_records())
                 df_ins = pd.DataFrame(client.open('MyStockData').worksheet('Insurance').get_all_records())
                 df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
 
-                # 2. ฟังก์ชันช่วยเตรียมข้อมูล Date
-                def clean_df(df, date_col, val_col, name):
+                # 2. ฟังก์ชันเตรียมข้อมูล (เน้นให้มี Date เป็น index)
+                def prepare_series(df, date_col, val_col, name):
                     df = df.copy()
-                    # แปลงวันที่
-                    if date_col == 'Month': # เฉพาะ PVD ที่มีคอลัมน์ Month
+                    if date_col == 'Month':
                         df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df[date_col].replace('', '12').map({
                             'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
                             'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08',
@@ -4741,44 +4740,40 @@ def main():
                     else:
                         df['Date'] = pd.to_datetime(df[date_col])
                     
-                    df['Value'] = df[val_col].astype(str).str.replace(',', '').astype(float)
-                    df['Type'] = name
-                    return df[['Date', 'Value', 'Type']]
+                    df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
+                    return df.set_index('Date')[[name]]
 
-                # เตรียมแต่ละรายการ
-                list_dfs = []
-                if not df_pvd.empty: list_dfs.append(clean_df(df_pvd, 'Month', 'Grand_Total', 'PVD'))
-                if not df_ins.empty: list_dfs.append(clean_df(df_ins, 'Date', 'Redemption_Value', 'Insurance'))
-                if not df_coop.empty: list_dfs.append(clean_df(df_coop, 'Date', 'Coop_Value', 'Coop'))
+                # 3. รวมทุกอย่างเข้าด้วยกันด้วย Outer Join
+                s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
+                s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
+                s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
 
-                if list_dfs:
-                    df_all = pd.concat(list_dfs)
-                    
-                    # 3. สร้างเส้นรวม (Total)
-                    df_total = df_all.groupby('Date')['Value'].sum().reset_index()
-                    df_total['Type'] = 'Total Net Worth'
-                    
-                    # รวมทุกอย่างเข้าด้วยกัน
-                    df_final = pd.concat([df_all, df_total])
+                df_merged = s_pvd.join([s_ins, s_coop], how='outer').sort_index()
 
-                    # 4. วาดกราฟด้วย Plotly Express (ใช้งานง่ายและไม่ค่อยพัง)
-                    import plotly.express as px
-                    fig = px.line(df_final, x='Date', y='Value', color='Type', 
-                                  markers=True, title="แนวโน้มความมั่งคั่งสุทธิ")
-                    
-                    # ขยายแกน Y ให้สวยงาม
-                    max_y = df_total['Value'].max() * 1.2
-                    fig.update_layout(
-                        yaxis=dict(range=[0, max_y], tickformat=",.0f"),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("ยังไม่มีข้อมูลใน Spreadsheet ครับ")
+                # *** ส่วนสำคัญ: Forward Fill (เติมค่าล่าสุดให้ช่องที่ว่าง) ***
+                df_merged = df_merged.ffill().fillna(0)
+                
+                # บวกหุ้นปัจจุบันเข้าไป
+                df_merged['Total'] = df_merged.sum(axis=1) + (total_stock_value if 'total_stock_value' in locals() else 0)
+
+                # 4. วาดกราฟ
+                import plotly.graph_objects as go
+                fig = go.Figure()
+                
+                for col in df_merged.columns:
+                    fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col,
+                                            line=dict(width=3 if col == 'Total' else 2)))
+
+                # ปรับแกน Y
+                max_y = df_merged['Total'].max() * 1.1
+                fig.update_layout(yaxis=dict(range=[0, max_y], tickformat=",.0f"),
+                                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+
+                st.plotly_chart(fig, use_container_width=True)
 
             except Exception as e:
-                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
+                st.error(f"เกิดข้อผิดพลาด: {e}")
+
                 
 
         # ==========================================
