@@ -1203,947 +1203,1106 @@ def main():
     else:
         st.error("ไม่สามารถโหลดข้อมูลหุ้นได้เลย กรุณาตรวจสอบการเชื่อมต่อ Google Sheets")
 
-    ###### ส่วนการสร้าง TAB หลัก ##################
-    tab_stock, tab_tfex, tab_tech, tab_risk = st.tabs([
-        "📊 หุ้น (Stock)", 
-        "📈 TFEX", 
-        "📉 วิเคราะห์กราฟเทคนิคอล", 
-        "🛡️ Risk Management"
+    # ==========================================================
+    # ปรับโครงสร้าง Tab ระดับบนสุดของแอป (แบ่งหมวดหมู่ชัดเจน)
+    # ==========================================================
+    main_tab_system, main_tab_wealth = st.tabs([
+        "📊 ระบบเทรด & สแกนหุ้น (Trading System)", 
+        "🌐 ภาพรวมความมั่งคั่ง (Total Wealth)"
     ])
 
-    # ส่วนวิเคราะห์แสกนกราฟหุ้น#
-    with tab_tech:
-
-        ################################
-        # 1. Slidebar (ตัวกรอง)
-        ################################
-        with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
-            max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0)
-            min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0)
-            rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0))
-            
-            strategy_option = st.selectbox(
-                "เลือกหน้าเทรด:",
-                options=[
-                    "ไม่กรองเงื่อนไขนี้", 
-                    "--- กลุ่ม RS Line ---",
-                    "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว", 
-                    "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)",
-                    "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)", 
-                    "--- กลุ่ม New High ---",
-                    "3 Month High", 
-                    "6 Month High", 
-                    "52 Week High"
-                ]
-            )
-        
-            # ตรวจสอบข้อมูลก่อนโชว์
-            if df_all_stocks is not None and not df_all_stocks.empty:
-                # 1. เตรียมข้อมูลและทำความสะอาด
-                filtered_df = df_all_stocks.copy()
-                filtered_df.columns = filtered_df.columns.str.strip()
-                
-                # แปลงคอลัมน์ตัวเลข
-                numeric_cols = ['PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
-                for col in numeric_cols:
-                    if col in filtered_df.columns:
-                        filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce').fillna(0)
-                
-                # แปลงคอลัมน์ Boolean (สำคัญมากสำหรับการกรองเงื่อนไข)
-                bool_cols = ['Is_RS_Above_0', 'Is_3M_High', 'Is_6M_High', 'Is_52W_High']
-                for col in bool_cols:
-                    if col in filtered_df.columns:
-                        filtered_df[col] = filtered_df[col].astype(str).str.lower().str.strip() == 'true'
-        
-                # 2. กรองพื้นฐานด้วย Slider (จะกรองทับกันไปเรื่อยๆ)
-                if max_pe < 100:
-                    filtered_df = filtered_df[filtered_df['PE_Ratio'] <= max_pe]
-                filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
-                filtered_df = filtered_df[(filtered_df['RSI_14'] >= rsi_range[0]) & (filtered_df['RSI_14'] <= rsi_range[1])]
-        
-                # 3. กำหนดคอลัมน์พื้นฐานและ Sort
-                show_columns = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
-                sort_by_col = 'Ticker'
-                ascending_sort = True
-        
-                # 4. กรองตามหน้าเทรด (Strategy)
-                if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
-                    filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
-                    show_columns.append('ตัดเส้น0ขึ้นมาแล้ว(วัน)')
-                    sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
-                
-                elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
-                    filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
-                    sort_by_col, ascending_sort = 'RS_Line', False
-                
-                elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
-                    time_map = {"3 เดือน (60 วัน)": 60, "6 เดือน (120 วัน)": 120, "1 ปี (240 วัน)": 240}
-                    time_choice = st.sidebar.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
-                    min_days = time_map[time_choice]
-                    filtered_df = filtered_df[(filtered_df['RS_Line'] <= 0.0) & (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days)]
-                    show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
-                    sort_by_col, ascending_sort = 'RS_Line', False
-                
-                elif strategy_option == "3 Month High":
-                    filtered_df = filtered_df[filtered_df['Is_3M_High'] == True]
-                    show_columns.append('New_High_3M_มาแล้ว(วัน)')
-                    sort_by_col, ascending_sort = 'New_High_3M_มาแล้ว(วัน)', True
-                
-                elif strategy_option == "6 Month High":
-                    filtered_df = filtered_df[filtered_df['Is_6M_High'] == True]
-                    show_columns.append('New_High_6M_มาแล้ว(วัน)')
-                    sort_by_col, ascending_sort = 'New_High_6M_มาแล้ว(วัน)', True
-                
-                elif strategy_option == "52 Week High":
-                    filtered_df = filtered_df[filtered_df['Is_52W_High'] == True]
-                    show_columns.append('New_High_52W_มาแล้ว(วัน)')
-                    sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
-        
-                # 5. แสดงผล
-                results_container = st.empty() 
-            
-            
-                # กรองคอลัมน์ที่เลือกให้โชว์
-                valid_cols = [c for c in show_columns if c in filtered_df.columns]
-            ##########################
-        # 4. ส่วนการเลือกหุ้น (เป็นตัวกลางส่งค่าไป Fundamental และ กราฟ)
-        
-        st.subheader("🔍 1. วิเคราะห์กราฟเทคนิคัลอัจฉริยะ (Multi-Timeframe & RS vs SET Index)")
-        
-        col_input, col_metrics = st.columns([1, 3])
-        
-        with col_input:
-            all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS]
-            
-            # 1. กำหนดค่าเริ่มต้น
-            current_selected = st.session_state.get("selected_ticker", "KBANK")
-            
-            # 2. สร้าง Selectbox
-            ticker_input = st.selectbox(
-                "เลือกหรือพิมพ์ชื่อหุ้นที่ต้องการดูราคากราฟรายละเอียด:", 
-                options=all_tickers, 
-                index=all_tickers.index(current_selected) if current_selected in all_tickers else 0
-            )
-            
-            # 3. จุดสำคัญ: ถ้าค่าที่เลือกใหม่ไม่ตรงกับค่าใน session_state ให้สั่งอัปเดตและ Rerun
-            if ticker_input != current_selected:
-                st.session_state.selected_ticker = ticker_input
-                st.rerun()  # บังคับให้โปรแกรมเริ่มทำงานใหม่ตั้งแต่บรรทัดบนสุดเพื่อให้กราฟโหลดข้อมูลหุ้นตัวใหม่
-            
-            ticker = f"{st.session_state.selected_ticker}.BK"
-        
-        selected_ticker = st.session_state.selected_ticker 
-        ticker = f"{selected_ticker}.BK"
-        
-        # ใช้ฟังก์ชัน Cache ดึงข้อมูลแทนการดึงตรงจาก Ticker object
-        info = get_cached_stock_info(ticker) 
-        
-        # ถ้าพี่อ้ำยังต้องใช้ stock_data เพื่อดึงข้อมูลกราฟ หรืออย่างอื่น
-        # ก็ให้ประกาศ stock_data ไว้เหมือนเดิมได้ แต่ไม่ต้องดึง .info แล้วครับ
-        stock_data = yf.Ticker(ticker) 
-            
-        ##### link web set and trading view ########
-        # สร้างคอลัมน์ 2 ช่อง (ขนาดเท่ากัน)
-        col1, col2 = st.columns(2)
-        
-        # ปุ่มที่ 1 (ใส่ในคอลัมน์ที่ 1)
-        with col1:
-            set_url = f"https://www.set.or.th/th/market/product/stock/quote/{st.session_state.selected_ticker}/company-profile/information"
-            st.link_button(f"🌐 ข้อมูล SET", set_url, use_container_width=True)
-        
-        # ปุ่มที่ 2 (ใส่ในคอลัมน์ที่ 2)
-        with col2:
-            tv_url = f"https://www.tradingview.com/chart/?symbol=SET%3A{st.session_state.selected_ticker}"
-            st.link_button(f"📈 กราฟ TradingView", tv_url, use_container_width=True)
-        
-        # 5. Fundamental Dashboard
-        if info:
-            st.markdown("#### 📊 Fundamental Growth Dashboard (คัดกรองพลังขับเคลื่อนตามสูตร SEPA)")
-        
-            # ดึงงบอย่างปลอดภัย (เนื่องจากหุ้นไทยบางตัวบน Yahoo Finance ข้อมูลบางช่องอาจเป็น None)
-            m_cap = info.get('marketCap', None)
-            rev_growth = info.get('quarterlyRevenueGrowth', info.get('revenueGrowth', None))
-            eps_growth = info.get('quarterlyEarningsGrowth', info.get('earningsGrowth', None))
-            gross_margins = info.get('grossMargins', None)
-            profit_margins = info.get('profitMargins', None)
-            roe = info.get('returnOnEquity', None)
-            pb_ratio = info.get('priceToBook', None)
-        
-            f_col1, f_col2 = st.columns(2)
-            with f_col1:
-                st.write("##### 📈 ตัวเลขการเจริญเติบโต (Growth Metrics)")
-                if rev_growth is not None:
-                    st.metric("อัตราเติบโตของรายได้ (Revenue Growth YoY)", f"{rev_growth * 100:.2f} %")
-                else:
-                    st.write("• **Revenue Growth YoY:** ไม่มีข้อมูลระบบส่งตรง")
-                    
-                if eps_growth is not None:
-                    is_sepa_growth = "🔥 ผ่านเกณฑ์หุ้นเติบโตแรง (>20%)" if eps_growth >= 0.20 else "ปกติ"
-                    st.metric("อัตราเติบโตของกำไรต่อหุ้น (EPS Growth YoY)", f"{eps_growth * 100:.2f} %", delta=is_sepa_growth)
-                else:
-                    st.write("• **EPS Growth YoY:** ไม่มีข้อมูลระบบส่งตรง")
-                    
-                if m_cap is not None:
-                    st.write(f"🏢 **มูลค่าบริษัท (Market Cap):** {m_cap / 1_000_000_000:,.2f} พันล้านบาท")
-        
-            with f_col2:
-                st.write("##### 💰 อัตราการทำกำไรและมูลค่า (Profitability & Valuation)")
-                if gross_margins is not None:
-                    st.write(f"• **อัตรากำไรขั้นต้น (Gross Margin):** {gross_margins * 100:.2f} %")
-                if profit_margins is not None:
-                    st.write(f"• **อัตรากำไรสุทธิ (Net Profit Margin):** {profit_margins * 100:.2f} %")
-                if roe is not None:
-                    st.write(f"• **ผลตอบแทนต่อส่วนผู้ถือหุ้น (ROE):** {roe * 100:.2f} %")
-                if pb_ratio is not None:
-                    st.write(f"• **ราคาต่อมูลค่าทางบัญชี (P/B Ratio):** {pb_ratio:.2f} เท่า")
-                pe_value = info.get('trailingPE')
-                
-                if pe_value is not None:
-                    st.write(f"• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** {pe_value:.2f} เท่า")
-                else:
-                    st.write("• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** ไม่มีข้อมูล")
-                
-            st.info("💡 **ข้อแนะนำจากระบบ:** หุ้นซุปเปอร์สต็อกตามสไตล์ Mark Minervini มักจะมี EPS Growth ขยายตัวมากกว่า 20%-25% ขึ้นไป ควบคู่กับราคาหุ้นที่ยกฐานยืนเหนือเส้น EMA ขาขึ้น")
+    # ==========================================================
+    # TAB ที่ 1: ระบบเทรด & สแกนหุ้น (ย้าย 4 แทบเดิมมาไว้ข้างในนี้)
+    # ==========================================================
+    with main_tab_system:
+        ###### ส่วนการสร้าง TAB หลัก ##################
+        tab_stock, tab_tfex, tab_tech, tab_risk = st.tabs([
+            "📊 หุ้น (Stock)", 
+            "📈 TFEX", 
+            "📉 วิเคราะห์กราฟเทคนิคอล", 
+            "🛡️ Risk Management"
+        ])
     
-            with st.expander("⚙️ ตั้งค่าการแสดงผลกราฟ"):
-                # 3. แสดงผลตารางและกราฟ
-                # ... (เอาโค้ดส่วนแสดงผล st.dataframe และ st.plotly_chart มาใส่ตรงนี้) ...
-                #####################################
-            
-                st.markdown("##### ⚙️ ตั้งค่าการแสดงผลกราฟ")
-                col_tf, col_period = st.columns([1, 1])
+        # ส่วนวิเคราะห์แสกนกราฟหุ้น#
+        with tab_tech:
+    
+            ################################
+            # 1. Slidebar (ตัวกรอง)
+            ################################
+            with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
+                max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0)
+                min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0)
+                rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0))
                 
-                tf_mapping = {
-                    "1 ชม. (1hr)": "1h",
-                    "4 ชม. (4hr)": "4h",
-                    "1 วัน (Day)": "1d",
-                    "1 สัปดาห์ (Week)": "1wk",
-                    "1 เดือน (Month)": "1mo"
-                }
-                # เพิ่ม Mapping นี้ไว้ก่อนส่วนที่เรียก stock_data.history
-                p_map = {
-                    "6 เดือน (6m)": "6mo", 
-                    "1 ปี (1y)": "1y", 
-                    "5 ปี (5y)": "5y", 
-                    "ตั้งแต่เข้าตลาด (All Time)": "max"
-                }
-                
-                
-                with col_tf:
-                    tf_select = st.pills("เลือกความถี่แท่งเทียน (Timeframe):", options=list(tf_mapping.keys()), default="1 วัน (Day)")
-                    if not tf_select:
-                        tf_select = "1 วัน (Day)"
-                    selected_tf = tf_mapping[tf_select]
-                
-                with col_period:
-                    if selected_tf in ["1h", "4h"]:
-                        period_options = ["6 เดือน (6m)", "1 ปี (1y)"]
-                        chart_period = st.pills("เลือกช่วงเวลากราฟ (สั้น/กลาง):", options=period_options, default="6 เดือน (6m)")
-                    else:
-                        period_options = ["6 เดือน (6m)", "1 ปี (1y)", "5 ปี (5y)", "ตั้งแต่เข้าตลาด (All Time)"]
-                        chart_period = st.pills("เลือกช่วงเวลากราฟ (ทั้งหมด):", options=period_options, default="6 เดือน (6m)")
-                    if not chart_period:
-                        chart_period = "6 เดือน (6m)" if selected_tf in ["1h", "4h"] else "1 เดือน (1y)"
-                
-                # =============================================================
-                # 6. กราฟเทคนิคัล
-                # =============================================================
-                try:
-                    ticker = f"{st.session_state.selected_ticker}.BK"
-                    stock_data = yf.Ticker(ticker)
-                    set_market = yf.Ticker("^SET.BK")
-                    info = get_cached_stock_info(ticker)
-                    
-                    
-                    # 3.1 กำหนดช่วงเวลา 
-                    p_map = {"6 เดือน (6m)": "6mo", "1 ปี (1y)": "1y", "5 ปี (5y)": "5y", "ตั้งแต่เข้าตลาด (All Time)": "max"}
-                    selected_period = p_map.get(chart_period, "1y")
-                    actual_interval = "1h" if selected_tf == "4h" else selected_tf
-                    
-                    # กันเหนียว: ถ้า TF สั้น (1h/4h) เลือก Period ยาวเกินไป ให้ตัดเหลือ 1 ปี เพื่อป้องกันกราฟไม่ขึ้น
-                    if selected_tf in ["1h", "4h"] and selected_period in ["5y", "max"]:
-                        selected_period = "1y"
-                
-                    # 3.2 ดึงข้อมูล
-                    hist_chart = stock_data.history(period=selected_period, interval=actual_interval)
-                    hist_market = set_market.history(period=selected_period, interval=actual_interval)
-                    
-                    # กรณีดึงข้อมูลมาแล้วว่าง ให้ลองถอยกลับไปดึง period ที่สั้นลง (Fallback)
-                    if hist_chart.empty:
-                        hist_chart = stock_data.history(period="6mo", interval=actual_interval)
-                        hist_market = set_market.history(period="6mo", interval=actual_interval)
-                
-                    # 3.3 จัดการ Resample สำหรับ 4h
-                    if selected_tf == "4h" and not hist_chart.empty:
-                        conversion = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
-                        hist_chart = hist_chart.resample('4h').agg(conversion).ffill()
-                        hist_market = hist_market.resample('4h').agg(conversion).ffill()
-                        
-                    if not hist_chart.empty:
-                        # ปรับ Timezone และรวมข้อมูล
-                        if hist_chart.index.tz is not None: hist_chart.index = hist_chart.index.tz_localize(None)
-                        if not hist_market.empty and hist_market.index.tz is not None: hist_market.index = hist_market.index.tz_localize(None)
-                
-                        hist_market_close = hist_market['Close'].to_frame(name='Market_Close')
-                        chart_combined = hist_chart[['Open', 'High', 'Low', 'Close']].join(hist_market_close, how='inner')
-                        
-                        # คำนวณค่าเทคนิคัล
-                        base_stock = chart_combined['Close'].iloc[0]
-                        chart_combined['Stock_Perf'] = ((chart_combined['Close'] - base_stock) / base_stock) * 100
-                            
-                        base_market = chart_combined['Market_Close'].iloc[0]
-                        market_perf = ((chart_combined['Market_Close'] - base_market) / base_market) * 100
-                        chart_combined['RS_Line'] = chart_combined['Stock_Perf'] - market_perf
-                        chart_combined['RS_EMA20'] = chart_combined['RS_Line'].ewm(span=20, adjust=False).mean()
-                        chart_combined['Is_Above_0'] = chart_combined['RS_Line'] > 0
-                        chart_combined['Days_Above_0'] = chart_combined['Is_Above_0'].groupby((~chart_combined['Is_Above_0']).cumsum()).cumsum()
-                        chart_combined['EMA10'] = chart_combined['Close'].ewm(span=10, adjust=False).mean()
-                        chart_combined['EMA20'] = chart_combined['Close'].ewm(span=20, adjust=False).mean()
-                        chart_combined['EMA50'] = chart_combined['Close'].ewm(span=50, adjust=False).mean()
-                        chart_combined['EMA100'] = chart_combined['Close'].ewm(span=100, adjust=False).mean()
-                        chart_combined['EMA200'] = chart_combined['Close'].ewm(span=200, adjust=False).mean()
-                
-                        # สร้างตารางวันหยุด
-                        missing_dates = pd.date_range(start=chart_combined.index.min(), end=chart_combined.index.max(), freq='D').difference(pd.to_datetime(chart_combined.index.date))
-                
-                        # 3.5 แสดง Metrics
-                        latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
-                        latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
-                        with col_metrics:
-                            m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
-                            
-                            # ปรับส่วนดึงข้อมูลปันผล
-                            raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
-                            
-                            if raw_div:
-                                if raw_div > 1:
-                                    div_display = f"{raw_div:.2f}%"
-                                else:
-                                    div_display = f"{raw_div * 100:.2f}%"
-                            else:
-                                div_display = "N/A"
-            
-                            # --- m1: ชื่อบริษัท ---
-                            m1.caption("ชื่อบริษัท")
-                            m1.write(f"**{info.get('longName', 'N/A')}**")
-                            
-                            # --- m2: ราคาล่าสุด ---
-                            m2.caption("ราคาล่าสุด")
-                            m2.write(f"**{latest_price_single:.2f} บ.**")
-                            
-                            # --- m3: สถานะ RS ---
-                            m3.caption("สถานะ RS")
-                            m3.write(f"**{'แข็งแกร่งกว่าตลาด' if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else 'อ่อนแอกว่าตลาด'}**")
-                            
-                            # --- m4: ปันผล (Yield) ---
-                            m4.caption("ปันผล (Yield)")
-                            m4.write(f"**{div_display}**")
-                                    
-                        # 3.4 วาดกราฟ
-                        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
-                        fig.add_trace(go.Candlestick(x=chart_combined.index, open=chart_combined['Open'], high=chart_combined['High'], low=chart_combined['Low'], close=chart_combined['Close'], name='Price'), row=1, col=1)
-                        
-                        ema_hover_config = dict(bgcolor='rgba(255, 255, 255, 0.20)', bordercolor='rgba(0,0,0,0)')
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA10'], line=dict(color='orange', width=1.5), name='EMA 10', hovertemplate="EMA10: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA20'], line=dict(color='magenta', width=1.5), name='EMA 20', hovertemplate="EMA20: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA50'], line=dict(color='blue', width=1.5), name='EMA 50', hovertemplate="EMA50: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA100'], line=dict(color='brown', width=1.5), name='EMA 100', hovertemplate="EMA100: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA200'], line=dict(color='black', width=2.0), name='EMA 200', hovertemplate="EMA200: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        
-                        # กราฟ RS Line (Purple)
-                        fig.add_trace(go.Scatter(
-                            x=chart_combined.index, 
-                            y=chart_combined['RS_Line'], 
-                            line=dict(color='#9c27b0', width=2), 
-                            name='RS Line',
-                            hovertemplate="RS Line: %{y:.2f}%<extra></extra>"
-                        ), row=2, col=1)
-                        
-                        # กราฟ RS EMA 20 (Orange Dash)
-                        fig.add_trace(go.Scatter(
-                            x=chart_combined.index, 
-                            y=chart_combined['RS_EMA20'], 
-                            line=dict(color='#ff9800', width=1.5, dash='dot'), 
-                            name='RS EMA20',
-                            hovertemplate="RS EMA20: %{y:.2f}%<extra></extra>"
-                        ), row=2, col=1)
-                
-                        # เส้นอ้างอิงแนวนอน (Hline)
-                        fig.add_hline(y=0, line_dash="solid", line_color="grey", line_width=1, row=2, col=1)
-                        fig.add_hline(y=20, line_dash="dot", line_color="rgba(255, 0, 0, 0.3)", row=2, col=1)
-                        fig.add_hline(y=-20, line_dash="dot", line_color="rgba(0, 0, 255, 0.3)", row=2, col=1)
-                
-                        # 1. ตั้งค่า Candlestick ให้แสดงข้อมูลพื้นฐาน
-                        fig.update_xaxes(
-                                rangebreaks=[dict(values=missing_dates)],
-                                showgrid=True,
-                                gridcolor='rgba(150,150,150,0.08)',
-                                showspikes=True,
-                                spikecolor='#888',
-                                spikethickness=1,
-                                spikesnap='cursor',
-                                spikemode='across'
-                            )
-                        fig.update_yaxes(
-                                showgrid=True,
-                                gridcolor='rgba(150,150,150,0.08)',
-                                showspikes=True,
-                                spikecolor='#888',
-                                spikethickness=1,
-                                spikesnap='cursor',
-                                spikemode='across'
-                            )
-                        
-                        fig.update_layout(
-                    height=800,
-                    margin=dict(l=40, r=60, t=50, b=40), # เพิ่มขอบขวา (r=60) เพื่อให้มีที่ว่างสำหรับป้ายราคา
-                    hovermode='x unified',
-                    xaxis_rangeslider_visible=False,
-                    # ปรับแกน Y ให้แสดงป้ายราคาที่ "ชี้" ไปที่ราคาล่าสุด
-                    yaxis=dict(
-                        showspikes=False, # ปิด spike แกน Y เพื่อไม่ให้บังป้ายราคา
-                        side='right',     # ย้ายแกนราคาไปไว้ขวาเหมือน TradingView
-                        showgrid=True,
-                    )
+                strategy_option = st.selectbox(
+                    "เลือกหน้าเทรด:",
+                    options=[
+                        "ไม่กรองเงื่อนไขนี้", 
+                        "--- กลุ่ม RS Line ---",
+                        "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว", 
+                        "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)",
+                        "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)", 
+                        "--- กลุ่ม New High ---",
+                        "3 Month High", 
+                        "6 Month High", 
+                        "52 Week High"
+                    ]
                 )
-                        st.plotly_chart(fig, use_container_width=True)
-                    # (แนะนำให้พี่อ้ำใช้โค้ดเดิมในส่วนนี้ได้เลยครับ ผมตัดมาให้สั้นลงเพื่อดูโครงสร้าง)
-                    # ...
-                
-                
-                except Exception as e:
-                    st.error(f"⚠️ เกิดข้อผิดพลาดในการวาดกราฟ: {str(e)}")
-            # ==========================================
-            # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
-            # ==========================================
-            with tab_risk:
-                st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
-
-                # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
-                cash_balance = load_total_cash_balance()
-                market_value = get_total_market_value()
-                total_equity = cash_balance + market_value
-                
-                st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
-                col_a, col_b, col_c = st.columns(3)
-                col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
-                col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
-                col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
-                
-                st.divider()
-                
-                # --- ส่วนป้องกัน Error: ดึงค่า EMA และตรวจสอบตาราง chart_combined อย่างปลอดภัย ---
-                has_chart = 'chart_combined' in locals() and isinstance(chart_combined, pd.DataFrame) and not chart_combined.empty
-                
-                if has_chart and 'EMA10' in chart_combined.columns:
-                    ema10_val = float(chart_combined['EMA10'].iloc[-1])
-                    ema10_str = f"เส้น EMA 10 ({ema10_val:.2f} บาท)"
-                else:
-                    ema10_val = 0.0
-                    ema10_str = "เส้น EMA 10 (ไม่มีข้อมูล)"
-
-                if has_chart and 'EMA20' in chart_combined.columns:
-                    ema20_val = float(chart_combined['EMA20'].iloc[-1])
-                    ema20_str = f"เส้น EMA 20 ({ema20_val:.2f} บาท)"
-                else:
-                    ema20_val = 0.0
-                    ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
-                # -------------------------------------------------------------
-
-                # 2. ส่วนการคำนวณ
-                r_col1, r_col2 = st.columns([1, 1])
-
-                with r_col1:
-                    total_cap = st.number_input(
-                        "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
-                        min_value=1000, 
-                        value=int(total_equity), # นี่คือค่าเริ่มต้นที่ดึงมาจากพอร์ตจริง
-                        step=1000,
-                        help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
-                    )
-                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
-                
-                with r_col2:
-                    # กำหนดค่าเริ่มต้นให้ปลอดภัยก่อน ถ้าตัวแปรไม่มีค่าให้เป็น 0.0
-                    try:
-                        latest_p = float(latest_price_single) if 'latest_price_single' in locals() and latest_price_single is not None else 0.0
-                    except (ValueError, TypeError):
-                        latest_p = 0.0
-                    
-                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
-                        ema10_str,
-                        ema20_str,
-                        "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
-                        "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
-                    ])
-                    
-                    # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
-                    if "EMA 10" in sl_type and ema10_val > 0:
-                        sl_price = ema10_val
-                    elif "EMA 20" in sl_type and ema20_val > 0:
-                        sl_price = ema20_val
-                    elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                        fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
-                        sl_price = latest_p * (1 - (fixed_sl_pct / 100))
-                    else: # Manual Price หรือกรณี EMA ไม่มีข้อมูล
-                        if "EMA" in sl_type and ema10_val == 0:
-                            st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
-                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
-                
-                # 3. คำนวณผลลัพธ์
-                max_risk_money = total_cap * (risk_pct / 100)
-                risk_per_share = latest_p - sl_price
-                
-                # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
-                if risk_per_share <= 0:
-                    st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
-                else:
-                    shares_to_buy = int(max_risk_money / risk_per_share)
-                    total_buy_value = shares_to_buy * latest_p
-                    
-                    st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
-                    res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-                    res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
-                    res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
-                    res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
-                    res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
-                                        
-        #######################          
-                st.markdown("---")
-                st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
-
-                # 1. ดึงข้อมูลจาก journal_data มาแปลงเป็น DataFrame
-                if 'journal_data' in st.session_state and st.session_state.journal_data:
-                    df_filtered = pd.DataFrame(st.session_state.journal_data)
-                else:
-                    df_filtered = pd.DataFrame()
-
-                # แปลงคอลัมน์ 'กำไร/ขาดทุน (บาท)' ให้เป็นตัวเลขอย่างปลอดภัย (กันกรณีมีคอมมาหรือข้อความปน)
-                if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
-                    df_filtered['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(
-                        df_filtered['กำไร/ขาดทุน (บาท)'].astype(str).str.replace(',', ''), 
-                        errors='coerce'
-                    ).fillna(0)
-
-                # 2. คำนวณ Exposure
-                total_market_val = calculate_total_portfolio_value() 
-                current_cash = st.session_state.get('cash_balance', 0.0)
-                total_equity = total_market_val + current_cash
-                
-                exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
-                
-                # 3. คำนวณ Expectancy และแยกไม้ชนะ/แพ้
-                if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
-                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
-                    
-                    win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
-                    avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
-                    avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
-                    loss_rate = 1 - win_rate
-                    
-                    expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
-                else:
-                    win_rate = 0.0
-                    avg_win = 0.0
-                    avg_loss = 0.0
-                    loss_rate = 0.0
-                    expectancy = 0.0
-                
-                # 3. แสดงผลด้วย st.metric
-                col_r1, col_r2 = st.columns(2)
-                col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
-                col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
-
             
-                # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
-                def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
-                    fixed_capital = initial_capital
-                    fixed_balance = initial_capital
-                    comp_balance = initial_capital
+                # ตรวจสอบข้อมูลก่อนโชว์
+                if df_all_stocks is not None and not df_all_stocks.empty:
+                    # 1. เตรียมข้อมูลและทำความสะอาด
+                    filtered_df = df_all_stocks.copy()
+                    filtered_df.columns = filtered_df.columns.str.strip()
                     
-                    for i in range(trades):
-                        win = np.random.rand() < win_rate
-                        # คำนวณแบบไม่ทบต้น
-                        fixed_profit = (profit_pct * fixed_capital) if win else (-loss_pct * fixed_capital)
-                        fixed_balance += fixed_profit
-                        # คำนวณแบบทบต้น
-                        comp_profit = (profit_pct * comp_balance) if win else (-loss_pct * comp_balance)
-                        comp_balance += comp_profit
-                        
-                    return fixed_balance, comp_balance
-                
-                def show_strategy_analysis():
-                    st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
-                    initial_cap = 100000
-                    loss_pct = 0.08
-                    trades = 30
-                    win_rates = [0.4, 0.5, 0.6]
-                    profit_pcts = [0.10, 0.12, 0.14, 0.16]
-                
-                    data = []
-                    for wr in win_rates:
-                        for pr in profit_pcts:
-                            wins = trades * wr
-                            losses = trades * (1 - wr)
-                            fixed_profit = (wins * pr * initial_cap) - (losses * loss_pct * initial_cap)
-                            
-                            comp_cap = initial_cap
-                            for i in range(trades):
-                                if np.random.rand() < wr: comp_cap *= (1 + pr)
-                                else: comp_cap *= (1 - loss_pct)
-                            
-                            data.append({
-                                "Win Rate": f"{int(wr*100)}%",
-                                "Profit %": f"{int(pr*100)}%",
-                                "ไม่ทบต้น (กำไร)": f"{fixed_profit:,.0f}",
-                                "ทบต้น (กำไร)": f"{comp_cap - initial_cap:,.0f}",
-                                "กลยุทธ์ที่แนะนำ": "ทบต้น" if comp_cap > (initial_cap + fixed_profit) else "ไม่ทบต้น"
-                            })
-                    st.table(pd.DataFrame(data))
-                
-                # --- ส่วนแสดงผลความเสี่ยง ทบต้น VS ไม่ทบต้น ---
-                st.markdown("---")
-                
-                st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
+                    # แปลงคอลัมน์ตัวเลข
+                    numeric_cols = ['PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
+                    for col in numeric_cols:
+                        if col in filtered_df.columns:
+                            filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce').fillna(0)
+                    
+                    # แปลงคอลัมน์ Boolean (สำคัญมากสำหรับการกรองเงื่อนไข)
+                    bool_cols = ['Is_RS_Above_0', 'Is_3M_High', 'Is_6M_High', 'Is_52W_High']
+                    for col in bool_cols:
+                        if col in filtered_df.columns:
+                            filtered_df[col] = filtered_df[col].astype(str).str.lower().str.strip() == 'true'
             
-                # เพิ่มส่วนเลือกช่วงเวลา
-                time_period = st.radio(
-                    "เลือกช่วงเวลาที่ต้องการวิเคราะห์:",
-                    ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "Overall"],
-                    horizontal=True
+                    # 2. กรองพื้นฐานด้วย Slider (จะกรองทับกันไปเรื่อยๆ)
+                    if max_pe < 100:
+                        filtered_df = filtered_df[filtered_df['PE_Ratio'] <= max_pe]
+                    filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
+                    filtered_df = filtered_df[(filtered_df['RSI_14'] >= rsi_range[0]) & (filtered_df['RSI_14'] <= rsi_range[1])]
+            
+                    # 3. กำหนดคอลัมน์พื้นฐานและ Sort
+                    show_columns = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
+                    sort_by_col = 'Ticker'
+                    ascending_sort = True
+            
+                    # 4. กรองตามหน้าเทรด (Strategy)
+                    if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
+                        filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
+                        show_columns.append('ตัดเส้น0ขึ้นมาแล้ว(วัน)')
+                        sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
+                    
+                    elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
+                        filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
+                        sort_by_col, ascending_sort = 'RS_Line', False
+                    
+                    elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
+                        time_map = {"3 เดือน (60 วัน)": 60, "6 เดือน (120 วัน)": 120, "1 ปี (240 วัน)": 240}
+                        time_choice = st.sidebar.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
+                        min_days = time_map[time_choice]
+                        filtered_df = filtered_df[(filtered_df['RS_Line'] <= 0.0) & (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days)]
+                        show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
+                        sort_by_col, ascending_sort = 'RS_Line', False
+                    
+                    elif strategy_option == "3 Month High":
+                        filtered_df = filtered_df[filtered_df['Is_3M_High'] == True]
+                        show_columns.append('New_High_3M_มาแล้ว(วัน)')
+                        sort_by_col, ascending_sort = 'New_High_3M_มาแล้ว(วัน)', True
+                    
+                    elif strategy_option == "6 Month High":
+                        filtered_df = filtered_df[filtered_df['Is_6M_High'] == True]
+                        show_columns.append('New_High_6M_มาแล้ว(วัน)')
+                        sort_by_col, ascending_sort = 'New_High_6M_มาแล้ว(วัน)', True
+                    
+                    elif strategy_option == "52 Week High":
+                        filtered_df = filtered_df[filtered_df['Is_52W_High'] == True]
+                        show_columns.append('New_High_52W_มาแล้ว(วัน)')
+                        sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
+            
+                    # 5. แสดงผล
+                    results_container = st.empty() 
+                
+                
+                    # กรองคอลัมน์ที่เลือกให้โชว์
+                    valid_cols = [c for c in show_columns if c in filtered_df.columns]
+                ##########################
+            # 4. ส่วนการเลือกหุ้น (เป็นตัวกลางส่งค่าไป Fundamental และ กราฟ)
+            
+            st.subheader("🔍 1. วิเคราะห์กราฟเทคนิคัลอัจฉริยะ (Multi-Timeframe & RS vs SET Index)")
+            
+            col_input, col_metrics = st.columns([1, 3])
+            
+            with col_input:
+                all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS]
+                
+                # 1. กำหนดค่าเริ่มต้น
+                current_selected = st.session_state.get("selected_ticker", "KBANK")
+                
+                # 2. สร้าง Selectbox
+                ticker_input = st.selectbox(
+                    "เลือกหรือพิมพ์ชื่อหุ้นที่ต้องการดูราคากราฟรายละเอียด:", 
+                    options=all_tickers, 
+                    index=all_tickers.index(current_selected) if current_selected in all_tickers else 0
                 )
                 
-                if "journal_data" in st.session_state and st.session_state.journal_data:
-                    df_journal = pd.DataFrame(st.session_state.journal_data)
-                    # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime
-                    df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                    
-                    # คำนวณวันย้อนหลังตามช่วงเวลา
-                    today = pd.Timestamp.now()
-                    if time_period == "1 เดือน": filter_date = today - pd.Timedelta(days=30)
-                    elif time_period == "3 เดือน": filter_date = today - pd.Timedelta(days=90)
-                    elif time_period == "6 เดือน": filter_date = today - pd.Timedelta(days=180)
-                    elif time_period == "1 ปี": filter_date = today - pd.Timedelta(days=365)
-                    else: filter_date = pd.Timestamp('1900-01-01') # Overall
-                    
-                    # กรองข้อมูล
-                    df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date].copy()
-                    
-                    if not df_filtered.empty:
-                        # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
-                        # คำนวณ ROI% เองโดยตรงจาก df_filtered
-                        df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
-                        
-                        total_trades = len(df_filtered)
-                        win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
-                        loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
-                        
-                        win_rate_val = (len(win_trades) / total_trades) * 100
-                        avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
-                        avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
-                        rr_ratio = (avg_profit_val / avg_loss_val) if avg_loss_val != 0 else 0
-                        
-                        # แสดงผล
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("Win Rate", f"{win_rate_val:.1f}%")
-                        col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
-                        col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
-                        
-                        st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
+                # 3. จุดสำคัญ: ถ้าค่าที่เลือกใหม่ไม่ตรงกับค่าใน session_state ให้สั่งอัปเดตและ Rerun
+                if ticker_input != current_selected:
+                    st.session_state.selected_ticker = ticker_input
+                    st.rerun()  # บังคับให้โปรแกรมเริ่มทำงานใหม่ตั้งแต่บรรทัดบนสุดเพื่อให้กราฟโหลดข้อมูลหุ้นตัวใหม่
+                
+                ticker = f"{st.session_state.selected_ticker}.BK"
+            
+            selected_ticker = st.session_state.selected_ticker 
+            ticker = f"{selected_ticker}.BK"
+            
+            # ใช้ฟังก์ชัน Cache ดึงข้อมูลแทนการดึงตรงจาก Ticker object
+            info = get_cached_stock_info(ticker) 
+            
+            # ถ้าพี่อ้ำยังต้องใช้ stock_data เพื่อดึงข้อมูลกราฟ หรืออย่างอื่น
+            # ก็ให้ประกาศ stock_data ไว้เหมือนเดิมได้ แต่ไม่ต้องดึง .info แล้วครับ
+            stock_data = yf.Ticker(ticker) 
+                
+            ##### link web set and trading view ########
+            # สร้างคอลัมน์ 2 ช่อง (ขนาดเท่ากัน)
+            col1, col2 = st.columns(2)
+            
+            # ปุ่มที่ 1 (ใส่ในคอลัมน์ที่ 1)
+            with col1:
+                set_url = f"https://www.set.or.th/th/market/product/stock/quote/{st.session_state.selected_ticker}/company-profile/information"
+                st.link_button(f"🌐 ข้อมูล SET", set_url, use_container_width=True)
+            
+            # ปุ่มที่ 2 (ใส่ในคอลัมน์ที่ 2)
+            with col2:
+                tv_url = f"https://www.tradingview.com/chart/?symbol=SET%3A{st.session_state.selected_ticker}"
+                st.link_button(f"📈 กราฟ TradingView", tv_url, use_container_width=True)
+            
+            # 5. Fundamental Dashboard
+            if info:
+                st.markdown("#### 📊 Fundamental Growth Dashboard (คัดกรองพลังขับเคลื่อนตามสูตร SEPA)")
+            
+                # ดึงงบอย่างปลอดภัย (เนื่องจากหุ้นไทยบางตัวบน Yahoo Finance ข้อมูลบางช่องอาจเป็น None)
+                m_cap = info.get('marketCap', None)
+                rev_growth = info.get('quarterlyRevenueGrowth', info.get('revenueGrowth', None))
+                eps_growth = info.get('quarterlyEarningsGrowth', info.get('earningsGrowth', None))
+                gross_margins = info.get('grossMargins', None)
+                profit_margins = info.get('profitMargins', None)
+                roe = info.get('returnOnEquity', None)
+                pb_ratio = info.get('priceToBook', None)
+            
+                f_col1, f_col2 = st.columns(2)
+                with f_col1:
+                    st.write("##### 📈 ตัวเลขการเจริญเติบโต (Growth Metrics)")
+                    if rev_growth is not None:
+                        st.metric("อัตราเติบโตของรายได้ (Revenue Growth YoY)", f"{rev_growth * 100:.2f} %")
                     else:
-                        st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
+                        st.write("• **Revenue Growth YoY:** ไม่มีข้อมูลระบบส่งตรง")
                         
-                st.divider()
-            
-                # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
-                with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-                    # 1. ดึงข้อมูลจาก df_period มาคำนวณแบบสดๆ ตรงนี้เลย เพื่อความชัวร์ (ไม่ให้ไปดึงตัวแปรเก่าข้างนอกมาปน)
-                    if 'df_period' in locals() and not df_period.empty:
-                        col_pl_sim = 'กำไร/ขาดทุน (บาท)'
-                        col_cost_sim = 'ต้นทุน (บาท)'
-                        
-                        # คำนวณ Win Rate สดๆ
-                        wr_val = (df_period[col_pl_sim] > 0).mean() * 100
-                        
-                        # คำนวณ Avg Profit สดๆ
-                        p_mask = (df_period[col_pl_sim] > 0) & (df_period[col_cost_sim] > 0)
-                        p_series = (df_period.loc[p_mask, col_pl_sim] / df_period.loc[p_mask, col_cost_sim]) * 100
-                        pr_val = p_series.clip(upper=500).mean() if not p_series.empty else 10.0 # ค่าสำรองถ้าไม่มีข้อมูล
-                        
-                        # คำนวณ Avg Loss สดๆ (และบังคับให้เป็นบวกทันทีด้วย abs)
-                        l_mask = (df_period[col_pl_sim] <= 0) & (df_period[col_cost_sim] > 0)
-                        l_series = (df_period.loc[l_mask, col_pl_sim] / df_period.loc[l_mask, col_cost_sim]) * 100
-                        l_series = l_series[l_series >= -100] # กรองค่าเพี้ยน
-                        ls_val = abs(l_series.mean()) if not l_series.empty else 5.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                    if eps_growth is not None:
+                        is_sepa_growth = "🔥 ผ่านเกณฑ์หุ้นเติบโตแรง (>20%)" if eps_growth >= 0.20 else "ปกติ"
+                        st.metric("อัตราเติบโตของกำไรต่อหุ้น (EPS Growth YoY)", f"{eps_growth * 100:.2f} %", delta=is_sepa_growth)
                     else:
-                        # ค่า Default เผื่อกรณีไม่มีข้อมูลในช่วงเวลานั้น
-                        wr_val, pr_val, ls_val = 50.0, 10.0, 5.0
-                
-                    act_wr = wr_val / 100.0
-                    act_profit = pr_val / 100.0
-                    act_loss = ls_val / 100.0  # ตอนนี้ ls_val จะเป็นค่าบวกปกติ (เช่น 7.49%) หาร 100 จะได้ 0.0749
-                    
-                    # 2. สร้าง Range สำหรับจำลองตาราง
-                    wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
-                    pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
-                    
-                    sim_data = []
-                    for wr in wr_range:
-                        wr_display = max(0.0, min(1.0, wr)) 
-                        row = {"Win Rate": f"{wr_display*100:.1f}%"}
-                        for pr in pr_range:
-                            # คำนวณ Expected Value (EV) 
-                            ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
-                            
-                            # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%)
-                            row[f"{pr*100:.1f}% Profit"] = ev * 100 
-                            
-                        sim_data.append(row)
-                    
-                    # 3. เตรียมข้อมูลและเซต Index
-                    df_full = pd.DataFrame(sim_data)
-                    df_full = df_full.set_index("Win Rate")
-                    
-                    # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
-                    df_numeric = df_full.astype(float)
-                    
-                    # 5. สร้าง Styler และจัด Format เป็น %
-                    st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
-                    
-                    # 6. แสดงผลผ่านตาราง
-                    st.dataframe(st_table, use_container_width=True)
-                    
-                    st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูลที่ {ls_val:.2f}%")
-                
-            # =============================================================
-            # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรองผ่าน Sidebar มาแล้ว)
-            # =============================================================
-            with st.expander("📊 ผลลัพธ์การสแกน"):
-                # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
-                # แก้ไขบรรทัดที่ 1152 เป็นแบบนี้ครับ
-                try:
-                    # พยายามใช้ filtered_df ถ้ามี และมีค่า
-                    if 'filtered_df' in locals() and filtered_df is not None:
-                        df_scan = filtered_df.copy()
-                    # ถ้าไม่มี ให้ใช้ df_all_stocks แต่ต้องเช็คว่ามีอยู่จริงด้วย
-                    elif 'df_all_stocks' in locals() and df_all_stocks is not None:
-                        df_scan = df_all_stocks.copy()
-                    else:
-                        # กรณีแย่ที่สุด คือไม่มีข้อมูลเลย ให้สร้าง DataFrame เปล่าขึ้นมา
-                        df_scan = pd.DataFrame()
-                        st.error("ไม่พบข้อมูลหุ้นในระบบ กรุณาตรวจสอบการโหลดข้อมูล")
-                except Exception as e:
-                    df_scan = pd.DataFrame()
-                    st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
-            
-                df_scan = filtered_df.copy() if filtered_df is not None else df_all_stocks.copy()
-                
-                # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
-                if strategy_option == "3 Month High":
-                    final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
-                elif strategy_option == "6 Month High":
-                    final_sorted_df = df_scan[df_scan['Is_6M_High'] == True]
-                elif strategy_option == "52 Week High":
-                    final_sorted_df = df_scan[df_scan['Is_52W_High'] == True]
-                elif strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
-                    final_sorted_df = df_scan[df_scan['Is_RS_Above_0'] == True]
-                elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
-                    final_sorted_df = df_scan[df_scan['RS_Line'] >= df_scan['RS_Line_50D_Max']]
-                else:
-                    final_sorted_df = df_scan
-            
-                # 3. แสดงผลหัวข้อ
-                st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): พบทั้งหมด {len(final_sorted_df)} ตัว")
-                
-                # 4. เลือกคอลัมน์ที่จะแสดง (Whitelist)
-                fixed_cols = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
-                strategy_cols_map = {
-                    "3 Month High": ['New_High_3M_มาแล้ว(วัน)'], 
-                    "6 Month High": ['New_High_6M_มาแล้ว(วัน)'],
-                    "52 Week High": ['New_High_52W_มาแล้ว(วัน)'],
-                    "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว": ['ตัดเส้น0ขึ้นมาแล้ว(วัน)'],
-                    "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)": ['อยู่ใต้เส้น0มาแล้ว(วัน)']
-                }
-                
-                cols_to_show = fixed_cols + strategy_cols_map.get(strategy_option, [])
-                existing_cols = [c for c in cols_to_show if c in final_sorted_df.columns]
-                df_display = final_sorted_df[existing_cols].copy()
-            
-                # 5. บังคับแปลงตัวเลขเพื่อจัดรูปแบบ
-                numeric_cols = ['PE_Ratio', 'ปันผล_%', 'ราคาล่าสุด', 'RSI_14', 'RS_Line']
-                for col in numeric_cols:
-                    if col in df_display.columns:
-                        df_display[col] = pd.to_numeric(df_display[col], errors='coerce')
-                
-                # 6. จัดรูปแบบตาราง
-                styled_df = df_display.style.format({
-                    'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
-                    'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
-                }, na_rep='-').apply(highlight_rsi_zones, axis=1)
-            
-                # 7. แสดงตารางและดึง Event
-                event = st.dataframe(
-                    styled_df,
-                    use_container_width=True,
-                    selection_mode="single-row",
-                    on_select="rerun",
-                    key="stock_table"
-                )
-                
-                # 8. ดึงข้อมูลการเลือกหุ้น (สรุปรวมเหลือบล็อกเดียว)
-                if event.selection and "rows" in event.selection and event.selection["rows"]:
-                    selected_index = event.selection["rows"][0]
-                    
-                    # ตรวจสอบว่า Index อยู่ในขอบเขตข้อมูลปัจจุบันหรือไม่
-                    if selected_index < len(final_sorted_df):
-                        clicked_ticker = final_sorted_df.iloc[selected_index]['Ticker']
+                        st.write("• **EPS Growth YoY:** ไม่มีข้อมูลระบบส่งตรง")
                         
-                        # ถ้าหุ้นที่เลือกเปลี่ยนไปจากเดิม ถึงจะสั่ง Rerun
-                        if st.session_state.get("selected_ticker") != clicked_ticker:
-                            st.session_state.selected_ticker = clicked_ticker
-                            st.rerun()
+                    if m_cap is not None:
+                        st.write(f"🏢 **มูลค่าบริษัท (Market Cap):** {m_cap / 1_000_000_000:,.2f} พันล้านบาท")
+            
+                with f_col2:
+                    st.write("##### 💰 อัตราการทำกำไรและมูลค่า (Profitability & Valuation)")
+                    if gross_margins is not None:
+                        st.write(f"• **อัตรากำไรขั้นต้น (Gross Margin):** {gross_margins * 100:.2f} %")
+                    if profit_margins is not None:
+                        st.write(f"• **อัตรากำไรสุทธิ (Net Profit Margin):** {profit_margins * 100:.2f} %")
+                    if roe is not None:
+                        st.write(f"• **ผลตอบแทนต่อส่วนผู้ถือหุ้น (ROE):** {roe * 100:.2f} %")
+                    if pb_ratio is not None:
+                        st.write(f"• **ราคาต่อมูลค่าทางบัญชี (P/B Ratio):** {pb_ratio:.2f} เท่า")
+                    pe_value = info.get('trailingPE')
+                    
+                    if pe_value is not None:
+                        st.write(f"• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** {pe_value:.2f} เท่า")
                     else:
-                        # กรณีตารางถูกกรองจน Index เดิมหายไป (เช่น สลับหน้าเทรด) 
-                        # ล้างค่า Selection เก่าออกเพื่อความปลอดภัย
-                        if st.session_state.get("selected_ticker"):
-                            del st.session_state.selected_ticker
-                            st.rerun()
-                            
-        st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
+                        st.write("• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** ไม่มีข้อมูล")
+                    
+                st.info("💡 **ข้อแนะนำจากระบบ:** หุ้นซุปเปอร์สต็อกตามสไตล์ Mark Minervini มักจะมี EPS Growth ขยายตัวมากกว่า 20%-25% ขึ้นไป ควบคู่กับราคาหุ้นที่ยกฐานยืนเหนือเส้น EMA ขาขึ้น")
         
-    # 1. ส่วนหุ้น
-    with tab_stock:
-                       
-            ##########################
-            # 8.แท็บข้อมูล
-            ##############################  
-            st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
-            st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
-            
-            # 1. สร้าง Tabs (จัดรวม แผนและ Alert ไว้ใน tab เดียวกัน)
-            tab_dashboard, tab_portfolio, tab_dividend, tab_journal, tab_plan = st.tabs([
-                "📈 Dashboard", "📊 พอร์ตโฟลิโอ", "💰 ข้อมูลปันผล", "📖 สมุดบันทึก", "📝 แผนและ Alert"
-            ])
-            
-            ##############################
-            with tab_dashboard:
-                st.markdown("### 📊 Trading Performance Dashboard")
+                with st.expander("⚙️ ตั้งค่าการแสดงผลกราฟ"):
+                    # 3. แสดงผลตารางและกราฟ
+                    # ... (เอาโค้ดส่วนแสดงผล st.dataframe และ st.plotly_chart มาใส่ตรงนี้) ...
+                    #####################################
                 
-                if not st.session_state.get('journal_data'):
-                    st.info("ยังไม่มีข้อมูลรายการเทรดครับ")
-                else:
-                    df_journal = pd.DataFrame(st.session_state.journal_data)
-                    df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])
-                    df_closed = df_journal[df_journal['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
+                    st.markdown("##### ⚙️ ตั้งค่าการแสดงผลกราฟ")
+                    col_tf, col_period = st.columns([1, 1])
                     
-                    if df_closed.empty:
-                        st.info("ยังไม่มีข้อมูลรายการที่ปิดสถานะ (Closed) เพื่อสรุปผลงานครับ")
-                    else:
-                        # ทำความสะอาดข้อมูล
-                        df_closed['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed['กำไร/ขาดทุน (บาท)'], errors='coerce')
-                        df_closed['ต้นทุน (บาท)'] = pd.to_numeric(df_closed['ต้นทุน (บาท)'], errors='coerce')
-                        df_clean = df_closed.dropna(subset=['กำไร/ขาดทุน (บาท)', 'ต้นทุน (บาท)'])
-                        df_clean = df_clean[df_clean['ต้นทุน (บาท)'] > 100]
-                        df_clean['% ROI'] = (df_clean['กำไร/ขาดทุน (บาท)'] / df_clean['ต้นทุน (บาท)']) * 100
-            
-                        # Filter
-                        col_f1, col_f2 = st.columns([1, 3])
-                        filter_type = col_f1.selectbox("แสดงผลตาม:", ["ทั้งหมด", "รายปี", "รายเดือน"])
-                        
-                        df_filtered = df_clean.copy()
-                        if filter_type == "รายปี":
-                            year = col_f2.selectbox("เลือกปี:", sorted(df_clean['วันที่'].dt.year.unique(), reverse=True))
-                            df_filtered = df_clean[df_clean['วันที่'].dt.year == year]
-                        elif filter_type == "รายเดือน":
-                            year = col_f2.selectbox("เลือกปี:", sorted(df_clean['วันที่'].dt.year.unique(), reverse=True))
-                            month = col_f2.selectbox("เลือกเดือน:", range(1, 13))
-                            df_filtered = df_clean[(df_clean['วันที่'].dt.year == year) & (df_clean['วันที่'].dt.month == month)]
-            
-                        # คำนวณ Metric
-                        wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                        losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
-                        avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if not wins.empty else 0
-                        avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if not losses.empty else 1
-                        rr_ratio_actual = avg_win / avg_loss
-                        
-                        col1, col2, col3, col4, col5 = st.columns(5)
-                        # กำหนดยอดกำไรในอดีตที่ต้องการบวกเพิ่ม
-                        historical_profit = 77420.5
-                        total_net_profit = df_filtered['กำไร/ขาดทุน (บาท)'].sum() + historical_profit
-                        
-                        # แสดง Metric กำไร/ขาดทุนสุทธิ
-                        col1.metric("กำไร/ขาดทุนสุทธิ", f"{total_net_profit:,.2f} ฿")
-                        
-                        # ใส่ Note สีเทาอ่อนไว้ใต้ Metric ของ col1
-                        col1.markdown(
-                            "<span style='color: #888888; font-size: 0.8em;'>historical profit 2018-2025 = 77,420.50</span>", 
-                            unsafe_allow_html=True
-                        )
-                        col2.metric("ค่าเฉลี่ยต่อไม้ (%):", f"{df_clean['% ROI'].mean():.2f} %")
-                        col3.metric("Win Rate", f"{(len(wins)/len(df_filtered)*100):.1f}%" if not df_filtered.empty else "0%")
-                        col4.metric("Profit Factor", f"{(wins['กำไร/ขาดทุน (บาท)'].sum() / abs(losses['กำไร/ขาดทุน (บาท)'].sum())):.2f}" if not losses.empty and losses['กำไร/ขาดทุน (บาท)'].sum() != 0 else "N/A")
-                        col5.metric("Realized R:R", f"{rr_ratio_actual:.2f} : 1")
-            
-                        st.markdown("---")
-                        st.markdown("##### 🔍 สถิติการเทรดเชิงลึก")
-                        col_s1, col_s2, col_s3 = st.columns(3)
-                        
-                        # 1. คำนวณกำไร/ขาดทุนต่อไม้ (เพื่อหา Best/Worst)
-                        df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)']) * 100
-                        idx_best = df_filtered['กำไร/ขาดทุน (บาท)'].idxmax()
-                        idx_worst = df_filtered['กำไร/ขาดทุน (บาท)'].idxmin()
-                        
-                        # 2. คำนวณ Max Drawdown จากประวัติมูลค่าพอร์ตสะสม (สมมติว่าคุณมี df_history หรือคำนวณจากยอดสะสม)
-                        # กรณีนี้ผมใช้ logic หาค่า Drawdown สูงสุดจากยอดสะสมใน df_filtered
-                        cumulative_profit = df_filtered['กำไร/ขาดทุน (บาท)'].cumsum()
-                        running_max = cumulative_profit.cummax()
-                        drawdown = (cumulative_profit - running_max) / (running_max + abs(df_filtered['ต้นทุน (บาท)'].sum())) # ประมาณการ MDD
-                        max_drawdown = drawdown.min() * 100
-                        
-                        # 3. ดึงค่า Best/Worst
-                        best_val = df_filtered.loc[idx_best, 'กำไร/ขาดทุน (บาท)']
-                        best_pct = df_filtered.loc[idx_best, 'Profit_Pct']
-                        worst_val = df_filtered.loc[idx_worst, 'กำไร/ขาดทุน (บาท)']
-                        worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
-                        
-                        # 4. แสดงผล 3 ช่อง
-                        col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
-                        col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
-                        col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
-                        
-                        ######### กราฟรายเดือน vs พร์อตสะสม ###################
-                        st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
-                        # --- 0. เตรียมข้อมูลรายการที่ขายแล้ว (Closed) และยึด "วันที่ขาย" เป็นหลัก ---
-                        if 'journal_data' in st.session_state and st.session_state.journal_data:
-                            df_j_all = pd.DataFrame(st.session_state.journal_data)
-                            df_closed_perf = df_j_all[df_j_all['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
+                    tf_mapping = {
+                        "1 ชม. (1hr)": "1h",
+                        "4 ชม. (4hr)": "4h",
+                        "1 วัน (Day)": "1d",
+                        "1 สัปดาห์ (Week)": "1wk",
+                        "1 เดือน (Month)": "1mo"
+                    }
+                    # เพิ่ม Mapping นี้ไว้ก่อนส่วนที่เรียก stock_data.history
+                    p_map = {
+                        "6 เดือน (6m)": "6mo", 
+                        "1 ปี (1y)": "1y", 
+                        "5 ปี (5y)": "5y", 
+                        "ตั้งแต่เข้าตลาด (All Time)": "max"
+                    }
+                    
+                    
+                    with col_tf:
+                        tf_select = st.pills("เลือกความถี่แท่งเทียน (Timeframe):", options=list(tf_mapping.keys()), default="1 วัน (Day)")
+                        if not tf_select:
+                            tf_select = "1 วัน (Day)"
+                        selected_tf = tf_mapping[tf_select]
+                    
+                    with col_period:
+                        if selected_tf in ["1h", "4h"]:
+                            period_options = ["6 เดือน (6m)", "1 ปี (1y)"]
+                            chart_period = st.pills("เลือกช่วงเวลากราฟ (สั้น/กลาง):", options=period_options, default="6 เดือน (6m)")
                         else:
-                            df_closed_perf = df_filtered.copy()
+                            period_options = ["6 เดือน (6m)", "1 ปี (1y)", "5 ปี (5y)", "ตั้งแต่เข้าตลาด (All Time)"]
+                            chart_period = st.pills("เลือกช่วงเวลากราฟ (ทั้งหมด):", options=period_options, default="6 เดือน (6m)")
+                        if not chart_period:
+                            chart_period = "6 เดือน (6m)" if selected_tf in ["1h", "4h"] else "1 เดือน (1y)"
+                    
+                    # =============================================================
+                    # 6. กราฟเทคนิคัล
+                    # =============================================================
+                    try:
+                        ticker = f"{st.session_state.selected_ticker}.BK"
+                        stock_data = yf.Ticker(ticker)
+                        set_market = yf.Ticker("^SET.BK")
+                        info = get_cached_stock_info(ticker)
                         
-                        df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่ขาย'], errors='coerce')
-                        df_closed_perf['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed_perf['กำไร/ขาดทุน (บาท)'], errors='coerce').fillna(0)
-                        df_closed_perf['ต้นทุน (บาท)'] = pd.to_numeric(df_closed_perf['ต้นทุน (บาท)'], errors='coerce').fillna(0)
                         
-                        # ==========================================
-                        # ส่วนที่ 1: สำหรับกราฟแท่งและตาราง (รายเดือน มี Dropdown เลือกปี)
-                        # ==========================================
-                        available_years = sorted(df_closed_perf['Sell_Date'].dt.year.dropna().unique(), reverse=True)
-                        if not available_years:
-                            available_years = [2026]
+                        # 3.1 กำหนดช่วงเวลา 
+                        p_map = {"6 เดือน (6m)": "6mo", "1 ปี (1y)": "1y", "5 ปี (5y)": "5y", "ตั้งแต่เข้าตลาด (All Time)": "max"}
+                        selected_period = p_map.get(chart_period, "1y")
+                        actual_interval = "1h" if selected_tf == "4h" else selected_tf
                         
-                        df_closed_perf_sorted = df_closed_perf.sort_values('Sell_Date')
+                        # กันเหนียว: ถ้า TF สั้น (1h/4h) เลือก Period ยาวเกินไป ให้ตัดเหลือ 1 ปี เพื่อป้องกันกราฟไม่ขึ้น
+                        if selected_tf in ["1h", "4h"] and selected_period in ["5y", "max"]:
+                            selected_period = "1y"
+                    
+                        # 3.2 ดึงข้อมูล
+                        hist_chart = stock_data.history(period=selected_period, interval=actual_interval)
+                        hist_market = set_market.history(period=selected_period, interval=actual_interval)
                         
-                        # --- 3. ตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
-                        view_mode = st.radio("เลือกรูปแบบการแสดงผล:", ["📊 แสดงกราฟ", "📋 แสดงตารางข้อมูล"], horizontal=True, label_visibility="collapsed", key="view_mode_perf")
-                        
-                        if view_mode == "📊 แสดงกราฟ":
-                            c1, c2 = st.columns(2)
-                        
-                            with c1:
-                                # ย้าย Dropdown เลือกปีเข้ามาไว้ด้านในฝั่งซ้าย (ให้ขนานกับ Dropdown ช่วงเวลากราฟเส้นฝั่งขวา)
-                                selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงานกราฟแท่ง:", available_years, key="select_year_perf")
+                        # กรณีดึงข้อมูลมาแล้วว่าง ให้ลองถอยกลับไปดึง period ที่สั้นลง (Fallback)
+                        if hist_chart.empty:
+                            hist_chart = stock_data.history(period="6mo", interval=actual_interval)
+                            hist_market = set_market.history(period="6mo", interval=actual_interval)
+                    
+                        # 3.3 จัดการ Resample สำหรับ 4h
+                        if selected_tf == "4h" and not hist_chart.empty:
+                            conversion = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
+                            hist_chart = hist_chart.resample('4h').agg(conversion).ffill()
+                            hist_market = hist_market.resample('4h').agg(conversion).ffill()
+                            
+                        if not hist_chart.empty:
+                            # ปรับ Timezone และรวมข้อมูล
+                            if hist_chart.index.tz is not None: hist_chart.index = hist_chart.index.tz_localize(None)
+                            if not hist_market.empty and hist_market.index.tz is not None: hist_market.index = hist_market.index.tz_localize(None)
+                    
+                            hist_market_close = hist_market['Close'].to_frame(name='Market_Close')
+                            chart_combined = hist_chart[['Open', 'High', 'Low', 'Close']].join(hist_market_close, how='inner')
+                            
+                            # คำนวณค่าเทคนิคัล
+                            base_stock = chart_combined['Close'].iloc[0]
+                            chart_combined['Stock_Perf'] = ((chart_combined['Close'] - base_stock) / base_stock) * 100
                                 
+                            base_market = chart_combined['Market_Close'].iloc[0]
+                            market_perf = ((chart_combined['Market_Close'] - base_market) / base_market) * 100
+                            chart_combined['RS_Line'] = chart_combined['Stock_Perf'] - market_perf
+                            chart_combined['RS_EMA20'] = chart_combined['RS_Line'].ewm(span=20, adjust=False).mean()
+                            chart_combined['Is_Above_0'] = chart_combined['RS_Line'] > 0
+                            chart_combined['Days_Above_0'] = chart_combined['Is_Above_0'].groupby((~chart_combined['Is_Above_0']).cumsum()).cumsum()
+                            chart_combined['EMA10'] = chart_combined['Close'].ewm(span=10, adjust=False).mean()
+                            chart_combined['EMA20'] = chart_combined['Close'].ewm(span=20, adjust=False).mean()
+                            chart_combined['EMA50'] = chart_combined['Close'].ewm(span=50, adjust=False).mean()
+                            chart_combined['EMA100'] = chart_combined['Close'].ewm(span=100, adjust=False).mean()
+                            chart_combined['EMA200'] = chart_combined['Close'].ewm(span=200, adjust=False).mean()
+                    
+                            # สร้างตารางวันหยุด
+                            missing_dates = pd.date_range(start=chart_combined.index.min(), end=chart_combined.index.max(), freq='D').difference(pd.to_datetime(chart_combined.index.date))
+                    
+                            # 3.5 แสดง Metrics
+                            latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
+                            latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
+                            with col_metrics:
+                                m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
+                                
+                                # ปรับส่วนดึงข้อมูลปันผล
+                                raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
+                                
+                                if raw_div:
+                                    if raw_div > 1:
+                                        div_display = f"{raw_div:.2f}%"
+                                    else:
+                                        div_display = f"{raw_div * 100:.2f}%"
+                                else:
+                                    div_display = "N/A"
+                
+                                # --- m1: ชื่อบริษัท ---
+                                m1.caption("ชื่อบริษัท")
+                                m1.write(f"**{info.get('longName', 'N/A')}**")
+                                
+                                # --- m2: ราคาล่าสุด ---
+                                m2.caption("ราคาล่าสุด")
+                                m2.write(f"**{latest_price_single:.2f} บ.**")
+                                
+                                # --- m3: สถานะ RS ---
+                                m3.caption("สถานะ RS")
+                                m3.write(f"**{'แข็งแกร่งกว่าตลาด' if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else 'อ่อนแอกว่าตลาด'}**")
+                                
+                                # --- m4: ปันผล (Yield) ---
+                                m4.caption("ปันผล (Yield)")
+                                m4.write(f"**{div_display}**")
+                                        
+                            # 3.4 วาดกราฟ
+                            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
+                            fig.add_trace(go.Candlestick(x=chart_combined.index, open=chart_combined['Open'], high=chart_combined['High'], low=chart_combined['Low'], close=chart_combined['Close'], name='Price'), row=1, col=1)
+                            
+                            ema_hover_config = dict(bgcolor='rgba(255, 255, 255, 0.20)', bordercolor='rgba(0,0,0,0)')
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA10'], line=dict(color='orange', width=1.5), name='EMA 10', hovertemplate="EMA10: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA20'], line=dict(color='magenta', width=1.5), name='EMA 20', hovertemplate="EMA20: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA50'], line=dict(color='blue', width=1.5), name='EMA 50', hovertemplate="EMA50: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA100'], line=dict(color='brown', width=1.5), name='EMA 100', hovertemplate="EMA100: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA200'], line=dict(color='black', width=2.0), name='EMA 200', hovertemplate="EMA200: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            
+                            # กราฟ RS Line (Purple)
+                            fig.add_trace(go.Scatter(
+                                x=chart_combined.index, 
+                                y=chart_combined['RS_Line'], 
+                                line=dict(color='#9c27b0', width=2), 
+                                name='RS Line',
+                                hovertemplate="RS Line: %{y:.2f}%<extra></extra>"
+                            ), row=2, col=1)
+                            
+                            # กราฟ RS EMA 20 (Orange Dash)
+                            fig.add_trace(go.Scatter(
+                                x=chart_combined.index, 
+                                y=chart_combined['RS_EMA20'], 
+                                line=dict(color='#ff9800', width=1.5, dash='dot'), 
+                                name='RS EMA20',
+                                hovertemplate="RS EMA20: %{y:.2f}%<extra></extra>"
+                            ), row=2, col=1)
+                    
+                            # เส้นอ้างอิงแนวนอน (Hline)
+                            fig.add_hline(y=0, line_dash="solid", line_color="grey", line_width=1, row=2, col=1)
+                            fig.add_hline(y=20, line_dash="dot", line_color="rgba(255, 0, 0, 0.3)", row=2, col=1)
+                            fig.add_hline(y=-20, line_dash="dot", line_color="rgba(0, 0, 255, 0.3)", row=2, col=1)
+                    
+                            # 1. ตั้งค่า Candlestick ให้แสดงข้อมูลพื้นฐาน
+                            fig.update_xaxes(
+                                    rangebreaks=[dict(values=missing_dates)],
+                                    showgrid=True,
+                                    gridcolor='rgba(150,150,150,0.08)',
+                                    showspikes=True,
+                                    spikecolor='#888',
+                                    spikethickness=1,
+                                    spikesnap='cursor',
+                                    spikemode='across'
+                                )
+                            fig.update_yaxes(
+                                    showgrid=True,
+                                    gridcolor='rgba(150,150,150,0.08)',
+                                    showspikes=True,
+                                    spikecolor='#888',
+                                    spikethickness=1,
+                                    spikesnap='cursor',
+                                    spikemode='across'
+                                )
+                            
+                            fig.update_layout(
+                        height=800,
+                        margin=dict(l=40, r=60, t=50, b=40), # เพิ่มขอบขวา (r=60) เพื่อให้มีที่ว่างสำหรับป้ายราคา
+                        hovermode='x unified',
+                        xaxis_rangeslider_visible=False,
+                        # ปรับแกน Y ให้แสดงป้ายราคาที่ "ชี้" ไปที่ราคาล่าสุด
+                        yaxis=dict(
+                            showspikes=False, # ปิด spike แกน Y เพื่อไม่ให้บังป้ายราคา
+                            side='right',     # ย้ายแกนราคาไปไว้ขวาเหมือน TradingView
+                            showgrid=True,
+                        )
+                    )
+                            st.plotly_chart(fig, use_container_width=True)
+                        # (แนะนำให้พี่อ้ำใช้โค้ดเดิมในส่วนนี้ได้เลยครับ ผมตัดมาให้สั้นลงเพื่อดูโครงสร้าง)
+                        # ...
+                    
+                    
+                    except Exception as e:
+                        st.error(f"⚠️ เกิดข้อผิดพลาดในการวาดกราฟ: {str(e)}")
+                # ==========================================
+                # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
+                # ==========================================
+                with tab_risk:
+                    st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
+    
+                    # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
+                    cash_balance = load_total_cash_balance()
+                    market_value = get_total_market_value()
+                    total_equity = cash_balance + market_value
+                    
+                    st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
+                    col_a, col_b, col_c = st.columns(3)
+                    col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
+                    col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
+                    col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
+                    
+                    st.divider()
+                    
+                    # --- ส่วนป้องกัน Error: ดึงค่า EMA และตรวจสอบตาราง chart_combined อย่างปลอดภัย ---
+                    has_chart = 'chart_combined' in locals() and isinstance(chart_combined, pd.DataFrame) and not chart_combined.empty
+                    
+                    if has_chart and 'EMA10' in chart_combined.columns:
+                        ema10_val = float(chart_combined['EMA10'].iloc[-1])
+                        ema10_str = f"เส้น EMA 10 ({ema10_val:.2f} บาท)"
+                    else:
+                        ema10_val = 0.0
+                        ema10_str = "เส้น EMA 10 (ไม่มีข้อมูล)"
+    
+                    if has_chart and 'EMA20' in chart_combined.columns:
+                        ema20_val = float(chart_combined['EMA20'].iloc[-1])
+                        ema20_str = f"เส้น EMA 20 ({ema20_val:.2f} บาท)"
+                    else:
+                        ema20_val = 0.0
+                        ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
+                    # -------------------------------------------------------------
+    
+                    # 2. ส่วนการคำนวณ
+                    r_col1, r_col2 = st.columns([1, 1])
+    
+                    with r_col1:
+                        total_cap = st.number_input(
+                            "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
+                            min_value=1000, 
+                            value=int(total_equity), # นี่คือค่าเริ่มต้นที่ดึงมาจากพอร์ตจริง
+                            step=1000,
+                            help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
+                        )
+                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
+                    
+                    with r_col2:
+                        # กำหนดค่าเริ่มต้นให้ปลอดภัยก่อน ถ้าตัวแปรไม่มีค่าให้เป็น 0.0
+                        try:
+                            latest_p = float(latest_price_single) if 'latest_price_single' in locals() and latest_price_single is not None else 0.0
+                        except (ValueError, TypeError):
+                            latest_p = 0.0
+                        
+                        sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
+                            ema10_str,
+                            ema20_str,
+                            "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
+                            "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
+                        ])
+                        
+                        # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
+                        if "EMA 10" in sl_type and ema10_val > 0:
+                            sl_price = ema10_val
+                        elif "EMA 20" in sl_type and ema20_val > 0:
+                            sl_price = ema20_val
+                        elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
+                            fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
+                            sl_price = latest_p * (1 - (fixed_sl_pct / 100))
+                        else: # Manual Price หรือกรณี EMA ไม่มีข้อมูล
+                            if "EMA" in sl_type and ema10_val == 0:
+                                st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
+                            sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
+                    
+                    # 3. คำนวณผลลัพธ์
+                    max_risk_money = total_cap * (risk_pct / 100)
+                    risk_per_share = latest_p - sl_price
+                    
+                    # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
+                    if risk_per_share <= 0:
+                        st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
+                    else:
+                        shares_to_buy = int(max_risk_money / risk_per_share)
+                        total_buy_value = shares_to_buy * latest_p
+                        
+                        st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
+                        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+                        res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
+                        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
+                        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
+                        res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
+                                            
+            #######################          
+                    st.markdown("---")
+                    st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
+    
+                    # 1. ดึงข้อมูลจาก journal_data มาแปลงเป็น DataFrame
+                    if 'journal_data' in st.session_state and st.session_state.journal_data:
+                        df_filtered = pd.DataFrame(st.session_state.journal_data)
+                    else:
+                        df_filtered = pd.DataFrame()
+    
+                    # แปลงคอลัมน์ 'กำไร/ขาดทุน (บาท)' ให้เป็นตัวเลขอย่างปลอดภัย (กันกรณีมีคอมมาหรือข้อความปน)
+                    if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
+                        df_filtered['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(
+                            df_filtered['กำไร/ขาดทุน (บาท)'].astype(str).str.replace(',', ''), 
+                            errors='coerce'
+                        ).fillna(0)
+    
+                    # 2. คำนวณ Exposure
+                    total_market_val = calculate_total_portfolio_value() 
+                    current_cash = st.session_state.get('cash_balance', 0.0)
+                    total_equity = total_market_val + current_cash
+                    
+                    exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
+                    
+                    # 3. คำนวณ Expectancy และแยกไม้ชนะ/แพ้
+                    if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
+                        wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                        losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                        
+                        win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
+                        avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
+                        avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
+                        loss_rate = 1 - win_rate
+                        
+                        expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
+                    else:
+                        win_rate = 0.0
+                        avg_win = 0.0
+                        avg_loss = 0.0
+                        loss_rate = 0.0
+                        expectancy = 0.0
+                    
+                    # 3. แสดงผลด้วย st.metric
+                    col_r1, col_r2 = st.columns(2)
+                    col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
+                    col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
+    
+                
+                    # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
+                    def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
+                        fixed_capital = initial_capital
+                        fixed_balance = initial_capital
+                        comp_balance = initial_capital
+                        
+                        for i in range(trades):
+                            win = np.random.rand() < win_rate
+                            # คำนวณแบบไม่ทบต้น
+                            fixed_profit = (profit_pct * fixed_capital) if win else (-loss_pct * fixed_capital)
+                            fixed_balance += fixed_profit
+                            # คำนวณแบบทบต้น
+                            comp_profit = (profit_pct * comp_balance) if win else (-loss_pct * comp_balance)
+                            comp_balance += comp_profit
+                            
+                        return fixed_balance, comp_balance
+                    
+                    def show_strategy_analysis():
+                        st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
+                        initial_cap = 100000
+                        loss_pct = 0.08
+                        trades = 30
+                        win_rates = [0.4, 0.5, 0.6]
+                        profit_pcts = [0.10, 0.12, 0.14, 0.16]
+                    
+                        data = []
+                        for wr in win_rates:
+                            for pr in profit_pcts:
+                                wins = trades * wr
+                                losses = trades * (1 - wr)
+                                fixed_profit = (wins * pr * initial_cap) - (losses * loss_pct * initial_cap)
+                                
+                                comp_cap = initial_cap
+                                for i in range(trades):
+                                    if np.random.rand() < wr: comp_cap *= (1 + pr)
+                                    else: comp_cap *= (1 - loss_pct)
+                                
+                                data.append({
+                                    "Win Rate": f"{int(wr*100)}%",
+                                    "Profit %": f"{int(pr*100)}%",
+                                    "ไม่ทบต้น (กำไร)": f"{fixed_profit:,.0f}",
+                                    "ทบต้น (กำไร)": f"{comp_cap - initial_cap:,.0f}",
+                                    "กลยุทธ์ที่แนะนำ": "ทบต้น" if comp_cap > (initial_cap + fixed_profit) else "ไม่ทบต้น"
+                                })
+                        st.table(pd.DataFrame(data))
+                    
+                    # --- ส่วนแสดงผลความเสี่ยง ทบต้น VS ไม่ทบต้น ---
+                    st.markdown("---")
+                    
+                    st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
+                
+                    # เพิ่มส่วนเลือกช่วงเวลา
+                    time_period = st.radio(
+                        "เลือกช่วงเวลาที่ต้องการวิเคราะห์:",
+                        ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "Overall"],
+                        horizontal=True
+                    )
+                    
+                    if "journal_data" in st.session_state and st.session_state.journal_data:
+                        df_journal = pd.DataFrame(st.session_state.journal_data)
+                        # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime
+                        df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
+                        
+                        # คำนวณวันย้อนหลังตามช่วงเวลา
+                        today = pd.Timestamp.now()
+                        if time_period == "1 เดือน": filter_date = today - pd.Timedelta(days=30)
+                        elif time_period == "3 เดือน": filter_date = today - pd.Timedelta(days=90)
+                        elif time_period == "6 เดือน": filter_date = today - pd.Timedelta(days=180)
+                        elif time_period == "1 ปี": filter_date = today - pd.Timedelta(days=365)
+                        else: filter_date = pd.Timestamp('1900-01-01') # Overall
+                        
+                        # กรองข้อมูล
+                        df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date].copy()
+                        
+                        if not df_filtered.empty:
+                            # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
+                            # คำนวณ ROI% เองโดยตรงจาก df_filtered
+                            df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
+                            
+                            total_trades = len(df_filtered)
+                            win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
+                            loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
+                            
+                            win_rate_val = (len(win_trades) / total_trades) * 100
+                            avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
+                            avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
+                            rr_ratio = (avg_profit_val / avg_loss_val) if avg_loss_val != 0 else 0
+                            
+                            # แสดงผล
+                            col1, col2, col3 = st.columns(3)
+                            col1.metric("Win Rate", f"{win_rate_val:.1f}%")
+                            col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
+                            col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+                            
+                            st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
+                        else:
+                            st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
+                            
+                    st.divider()
+                
+                    # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
+                    with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
+                        # 1. ดึงข้อมูลจาก df_period มาคำนวณแบบสดๆ ตรงนี้เลย เพื่อความชัวร์ (ไม่ให้ไปดึงตัวแปรเก่าข้างนอกมาปน)
+                        if 'df_period' in locals() and not df_period.empty:
+                            col_pl_sim = 'กำไร/ขาดทุน (บาท)'
+                            col_cost_sim = 'ต้นทุน (บาท)'
+                            
+                            # คำนวณ Win Rate สดๆ
+                            wr_val = (df_period[col_pl_sim] > 0).mean() * 100
+                            
+                            # คำนวณ Avg Profit สดๆ
+                            p_mask = (df_period[col_pl_sim] > 0) & (df_period[col_cost_sim] > 0)
+                            p_series = (df_period.loc[p_mask, col_pl_sim] / df_period.loc[p_mask, col_cost_sim]) * 100
+                            pr_val = p_series.clip(upper=500).mean() if not p_series.empty else 10.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                            
+                            # คำนวณ Avg Loss สดๆ (และบังคับให้เป็นบวกทันทีด้วย abs)
+                            l_mask = (df_period[col_pl_sim] <= 0) & (df_period[col_cost_sim] > 0)
+                            l_series = (df_period.loc[l_mask, col_pl_sim] / df_period.loc[l_mask, col_cost_sim]) * 100
+                            l_series = l_series[l_series >= -100] # กรองค่าเพี้ยน
+                            ls_val = abs(l_series.mean()) if not l_series.empty else 5.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                        else:
+                            # ค่า Default เผื่อกรณีไม่มีข้อมูลในช่วงเวลานั้น
+                            wr_val, pr_val, ls_val = 50.0, 10.0, 5.0
+                    
+                        act_wr = wr_val / 100.0
+                        act_profit = pr_val / 100.0
+                        act_loss = ls_val / 100.0  # ตอนนี้ ls_val จะเป็นค่าบวกปกติ (เช่น 7.49%) หาร 100 จะได้ 0.0749
+                        
+                        # 2. สร้าง Range สำหรับจำลองตาราง
+                        wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
+                        pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
+                        
+                        sim_data = []
+                        for wr in wr_range:
+                            wr_display = max(0.0, min(1.0, wr)) 
+                            row = {"Win Rate": f"{wr_display*100:.1f}%"}
+                            for pr in pr_range:
+                                # คำนวณ Expected Value (EV) 
+                                ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
+                                
+                                # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%)
+                                row[f"{pr*100:.1f}% Profit"] = ev * 100 
+                                
+                            sim_data.append(row)
+                        
+                        # 3. เตรียมข้อมูลและเซต Index
+                        df_full = pd.DataFrame(sim_data)
+                        df_full = df_full.set_index("Win Rate")
+                        
+                        # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
+                        df_numeric = df_full.astype(float)
+                        
+                        # 5. สร้าง Styler และจัด Format เป็น %
+                        st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
+                        
+                        # 6. แสดงผลผ่านตาราง
+                        st.dataframe(st_table, use_container_width=True)
+                        
+                        st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูลที่ {ls_val:.2f}%")
+                    
+                # =============================================================
+                # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรองผ่าน Sidebar มาแล้ว)
+                # =============================================================
+                with st.expander("📊 ผลลัพธ์การสแกน"):
+                    # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
+                    # แก้ไขบรรทัดที่ 1152 เป็นแบบนี้ครับ
+                    try:
+                        # พยายามใช้ filtered_df ถ้ามี และมีค่า
+                        if 'filtered_df' in locals() and filtered_df is not None:
+                            df_scan = filtered_df.copy()
+                        # ถ้าไม่มี ให้ใช้ df_all_stocks แต่ต้องเช็คว่ามีอยู่จริงด้วย
+                        elif 'df_all_stocks' in locals() and df_all_stocks is not None:
+                            df_scan = df_all_stocks.copy()
+                        else:
+                            # กรณีแย่ที่สุด คือไม่มีข้อมูลเลย ให้สร้าง DataFrame เปล่าขึ้นมา
+                            df_scan = pd.DataFrame()
+                            st.error("ไม่พบข้อมูลหุ้นในระบบ กรุณาตรวจสอบการโหลดข้อมูล")
+                    except Exception as e:
+                        df_scan = pd.DataFrame()
+                        st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
+                
+                    df_scan = filtered_df.copy() if filtered_df is not None else df_all_stocks.copy()
+                    
+                    # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
+                    if strategy_option == "3 Month High":
+                        final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
+                    elif strategy_option == "6 Month High":
+                        final_sorted_df = df_scan[df_scan['Is_6M_High'] == True]
+                    elif strategy_option == "52 Week High":
+                        final_sorted_df = df_scan[df_scan['Is_52W_High'] == True]
+                    elif strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
+                        final_sorted_df = df_scan[df_scan['Is_RS_Above_0'] == True]
+                    elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
+                        final_sorted_df = df_scan[df_scan['RS_Line'] >= df_scan['RS_Line_50D_Max']]
+                    else:
+                        final_sorted_df = df_scan
+                
+                    # 3. แสดงผลหัวข้อ
+                    st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): พบทั้งหมด {len(final_sorted_df)} ตัว")
+                    
+                    # 4. เลือกคอลัมน์ที่จะแสดง (Whitelist)
+                    fixed_cols = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
+                    strategy_cols_map = {
+                        "3 Month High": ['New_High_3M_มาแล้ว(วัน)'], 
+                        "6 Month High": ['New_High_6M_มาแล้ว(วัน)'],
+                        "52 Week High": ['New_High_52W_มาแล้ว(วัน)'],
+                        "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว": ['ตัดเส้น0ขึ้นมาแล้ว(วัน)'],
+                        "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)": ['อยู่ใต้เส้น0มาแล้ว(วัน)']
+                    }
+                    
+                    cols_to_show = fixed_cols + strategy_cols_map.get(strategy_option, [])
+                    existing_cols = [c for c in cols_to_show if c in final_sorted_df.columns]
+                    df_display = final_sorted_df[existing_cols].copy()
+                
+                    # 5. บังคับแปลงตัวเลขเพื่อจัดรูปแบบ
+                    numeric_cols = ['PE_Ratio', 'ปันผล_%', 'ราคาล่าสุด', 'RSI_14', 'RS_Line']
+                    for col in numeric_cols:
+                        if col in df_display.columns:
+                            df_display[col] = pd.to_numeric(df_display[col], errors='coerce')
+                    
+                    # 6. จัดรูปแบบตาราง
+                    styled_df = df_display.style.format({
+                        'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
+                        'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
+                    }, na_rep='-').apply(highlight_rsi_zones, axis=1)
+                
+                    # 7. แสดงตารางและดึง Event
+                    event = st.dataframe(
+                        styled_df,
+                        use_container_width=True,
+                        selection_mode="single-row",
+                        on_select="rerun",
+                        key="stock_table"
+                    )
+                    
+                    # 8. ดึงข้อมูลการเลือกหุ้น (สรุปรวมเหลือบล็อกเดียว)
+                    if event.selection and "rows" in event.selection and event.selection["rows"]:
+                        selected_index = event.selection["rows"][0]
+                        
+                        # ตรวจสอบว่า Index อยู่ในขอบเขตข้อมูลปัจจุบันหรือไม่
+                        if selected_index < len(final_sorted_df):
+                            clicked_ticker = final_sorted_df.iloc[selected_index]['Ticker']
+                            
+                            # ถ้าหุ้นที่เลือกเปลี่ยนไปจากเดิม ถึงจะสั่ง Rerun
+                            if st.session_state.get("selected_ticker") != clicked_ticker:
+                                st.session_state.selected_ticker = clicked_ticker
+                                st.rerun()
+                        else:
+                            # กรณีตารางถูกกรองจน Index เดิมหายไป (เช่น สลับหน้าเทรด) 
+                            # ล้างค่า Selection เก่าออกเพื่อความปลอดภัย
+                            if st.session_state.get("selected_ticker"):
+                                del st.session_state.selected_ticker
+                                st.rerun()
+                                
+            st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
+            
+        # 1. ส่วนหุ้น
+        with tab_stock:
+                           
+                ##########################
+                # 8.แท็บข้อมูล
+                ##############################  
+                st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
+                st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
+                
+                # 1. สร้าง Tabs (จัดรวม แผนและ Alert ไว้ใน tab เดียวกัน)
+                tab_dashboard, tab_portfolio, tab_dividend, tab_journal, tab_plan = st.tabs([
+                    "📈 Dashboard", "📊 พอร์ตโฟลิโอ", "💰 ข้อมูลปันผล", "📖 สมุดบันทึก", "📝 แผนและ Alert"
+                ])
+                
+                ##############################
+                with tab_dashboard:
+                    st.markdown("### 📊 Trading Performance Dashboard")
+                    
+                    if not st.session_state.get('journal_data'):
+                        st.info("ยังไม่มีข้อมูลรายการเทรดครับ")
+                    else:
+                        df_journal = pd.DataFrame(st.session_state.journal_data)
+                        df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])
+                        df_closed = df_journal[df_journal['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
+                        
+                        if df_closed.empty:
+                            st.info("ยังไม่มีข้อมูลรายการที่ปิดสถานะ (Closed) เพื่อสรุปผลงานครับ")
+                        else:
+                            # ทำความสะอาดข้อมูล
+                            df_closed['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed['กำไร/ขาดทุน (บาท)'], errors='coerce')
+                            df_closed['ต้นทุน (บาท)'] = pd.to_numeric(df_closed['ต้นทุน (บาท)'], errors='coerce')
+                            df_clean = df_closed.dropna(subset=['กำไร/ขาดทุน (บาท)', 'ต้นทุน (บาท)'])
+                            df_clean = df_clean[df_clean['ต้นทุน (บาท)'] > 100]
+                            df_clean['% ROI'] = (df_clean['กำไร/ขาดทุน (บาท)'] / df_clean['ต้นทุน (บาท)']) * 100
+                
+                            # Filter
+                            col_f1, col_f2 = st.columns([1, 3])
+                            filter_type = col_f1.selectbox("แสดงผลตาม:", ["ทั้งหมด", "รายปี", "รายเดือน"])
+                            
+                            df_filtered = df_clean.copy()
+                            if filter_type == "รายปี":
+                                year = col_f2.selectbox("เลือกปี:", sorted(df_clean['วันที่'].dt.year.unique(), reverse=True))
+                                df_filtered = df_clean[df_clean['วันที่'].dt.year == year]
+                            elif filter_type == "รายเดือน":
+                                year = col_f2.selectbox("เลือกปี:", sorted(df_clean['วันที่'].dt.year.unique(), reverse=True))
+                                month = col_f2.selectbox("เลือกเดือน:", range(1, 13))
+                                df_filtered = df_clean[(df_clean['วันที่'].dt.year == year) & (df_clean['วันที่'].dt.month == month)]
+                
+                            # คำนวณ Metric
+                            wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                            losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
+                            avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if not wins.empty else 0
+                            avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if not losses.empty else 1
+                            rr_ratio_actual = avg_win / avg_loss
+                            
+                            col1, col2, col3, col4, col5 = st.columns(5)
+                            # กำหนดยอดกำไรในอดีตที่ต้องการบวกเพิ่ม
+                            historical_profit = 77420.5
+                            total_net_profit = df_filtered['กำไร/ขาดทุน (บาท)'].sum() + historical_profit
+                            
+                            # แสดง Metric กำไร/ขาดทุนสุทธิ
+                            col1.metric("กำไร/ขาดทุนสุทธิ", f"{total_net_profit:,.2f} ฿")
+                            
+                            # ใส่ Note สีเทาอ่อนไว้ใต้ Metric ของ col1
+                            col1.markdown(
+                                "<span style='color: #888888; font-size: 0.8em;'>historical profit 2018-2025 = 77,420.50</span>", 
+                                unsafe_allow_html=True
+                            )
+                            col2.metric("ค่าเฉลี่ยต่อไม้ (%):", f"{df_clean['% ROI'].mean():.2f} %")
+                            col3.metric("Win Rate", f"{(len(wins)/len(df_filtered)*100):.1f}%" if not df_filtered.empty else "0%")
+                            col4.metric("Profit Factor", f"{(wins['กำไร/ขาดทุน (บาท)'].sum() / abs(losses['กำไร/ขาดทุน (บาท)'].sum())):.2f}" if not losses.empty and losses['กำไร/ขาดทุน (บาท)'].sum() != 0 else "N/A")
+                            col5.metric("Realized R:R", f"{rr_ratio_actual:.2f} : 1")
+                
+                            st.markdown("---")
+                            st.markdown("##### 🔍 สถิติการเทรดเชิงลึก")
+                            col_s1, col_s2, col_s3 = st.columns(3)
+                            
+                            # 1. คำนวณกำไร/ขาดทุนต่อไม้ (เพื่อหา Best/Worst)
+                            df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)']) * 100
+                            idx_best = df_filtered['กำไร/ขาดทุน (บาท)'].idxmax()
+                            idx_worst = df_filtered['กำไร/ขาดทุน (บาท)'].idxmin()
+                            
+                            # 2. คำนวณ Max Drawdown จากประวัติมูลค่าพอร์ตสะสม (สมมติว่าคุณมี df_history หรือคำนวณจากยอดสะสม)
+                            # กรณีนี้ผมใช้ logic หาค่า Drawdown สูงสุดจากยอดสะสมใน df_filtered
+                            cumulative_profit = df_filtered['กำไร/ขาดทุน (บาท)'].cumsum()
+                            running_max = cumulative_profit.cummax()
+                            drawdown = (cumulative_profit - running_max) / (running_max + abs(df_filtered['ต้นทุน (บาท)'].sum())) # ประมาณการ MDD
+                            max_drawdown = drawdown.min() * 100
+                            
+                            # 3. ดึงค่า Best/Worst
+                            best_val = df_filtered.loc[idx_best, 'กำไร/ขาดทุน (บาท)']
+                            best_pct = df_filtered.loc[idx_best, 'Profit_Pct']
+                            worst_val = df_filtered.loc[idx_worst, 'กำไร/ขาดทุน (บาท)']
+                            worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
+                            
+                            # 4. แสดงผล 3 ช่อง
+                            col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
+                            col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
+                            col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
+                            
+                            ######### กราฟรายเดือน vs พร์อตสะสม ###################
+                            st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
+                            # --- 0. เตรียมข้อมูลรายการที่ขายแล้ว (Closed) และยึด "วันที่ขาย" เป็นหลัก ---
+                            if 'journal_data' in st.session_state and st.session_state.journal_data:
+                                df_j_all = pd.DataFrame(st.session_state.journal_data)
+                                df_closed_perf = df_j_all[df_j_all['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
+                            else:
+                                df_closed_perf = df_filtered.copy()
+                            
+                            df_closed_perf['Sell_Date'] = pd.to_datetime(df_closed_perf['วันที่ขาย'], errors='coerce')
+                            df_closed_perf['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed_perf['กำไร/ขาดทุน (บาท)'], errors='coerce').fillna(0)
+                            df_closed_perf['ต้นทุน (บาท)'] = pd.to_numeric(df_closed_perf['ต้นทุน (บาท)'], errors='coerce').fillna(0)
+                            
+                            # ==========================================
+                            # ส่วนที่ 1: สำหรับกราฟแท่งและตาราง (รายเดือน มี Dropdown เลือกปี)
+                            # ==========================================
+                            available_years = sorted(df_closed_perf['Sell_Date'].dt.year.dropna().unique(), reverse=True)
+                            if not available_years:
+                                available_years = [2026]
+                            
+                            df_closed_perf_sorted = df_closed_perf.sort_values('Sell_Date')
+                            
+                            # --- 3. ตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
+                            view_mode = st.radio("เลือกรูปแบบการแสดงผล:", ["📊 แสดงกราฟ", "📋 แสดงตารางข้อมูล"], horizontal=True, label_visibility="collapsed", key="view_mode_perf")
+                            
+                            if view_mode == "📊 แสดงกราฟ":
+                                c1, c2 = st.columns(2)
+                            
+                                with c1:
+                                    # ย้าย Dropdown เลือกปีเข้ามาไว้ด้านในฝั่งซ้าย (ให้ขนานกับ Dropdown ช่วงเวลากราฟเส้นฝั่งขวา)
+                                    selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงานกราฟแท่ง:", available_years, key="select_year_perf")
+                                    
+                                    df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
+                                    
+                                    months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
+                                    df_full_year = pd.DataFrame({
+                                        'Date': months_range,
+                                        'Month_Label': months_range.strftime('%b %Y')
+                                    })
+                                    
+                                    if not df_filtered_year.empty:
+                                        df_filtered_year['Month_Label'] = df_filtered_year['Sell_Date'].dt.strftime('%b %Y')
+                                        df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
+                                            'กำไร/ขาดทุน (บาท)': 'sum',
+                                            'ต้นทุน (บาท)': 'sum'
+                                        }).reset_index()
+                                        
+                                        df_monthly = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
+                                            'กำไร/ขาดทุน (บาท)': 0,
+                                            'ต้นทุน (บาท)': 0
+                                        })
+                                    else:
+                                        df_monthly = df_full_year.copy()
+                                        df_monthly['กำไร/ขาดทุน (บาท)'] = 0
+                                        df_monthly['ต้นทุน (บาท)'] = 0
+                            
+                                    df_monthly = df_monthly.sort_values('Date').reset_index(drop=True)
+                                    df_monthly.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
+                                    df_monthly['Color'] = df_monthly['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
+                                    df_monthly['Monthly_ROI'] = df_monthly.apply(
+                                        lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
+                                        axis=1
+                                    )
+                                    df_monthly['ROI_Text'] = df_monthly['Monthly_ROI'].apply(lambda x: f"{x:+.2f}%")
+                            
+                                    st.markdown(f"**📊 ผลงานรายเดือน ประจำปี {selected_year}**")
+                                    
+                                    chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
+                                        x=alt.X('Month_Label:O', title='เดือน (ตามวันที่ขาย)', sort=None), 
+                                        y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
+                                        color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=['#2ecc71', '#e74c3c']), legend=None),
+                                        tooltip=['Month_Label', 'Profit_Sum', alt.Tooltip('Monthly_ROI:Q', format='.2f', title='% ROI เดือน')]
+                                    )
+                                    
+                                    text_labels = alt.Chart(df_monthly).mark_text(
+                                        align='center',
+                                        baseline='bottom', 
+                                        dy=-5, 
+                                        color='#888888', 
+                                        fontSize=10
+                                    ).encode(
+                                        x=alt.X('Month_Label:O', sort=None),
+                                        y=alt.Y('Profit_Sum:Q'),
+                                        text='ROI_Text:N'
+                                    )
+                            
+                                    rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
+                                    
+                                    st.altair_chart((chart_bar + text_labels + rule).properties(height=350), use_container_width=True)
+                            
+                                with c2:
+                                    # ==========================================
+                                    # ส่วนที่ 2: สำหรับกราฟเส้น (รองรับหลายปี + ตัวเลือกช่วงเวลา + Dynamic Aggregation + Zoom)
+                                    # ==========================================
+                                    initial_past_profit = 77420.5 # กำไรตั้งต้น
+                                    
+                                    st.markdown("##### 📈 กราฟเส้นกำไรสะสมพอร์ตระยะยาว")
+    
+                                    if not df_closed_perf_sorted.empty:
+                                        # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟเส้นโดยเฉพาะ
+                                        c_f1, c_f2 = st.columns([2, 2])
+                                        with c_f1:
+                                            line_view_range = st.selectbox(
+                                                "⏳ เลือกช่วงเวลาแสดงผล (กราฟเส้น):",
+                                                ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
+                                                key="line_view_range"
+                                            )
+                                        
+                                        # กรองข้อมูลตามช่วงเวลาที่เลือก
+                                        df_line_filtered = df_closed_perf_sorted.copy()
+                                        max_date = df_line_filtered['Sell_Date'].max()
+                                        
+                                        if line_view_range == "3 เดือนล่าสุด":
+                                            start_date = max_date - pd.DateOffset(months=3)
+                                            past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
+                                            initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
+                                            df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
+                                        elif line_view_range == "6 เดือนล่าสุด":
+                                            start_date = max_date - pd.DateOffset(months=6)
+                                            past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
+                                            initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
+                                            df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
+                                        elif line_view_range == "1 ปีล่าสุด (YTD / 12M)":
+                                            start_date = max_date - pd.DateOffset(years=1)
+                                            past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
+                                            initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
+                                            df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
+                                        else:
+                                            initial_past_profit_adjusted = initial_past_profit
+                                    
+                                        if not df_line_filtered.empty:
+                                            # 2. Dynamic Aggregation: ตรวจสอบช่วงเวลา ถ้าระยะเวลามากกว่า 1 ปี ให้ยุบเป็น "รายเดือน" อัตโนมัติเพื่อกันกราฟแน่น
+                                            date_span_days = (df_line_filtered['Sell_Date'].max() - df_line_filtered['Sell_Date'].min()).days
+                                            
+                                            if date_span_days > 365 and line_view_range == "ทั้งหมด (All Time)":
+                                                df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('M')
+                                                df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: r.strftime('%b %Y'))
+                                                df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
+                                                agg_freq_text = "รายเดือน (มุมมองระยะยาว)"
+                                            else:
+                                                df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('W-MON')
+                                                df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
+                                                df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
+                                                agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
+                                    
+                                            with c_f2:
+                                                st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
+                                    
+                                            # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
+                                            df_line_grouped = df_line_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
+                                                'กำไร/ขาดทุน (บาท)': 'sum'
+                                            }).sort_values('Sort_Time')
+                                            
+                                            # คำนวณกำไรสะสมต่อเนื่อง
+                                            df_line_grouped['Cumulative_Profit'] = initial_past_profit_adjusted + df_line_grouped['กำไร/ขาดทุน (บาท)'].cumsum()
+                                    
+                                            # 3. คำนวณขอบเขตแกน Y ให้เผื่อพื้นที่ด้านบนเพิ่ม 15% (แก้ปัญหาเส้นชนขอบบน)
+                                            y_max = df_line_grouped['Cumulative_Profit'].max()
+                                            y_min = df_line_grouped['Cumulative_Profit'].min()
+                                            y_upper_limit = y_max * 1.15 if y_max > 0 else y_max * 0.85
+                                    
+                                            # สร้างกราฟเส้นพร้อมกำหนด Scale แกน Y และเปิด Interactive Zoom & Pan
+                                            chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
+                                                x=alt.X('Time_Label:O', title='ช่วงเวลาที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Time_Label'])),
+                                                y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)', scale=alt.Scale(domain=[y_min, y_upper_limit], nice=True)),
+                                                tooltip=['Time_Label', 'Cumulative_Profit']
+                                            ).properties(
+                                                height=350
+                                            ).interactive()
+                                            
+                                            st.altair_chart(chart_line, use_container_width=True)
+                                        else:
+                                            st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
+                                    else:
+                                        st.info("ยังไม่มีข้อมูลประวัติการเทรดที่ปิดสถานะ")
+                                                            
+                            else:
+                                # สำหรับโหมดตาราง (ใช้ปีที่เลือกจากฝั่งซ้ายมาแสดงผล)
+                                selected_year = st.session_state.get('select_year_perf', available_years[0])
                                 df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
                                 
                                 months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
@@ -2158,7 +2317,6 @@ def main():
                                         'กำไร/ขาดทุน (บาท)': 'sum',
                                         'ต้นทุน (บาท)': 'sum'
                                     }).reset_index()
-                                    
                                     df_monthly = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
                                         'กำไร/ขาดทุน (บาท)': 0,
                                         'ต้นทุน (บาท)': 0
@@ -2167,2358 +2325,2250 @@ def main():
                                     df_monthly = df_full_year.copy()
                                     df_monthly['กำไร/ขาดทุน (บาท)'] = 0
                                     df_monthly['ต้นทุน (บาท)'] = 0
-                        
+                            
                                 df_monthly = df_monthly.sort_values('Date').reset_index(drop=True)
                                 df_monthly.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
-                                df_monthly['Color'] = df_monthly['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
                                 df_monthly['Monthly_ROI'] = df_monthly.apply(
                                     lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
                                     axis=1
                                 )
-                                df_monthly['ROI_Text'] = df_monthly['Monthly_ROI'].apply(lambda x: f"{x:+.2f}%")
-                        
-                                st.markdown(f"**📊 ผลงานรายเดือน ประจำปี {selected_year}**")
-                                
-                                chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
-                                    x=alt.X('Month_Label:O', title='เดือน (ตามวันที่ขาย)', sort=None), 
-                                    y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
-                                    color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=['#2ecc71', '#e74c3c']), legend=None),
-                                    tooltip=['Month_Label', 'Profit_Sum', alt.Tooltip('Monthly_ROI:Q', format='.2f', title='% ROI เดือน')]
-                                )
-                                
-                                text_labels = alt.Chart(df_monthly).mark_text(
-                                    align='center',
-                                    baseline='bottom', 
-                                    dy=-5, 
-                                    color='#888888', 
-                                    fontSize=10
-                                ).encode(
-                                    x=alt.X('Month_Label:O', sort=None),
-                                    y=alt.Y('Profit_Sum:Q'),
-                                    text='ROI_Text:N'
-                                )
-                        
-                                rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
-                                
-                                st.altair_chart((chart_bar + text_labels + rule).properties(height=350), use_container_width=True)
-                        
-                            with c2:
-                                # ==========================================
-                                # ส่วนที่ 2: สำหรับกราฟเส้น (รองรับหลายปี + ตัวเลือกช่วงเวลา + Dynamic Aggregation + Zoom)
-                                # ==========================================
-                                initial_past_profit = 77420.5 # กำไรตั้งต้น
-                                
-                                st.markdown("##### 📈 กราฟเส้นกำไรสะสมพอร์ตระยะยาว")
-
-                                if not df_closed_perf_sorted.empty:
-                                    # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟเส้นโดยเฉพาะ
-                                    c_f1, c_f2 = st.columns([2, 2])
-                                    with c_f1:
-                                        line_view_range = st.selectbox(
-                                            "⏳ เลือกช่วงเวลาแสดงผล (กราฟเส้น):",
-                                            ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
-                                            key="line_view_range"
-                                        )
-                                    
-                                    # กรองข้อมูลตามช่วงเวลาที่เลือก
-                                    df_line_filtered = df_closed_perf_sorted.copy()
-                                    max_date = df_line_filtered['Sell_Date'].max()
-                                    
-                                    if line_view_range == "3 เดือนล่าสุด":
-                                        start_date = max_date - pd.DateOffset(months=3)
-                                        past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
-                                        initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
-                                        df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
-                                    elif line_view_range == "6 เดือนล่าสุด":
-                                        start_date = max_date - pd.DateOffset(months=6)
-                                        past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
-                                        initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
-                                        df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
-                                    elif line_view_range == "1 ปีล่าสุด (YTD / 12M)":
-                                        start_date = max_date - pd.DateOffset(years=1)
-                                        past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
-                                        initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
-                                        df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
-                                    else:
-                                        initial_past_profit_adjusted = initial_past_profit
-                                
-                                    if not df_line_filtered.empty:
-                                        # 2. Dynamic Aggregation: ตรวจสอบช่วงเวลา ถ้าระยะเวลามากกว่า 1 ปี ให้ยุบเป็น "รายเดือน" อัตโนมัติเพื่อกันกราฟแน่น
-                                        date_span_days = (df_line_filtered['Sell_Date'].max() - df_line_filtered['Sell_Date'].min()).days
-                                        
-                                        if date_span_days > 365 and line_view_range == "ทั้งหมด (All Time)":
-                                            df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('M')
-                                            df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: r.strftime('%b %Y'))
-                                            df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
-                                            agg_freq_text = "รายเดือน (มุมมองระยะยาว)"
-                                        else:
-                                            df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('W-MON')
-                                            df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
-                                            df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
-                                            agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
-                                
-                                        with c_f2:
-                                            st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
-                                
-                                        # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
-                                        df_line_grouped = df_line_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
-                                            'กำไร/ขาดทุน (บาท)': 'sum'
-                                        }).sort_values('Sort_Time')
-                                        
-                                        # คำนวณกำไรสะสมต่อเนื่อง
-                                        df_line_grouped['Cumulative_Profit'] = initial_past_profit_adjusted + df_line_grouped['กำไร/ขาดทุน (บาท)'].cumsum()
-                                
-                                        # 3. คำนวณขอบเขตแกน Y ให้เผื่อพื้นที่ด้านบนเพิ่ม 15% (แก้ปัญหาเส้นชนขอบบน)
-                                        y_max = df_line_grouped['Cumulative_Profit'].max()
-                                        y_min = df_line_grouped['Cumulative_Profit'].min()
-                                        y_upper_limit = y_max * 1.15 if y_max > 0 else y_max * 0.85
-                                
-                                        # สร้างกราฟเส้นพร้อมกำหนด Scale แกน Y และเปิด Interactive Zoom & Pan
-                                        chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
-                                            x=alt.X('Time_Label:O', title='ช่วงเวลาที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Time_Label'])),
-                                            y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)', scale=alt.Scale(domain=[y_min, y_upper_limit], nice=True)),
-                                            tooltip=['Time_Label', 'Cumulative_Profit']
-                                        ).properties(
-                                            height=350
-                                        ).interactive()
-                                        
-                                        st.altair_chart(chart_line, use_container_width=True)
-                                    else:
-                                        st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
-                                else:
-                                    st.info("ยังไม่มีข้อมูลประวัติการเทรดที่ปิดสถานะ")
-                                                        
-                        else:
-                            # สำหรับโหมดตาราง (ใช้ปีที่เลือกจากฝั่งซ้ายมาแสดงผล)
-                            selected_year = st.session_state.get('select_year_perf', available_years[0])
-                            df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
                             
-                            months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
-                            df_full_year = pd.DataFrame({
-                                'Date': months_range,
-                                'Month_Label': months_range.strftime('%b %Y')
-                            })
-                            
-                            if not df_filtered_year.empty:
-                                df_filtered_year['Month_Label'] = df_filtered_year['Sell_Date'].dt.strftime('%b %Y')
-                                df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
-                                    'กำไร/ขาดทุน (บาท)': 'sum',
-                                    'ต้นทุน (บาท)': 'sum'
-                                }).reset_index()
-                                df_monthly = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
-                                    'กำไร/ขาดทุน (บาท)': 0,
-                                    'ต้นทุน (บาท)': 0
-                                })
-                            else:
-                                df_monthly = df_full_year.copy()
-                                df_monthly['กำไร/ขาดทุน (บาท)'] = 0
-                                df_monthly['ต้นทุน (บาท)'] = 0
-                        
-                            df_monthly = df_monthly.sort_values('Date').reset_index(drop=True)
-                            df_monthly.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
-                            df_monthly['Monthly_ROI'] = df_monthly.apply(
-                                lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
-                                axis=1
-                            )
-                        
-                            st.markdown(f"##### 📋 ตารางสรุปผลงานรายเดือน (อิงวันที่ขาย) ประจำปี {selected_year}")
-                            df_display = df_monthly[['Month_Label', 'Profit_Sum', 'Cost_Sum', 'Monthly_ROI']].copy()
-                            df_display.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', 'ต้นทุนประจำเดือน (บาท)', '% กำไร/ขาดทุน (ROI)']
-                            
-                            st.dataframe(
-                                df_display.style.format({
-                                    'กำไร/ขาดทุน (บาท)': '{:,.2f}',
-                                    'ต้นทุนประจำเดือน (บาท)': '{:,.2f}',
-                                    '% กำไร/ขาดทุน (ROI)': '{:.2f}%'
-                                }),
-                                use_container_width=True
-                            )
-                                                                                                    
-                        ##### กราฟกระจายตัว (Histogram) ###########
-                        st.markdown("---")
-                        st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
-
-                        # 1. จัดการข้อมูลให้พร้อมก่อนแสดงผล
-                        if not df_filtered.empty:
-                            df_filtered = df_filtered.copy()
-                            df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, 1)) * 100
-                            wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                            losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
-                            
-                            mean_val = df_filtered['Profit_Pct'].mean()
-                            avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
-                            optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
-
-                            # 2. แสดง Metric ด้วย HTML เพื่อคุมสีให้ตรงกับสีเส้นในกราฟ
-                            # สี: Mean=#12da58, Avg Loss=#9b59b6, Target=#f21d2b
-                            col_m1, col_m2, col_m3 = st.columns(3)
-                            col_m1.markdown(f"<div style='text-align: center; color: #12da58; font-size: 20px; font-weight: bold;'>Mean</div><div style='text-align: center; font-size: 24px;'>{mean_val:.1f}%</div>", unsafe_allow_html=True)
-                            col_m2.markdown(f"<div style='text-align: center; color: #9b59b6; font-size: 20px; font-weight: bold;'>Avg Loss</div><div style='text-align: center; font-size: 24px;'>{avg_loss_pct:.1f}%</div>", unsafe_allow_html=True)
-                            if optimal_cutloss_pct is not None:
-                                col_m3.markdown(f"<div style='text-align: center; color: #f21d2b; font-size: 20px; font-weight: bold;'>Target Cut</div><div style='text-align: center; font-size: 24px;'>{optimal_cutloss_pct:.1f}%</div>", unsafe_allow_html=True)
-                            
-                            # 3. วาดกราฟ
-                            fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
-                            
-                            # เพิ่ม annotation_yshift ให้ต่ำลงเล็กน้อย และลดระยะห่าง
-                            fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
-                                          annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right", annotation_yshift=20)
-                            fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
-                                          annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-10)
-                            if optimal_cutloss_pct is not None:
-                                fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
-                                              annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-40)
-                            
-                            # **สำคัญ:** เพิ่ม margin top เพื่อให้มีพื้นที่เหลือให้ป้ายข้อความด้านบนไม่ถูกตัด
-                            fig.update_layout(margin=dict(t=50, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                        else:
-                            st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
-
-                        ####################
-                        if st.button("🔄 อัปเดตข้อมูลย้อนหลัง (Backfill)"):
-                            with st.spinner('กำลังคำนวณข้อมูลย้อนหลัง (อาจใช้เวลาสักครู่)...'):
-                                # เรียกใช้ฟังก์ชันที่เขียนไว้
-                                backfill_portfolio_history()
-                                st.success("อัปเดตเรียบร้อย! กราฟของคุณพร้อมใช้งานแล้ว")
-                        # Equity Curve 
-                        st.markdown("---")
-                        st.markdown("##### 📈 Equity Curve")
-                        
-                        # เรียกใช้งานฟังก์ชันที่ย้ายไปด้านบน
-                        try:
-                            display_performance_dashboard()
-                        except Exception as e:
-                            st.warning(f"ยังไม่พบข้อมูล Portfolio_History หรือเกิดข้อผิดพลาดในการโหลด: {e}")
-
-                        st.markdown("---")
-
-                        # --- 2. ส่วนวิเคราะห์ Sector Performance (แก้ไขป้องกัน Error ประเภทข้อมูล) ---
-                        journal_df = pd.DataFrame(st.session_state.get('journal_data', []))
-                        closed_trades = journal_df[journal_df['สถานะ'] == 'Closed (ขายแล้ว)'] if not journal_df.empty else pd.DataFrame()
-                    
-                        if not journal_df.empty:
-                            sector_data_list = []
-                            for idx, row in journal_df.iterrows():
-                                ticker = row.get('หุ้น', 'UNKNOWN')
-                                
-                                # ป้องกันค่าที่เป็น String หรือค่าว่าง ให้แปลงเป็น float ทันที
-                                try:
-                                    profit = float(row.get('กำไร/ขาดทุน (บาท)', 0))
-                                except (ValueError, TypeError):
-                                    profit = 0.0
-                                    
-                                try:
-                                    cost = float(row.get('ต้นทุน (บาท)', 0))
-                                except (ValueError, TypeError):
-                                    cost = 0.0
-                                    
-                                sector = row.get('Sector', 'General / Unspecified')
-                                if pd.isna(sector) or str(sector).strip() == '': 
-                                    sector = 'General / Unspecified'
-                                    
-                                sector_data_list.append({
-                                    'Sector': str(sector).strip(),
-                                    'Ticker': str(ticker).strip(),
-                                    'Net_Profit': profit,
-                                    'Invested_Cost': cost
-                                })
-                                
-                            if len(sector_data_list) > 0:
-                                df_sector_source = pd.DataFrame(sector_data_list)
-                                
-                                # บังคับแปลงชนิดข้อมูลให้เป็นตัวเลขชัวร์ๆ อีกรอบก่อน Groupby
-                                df_sector_source['Net_Profit'] = pd.to_numeric(df_sector_source['Net_Profit'], errors='coerce').fillna(0)
-                                df_sector_source['Invested_Cost'] = pd.to_numeric(df_sector_source['Invested_Cost'], errors='coerce').fillna(0)
-                                
-                                df_sector_summary = df_sector_source.groupby('Sector', as_index=False).agg({
-                                    'Net_Profit': 'sum',
-                                    'Invested_Cost': 'sum',
-                                    'Ticker': lambda x: ', '.join(x.unique())
-                                })
-                                
-                                df_sector_summary['Return_Pct'] = df_sector_summary.apply(
-                                    lambda r: (r['Net_Profit'] / r['Invested_Cost'] * 100) if r['Invested_Cost'] > 0 else 0, 
-                                    axis=1
-                                )
-                                df_sector_summary = df_sector_summary.sort_values(by='Net_Profit', ascending=False)
-                    
-                                # 📊 ส่วน กราฟแท่ง (Bar Chart)
-                                st.markdown("##### 📊 กำไร/ขาดทุนสะสมแยกตามกลุ่มอุตสาหกรรม")
-                                fig_bar = px.bar(
-                                    df_sector_summary, 
-                                    x='Sector', 
-                                    y='Net_Profit', 
-                                    text=df_sector_summary['Net_Profit'].apply(lambda x: f"{x:,.2f} ฿"), 
-                                    color='Net_Profit', 
-                                    color_continuous_scale=['#EF5350', '#26A69A']
-                                )
-                                fig_bar.update_traces(textposition='outside')
-                                fig_bar.update_layout(
-                                    xaxis_title="กลุ่มอุตสาหกรรม (Sector)", 
-                                    yaxis_title="กำไร/ขาดทุนสุทธิ (บาท)", 
-                                    height=400, 
-                                    margin=dict(l=20, r=20, t=30, b=20), 
-                                    coloraxis_showscale=False
-                                )
-                                st.plotly_chart(fig_bar, use_container_width=True)
-                    
-                                # 🗺️ ส่วน Treemap
-                                st.markdown("##### 🗺️ แผนผังแสดงสัดส่วนและผลงานพอร์ตตาม Sector (Treemap)")
-                                fig_tree = px.treemap(
-                                    df_sector_summary, 
-                                    path=['Sector'], 
-                                    values='Invested_Cost', 
-                                    color='Return_Pct', 
-                                    color_continuous_scale='Tealrose', 
-                                    color_continuous_midpoint=0, 
-                                    custom_data=['Net_Profit', 'Return_Pct', 'Ticker']
-                                )
-                                fig_tree.update_traces(
-                                    hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนรวม:</b> %{value:,.2f} ฿<br><b>กำไร/ขาดทุน:</b> %{customdata[0]:,.2f} ฿<br><b>ผลตอบแทน:</b> %{customdata[1]:+.2f}%<br><b>หุ้นในกลุ่ม:</b> %{customdata[2]}'
-                                )
-                                fig_tree.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10))
-                                st.plotly_chart(fig_tree, use_container_width=True)
-                                
-                                # 📋 ตารางสรุปข้อมูล Sector (ปัดเศษทศนิยม 2 ตำแหน่งจริง ๆ ก่อนแสดงผล)
-                                st.markdown("##### 📋 ตารางสรุปข้อมูลแยกตาม Sector")
-                                display_sector_df = df_sector_summary[['Sector', 'Invested_Cost', 'Net_Profit', 'Return_Pct', 'Ticker']].copy()
-                                
-                                # ปัดเศษทศนิยม 2 ตำแหน่งให้คอลัมน์ Return_Pct ตรงนี้เลย
-                                display_sector_df['Return_Pct'] = display_sector_df['Return_Pct'].round(2)
-                                
-                                display_sector_df.columns = ['กลุ่มอุตสาหกรรม (Sector)', 'เงินลงทุนรวม (บาท)', 'กำไร/ขาดทุนสุทธิ (บาท)', '% ผลตอบแทน', 'รายชื่อหุ้นที่เกี่ยวข้อง']
+                                st.markdown(f"##### 📋 ตารางสรุปผลงานรายเดือน (อิงวันที่ขาย) ประจำปี {selected_year}")
+                                df_display = df_monthly[['Month_Label', 'Profit_Sum', 'Cost_Sum', 'Monthly_ROI']].copy()
+                                df_display.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', 'ต้นทุนประจำเดือน (บาท)', '% กำไร/ขาดทุน (ROI)']
                                 
                                 st.dataframe(
-                                    display_sector_df.style.format({
-                                        'เงินลงทุนรวม (บาท)': '{:,.2f}',
-                                        'กำไร/ขาดทุนสุทธิ (บาท)': '{:,.2f}',
-                                        '% ผลตอบแทน': '{:+.2f}%'
-                                    }).set_properties(**{'text-align': 'right'}), 
+                                    df_display.style.format({
+                                        'กำไร/ขาดทุน (บาท)': '{:,.2f}',
+                                        'ต้นทุนประจำเดือน (บาท)': '{:,.2f}',
+                                        '% กำไร/ขาดทุน (ROI)': '{:.2f}%'
+                                    }),
                                     use_container_width=True
                                 )
-                            else:
-                                st.info("ยังไม่มีข้อมูลเพียงพอสำหรับการวิเคราะห์ Sector")
-                        else:
-                            st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
-                                                                    
-                        #######################################
-                        # 1. จัดการข้อมูล (ยังคงตรรกะเดิมไว้)
-                        df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
-                        df_summary = df_summary.sort_values(by='กำไร/ขาดทุน (บาท)', ascending=False)
-                        top_ticker = df_summary.iloc[0]['หุ้น']
-
-                        # แสดงข้อมูลหุ้นตัวเก่งแบบสรุปที่เปิดตลอดเวลา
-                        st.info(f"หุ้นที่ทำกำไรให้คุณมากที่สุดในปัจจุบันคือ: **{top_ticker}**")
-                        
-                        # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
-                        with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
-                            # แปลงคอลัมน์วันที่ให้เป็น datetime
-                            df_filtered['วันที่ซื้อ'] = pd.to_datetime(df_filtered['วันที่ซื้อ'])
-                            df_filtered['วันที่ขาย'] = pd.to_datetime(df_filtered['วันที่ขาย'])
-                            
-                            # 1. คำนวณ Holding Time ทีละแถว
-                            # ถ้าวันที่ขายเป็น NaT (คือยังไม่ขาย) ให้ใช้วันปัจจุบัน
-                            now = pd.Timestamp.now()
-                            df_filtered['Hold_Days'] = df_filtered.apply(
-                                lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days 
-                                if pd.notnull(row['วันที่ขาย']) 
-                                else (now - row['วันที่ซื้อ']).days, 
-                                axis=1
-                            )
-                            # คำนวณข้อมูลตามเดิม
-                            summary = df_filtered.groupby('หุ้น').agg({
-                                'กำไร/ขาดทุน (บาท)': 'sum',
-                                'ต้นทุน (บาท)': 'sum'
-                            })
-                            summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
-                            
-                            df_filtered['วันที่'] = pd.to_datetime(df_filtered['วันที่'])
-                            hold_time = df_filtered.groupby('หุ้น')['วันที่'].min()
-                            summary['Holding Time'] = (pd.Timestamp.now() - hold_time).dt.days
-                            
-                            # ปรับชื่อคอลัมน์และเลือกเฉพาะที่ต้องการ
-                            display_df = summary.reset_index()
-                            display_df = display_df[['หุ้น', 'กำไร/ขาดทุน (บาท)', '% Return', 'Holding Time']]
-                            display_df.columns = ['Ticker', 'Total Profit/Loss', '% Return', 'Holding Time']
-                            
-                            # แสดงตารางแบบไม่ต้องใช้ column_config ก่อน เพื่อเช็คว่าข้อมูลมาครบไหม
-                            # ถ้าวิธีนี้เห็นตัวเลข แสดงว่าปัญหาอยู่ที่ column_config ที่คุณใช้
-                            st.dataframe(display_df, use_container_width=True)
-                            
-                            # ถ้าข้อมูลในตารางนี้แสดงผลครบถ้วน ให้ค่อยๆ เพิ่ม column_config ทีละส่วนครับ
-                        with st.expander("🎯 Win Rate รายหุ้น (หุ้นตัวไหนแม่นที่สุด)"):
-                            # 1. เตรียมข้อมูลสำหรับคำนวณ Win Rate
-                            # แยกกำไร (>0) และ ขาดทุน (<=0)
-                            df_filtered['is_win'] = df_filtered['กำไร/ขาดทุน (บาท)'] > 0
-                            
-                            # 2. Group ข้อมูลรายหุ้น
-                            win_rate_df = df_filtered.groupby('หุ้น').agg(
-                                Total_Trades=('หุ้น', 'count'),
-                                Wins=('is_win', 'sum')
-                            )
-                            
-                            # คำนวณ % Win Rate
-                            win_rate_df['Win Rate (%)'] = (win_rate_df['Wins'] / win_rate_df['Total_Trades']) * 100
-                            
-                            # 3. จัดระเบียบตาราง
-                            win_rate_df = win_rate_df.sort_values(by='Win Rate (%)', ascending=False).reset_index()
-                            win_rate_df = win_rate_df.rename(columns={'หุ้น': 'Ticker'})
-                            
-                            # 4. แสดงตารางแบบ Basic ที่ดูง่าย
-                            st.dataframe(
-                                win_rate_df[['Ticker', 'Win Rate (%)', 'Total_Trades']],
-                                use_container_width=True,
-                                hide_index=True,
-                                column_config={
-                                    "Win Rate (%)": st.column_config.ProgressColumn(
-                                        "Win Rate (%)",
-                                        format="%.1f%%",
-                                        min_value=0,
-                                        max_value=100,
-                                    ),
-                                    "Total_Trades": "จำนวนครั้งที่เทรด"
-                                }
-                            )
-                            
-                            # 5. สรุปสั้นๆ ให้
-                            best_stock = win_rate_df.iloc[0]['Ticker']
-                            worst_stock = win_rate_df.iloc[-1]['Ticker']
-                            st.write(f"✅ หุ้นที่วินเรทสูงที่สุด: **{best_stock}**")
-                            st.write(f"⚠️ หุ้นที่วินเรทต่ำที่สุด: **{worst_stock}**")
-                        #########
-                        with st.expander("🏆 ตารางสรุปผลงานรายหุ้น (Annualized Return)"):
-                            # 1. จัดเตรียมข้อมูล: แปลงวันที่และจัดการค่าว่าง
-                            df_filtered['วันที่ซื้อ'] = pd.to_datetime(df_filtered['วันที่ซื้อ'])
-                            df_filtered['วันที่ขาย'] = pd.to_datetime(df_filtered['วันที่ขาย'])
-                            now = pd.Timestamp.now()
-                            
-                            # 2. คำนวณ Holding Time อย่างปลอดภัย
-                            df_filtered['Hold_Days'] = df_filtered.apply(
-                                lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days if pd.notnull(row['วันที่ขาย']) 
-                                else (now - row['วันที่ซื้อ']).days, axis=1
-                            )
-                            df_filtered['Hold_Days'] = df_filtered['Hold_Days'].clip(lower=1)
-                            
-                            # 3. คำนวณสรุปรายหุ้น
-                            summary = df_filtered.groupby('หุ้น').agg({
-                                'กำไร/ขาดทุน (บาท)': 'sum',
-                                'ต้นทุน (บาท)': 'sum',
-                                'Hold_Days': 'mean'
-                            })
-                            
-                            # 4. คำนวณตัวเลข
-                            summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
-                            summary['Annualized Return'] = (((1 + (summary['% Return'] / 100)) ** (365 / summary['Hold_Days'])) - 1) * 100
-                            summary = summary.replace([float('inf'), -float('inf')], 0).fillna(0)
-                            
-                            # 5. เตรียม DataFrame สำหรับแสดงผล
-                            display_df = summary.reset_index()
-                            
-                            # 6. แปลงข้อมูลเป็น String ที่จัดรูปแบบตามต้องการ (วิธีนี้แก้ปัญหาช่องว่างได้ถาวร)
-                            final_df = pd.DataFrame({
-                                "Ticker": display_df['หุ้น'],
-                                "Profit/Loss (บาท)": display_df['กำไร/ขาดทุน (บาท)'].apply(lambda x: f"{x:,.2f} ฿"),
-                                "Return (%)": display_df['% Return'].apply(lambda x: f"{x:.2f} %"),
-                                "Annualized Return (%)": display_df['Annualized Return'].apply(lambda x: f"{x:,.2f} %"),
-                                "Holding Time (วัน)": display_df['Hold_Days'].apply(lambda x: f"{int(x)} วัน")
-                            })
-                            
-                            # 7. แสดงผล
-                            st.dataframe(
-                                final_df,
-                                use_container_width=True,
-                                hide_index=True
-                            )
-                        ########
-                        with st.expander("📊 วิเคราะห์ประสิทธิภาพเชิงลึก (Efficiency & Time-to-Profit)"):
-                            # คำนวณเบื้องต้น (ต่อจากของเดิม)
-                            # ... (สมมติว่ามี df_filtered อยู่แล้ว)
-                            
-                            # 1. แยกกลุ่มหุ้นทำกำไร และหุ้นขาดทุน เพื่อหา Time-to-Profit
-                            winners = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                            losers = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
-                            
-                            avg_win_time = winners['Hold_Days'].mean() if not winners.empty else 0
-                            avg_loss_time = losers['Hold_Days'].mean() if not losers.empty else 0
-                            
-                            # 2. คำนวณ Efficiency Ratio รายหุ้น (กำไรต่อวัน)
-                            summary['Profit Per Day'] = summary['กำไร/ขาดทุน (บาท)'] / summary['Hold_Days']
-                            
-                            # 3. เตรียมข้อมูลแสดงผลเป็นข้อความ (ป้องกัน error)
-                            analytics_df = pd.DataFrame({
-                                "Ticker": summary.index,
-                                "Profit/Loss (บาท)": summary['กำไร/ขาดทุน (บาท)'].apply(lambda x: f"{x:,.2f} ฿"),
-                                "Profit Per Day (บาท/วัน)": summary['Profit Per Day'].apply(lambda x: f"{x:,.2f} ฿"),
-                                "Avg Hold Days (วัน)": summary['Hold_Days'].apply(lambda x: f"{x:.1f} วัน")
-                            })
-                            
-                            # แสดงตารางวิเคราะห์
-                            st.dataframe(analytics_df, use_container_width=True, hide_index=True)
-                            
-                            # 4. แสดงสรุปเชิงกลยุทธ์ (Time-to-Profit Insights)
-                            st.divider()
-                            st.subheader("💡 วิเคราะห์นิสัยการเทรด (Insights)")
-                            
-                            col1, col2 = st.columns(2)
-                            col1.metric("ถือหุ้นกำไรเฉลี่ย", f"{avg_win_time:.1f} วัน")
-                            col2.metric("ถือหุ้นขาดทุนเฉลี่ย", f"{avg_loss_time:.1f} วัน")
-                            
-                            if avg_win_time < avg_loss_time:
-                                st.success("✅ ระบบของคุณ: ทำกำไรได้รวดเร็ว (ถือหุ้นกำไรสั้นกว่าหุ้นที่ขาดทุน)")
-                            else:
-                                st.warning("⚠️ ข้อสังเกต: คุณอาจจะทนถือหุ้นที่ขาดทุนนานกว่าหุ้นที่ทำกำไร (Loss Aversion)")
-
-                        #####
-                        with st.expander("📈 Opportunity Cost Matrix (หุ้นไหนควรเก็บ หุ้นไหนควรทิ้ง)"):
-                            # 1. เตรียมข้อมูลสำหรับทำกราฟ
-                            plot_df = summary.reset_index()
-                            plot_df['% Return'] = (plot_df['กำไร/ขาดทุน (บาท)'] / plot_df['ต้นทุน (บาท)']) * 100
-                            
-                            # 2. สร้างกราฟ Scatter Plot
-                            fig = px.scatter(
-                                plot_df, 
-                                x='Hold_Days', 
-                                y='% Return', 
-                                text='หุ้น',
-                                title="Holding Time vs % Return",
-                                labels={'Hold_Days': 'ระยะเวลาการถือครอง (วัน)', '% Return': 'ผลตอบแทน (%)'},
-                                size_max=60
-                            )
-                            
-                            # 3. เพิ่มเส้นแบ่ง (Quadrants) เพื่อให้ดูง่ายขึ้น
-                            fig.add_hline(y=0, line_dash="dash", line_color="red") # เส้นแบ่ง กำไร/ขาดทุน
-                            fig.add_vline(x=plot_df['Hold_Days'].mean(), line_dash="dash", line_color="gray") # เส้นแบ่ง ถือสั้น/ถือนาน
-                            
-                            fig.update_traces(textposition='top center')
-                            
-                            # 4. แสดงผล
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # 5. สรุปคำแนะนำจากกราฟ
-                            st.markdown("""
-                            **วิธีอ่านกราฟ Opportunity Cost:**
-                            *   **บน-ซ้าย (High Return, Low Holding Time):** ✅ **Super Stock** ของคุณ! ทำเงินได้เร็วและคุ้มค่าที่สุด
-                            *   **ล่าง-ขวา (Low Return, High Holding Time):** ⚠️ **Dead Money** หุ้นตัวที่กินเวลาชีวิตคุณไปนานแต่ไม่ทำกำไร (พิจารณาขายทิ้งเพื่อนำเงินไปหาโอกาสใหม่)
-                            *   **บน-ขวา (High Return, High Holding Time):** 🐢 **Value/Trend Stock** เป็นหุ้นที่ต้องถือยาวถึงจะกำไร ถ้าคุณชอบสไตล์นี้ถือว่าโอเคครับ
-                            """)
-                        # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
-                        with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
-                            # แยกข้อมูลพอร์ต
-                            df_rest = df_filtered[df_filtered['หุ้น'] != top_ticker]
-                            
-                            # คำนวณกราฟ
-                            df_filtered_sorted = df_filtered.sort_values('วันที่')
-                            df_rest_sorted = df_rest.sort_values('วันที่')
-                            
-                            all_portfolio = df_filtered_sorted.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
-                            core_portfolio = df_rest_sorted.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
-                            
-                            # สร้าง DataFrame
-                            chart_data = pd.concat([all_portfolio, core_portfolio], axis=1)
-                            chart_data.columns = ['พอร์ตทั้งหมด', 'พอร์ตหักหุ้นตัวเก่ง']
-                            
-                            # วิธีที่ชัวร์ที่สุดสำหรับ Pandas ทุกเวอร์ชัน
-                            chart_data = chart_data.ffill() 
-                            chart_data = chart_data.fillna(0)
-                            
-                            st.line_chart(chart_data)
-                            
-            #########################            
-            with tab_portfolio:
-                st.markdown("#### 💼 ระบบบันทึกพอร์ตโฟลิโอส่วนตัว")
-                
-                # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
-                if "cash_balance" not in st.session_state:
-                    st.session_state.cash_balance = load_total_cash_balance()
-                    
-                # ส่วนแสดงปุ่มเข้าออกเงินสด 
-                with st.expander("💰 บันทึกรายการเงินสดเข้า-ออก"):
-                    with st.form("cash_flow_form", clear_on_submit=True):
-                        c1, c2, c3 = st.columns(3)
-                        with c1:
-                            log_date = st.date_input("วันที่:")
-                        with c2:
-                            log_type = st.selectbox("ประเภท:", ["เติมเงินสด", "เงินปันผล", "เงินรายได้อื่นๆ", "ถอนเงินสด"])
-                        with c3:
-                            log_amount = st.number_input("จำนวนเงิน:", step=100.0)
-                        
-                        log_note = st.text_input("หมายเหตุ:")
-                        submitted_cash = st.form_submit_button("บันทึกรายการเงินสด")
-                
-                        if submitted_cash:
-                            # คำนวณค่าบวก/ลบ ตามประเภท
-                            actual_amount = log_amount if log_type in ["เติมเงินสด", "เงินปันผล", "เงินรายได้อื่นๆ"] else -log_amount
-                            
-                            # บันทึกผ่านฟังก์ชันที่เราทำไว้
-                            log_cash_transaction(
-                                date=str(log_date),
-                                trans_type=log_type,
-                                amount=actual_amount,
-                                note=log_note
-                            )
-                            # อัปเดต Session เพื่อให้ยอดเงินโชว์ทันที
-                            st.session_state.cash_balance += actual_amount
-                            st.success(f"บันทึก {log_type} สำเร็จ!")
-                            st.rerun()
-                
-                # 2. ฟอร์มเพิ่ม/ลดหุ้น
-                with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
-                    col1, col2 = st.columns(2)
-                    
-                    portfolio_stocks = [item['หุ้น'] for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
-                    
-                    with col1:
-                        options = ["  "] + portfolio_stocks
-                        
-                        # 🌟 สร้างฟังก์ชัน Callback สำหรับอัปเดต Sector อัตโนมัติเมื่อเปลี่ยนตัวเลือกหุ้น
-                        def update_sector_on_select():
-                            selected = st.session_state.journal_select_ticker
-                            if selected != "  ":
-                                # 1. เช็คจากพอร์ตก่อน
-                                matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == selected), None)
-                                if matched_item and matched_item.get('Sector') and matched_item.get('Sector') != "General / Unspecified":
-                                    st.session_state.journal_p_sector = matched_item['Sector']
-                                else:
-                                    # 2. ถ้าไม่มีในพอร์ต ดึงจาก Dictionary A-Z
-                                    st.session_state.journal_p_sector = get_sector_from_mapping(selected)
-                            else:
-                                st.session_state.journal_p_sector = "General / Unspecified"
-
-                        select_ticker = st.selectbox(
-                            "เลือกหุ้นจากพอร์ต:", 
-                            options, 
-                            key="journal_select_ticker",
-                            on_change=update_sector_on_select
-                        )
-                        
-                        # กำหนดค่าเริ่มต้นของ Sector ตอนโหลดครั้งแรก
-                        if "journal_p_sector" not in st.session_state:
-                            st.session_state.journal_p_sector = "General / Unspecified"
-
-                        if select_ticker != "  ":
-                            p_ticker = select_ticker
-                        else:
-                            p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker")
-                            # ถ้าพิมพ์ชื่อหุ้นใหม่เอง ให้เช็คจาก Dictionary แล้วอัปเดตลงช่อง Sector ทันที
-                            if p_ticker:
-                                st.session_state.journal_p_sector = get_sector_from_mapping(p_ticker)
-
-                        # ช่องกรอก Sector ที่ผูกกับ st.session_state.journal_p_sector โดยตรง
-                        p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", key="journal_p_sector")
-                        
-                        p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
-                        
-                        if p_status == "Closed (ขายแล้ว)":
-                            p_buy_date = st.date_input("📅 วันที่ซื้อหุ้น (ต้นทุนเดิม):", key="journal_p_buy_date")
-                            p_sell_date = st.date_input("📅 วันที่ขายจริง (วันที่ทำรายการ):", key="journal_p_sell_date")
-                        else:
-                            p_buy_date = st.date_input("📅 วันที่ทำรายการซื้อ:", key="journal_open_date")
-                            p_sell_date = None
-                        
-                    with col2:
-                        p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"], key="journal_p_type")
-                        p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง", key="journal_p_result")
-                        p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f", key="journal_p_price")
-                        p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100, key="journal_p_qty")
-                        p_comm = st.number_input("ค่าธรรมเนียม:", min_value=0.0, step=1.0, key="journal_p_comm")
-                        
-                    p_reason = st.text_area("เหตุผล/กลยุทธ์:", key="journal_p_reason")
-                    submitted = st.button("ยืนยันรายการบันทึก", type="primary")
-                    
-                    if submitted:
-                        if not p_ticker or p_ticker.strip() == "":
-                            st.error("กรุณาระบุชื่อหุ้นให้เรียบร้อยครับ")
-                        else:
-                            total_val = (p_qty * p_price)
-                            ticker_upper = p_ticker.upper()
-                            
-                            # Logic อัตโนมัติ: ถ้าเป็น Stop Loss หรือ ขาดทุน ให้บังคับเป็นค่าลบ
-                            final_result = float(p_result)
-                            if "Stop Loss" in p_type or "ขาดทุน" in p_status:
-                                final_result = -abs(final_result) 
-                            else:
-                                final_result = abs(final_result)  
-                            
-                            transaction_date_str = str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else str(p_buy_date)
-                            
-                            # 1. จัดการข้อมูล Portfolio
-                            found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
-                            
-                            if "ซื้อ" in p_type and p_status != "Closed (ขายแล้ว)":
-                                log_cash_transaction(date=transaction_date_str, trans_type="ซื้อหุ้น " + ticker_upper, amount=-(total_val + p_comm), note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}")
-                                st.session_state.cash_balance -= (total_val + p_comm)
+                                                                                                        
+                            ##### กราฟกระจายตัว (Histogram) ###########
+                            st.markdown("---")
+                            st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
+    
+                            # 1. จัดการข้อมูลให้พร้อมก่อนแสดงผล
+                            if not df_filtered.empty:
+                                df_filtered = df_filtered.copy()
+                                df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, 1)) * 100
+                                wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                                losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
                                 
-                                if found_idx != -1:
-                                    old = st.session_state.my_portfolio[found_idx]
-                                    new_shares = old['shares'] + p_qty
-                                    new_cost = ((old['shares'] * old['avg_price']) + total_val) / new_shares
-                                    st.session_state.my_portfolio[found_idx] = {'หุ้น': ticker_upper, 'shares': new_shares, 'avg_price': new_cost, 'Sector': p_sector}
-                                else:
-                                    st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price, 'Sector': p_sector})
-                            
-                            else: # กรณีขาย
-                                log_cash_transaction(date=transaction_date_str, trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
-                                st.session_state.cash_balance += (total_val - p_comm)
+                                mean_val = df_filtered['Profit_Pct'].mean()
+                                avg_loss_pct = losses['Profit_Pct'].mean() if not losses.empty else 0
+                                optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
+    
+                                # 2. แสดง Metric ด้วย HTML เพื่อคุมสีให้ตรงกับสีเส้นในกราฟ
+                                # สี: Mean=#12da58, Avg Loss=#9b59b6, Target=#f21d2b
+                                col_m1, col_m2, col_m3 = st.columns(3)
+                                col_m1.markdown(f"<div style='text-align: center; color: #12da58; font-size: 20px; font-weight: bold;'>Mean</div><div style='text-align: center; font-size: 24px;'>{mean_val:.1f}%</div>", unsafe_allow_html=True)
+                                col_m2.markdown(f"<div style='text-align: center; color: #9b59b6; font-size: 20px; font-weight: bold;'>Avg Loss</div><div style='text-align: center; font-size: 24px;'>{avg_loss_pct:.1f}%</div>", unsafe_allow_html=True)
+                                if optimal_cutloss_pct is not None:
+                                    col_m3.markdown(f"<div style='text-align: center; color: #f21d2b; font-size: 20px; font-weight: bold;'>Target Cut</div><div style='text-align: center; font-size: 24px;'>{optimal_cutloss_pct:.1f}%</div>", unsafe_allow_html=True)
                                 
-                                if found_idx != -1:
-                                    st.session_state.my_portfolio[found_idx]['shares'] -= p_qty
-                                    if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
-                                        st.session_state.my_portfolio.pop(found_idx)
-                            
-                            # 2. เพิ่มข้อมูลเข้า Journal (รวม Sector)
-                            if "journal_data" not in st.session_state:
-                                st.session_state.journal_data = []
+                                # 3. วาดกราฟ
+                                fig = px.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
                                 
-                            new_entry = {
-                                "วันที่": transaction_date_str, 
-                                "วันที่ซื้อ": str(p_buy_date),
-                                "วันที่ขาย": str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else "",
-                                "หุ้น": ticker_upper,
-                                "Sector": p_sector,
-                                "สถานะ": p_status,
-                                "ประเภท": p_type,
-                                "กำไร/ขาดทุน (บาท)": final_result,
-                                "ต้นทุน (บาท)": total_val,
-                                "ราคาหุ้นที่ซื้อ (บาท/หุ้น)": p_price,
-                                "จำนวนหุ้นที่ซื้อ": p_qty,
-                                "เหตุผล": p_reason
-                            }
-                            st.session_state.journal_data.append(new_entry)
-                            
-                            # 3. บันทึกข้อมูล
-                            save_portfolio()
-                            save_journal()
-                            save_cash_balance(st.session_state.cash_balance)
-                            save_portfolio_snapshot()
-                            
-                            st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
-                            st.rerun()
-                            
-                # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
-                st.divider()
-                st.subheader("📊 สรุปพอร์ตการลงทุน")
-                
-                if "my_portfolio" not in st.session_state:
-                    load_portfolio()
-                
-                if st.session_state.my_portfolio:
-                    portfolio_list = []
-                    total_invest = 0
-                    total_value = 0
-                    
-                    # ฟังก์ชันกำหนดสีสำหรับตารางพอร์ต
-                    def color_portfolio(val):
-                        if isinstance(val, (int, float)):
-                            color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
-                            return f'color: {color}'
-                        return None
-                
-                    for row in st.session_state.my_portfolio:
-                        ticker = row.get('หุ้น', '')
-                        shares = float(row.get('shares', 0))
-                        avg_price = float(row.get('avg_price', 0.0))
-                        sector_val = row.get('Sector', 'General / Unspecified') # ดึง Sector เผื่อไว้ใช้ต่อ
-                        
-                        try:
-                            m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
-                        except:
-                            m_price = avg_price
-                        
-                        cost_value = shares * avg_price
-                        market_value = shares * m_price
-                        profit = market_value - cost_value
-                        profit_pct = (profit / cost_value * 100) if cost_value > 0 else 0
-                        
-                        portfolio_list.append({
-                            "หุ้น": ticker,
-                            "Sector": sector_val, # เก็บ Sector ไว้ใน DataFrame ด้วย
-                            "จำนวน": shares,
-                            "ต้นทุนเฉลี่ย": avg_price,
-                            "มูลค่าต้นทุน": cost_value,
-                            "ราคาตลาด": m_price,
-                            "มูลค่าตลาด": market_value,
-                            "กำไร/ขาดทุน": profit,
-                            "% กำไร/ขาดทุน": profit_pct
-                        })
-                        total_invest += cost_value
-                        total_value += market_value
-                    
-                    # สรุปยอดรวม
-                    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                    col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.cash_balance:,.0f} ฿")
-                    col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
-                    col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
-                    diff = total_value - total_invest
-                    col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
-                
-                    # แสดงตารางพอร์ตหลัก
-                    df_p = pd.DataFrame(portfolio_list)
-                    df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
-                    
-                    st.dataframe(
-                        df_display_p.style.format({
-                            "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
-                            "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
-                            "% กำไร/ขาดทุน": "{:.2f}%"
-                        })
-                        .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
-                        .set_properties(**{'text-align': 'right'})
-                        .set_table_styles([{'selector': 'th', 'props': [('text-align', 'right')]}])
-                        , use_container_width=True
-                    )
-                    
-                    if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
-                        st.session_state.edit_mode = True
-                
-                    # --- ส่วนแสดงกราฟสรุปพอร์ต ---
-                    st.divider()
-                    
-                    # แบ่งคอลัมน์สัดส่วน 25% : 25% : 50%
-                    col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
-                    
-                    # 1. Pie Chart: มูลค่าตลาด (25%)
-                    with col_p1:
-                        st.subheader("🥧 มูลค่าตลาด")
-                        fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4)
-                        fig_pie1.update_traces(
-                            textposition='outside', 
-                            textinfo='label+percent',
-                            textfont=dict(size=9),
-                            automargin=True
-                        )
-                        fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
-                        st.plotly_chart(fig_pie1, use_container_width=True)
-                        st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
-                
-                    # 2. Pie Chart: มูลค่าต้นทุน (25%)
-                    with col_p2:
-                        st.subheader("🥧 มูลค่าต้นทุน")
-                        fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4)
-                        fig_pie2.update_traces(
-                            textposition='outside', 
-                            textinfo='label+percent',
-                            textfont=dict(size=9),
-                            automargin=True
-                        )
-                        fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
-                        st.plotly_chart(fig_pie2, use_container_width=True)
-                        st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
-                    
-                    # 3. Bar Chart: กำไร/ขาดทุน (50%)
-                    with col_p3:
-                        st.subheader("📈 กำไร/ขาดทุนรายตัว")
-                        text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} / {row['% กำไร/ขาดทุน']:.1f}%" for _, row in df_p.iterrows()]
-                        bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in df_p['กำไร/ขาดทุน']]
-                        
-                        fig_bar = go.Figure(data=[go.Bar(
-                            x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
-                            marker_color=bar_colors, text=text_labels, textposition='auto'
-                        )])
-                        fig_bar.update_traces(textfont_size=10)
-                        fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
-                        st.plotly_chart(fig_bar, use_container_width=True)
-                        st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
-                
-                    # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
-                    # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
-                    st.divider()
-                    st.subheader("🥧 การกระจายตัวของพอร์ตตามกลุ่มอุตสาหกรรม (Sector Allocation)")
-                
-                    if not df_p.empty:
-                        # จัดกลุ่มรวมตาม Sector ของหุ้นในพอร์ตปัจจุบัน (ใช้ as_index=False และ reset_index เพื่อความชัวร์)
-                        df_port_sector = df_p.groupby('Sector', as_index=False).agg({
-                            'มูลค่าตลาด': 'sum',
-                            'มูลค่าต้นทุน': 'sum',
-                            'หุ้น': lambda x: ', '.join(x.unique())
-                        }).reset_index(drop=True)
-                        
-                        # 1. คำนวณสัดส่วน % ตาม "มูลค่าตลาด"
-                        total_market_val = df_port_sector['มูลค่าตลาด'].sum()
-                        if total_market_val > 0:
-                            df_port_sector['Market_Weight_Pct'] = (df_port_sector['มูลค่าตลาด'] / total_market_val) * 100
-                        else:
-                            df_port_sector['Market_Weight_Pct'] = 0.0
-                
-                        # 2. คำนวณสัดส่วน % ตาม "เงินลงทุน (ต้นทุน)"
-                        total_cost_val = df_port_sector['มูลค่าต้นทุน'].sum()
-                        if total_cost_val > 0:
-                            df_port_sector['Cost_Weight_Pct'] = (df_port_sector['มูลค่าต้นทุน'] / total_cost_val) * 100
-                        else:
-                            df_port_sector['Cost_Weight_Pct'] = 0.0
-                            
-                        # เรียงลำดับตามเงินลงทุนต้นทุนจากมากไปน้อย
-                        df_port_sector = df_port_sector.sort_values(by='มูลค่าต้นทุน', ascending=False).reset_index(drop=True)
-                
-                        # 📊 แบ่ง 2 คอลัมน์สำหรับกราฟโดนัท (เงินลงทุนต้นทุน VS มูลค่าตลาด)
-                        col_sec1, col_sec2 = st.columns(2)
-                
-                        with col_sec1:
-                            st.markdown("###### 🥧 สัดส่วนตามเงินลงทุน (Cost Weight)")
-                            fig_donut_cost = px.pie(
-                                df_port_sector,
-                                names='Sector',
-                                values='มูลค่าต้นทุน',
-                                hole=0.4,
-                                color_discrete_sequence=px.colors.qualitative.Pastel
-                            )
-                            fig_donut_cost.update_traces(
-                                textinfo='percent+label',
-                                hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนต้นทุน:</b> %{value:,.2f} ฿<br><b>สัดส่วนต้นทุน:</b> %{percent}'
-                            )
-                            fig_donut_cost.update_layout(
-                                height=380,
-                                margin=dict(l=10, r=10, t=40, b=40),
-                                showlegend=False
-                            )
-                            st.plotly_chart(fig_donut_cost, use_container_width=True)
-                
-                        with col_sec2:
-                            st.markdown("###### 🥧 สัดส่วนตามมูลค่าตลาด (Market Weight)")
-                            fig_donut_market = px.pie(
-                                df_port_sector,
-                                names='Sector',
-                                values='มูลค่าตลาด',
-                                hole=0.4,
-                                color_discrete_sequence=px.colors.qualitative.Set3
-                            )
-                            fig_donut_market.update_traces(
-                                textinfo='percent+label',
-                                hovertemplate='<b>Sector:</b> %{label}<br><b>มูลค่าตลาด:</b> %{value:,.2f} ฿<br><b>สัดส่วนตลาด:</b> %{percent}'
-                            )
-                            fig_donut_market.update_layout(
-                                height=380,
-                                margin=dict(l=10, r=10, t=40, b=40),
-                                showlegend=True
-                            )
-                            st.plotly_chart(fig_donut_market, use_container_width=True)
-                
-                        # 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่ม
-                        st.markdown("##### 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่มในพอร์ต")
-                        display_port_sector = df_port_sector[[
-                            'Sector', 'มูลค่าต้นทุน', 'Cost_Weight_Pct', 'มูลค่าตลาด', 'Market_Weight_Pct', 'หุ้น'
-                        ]].copy()
-                        
-                        display_port_sector.columns = [
-                            'กลุ่มอุตสาหกรรม (Sector)', 
-                            'เงินลงทุนต้นทุน (บาท)', 
-                            'สัดส่วนต้นทุน (%)', 
-                            'มูลค่าตลาดรวม (บาท)', 
-                            'สัดส่วนตลาด (%)', 
-                            'รายชื่อหุ้นในกลุ่ม'
-                        ]
-                        
-                        st.dataframe(
-                            display_port_sector.style.format({
-                                'เงินลงทุนต้นทุน (บาท)': '{:,.2f}',
-                                'สัดส่วนต้นทุน (%)': '{:.2f} %',
-                                'มูลค่าตลาดรวม (บาท)': '{:,.2f}',
-                                'สัดส่วนตลาด (%)': '{:.2f} %'
-                            }).set_properties(**{'text-align': 'right'}),
-                            use_container_width=True,
-                            hide_index=True  # เพิ่มคำสั่งนี้เพื่อซ่อนคอลัมน์ Index ที่เกินมาครับ
-                        )
+                                # เพิ่ม annotation_yshift ให้ต่ำลงเล็กน้อย และลดระยะห่าง
+                                fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
+                                              annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right", annotation_yshift=20)
+                                fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
+                                              annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-10)
+                                if optimal_cutloss_pct is not None:
+                                    fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
+                                                  annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-40)
                                 
-                    else:
-                        st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
-                        
-            #########################
-            with tab_dividend:
-                DATA_FILE = "dividend_database.csv"
-                
-                # โหลดข้อมูลจากไฟล์ CSV เข้า session_state ทุกครั้งที่เปิดหรือรีเฟรชแอป
-                if "dividend_data" not in st.session_state:
-                    if os.path.exists(DATA_FILE):
-                        try:
-                            df_saved = pd.read_csv(DATA_FILE)
-                            if not df_saved.empty:
-                                st.session_state.dividend_data = df_saved.to_dict('records')
+                                # **สำคัญ:** เพิ่ม margin top เพื่อให้มีพื้นที่เหลือให้ป้ายข้อความด้านบนไม่ถูกตัด
+                                fig.update_layout(margin=dict(t=50, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
+                                st.plotly_chart(fig, use_container_width=True)
+                                
                             else:
-                                st.session_state.dividend_data = []
-                        except Exception:
-                            st.session_state.dividend_data = []
-                    else:
-                        st.session_state.dividend_data = []
-                        
-                st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
-                
-                # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV ---
-                with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD หรือไฟล์ Excel/CSV"):
-                    uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
-                    if uploaded_div_file:
-                        if st.button("ยืนยันการนำเข้าไฟล์ปันผล"):
+                                st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
+    
+                            ####################
+                            if st.button("🔄 อัปเดตข้อมูลย้อนหลัง (Backfill)"):
+                                with st.spinner('กำลังคำนวณข้อมูลย้อนหลัง (อาจใช้เวลาสักครู่)...'):
+                                    # เรียกใช้ฟังก์ชันที่เขียนไว้
+                                    backfill_portfolio_history()
+                                    st.success("อัปเดตเรียบร้อย! กราฟของคุณพร้อมใช้งานแล้ว")
+                            # Equity Curve 
+                            st.markdown("---")
+                            st.markdown("##### 📈 Equity Curve")
+                            
+                            # เรียกใช้งานฟังก์ชันที่ย้ายไปด้านบน
                             try:
-                                if uploaded_div_file.name.endswith('.csv'):
-                                    df_upload = pd.read_csv(uploaded_div_file)
-                                else:
-                                    df_upload = pd.read_excel(uploaded_div_file)
-                                
-                                processed_rows = []
-                                
-                                if 'ชื่อย่อหลักทรัพย์' in df_upload.columns and 'วันที่จ่าย' in df_upload.columns:
-                                    for idx, row in df_upload.iterrows():
-                                        ticker = str(row.get('ชื่อย่อหลักทรัพย์', '')).strip().upper()
-                                        if not ticker or ticker == 'NAN':
-                                            continue
-                                        if not ticker.endswith('.BK'):
-                                            ticker = f"{ticker}.BK"
-                                            
-                                        pay_date = str(row.get('วันที่จ่าย', ''))[:10]
-                                        total_div_before_tax = 0.0
-                                        total_tax = 0.0
-                                        
-                                        for col in df_upload.columns:
-                                            col_str = str(col)
-                                            val = row.get(col, 0)
-                                            try:
-                                                val_num = float(val) if pd.notna(val) else 0.0
-                                            except:
-                                                val_num = 0.0
-                                                
-                                            if 'จำนวนเงินปันผล' in col_str or 'ดอกเบี้ยหุ้นกู้' in col_str or 'เงินเทียบเท่าเงินปันผล' in col_str:
-                                                total_div_before_tax += val_num
-                                            elif 'ภาษีของเงินปันผล' in col_str or 'ภาษีของดอกเบี้ย' in col_str:
-                                                total_tax += val_num
-                                        
-                                        net_receive = total_div_before_tax - total_tax
-                                        
-                                        cost_val = 0.0
-                                        for cost_col in ['ต้นทุน', 'Cost', 'ทุนรวม', 'มูลค่าลงทุน']:
-                                            if cost_col in df_upload.columns:
-                                                try:
-                                                    cost_val = float(row.get(cost_col, 0))
-                                                except:
-                                                    pass
-                                        
-                                        processed_rows.append({
-                                            "วันที่ได้รับ": pay_date,
-                                            "Ticker": ticker,
-                                            "จำนวนหุ้น": 0.0,
-                                            "ปันผลต่อหุ้น": 0.0,
-                                            "ยอดรวมก่อนภาษี": total_div_before_tax,
-                                            "ภาษีหัก ณ ที่จ่าย": total_tax,
-                                            "ยอดรับสุทธิ": net_receive,
-                                            "ต้นทุนหุ้น": cost_val,
-                                            "หมายเหตุ": "นำเข้าจาก TSD Portal"
-                                        })
-                                else:
-                                    if 'ต้นทุนหุ้น' not in df_upload.columns:
-                                        df_upload['ต้นทุนหุ้น'] = 0.0
-                                    processed_rows = df_upload.to_dict('records')
-                                
-                                existing_df = pd.DataFrame(st.session_state.dividend_data)
-                                new_df = pd.DataFrame(processed_rows)
-                                
-                                if not existing_df.empty:
-                                    combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
-                                        subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], 
-                                        keep='first'
-                                    )
-                                    added_count = len(combined_df) - len(existing_df)
-                                else:
-                                    combined_df = new_df.drop_duplicates(subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], keep='first')
-                                    added_count = len(combined_df)
-                                
-                                st.session_state.dividend_data = combined_df.to_dict('records')
-                                save_dividend_data()
-                                
-                                if added_count > 0:
-                                    st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
-                                else:
-                                    st.info("ℹ️ ข้อมูลในไฟล์นี้มีอยู่แล้วในระบบทั้งหมด จึงไม่มีการเพิ่มรายการซ้ำ")
-                                st.rerun()
-                                    
+                                display_performance_dashboard()
                             except Exception as e:
-                                st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
+                                st.warning(f"ยังไม่พบข้อมูล Portfolio_History หรือเกิดข้อผิดพลาดในการโหลด: {e}")
+    
+                            st.markdown("---")
+    
+                            # --- 2. ส่วนวิเคราะห์ Sector Performance (แก้ไขป้องกัน Error ประเภทข้อมูล) ---
+                            journal_df = pd.DataFrame(st.session_state.get('journal_data', []))
+                            closed_trades = journal_df[journal_df['สถานะ'] == 'Closed (ขายแล้ว)'] if not journal_df.empty else pd.DataFrame()
+                        
+                            if not journal_df.empty:
+                                sector_data_list = []
+                                for idx, row in journal_df.iterrows():
+                                    ticker = row.get('หุ้น', 'UNKNOWN')
+                                    
+                                    # ป้องกันค่าที่เป็น String หรือค่าว่าง ให้แปลงเป็น float ทันที
+                                    try:
+                                        profit = float(row.get('กำไร/ขาดทุน (บาท)', 0))
+                                    except (ValueError, TypeError):
+                                        profit = 0.0
+                                        
+                                    try:
+                                        cost = float(row.get('ต้นทุน (บาท)', 0))
+                                    except (ValueError, TypeError):
+                                        cost = 0.0
+                                        
+                                    sector = row.get('Sector', 'General / Unspecified')
+                                    if pd.isna(sector) or str(sector).strip() == '': 
+                                        sector = 'General / Unspecified'
+                                        
+                                    sector_data_list.append({
+                                        'Sector': str(sector).strip(),
+                                        'Ticker': str(ticker).strip(),
+                                        'Net_Profit': profit,
+                                        'Invested_Cost': cost
+                                    })
+                                    
+                                if len(sector_data_list) > 0:
+                                    df_sector_source = pd.DataFrame(sector_data_list)
+                                    
+                                    # บังคับแปลงชนิดข้อมูลให้เป็นตัวเลขชัวร์ๆ อีกรอบก่อน Groupby
+                                    df_sector_source['Net_Profit'] = pd.to_numeric(df_sector_source['Net_Profit'], errors='coerce').fillna(0)
+                                    df_sector_source['Invested_Cost'] = pd.to_numeric(df_sector_source['Invested_Cost'], errors='coerce').fillna(0)
+                                    
+                                    df_sector_summary = df_sector_source.groupby('Sector', as_index=False).agg({
+                                        'Net_Profit': 'sum',
+                                        'Invested_Cost': 'sum',
+                                        'Ticker': lambda x: ', '.join(x.unique())
+                                    })
+                                    
+                                    df_sector_summary['Return_Pct'] = df_sector_summary.apply(
+                                        lambda r: (r['Net_Profit'] / r['Invested_Cost'] * 100) if r['Invested_Cost'] > 0 else 0, 
+                                        axis=1
+                                    )
+                                    df_sector_summary = df_sector_summary.sort_values(by='Net_Profit', ascending=False)
+                        
+                                    # 📊 ส่วน กราฟแท่ง (Bar Chart)
+                                    st.markdown("##### 📊 กำไร/ขาดทุนสะสมแยกตามกลุ่มอุตสาหกรรม")
+                                    fig_bar = px.bar(
+                                        df_sector_summary, 
+                                        x='Sector', 
+                                        y='Net_Profit', 
+                                        text=df_sector_summary['Net_Profit'].apply(lambda x: f"{x:,.2f} ฿"), 
+                                        color='Net_Profit', 
+                                        color_continuous_scale=['#EF5350', '#26A69A']
+                                    )
+                                    fig_bar.update_traces(textposition='outside')
+                                    fig_bar.update_layout(
+                                        xaxis_title="กลุ่มอุตสาหกรรม (Sector)", 
+                                        yaxis_title="กำไร/ขาดทุนสุทธิ (บาท)", 
+                                        height=400, 
+                                        margin=dict(l=20, r=20, t=30, b=20), 
+                                        coloraxis_showscale=False
+                                    )
+                                    st.plotly_chart(fig_bar, use_container_width=True)
+                        
+                                    # 🗺️ ส่วน Treemap
+                                    st.markdown("##### 🗺️ แผนผังแสดงสัดส่วนและผลงานพอร์ตตาม Sector (Treemap)")
+                                    fig_tree = px.treemap(
+                                        df_sector_summary, 
+                                        path=['Sector'], 
+                                        values='Invested_Cost', 
+                                        color='Return_Pct', 
+                                        color_continuous_scale='Tealrose', 
+                                        color_continuous_midpoint=0, 
+                                        custom_data=['Net_Profit', 'Return_Pct', 'Ticker']
+                                    )
+                                    fig_tree.update_traces(
+                                        hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนรวม:</b> %{value:,.2f} ฿<br><b>กำไร/ขาดทุน:</b> %{customdata[0]:,.2f} ฿<br><b>ผลตอบแทน:</b> %{customdata[1]:+.2f}%<br><b>หุ้นในกลุ่ม:</b> %{customdata[2]}'
+                                    )
+                                    fig_tree.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10))
+                                    st.plotly_chart(fig_tree, use_container_width=True)
+                                    
+                                    # 📋 ตารางสรุปข้อมูล Sector (ปัดเศษทศนิยม 2 ตำแหน่งจริง ๆ ก่อนแสดงผล)
+                                    st.markdown("##### 📋 ตารางสรุปข้อมูลแยกตาม Sector")
+                                    display_sector_df = df_sector_summary[['Sector', 'Invested_Cost', 'Net_Profit', 'Return_Pct', 'Ticker']].copy()
+                                    
+                                    # ปัดเศษทศนิยม 2 ตำแหน่งให้คอลัมน์ Return_Pct ตรงนี้เลย
+                                    display_sector_df['Return_Pct'] = display_sector_df['Return_Pct'].round(2)
+                                    
+                                    display_sector_df.columns = ['กลุ่มอุตสาหกรรม (Sector)', 'เงินลงทุนรวม (บาท)', 'กำไร/ขาดทุนสุทธิ (บาท)', '% ผลตอบแทน', 'รายชื่อหุ้นที่เกี่ยวข้อง']
+                                    
+                                    st.dataframe(
+                                        display_sector_df.style.format({
+                                            'เงินลงทุนรวม (บาท)': '{:,.2f}',
+                                            'กำไร/ขาดทุนสุทธิ (บาท)': '{:,.2f}',
+                                            '% ผลตอบแทน': '{:+.2f}%'
+                                        }).set_properties(**{'text-align': 'right'}), 
+                                        use_container_width=True
+                                    )
+                                else:
+                                    st.info("ยังไม่มีข้อมูลเพียงพอสำหรับการวิเคราะห์ Sector")
+                            else:
+                                st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
+                                                                        
+                            #######################################
+                            # 1. จัดการข้อมูล (ยังคงตรรกะเดิมไว้)
+                            df_summary = df_filtered.groupby('หุ้น')['กำไร/ขาดทุน (บาท)'].sum().reset_index()
+                            df_summary = df_summary.sort_values(by='กำไร/ขาดทุน (บาท)', ascending=False)
+                            top_ticker = df_summary.iloc[0]['หุ้น']
+    
+                            # แสดงข้อมูลหุ้นตัวเก่งแบบสรุปที่เปิดตลอดเวลา
+                            st.info(f"หุ้นที่ทำกำไรให้คุณมากที่สุดในปัจจุบันคือ: **{top_ticker}**")
+                            
+                            # --- ส่วนตารางสรุปรายหุ้น (ซ่อนได้) ---
+                            with st.expander("🏆 ดูตารางสรุปผลงานรายหุ้น"):
+                                # แปลงคอลัมน์วันที่ให้เป็น datetime
+                                df_filtered['วันที่ซื้อ'] = pd.to_datetime(df_filtered['วันที่ซื้อ'])
+                                df_filtered['วันที่ขาย'] = pd.to_datetime(df_filtered['วันที่ขาย'])
                                 
-                # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
-                with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=True):
-                    with st.form("dividend_form", clear_on_submit=True):
+                                # 1. คำนวณ Holding Time ทีละแถว
+                                # ถ้าวันที่ขายเป็น NaT (คือยังไม่ขาย) ให้ใช้วันปัจจุบัน
+                                now = pd.Timestamp.now()
+                                df_filtered['Hold_Days'] = df_filtered.apply(
+                                    lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days 
+                                    if pd.notnull(row['วันที่ขาย']) 
+                                    else (now - row['วันที่ซื้อ']).days, 
+                                    axis=1
+                                )
+                                # คำนวณข้อมูลตามเดิม
+                                summary = df_filtered.groupby('หุ้น').agg({
+                                    'กำไร/ขาดทุน (บาท)': 'sum',
+                                    'ต้นทุน (บาท)': 'sum'
+                                })
+                                summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
+                                
+                                df_filtered['วันที่'] = pd.to_datetime(df_filtered['วันที่'])
+                                hold_time = df_filtered.groupby('หุ้น')['วันที่'].min()
+                                summary['Holding Time'] = (pd.Timestamp.now() - hold_time).dt.days
+                                
+                                # ปรับชื่อคอลัมน์และเลือกเฉพาะที่ต้องการ
+                                display_df = summary.reset_index()
+                                display_df = display_df[['หุ้น', 'กำไร/ขาดทุน (บาท)', '% Return', 'Holding Time']]
+                                display_df.columns = ['Ticker', 'Total Profit/Loss', '% Return', 'Holding Time']
+                                
+                                # แสดงตารางแบบไม่ต้องใช้ column_config ก่อน เพื่อเช็คว่าข้อมูลมาครบไหม
+                                # ถ้าวิธีนี้เห็นตัวเลข แสดงว่าปัญหาอยู่ที่ column_config ที่คุณใช้
+                                st.dataframe(display_df, use_container_width=True)
+                                
+                                # ถ้าข้อมูลในตารางนี้แสดงผลครบถ้วน ให้ค่อยๆ เพิ่ม column_config ทีละส่วนครับ
+                            with st.expander("🎯 Win Rate รายหุ้น (หุ้นตัวไหนแม่นที่สุด)"):
+                                # 1. เตรียมข้อมูลสำหรับคำนวณ Win Rate
+                                # แยกกำไร (>0) และ ขาดทุน (<=0)
+                                df_filtered['is_win'] = df_filtered['กำไร/ขาดทุน (บาท)'] > 0
+                                
+                                # 2. Group ข้อมูลรายหุ้น
+                                win_rate_df = df_filtered.groupby('หุ้น').agg(
+                                    Total_Trades=('หุ้น', 'count'),
+                                    Wins=('is_win', 'sum')
+                                )
+                                
+                                # คำนวณ % Win Rate
+                                win_rate_df['Win Rate (%)'] = (win_rate_df['Wins'] / win_rate_df['Total_Trades']) * 100
+                                
+                                # 3. จัดระเบียบตาราง
+                                win_rate_df = win_rate_df.sort_values(by='Win Rate (%)', ascending=False).reset_index()
+                                win_rate_df = win_rate_df.rename(columns={'หุ้น': 'Ticker'})
+                                
+                                # 4. แสดงตารางแบบ Basic ที่ดูง่าย
+                                st.dataframe(
+                                    win_rate_df[['Ticker', 'Win Rate (%)', 'Total_Trades']],
+                                    use_container_width=True,
+                                    hide_index=True,
+                                    column_config={
+                                        "Win Rate (%)": st.column_config.ProgressColumn(
+                                            "Win Rate (%)",
+                                            format="%.1f%%",
+                                            min_value=0,
+                                            max_value=100,
+                                        ),
+                                        "Total_Trades": "จำนวนครั้งที่เทรด"
+                                    }
+                                )
+                                
+                                # 5. สรุปสั้นๆ ให้
+                                best_stock = win_rate_df.iloc[0]['Ticker']
+                                worst_stock = win_rate_df.iloc[-1]['Ticker']
+                                st.write(f"✅ หุ้นที่วินเรทสูงที่สุด: **{best_stock}**")
+                                st.write(f"⚠️ หุ้นที่วินเรทต่ำที่สุด: **{worst_stock}**")
+                            #########
+                            with st.expander("🏆 ตารางสรุปผลงานรายหุ้น (Annualized Return)"):
+                                # 1. จัดเตรียมข้อมูล: แปลงวันที่และจัดการค่าว่าง
+                                df_filtered['วันที่ซื้อ'] = pd.to_datetime(df_filtered['วันที่ซื้อ'])
+                                df_filtered['วันที่ขาย'] = pd.to_datetime(df_filtered['วันที่ขาย'])
+                                now = pd.Timestamp.now()
+                                
+                                # 2. คำนวณ Holding Time อย่างปลอดภัย
+                                df_filtered['Hold_Days'] = df_filtered.apply(
+                                    lambda row: (row['วันที่ขาย'] - row['วันที่ซื้อ']).days if pd.notnull(row['วันที่ขาย']) 
+                                    else (now - row['วันที่ซื้อ']).days, axis=1
+                                )
+                                df_filtered['Hold_Days'] = df_filtered['Hold_Days'].clip(lower=1)
+                                
+                                # 3. คำนวณสรุปรายหุ้น
+                                summary = df_filtered.groupby('หุ้น').agg({
+                                    'กำไร/ขาดทุน (บาท)': 'sum',
+                                    'ต้นทุน (บาท)': 'sum',
+                                    'Hold_Days': 'mean'
+                                })
+                                
+                                # 4. คำนวณตัวเลข
+                                summary['% Return'] = (summary['กำไร/ขาดทุน (บาท)'] / summary['ต้นทุน (บาท)']) * 100
+                                summary['Annualized Return'] = (((1 + (summary['% Return'] / 100)) ** (365 / summary['Hold_Days'])) - 1) * 100
+                                summary = summary.replace([float('inf'), -float('inf')], 0).fillna(0)
+                                
+                                # 5. เตรียม DataFrame สำหรับแสดงผล
+                                display_df = summary.reset_index()
+                                
+                                # 6. แปลงข้อมูลเป็น String ที่จัดรูปแบบตามต้องการ (วิธีนี้แก้ปัญหาช่องว่างได้ถาวร)
+                                final_df = pd.DataFrame({
+                                    "Ticker": display_df['หุ้น'],
+                                    "Profit/Loss (บาท)": display_df['กำไร/ขาดทุน (บาท)'].apply(lambda x: f"{x:,.2f} ฿"),
+                                    "Return (%)": display_df['% Return'].apply(lambda x: f"{x:.2f} %"),
+                                    "Annualized Return (%)": display_df['Annualized Return'].apply(lambda x: f"{x:,.2f} %"),
+                                    "Holding Time (วัน)": display_df['Hold_Days'].apply(lambda x: f"{int(x)} วัน")
+                                })
+                                
+                                # 7. แสดงผล
+                                st.dataframe(
+                                    final_df,
+                                    use_container_width=True,
+                                    hide_index=True
+                                )
+                            ########
+                            with st.expander("📊 วิเคราะห์ประสิทธิภาพเชิงลึก (Efficiency & Time-to-Profit)"):
+                                # คำนวณเบื้องต้น (ต่อจากของเดิม)
+                                # ... (สมมติว่ามี df_filtered อยู่แล้ว)
+                                
+                                # 1. แยกกลุ่มหุ้นทำกำไร และหุ้นขาดทุน เพื่อหา Time-to-Profit
+                                winners = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                                losers = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                                
+                                avg_win_time = winners['Hold_Days'].mean() if not winners.empty else 0
+                                avg_loss_time = losers['Hold_Days'].mean() if not losers.empty else 0
+                                
+                                # 2. คำนวณ Efficiency Ratio รายหุ้น (กำไรต่อวัน)
+                                summary['Profit Per Day'] = summary['กำไร/ขาดทุน (บาท)'] / summary['Hold_Days']
+                                
+                                # 3. เตรียมข้อมูลแสดงผลเป็นข้อความ (ป้องกัน error)
+                                analytics_df = pd.DataFrame({
+                                    "Ticker": summary.index,
+                                    "Profit/Loss (บาท)": summary['กำไร/ขาดทุน (บาท)'].apply(lambda x: f"{x:,.2f} ฿"),
+                                    "Profit Per Day (บาท/วัน)": summary['Profit Per Day'].apply(lambda x: f"{x:,.2f} ฿"),
+                                    "Avg Hold Days (วัน)": summary['Hold_Days'].apply(lambda x: f"{x:.1f} วัน")
+                                })
+                                
+                                # แสดงตารางวิเคราะห์
+                                st.dataframe(analytics_df, use_container_width=True, hide_index=True)
+                                
+                                # 4. แสดงสรุปเชิงกลยุทธ์ (Time-to-Profit Insights)
+                                st.divider()
+                                st.subheader("💡 วิเคราะห์นิสัยการเทรด (Insights)")
+                                
+                                col1, col2 = st.columns(2)
+                                col1.metric("ถือหุ้นกำไรเฉลี่ย", f"{avg_win_time:.1f} วัน")
+                                col2.metric("ถือหุ้นขาดทุนเฉลี่ย", f"{avg_loss_time:.1f} วัน")
+                                
+                                if avg_win_time < avg_loss_time:
+                                    st.success("✅ ระบบของคุณ: ทำกำไรได้รวดเร็ว (ถือหุ้นกำไรสั้นกว่าหุ้นที่ขาดทุน)")
+                                else:
+                                    st.warning("⚠️ ข้อสังเกต: คุณอาจจะทนถือหุ้นที่ขาดทุนนานกว่าหุ้นที่ทำกำไร (Loss Aversion)")
+    
+                            #####
+                            with st.expander("📈 Opportunity Cost Matrix (หุ้นไหนควรเก็บ หุ้นไหนควรทิ้ง)"):
+                                # 1. เตรียมข้อมูลสำหรับทำกราฟ
+                                plot_df = summary.reset_index()
+                                plot_df['% Return'] = (plot_df['กำไร/ขาดทุน (บาท)'] / plot_df['ต้นทุน (บาท)']) * 100
+                                
+                                # 2. สร้างกราฟ Scatter Plot
+                                fig = px.scatter(
+                                    plot_df, 
+                                    x='Hold_Days', 
+                                    y='% Return', 
+                                    text='หุ้น',
+                                    title="Holding Time vs % Return",
+                                    labels={'Hold_Days': 'ระยะเวลาการถือครอง (วัน)', '% Return': 'ผลตอบแทน (%)'},
+                                    size_max=60
+                                )
+                                
+                                # 3. เพิ่มเส้นแบ่ง (Quadrants) เพื่อให้ดูง่ายขึ้น
+                                fig.add_hline(y=0, line_dash="dash", line_color="red") # เส้นแบ่ง กำไร/ขาดทุน
+                                fig.add_vline(x=plot_df['Hold_Days'].mean(), line_dash="dash", line_color="gray") # เส้นแบ่ง ถือสั้น/ถือนาน
+                                
+                                fig.update_traces(textposition='top center')
+                                
+                                # 4. แสดงผล
+                                st.plotly_chart(fig, use_container_width=True)
+                                
+                                # 5. สรุปคำแนะนำจากกราฟ
+                                st.markdown("""
+                                **วิธีอ่านกราฟ Opportunity Cost:**
+                                *   **บน-ซ้าย (High Return, Low Holding Time):** ✅ **Super Stock** ของคุณ! ทำเงินได้เร็วและคุ้มค่าที่สุด
+                                *   **ล่าง-ขวา (Low Return, High Holding Time):** ⚠️ **Dead Money** หุ้นตัวที่กินเวลาชีวิตคุณไปนานแต่ไม่ทำกำไร (พิจารณาขายทิ้งเพื่อนำเงินไปหาโอกาสใหม่)
+                                *   **บน-ขวา (High Return, High Holding Time):** 🐢 **Value/Trend Stock** เป็นหุ้นที่ต้องถือยาวถึงจะกำไร ถ้าคุณชอบสไตล์นี้ถือว่าโอเคครับ
+                                """)
+                            # --- ส่วนกราฟเปรียบเทียบ (ซ่อนได้) ---
+                            with st.expander("📈 ดูพอร์ตภาพรวม vs พอร์ตหักหุ้นตัวเก่งออก"):
+                                # แยกข้อมูลพอร์ต
+                                df_rest = df_filtered[df_filtered['หุ้น'] != top_ticker]
+                                
+                                # คำนวณกราฟ
+                                df_filtered_sorted = df_filtered.sort_values('วันที่')
+                                df_rest_sorted = df_rest.sort_values('วันที่')
+                                
+                                all_portfolio = df_filtered_sorted.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
+                                core_portfolio = df_rest_sorted.set_index('วันที่')['กำไร/ขาดทุน (บาท)'].cumsum().groupby('วันที่').last()
+                                
+                                # สร้าง DataFrame
+                                chart_data = pd.concat([all_portfolio, core_portfolio], axis=1)
+                                chart_data.columns = ['พอร์ตทั้งหมด', 'พอร์ตหักหุ้นตัวเก่ง']
+                                
+                                # วิธีที่ชัวร์ที่สุดสำหรับ Pandas ทุกเวอร์ชัน
+                                chart_data = chart_data.ffill() 
+                                chart_data = chart_data.fillna(0)
+                                
+                                st.line_chart(chart_data)
+                                
+                #########################            
+                with tab_portfolio:
+                    st.markdown("#### 💼 ระบบบันทึกพอร์ตโฟลิโอส่วนตัว")
+                    
+                    # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
+                    if "cash_balance" not in st.session_state:
+                        st.session_state.cash_balance = load_total_cash_balance()
+                        
+                    # ส่วนแสดงปุ่มเข้าออกเงินสด 
+                    with st.expander("💰 บันทึกรายการเงินสดเข้า-ออก"):
+                        with st.form("cash_flow_form", clear_on_submit=True):
+                            c1, c2, c3 = st.columns(3)
+                            with c1:
+                                log_date = st.date_input("วันที่:")
+                            with c2:
+                                log_type = st.selectbox("ประเภท:", ["เติมเงินสด", "เงินปันผล", "เงินรายได้อื่นๆ", "ถอนเงินสด"])
+                            with c3:
+                                log_amount = st.number_input("จำนวนเงิน:", step=100.0)
+                            
+                            log_note = st.text_input("หมายเหตุ:")
+                            submitted_cash = st.form_submit_button("บันทึกรายการเงินสด")
+                    
+                            if submitted_cash:
+                                # คำนวณค่าบวก/ลบ ตามประเภท
+                                actual_amount = log_amount if log_type in ["เติมเงินสด", "เงินปันผล", "เงินรายได้อื่นๆ"] else -log_amount
+                                
+                                # บันทึกผ่านฟังก์ชันที่เราทำไว้
+                                log_cash_transaction(
+                                    date=str(log_date),
+                                    trans_type=log_type,
+                                    amount=actual_amount,
+                                    note=log_note
+                                )
+                                # อัปเดต Session เพื่อให้ยอดเงินโชว์ทันที
+                                st.session_state.cash_balance += actual_amount
+                                st.success(f"บันทึก {log_type} สำเร็จ!")
+                                st.rerun()
+                    
+                    # 2. ฟอร์มเพิ่ม/ลดหุ้น
+                    with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
                         col1, col2 = st.columns(2)
+                        
+                        portfolio_stocks = [item['หุ้น'] for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
+                        
                         with col1:
-                            div_date = st.date_input("วันที่ได้รับเงินปันผล", value=date.today())
-                            ticker = st.text_input("ชื่อหุ้น (Ticker)").upper()
-                            shares = st.number_input("จำนวนหุ้นที่ได้รับสิทธิ์", min_value=0.0, step=1.0)
-                            total_cost = st.number_input("ต้นทุนหุ้นรวม (บาท)", min_value=0.0, step=100.0, format="%.2f", help="มูลค่าเงินลงทุนหรือต้นทุนรวมของหุ้นตัวนี้")
-                        
+                            options = ["  "] + portfolio_stocks
+                            
+                            # 🌟 สร้างฟังก์ชัน Callback สำหรับอัปเดต Sector อัตโนมัติเมื่อเปลี่ยนตัวเลือกหุ้น
+                            def update_sector_on_select():
+                                selected = st.session_state.journal_select_ticker
+                                if selected != "  ":
+                                    # 1. เช็คจากพอร์ตก่อน
+                                    matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == selected), None)
+                                    if matched_item and matched_item.get('Sector') and matched_item.get('Sector') != "General / Unspecified":
+                                        st.session_state.journal_p_sector = matched_item['Sector']
+                                    else:
+                                        # 2. ถ้าไม่มีในพอร์ต ดึงจาก Dictionary A-Z
+                                        st.session_state.journal_p_sector = get_sector_from_mapping(selected)
+                                else:
+                                    st.session_state.journal_p_sector = "General / Unspecified"
+    
+                            select_ticker = st.selectbox(
+                                "เลือกหุ้นจากพอร์ต:", 
+                                options, 
+                                key="journal_select_ticker",
+                                on_change=update_sector_on_select
+                            )
+                            
+                            # กำหนดค่าเริ่มต้นของ Sector ตอนโหลดครั้งแรก
+                            if "journal_p_sector" not in st.session_state:
+                                st.session_state.journal_p_sector = "General / Unspecified"
+    
+                            if select_ticker != "  ":
+                                p_ticker = select_ticker
+                            else:
+                                p_ticker = st.text_input("ชื่อหุ้น:", key="journal_p_ticker")
+                                # ถ้าพิมพ์ชื่อหุ้นใหม่เอง ให้เช็คจาก Dictionary แล้วอัปเดตลงช่อง Sector ทันที
+                                if p_ticker:
+                                    st.session_state.journal_p_sector = get_sector_from_mapping(p_ticker)
+    
+                            # ช่องกรอก Sector ที่ผูกกับ st.session_state.journal_p_sector โดยตรง
+                            p_sector = st.text_input("กลุ่มอุตสาหกรรม (Sector):", key="journal_p_sector")
+                            
+                            p_status = st.selectbox("สถานะรายการ:", ["Open (กำลังถือ)", "Closed (ขายแล้ว)"], key="journal_p_status")
+                            
+                            if p_status == "Closed (ขายแล้ว)":
+                                p_buy_date = st.date_input("📅 วันที่ซื้อหุ้น (ต้นทุนเดิม):", key="journal_p_buy_date")
+                                p_sell_date = st.date_input("📅 วันที่ขายจริง (วันที่ทำรายการ):", key="journal_p_sell_date")
+                            else:
+                                p_buy_date = st.date_input("📅 วันที่ทำรายการซื้อ:", key="journal_open_date")
+                                p_sell_date = None
+                            
                         with col2:
-                            dps = st.number_input("เงินปันผลต่อหุ้น (บาท/หุ้น)", min_value=0.0000, format="%.4f", step=0.01)
-                            auto_gross = shares * dps
-                            gross_div = st.number_input("เงินปันผลรวมก่อนภาษี (บาท)", value=auto_gross, format="%.2f", step=1.0)
+                            p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"], key="journal_p_type")
+                            p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง", key="journal_p_result")
+                            p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f", key="journal_p_price")
+                            p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100, key="journal_p_qty")
+                            p_comm = st.number_input("ค่าธรรมเนียม:", min_value=0.0, step=1.0, key="journal_p_comm")
                             
-                            tax_wht = gross_div * 0.10
-                            net_div = gross_div - tax_wht
-                            
-                            st.caption(f"💡 คำนวณอัตโนมัติ: ภาษีหัก ณ ที่จ่าย 10% = {tax_wht:,.2f} ฿ | รับสุทธิ = {net_div:,.2f} ฿")
-                        
-                        notes = st.text_input("หมายเหตุ (เช่น ปันผล Q2/2026)")
-                        submitted = st.form_submit_button("💾 บันทึกเงินปันผล")
+                        p_reason = st.text_area("เหตุผล/กลยุทธ์:", key="journal_p_reason")
+                        submitted = st.button("ยืนยันรายการบันทึก", type="primary")
                         
                         if submitted:
-                            if ticker:
-                                formatted_ticker = ticker if ticker.endswith('.BK') else f"{ticker}.BK"
-                                new_entry = {
-                                    "วันที่ได้รับ": str(div_date),
-                                    "Ticker": formatted_ticker,
-                                    "จำนวนหุ้น": shares,
-                                    "ปันผลต่อหุ้น": dps,
-                                    "ยอดรวมก่อนภาษี": gross_div,
-                                    "ภาษีหัก ณ ที่จ่าย": tax_wht,
-                                    "ยอดรับสุทธิ": net_div,
-                                    "ต้นทุนหุ้น": total_cost,
-                                    "หมายเหตุ": notes
-                                }
-                                st.session_state.dividend_data.append(new_entry)
-                                save_dividend_data()
-                                st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} เรียบร้อยแล้วครับ!")
-                                st.rerun()
+                            if not p_ticker or p_ticker.strip() == "":
+                                st.error("กรุณาระบุชื่อหุ้นให้เรียบร้อยครับ")
                             else:
-                                st.warning("⚠️ กรุณากรอกชื่อหุ้น (Ticker)")
+                                total_val = (p_qty * p_price)
+                                ticker_upper = p_ticker.upper()
                                 
-                # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
-                st.markdown("---")
-                st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
-                
-                if st.session_state.dividend_data:
-                    df_div = pd.DataFrame(st.session_state.dividend_data)
-                    
-                    total_received = df_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_div.columns else 0
-                    total_tax = df_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_div.columns else 0
-                    
-                    m1, m2 = st.columns(2)
-                    m1.metric("💰 เงินปันผลรับสุทธิรวมทั้งสิ้น", f"{total_received:,.2f} ฿")
-                    m2.metric("🏛️ ภาษีหัก ณ ที่จ่ายรวม", f"{total_tax:,.2f} ฿")
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    
-                    with st.expander("📂 ดูตารางประวัติและแก้ไขข้อมูลปันผล", expanded=False):
-                        edited_div_df = st.data_editor(df_div, use_container_width=True, key="div_editor")
-                        
-                        if st.button("💾 อัปเดตการแก้ไขตารางปันผล", key="update_div_btn"):
-                            st.session_state.dividend_data = edited_div_df.to_dict('records')
-                            save_dividend_data()
-                            st.success("✅ อัปเดตข้อมูลสำเร็จ!")
-                            st.rerun()
-                            
-                        csv_div = df_div.to_csv(index=False).encode('utf-8-sig')
-                        st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
-                    
-                    # --- ส่วนที่ 4: กราฟวิเคราะห์และสรุปยอดเงินปันผลรับ ---
-                    st.markdown("---")
-                    st.markdown("##### 📊 วิเคราะห์ข้อมูลเงินปันผล (Dividend Analytics)")
-                    
-                    if 'วันที่ได้รับ' in df_div.columns:
-                        df_div['วันที่ได้รับ'] = pd.to_datetime(df_div['วันที่ได้รับ'], errors='coerce')
-                        df_div['Year'] = df_div['วันที่ได้รับ'].dt.year.fillna(0).astype(int)
-                    
-                    col_f1, col_f2 = st.columns([2, 2])
-                    with col_f1:
-                        available_years = sorted([y for y in df_div['Year'].unique() if y > 0], reverse=True)
-                        year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_years]
-                        selected_period = st.selectbox("📅 กรองช่วงเวลา (ปี):", year_options, key="div_year_filter")
-                    
-                    df_filtered_div = df_div.copy()
-                    if selected_period != "All Time (ทั้งหมด)":
-                        df_filtered_div = df_filtered_div[df_filtered_div['Year'] == int(selected_period)]
-                    
-                    if not df_filtered_div.empty:
-                        total_received_filtered = df_filtered_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_filtered_div.columns else 0
-                        total_tax_filtered = df_filtered_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_filtered_div.columns else 0
-                        
-                        mf1, mf2 = st.columns(2)
-                        mf1.metric(f"💰 เงินปันผลรับสุทธิ ({selected_period})", f"{total_received_filtered:,.2f} ฿")
-                        mf2.metric(f"🏛️ ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿")
-                        
-                        st.markdown("<br>", unsafe_allow_html=True)
-                    
-                        # --- ส่วนที่ 5: วิเคราะห์ Dividend Yield on Cost (%) ---
-                        st.markdown("---")
-                        st.markdown(f"##### 🎯 วิเคราะห์ผลตอบแทนจากเงินปันผลเทียบกับต้นทุนหุ้น (Dividend Yield on Cost) - [{selected_period}]")
-                        
-                        if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns and 'ต้นทุนหุ้น' in df_filtered_div.columns and 'จำนวนหุ้น' in df_filtered_div.columns:
-                            df_calc = df_filtered_div.copy()
-                            
-                            if 'วันที่ได้รับ' in df_calc.columns:
-                                df_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_calc['วันที่ได้รับ'], errors='coerce')
-                                df_calc = df_calc.sort_values(by='วันที่ได้รับ_dt', ascending=True)
-                            
-                            df_div_sum = df_calc.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
-                            
-                            df_latest = df_calc.groupby('Ticker').agg({
-                                'จำนวนหุ้น': 'last',
-                                'ต้นทุนหุ้น': 'last'
-                            }).reset_index()
-                            
-                            df_yield_analysis = pd.merge(df_div_sum, df_latest, on='Ticker')
-                            df_yield_analysis['Total_Cost'] = df_yield_analysis['ต้นทุนหุ้น'] * df_yield_analysis['จำนวนหุ้น']
-                            
-                            df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
-                                lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0, 
-                                axis=1
-                            )
-                            
-                            valid_cost_df = df_yield_analysis[(df_yield_analysis['Total_Cost'] > 0) & (df_yield_analysis['Yield_on_Cost'] <= 1000)]
-                            
-                            if not valid_cost_df.empty:
-                                total_portfolio_cost = valid_cost_df['Total_Cost'].sum()
-                                total_portfolio_dividend = valid_cost_df['ยอดรับสุทธิ'].sum()
-                                avg_yield_on_cost = (total_portfolio_dividend / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
-                                
-                                kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
-                                kpi_col1.metric(f"📊 Avg. Yield on Cost ({selected_period})", f"{avg_yield_on_cost:.2f}%")
-                                kpi_col2.metric(f"💰 ปันผลรับรวม ({selected_period})", f"{total_portfolio_dividend:,.2f} ฿")
-                                kpi_col3.metric("🏛️ ต้นทุนพอร์ตหุ้นรวม", f"{total_portfolio_cost:,.2f} ฿")
-                                
-                                st.markdown("<br>", unsafe_allow_html=True)
-                                
-                                df_yield_sorted = valid_cost_df.sort_values(by='Yield_on_Cost', ascending=True)
-                                df_yield_sorted['Text_Label'] = df_yield_sorted['Yield_on_Cost'].apply(lambda x: f"{x:.2f}%")
-                                
-                                fig_yield_bar = px.bar(
-                                    df_yield_sorted,
-                                    x='Yield_on_Cost',
-                                    y='Ticker',
-                                    orientation='h',
-                                    text='Text_Label',
-                                    color='Yield_on_Cost',
-                                    color_continuous_scale='Tealgrn'
-                                )
-                                
-                                fig_yield_bar.update_traces(textposition='outside')
-                                fig_yield_bar.update_layout(
-                                    xaxis_title=f"Dividend Yield on Cost (%) [{selected_period}]",
-                                    yaxis_title="ชื่อหุ้น (Ticker)",
-                                    height=max(320, len(df_yield_sorted) * 40),
-                                    margin=dict(l=10, r=20, t=20, b=20),
-                                    coloraxis_showscale=False
-                                )
-                                st.plotly_chart(fig_yield_bar, use_container_width=True)
-                                
-                                st.markdown(f"##### 📋 ตารางสรุป Yield on Cost ({selected_period})")
-                                df_table_display = df_yield_sorted[['Ticker', 'ยอดรับสุทธิ', 'Total_Cost', 'Yield_on_Cost']].copy()
-                                
-                                div_col_name = f"เงินปันผลรับรวม ({selected_period}) (บาท)"
-                                df_table_display.columns = ['ชื่อหุ้น (Ticker)', div_col_name, 'ต้นทุนรวมทั้งหมด (บาท)', 'Dividend Yield on Cost (%)']
-                                
-                                df_table_display[div_col_name] = df_table_display[div_col_name].apply(lambda x: f"{x:,.2f}")
-                                df_table_display['ต้นทุนรวมทั้งหมด (บาท)'] = df_table_display['ต้นทุนรวมทั้งหมด (บาท)'].apply(lambda x: f"{x:,.2f}")
-                                df_table_display['Dividend Yield on Cost (%)'] = df_table_display['Dividend Yield on Cost (%)'].apply(lambda x: f"{x:.2f}%")
-                                
-                                st.dataframe(df_table_display.reset_index(drop=True), use_container_width=True)
-                            else:
-                                st.info(f"💡 ไม่มีข้อมูลปันผลหรือต้นทุนหุ้นในช่วงเวลา {selected_period}")
-                        else:
-                            st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
-                            
-                    # --- ส่วนที่ 6: ปุ่มล้างข้อมูลทั้งหมด (Danger Zone) ---
-                    st.markdown("---")
-                    with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
-                        st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
-                        
-                        if "confirm_clear_div" not in st.session_state:
-                            st.session_state.confirm_clear_div = False
-                            
-                        if not st.session_state.confirm_clear_div:
-                            if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary", key="btn_clear_dividend_main"):
-                                st.session_state.confirm_clear_div = True
-                                st.rerun()
-                        else:
-                            st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
-                            col_c1, col_c2, _ = st.columns([1, 1, 2])
-                            with col_c1:
-                                if st.button("✔️ ยืนยันการลบ", type="primary", key="btn_confirm_clear_div"):
-                                    st.session_state.dividend_data = []
-                                    save_dividend_data()
-                                    st.session_state.confirm_clear_div = False
-                                    st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
-                                    st.rerun()
-                            with col_c2:
-                                if st.button("❌ ยกเลิก", key="btn_cancel_clear_div"):
-                                    st.session_state.confirm_clear_div = False
-                                    st.rerun()
-                    
-                    # ตรวจสอบว่ามีข้อมูลในระบบหรือไม่ ถ้าไม่มีให้แสดงข้อความแนะนำ
-                    if df_div.empty:
-                        st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
-                    else:
-                        # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
-                        st.markdown("---")
-                        st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
-                        if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
-                            df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
-                            df_yearly_sum['Year'] = df_yearly_sum['Year'].astype(str)
-                            
-                            fig_yearly = px.bar(
-                                df_yearly_sum,
-                                x='Year',
-                                y='ยอดรับสุทธิ',
-                                text=df_yearly_sum['ยอดรับสุทธิ'].apply(lambda x: f"{x:,.2f} ฿"),
-                                color='ยอดรับสุทธิ',
-                                color_continuous_scale='Blues'
-                            )
-                            fig_yearly.update_traces(textposition='outside')
-                            fig_yearly.update_layout(
-                                xaxis_title="ปี (Year)",
-                                yaxis_title="ยอดปันผลรับสุทธิ (บาท)",
-                                height=380,
-                                margin=dict(l=10, r=10, t=20, b=20),
-                                coloraxis_showscale=False
-                            )
-                            st.plotly_chart(fig_yearly, use_container_width=True)
-                            
-                        # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี) ---
-                        st.markdown("---")
-                        st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (เรียงจากยอดมากไปน้อย แบ่งตามปีที่ได้รับ)")
-                        
-                        if 'Ticker' in df_filtered_div.columns and 'Year' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
-                            df_stacked = df_filtered_div[df_filtered_div['Year'] > 0].groupby(['Ticker', 'Year'])['ยอดรับสุทธิ'].sum().reset_index()
-                            
-                            if not df_stacked.empty:
-                                df_ticker_totals = df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
-                                df_ticker_totals = df_ticker_totals.sort_values(by='ยอดรับสุทธิ', ascending=True)
-                                sorted_tickers = df_ticker_totals['Ticker'].tolist()
-                                
-                                df_stacked['Total_Stock_Sum'] = df_stacked['Ticker'].map(df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum())
-                                df_stacked['Percentage'] = (df_stacked['ยอดรับสุทธิ'] / df_stacked['Total_Stock_Sum']) * 100
-                                df_stacked['Year_Str'] = df_stacked['Year'].astype(str)
-                                
-                                df_stacked['Text_Label'] = df_stacked.apply(
-                                    lambda row: f"{row['ยอดรับสุทธิ']:,.0f} ฿ ({row['Percentage']:.1f}%)" if row['Percentage'] > 5 else "", 
-                                    axis=1
-                                )
-                                
-                                fig_stacked_bar = px.bar(
-                                    df_stacked,
-                                    x='ยอดรับสุทธิ',
-                                    y='Ticker',
-                                    color='Year_Str',
-                                    orientation='h',
-                                    text='Text_Label',
-                                    barmode='stack',
-                                    category_orders={'Ticker': sorted_tickers},
-                                    color_discrete_sequence=px.colors.qualitative.Bold
-                                )
-                                
-                                fig_stacked_bar.update_traces(
-                                    textposition='inside', 
-                                    insidetextanchor='middle'
-                                )
-                                
-                                fig_stacked_bar.update_layout(
-                                    xaxis_title="ยอดปันผลรับสุทธิรวม (บาท)",
-                                    yaxis_title="ชื่อหุ้น (Ticker)",
-                                    height=max(350, len(sorted_tickers) * 45),
-                                    margin=dict(l=10, r=20, t=20, b=20),
-                                    legend_title="ปีที่ได้รับ (Year)"
-                                )
-                                st.plotly_chart(fig_stacked_bar, use_container_width=True)
-                            else:
-                                st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
-                        else:
-                            st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปีที่เลือก")
-                        
-                        # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost รายปี (ที่เคยขาดหายไป) ---
-                        st.markdown("---")
-                        st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
-                        
-                        if 'dividend_data' in st.session_state and st.session_state.dividend_data:
-                            df_div_local = pd.DataFrame(st.session_state.dividend_data)
-                        else:
-                            df_div_local = pd.DataFrame()
-                        
-                        if not df_div_local.empty and 'Ticker' in df_div_local.columns and 'ยอดรับสุทธิ' in df_div_local.columns and 'ต้นทุนหุ้น' in df_div_local.columns and 'จำนวนหุ้น' in df_div_local.columns:
-                            df_stack_calc = df_div_local.copy()
-                            
-                            if 'วันที่ได้รับ' in df_stack_calc.columns:
-                                df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], errors='coerce')
-                                df_stack_calc['Year'] = df_stack_calc['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
-                            else:
-                                df_stack_calc['Year'] = 0
-                                
-                            available_stack_years = sorted([y for y in df_stack_calc['Year'].unique() if y > 0], reverse=True)
-                            stack_year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_stack_years]
-                            
-                            selected_stack_period = st.selectbox(
-                                "📅 กรองช่วงเวลากราฟ Stacked Bar:", 
-                                stack_year_options, 
-                                key="stack_bar_year_filter"
-                            )
-                            
-                            if selected_stack_period != "All Time (ทั้งหมด)":
-                                df_stack_filtered = df_stack_calc[df_stack_calc['Year'] == int(selected_stack_period)].copy()
-                            else:
-                                df_stack_filtered = df_stack_calc.copy()
-                                
-                            if not df_stack_filtered.empty:
-                                df_stack_filtered['Year_Str'] = df_stack_filtered['Year'].astype(str)
-                                
-                                df_latest = df_stack_calc.groupby('Ticker').agg({
-                                    'จำนวนหุ้น': 'last',
-                                    'ต้นทุนหุ้น': 'last'
-                                }).reset_index()
-                                df_latest['Total_Cost'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
-                                
-                                df_grouped_yearly = df_stack_filtered.groupby(['Ticker', 'Year_Str'])['ยอดรับสุทธิ'].sum().reset_index()
-                                df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'Total_Cost']], on='Ticker')
-                                
-                                df_merged_yearly['Yield_on_Cost_Annual'] = df_merged_yearly.apply(
-                                    lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
-                                    axis=1
-                                )
-                                
-                                if not df_merged_yearly.empty:
-                                    df_total_yield = df_merged_yearly.groupby('Ticker')['Yield_on_Cost_Annual'].sum().reset_index()
-                                    sorted_tickers_yield = df_total_yield.sort_values(by='Yield_on_Cost_Annual', ascending=True)['Ticker'].tolist()
-                                    
-                                    df_merged_yearly['Text_Label'] = df_merged_yearly['Yield_on_Cost_Annual'].apply(
-                                        lambda x: f"{x:.2f}%" if x > 0.5 else ""
-                                    )
-            
-                                    fig_stacked = px.bar(
-                                        df_merged_yearly,
-                                        x='Yield_on_Cost_Annual',
-                                        y='Ticker',
-                                        color='Year_Str',
-                                        orientation='h',
-                                        barmode='stack',
-                                        category_orders={'Ticker': sorted_tickers_yield},
-                                        text='Text_Label',
-                                        color_discrete_sequence=px.colors.qualitative.Prism
-                                    )
-                                    
-                                    fig_stacked.update_traces(
-                                        textposition='inside', 
-                                        insidetextanchor='middle'
-                                    )
-                                    
-                                    fig_stacked.update_layout(
-                                        xaxis_title=f"Annual Dividend Yield on Cost (%) [{selected_stack_period}]",
-                                        yaxis_title="ชื่อหุ้น (Ticker)",
-                                        height=max(350, len(sorted_tickers_yield) * 45),
-                                        margin=dict(l=10, r=20, t=20, b=20),
-                                        legend_title="ปีที่ได้รับ (Year)"
-                                    )
-                                    st.plotly_chart(fig_stacked, use_container_width=True)
+                                # Logic อัตโนมัติ: ถ้าเป็น Stop Loss หรือ ขาดทุน ให้บังคับเป็นค่าลบ
+                                final_result = float(p_result)
+                                if "Stop Loss" in p_type or "ขาดทุน" in p_status:
+                                    final_result = -abs(final_result) 
                                 else:
-                                    st.info("ไม่มีข้อมูลเพียงพอสำหรับกราฟ Stacked Bar รายปีนี้")
-                            else:
-                                st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือกสำหรับกราฟนี้")
-                else:
-                    st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
-                                        
-                                            
-            #########################
-            with tab_journal:
-                st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
-                
-                # --- ส่วนการ Upload ไฟล์ ---
-                with st.expander("📤 อัปโหลดข้อมูลจากไฟล์ Excel/CSV"):
-                    uploaded_file = st.file_uploader("เลือกไฟล์ของคุณ", type=['csv', 'xlsx', 'xls'])
-                    if uploaded_file:
-                        if st.button("ยืนยันการนำเข้าข้อมูล"):
-                            load_data_from_file(uploaded_file)
-                # --------------------------
-                
-                ################ เรียกการคำนวนนับจำนวนวันถือหุ้น #####################
-                def calculate_journal_stats(df):
-                    df = df[df['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
-                    
-                    # 1. จัดการคอลัมน์และคำนวณวันที่
-                    if 'วันที่ซื้อ' not in df.columns: df['วันที่ซื้อ'] = df['วันที่'] 
-                    if 'วันที่ขาย' not in df.columns: df['วันที่ขาย'] = df['วันที่'] 
-                    
-                    df['วันที่ซื้อ'] = pd.to_datetime(df['วันที่ซื้อ'])
-                    df['วันที่ขาย'] = pd.to_datetime(df['วันที่ขาย'])
-                    df['Holding_Days'] = (df['วันที่ขาย'] - df['วันที่ซื้อ']).dt.days.clip(lower=0)
-                    
-                    # 2. คำนวณเป็น % (Profit / Cost) * 100
-                    df['ROI_Percent'] = (df['กำไร/ขาดทุน (บาท)'] / df['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
-                    
-                    df['Year'] = df['วันที่ขาย'].dt.year
-                    df['Month'] = df['วันที่ขาย'].dt.month
-                    
-                    # 3. สรุปผลเป็น % ตามที่ต้องการ
-                    stats = df.groupby(['Year', 'Month']).agg(
-                        Avg_Profit_Pct=('ROI_Percent', lambda x: x[x>0].mean()),
-                        Avg_Loss_Pct=('ROI_Percent', lambda x: x[x<=0].mean()),
-                        Win_Rate=('ROI_Percent', lambda x: (x>0).mean() * 100),
-                        Trade_Count=('ROI_Percent', 'count'),
-                        Max_Profit_Pct=('ROI_Percent', 'max'),
-                        Max_Loss_Pct=('ROI_Percent', 'min'),
-                        Avg_Days_Win=('Holding_Days', lambda x: x[df['ROI_Percent']>0].mean()),
-                        Avg_Days_Loss=('Holding_Days', lambda x: x[df['ROI_Percent']<=0].mean())
-                    )
-                    stats = stats.round({'Avg_Days_Win': 0, 'Avg_Days_Loss': 0})
-                    stats = stats.round(2)
-                    return stats
-                ########################################################################
-            
-                ### แสดงข้อมูลสถิติ รายเดือน รายปี ####
-                if st.session_state.journal_data:
-                    df_journal = pd.DataFrame(st.session_state.journal_data)
-                    
-                    # --- เริ่มต้น Data Migration ---
-                    cols_to_check = ['วันที่ซื้อ', 'วันที่ขาย']
-                    for col in cols_to_check:
-                        if col not in df_journal.columns:
-                            df_journal[col] = df_journal['วันที่']
-                    
-                    df_journal['วันที่ซื้อ'] = pd.to_datetime(df_journal['วันที่ซื้อ'], errors='coerce')
-                    df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                    st.session_state.journal_data = df_journal.to_dict('records')
-                    # --- จบการ Data Migration ---
-                
-                    # 2. ส่วนสรุป Metric 3 ค่าด้านบน (อิงจากช่วงเวลาที่เลือก)
-                    with st.expander("📊 สถิติการเทรดรายเดือน", expanded=False):
-                        stats_df = calculate_journal_stats(df_journal)
-                        
-                        st.markdown("##### 🎯 สถิติการเทรดจริง & การปรับจุดคัทลอส (RR 2:1)")
-                        period = st.radio("ดูค่าเฉลี่ยย้อนหลัง:", ["3 เดือน", "6 เดือน", "1 ปี"], horizontal=True, key="stats_period")
-                        
-                        months_map = {"3 เดือน": 3, "6 เดือน": 6, "1 ปี": 12}
-                        cutoff_date = pd.Timestamp.now() - pd.DateOffset(months=months_map[period])
-                        
-                        if 'วันที่ขาย' not in df_journal.columns:
-                            df_journal['วันที่ขาย'] = df_journal['วันที่']
-                        
-                        df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                        
-                        df_period = df_journal[(df_journal['วันที่ขาย'] >= cutoff_date) & 
-                                               (df_journal['สถานะ'] == 'Closed (ขายแล้ว)')].copy()
-                        
-                        if not df_period.empty:
-                            if 'วันที่ซื้อ' not in df_period.columns:
-                                df_period['วันที่ซื้อ'] = df_period['วันที่']
-                            if 'วันที่ขาย' not in df_period.columns:
-                                df_period['วันที่ขาย'] = df_period['วันที่']
+                                    final_result = abs(final_result)  
                                 
-                            df_period['วันที่ซื้อ'] = pd.to_datetime(df_period['วันที่ซื้อ'], errors='coerce')
-                            df_period['วันที่ขาย'] = pd.to_datetime(df_period['วันที่ขาย'], errors='coerce')
-                            df_period['Holding_Days'] = (df_period['วันที่ขาย'] - df_period['วันที่ซื้อ']).dt.days.clip(lower=0)
-                            
-                            col_profit_loss = 'กำไร/ขาดทุน (บาท)'
-                            col_cost = 'ต้นทุน (บาท)'
-                            
-                            df_period[col_profit_loss] = pd.to_numeric(df_period[col_profit_loss], errors='coerce')
-                            df_period[col_cost] = pd.to_numeric(df_period[col_cost], errors='coerce')
-                            
-                            w_rate = (df_period[col_profit_loss] > 0).mean() * 100
-                            
-                            profit_mask = (df_period[col_profit_loss] > 0) & (df_period[col_cost] > 0)
-                            profit_series = (df_period.loc[profit_mask, col_profit_loss] / df_period.loc[profit_mask, col_cost]) * 100
-                            avg_profit = profit_series.clip(upper=500).mean() if not profit_series.empty else 0
-                
-                            loss_mask = (df_period[col_profit_loss] <= 0) & (df_period[col_cost] > 0)
-                            loss_series = (df_period.loc[loss_mask, col_profit_loss] / df_period.loc[loss_mask, col_cost]) * 100
-                            loss_series = loss_series[loss_series >= -100] 
-                            avg_loss = loss_series.mean() if not loss_series.empty else 0
-                            
-                            loss_adj = (avg_profit / 2) * -1
-                            
-                            c1, c2, c3 = st.columns(3)
-                            c1.metric("Win Rate", f"{w_rate:.1f} %")
-                            c2.metric("Avg P/L", f"{avg_profit:.1f}% / {avg_loss:.1f}%")
-                            c3.metric("Rec. Cut Loss (RR 2:1)", f"{loss_adj:.1f} %")
-                        else:
-                            st.info("ไม่มีข้อมูลย้อนหลังในช่วงเวลานี้")
-                        
-                        st.markdown("---")
-                        
-                        if not stats_df.empty:
-                            years = sorted(stats_df.index.get_level_values('Year').unique())
-                            selected_year = st.selectbox("เลือกปีที่ต้องการดูสถิติ:", years, key="stats_year")
-                            
-                            year_data = stats_df.loc[selected_year]
-                            
-                            styled_df = year_data.style.format({
-                                'Avg_Profit_Pct': '{:.2f} %',
-                                'Avg_Loss_Pct': '{:.2f} %',
-                                'Win_Rate': '{:.2f} %',
-                                'Max_Profit_Pct': '{:.2f} %',
-                                'Max_Loss_Pct': '{:.2f} %',
-                                'Avg_Days_Win': '{:.0f} วัน', 
-                                'Avg_Days_Loss': '{:.0f} วัน'
-                            })
-                            st.table(styled_df)
-                
-                    ########################################################################
-                    # 3. ตารางประวัติ 
-                    df_journal = pd.DataFrame(st.session_state.journal_data)
-                    df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])            
-                    
-                    df_journal['temp_sort'] = df_journal['สถานะ'].apply(lambda x: 0 if "Open" in x else 1)
-                    df_journal = df_journal.sort_values(by=['temp_sort', 'วันที่'], ascending=[True, False])
-                    df_journal = df_journal.drop(columns=['temp_sort'])
-                
-                    with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=False):
-                        items_per_page = 50
-                        total_pages = (len(df_journal) - 1) // items_per_page + 1
-                        page = st.number_input("หน้า:", min_value=1, max_value=total_pages, value=1, key="journal_page")
-                        
-                        start_idx = (page - 1) * items_per_page
-                        df_display = df_journal.iloc[start_idx : start_idx + items_per_page]
-                        
-                        edited_journal = st.data_editor(df_display, use_container_width=True, key="journal_editor")
-                        
-                        if st.button("💾 อัปเดตตารางหน้านี้", key="save_journal_page"):
-                            edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] = pd.to_numeric(edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'], errors='coerce')
-                            edited_journal['จำนวนหุ้นที่ซื้อ'] = pd.to_numeric(edited_journal['จำนวนหุ้นที่ซื้อ'], errors='coerce')
-                            edited_journal['ต้นทุน (บาท)'] = edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] * edited_journal['จำนวนหุ้นที่ซื้อ']
-                            
-                            date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
-                            for col in date_cols:
-                                if col in edited_journal.columns:
-                                    edited_journal[col] = pd.to_datetime(edited_journal[col], errors='coerce').dt.strftime('%Y-%m-%d')
-                            
-                            st.session_state.journal_data = edited_journal.to_dict('records')
-                            save_journal()
-                            st.success("บันทึกข้อมูลเรียบร้อยแล้วครับ!")
-                        
-                        csv = df_journal.to_csv(index=False).encode('utf-8-sig')
-                        st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv", key="export_journal_csv")
-                else:
-                    st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
-            
-            
-                #################################################
-                # --- ตารางแสดงแผนการเทรด ---
-                with tab_plan:
-                    st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
-                    
-                    # 1. ส่วนฟอร์มเพิ่มหุ้นใหม่
-                    with st.form("trading_plan_form", clear_on_submit=True):
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
-                            entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
-                            stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
-                            support = st.number_input("แนวรับ:", min_value=0.0, format="%.2f", value=0.0)
-                        with col2:
-                            resistance = st.number_input("แนวต้าน:", min_value=0.0, format="%.2f", value=0.0)
-                            take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
-                            image_url = st.text_input("วาง Link รูปภาพ (URL):")
-                        
-                        submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
-                    
-                    if submit_button:
-                        if not ticker:
-                            st.error("กรุณาระบุชื่อหุ้นครับ!")
-                        else:
-                            from datetime import datetime
-                            
-                            # 1. สร้าง Dictionary ของหุ้นใหม่
-                            new_data = {
-                                'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
-                                'Stop_Loss': stop_loss, 'แนวรับ': support, 'แนวต้าน': resistance, 
-                                'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
-                                'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                'Image_URL': image_url, 'Alert_Date': ''
-                            }
-                            
-                            # 2. โหลดข้อมูลปัจจุบันจาก Google Sheet ออกมาก่อน
-                            current_df = load_data("TradingPlan")
-                            
-                            # ถ้าตารางว่าง ให้สร้าง DataFrame ใหม่ขึ้นมาเลย
-                            if current_df is None or current_df.empty:
-                                final_df = pd.DataFrame([new_data])
-                            else:
-                                # รวมหุ้นเดิมกับหุ้นใหม่เข้าด้วยกัน
-                                new_df = pd.DataFrame([new_data])
-                                final_df = pd.concat([current_df, new_df], ignore_index=True)
+                                transaction_date_str = str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else str(p_buy_date)
                                 
-                            # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน clear_and_save_data
-                            # (เพราะฟังก์ชันนี้ลบของเก่าแล้วเขียนทับใหม่ เราจึงต้องส่ง 'ข้อมูลก้อนใหม่' ที่รวมตัวเก่าไปให้)
-                            if clear_and_save_data(final_df, "TradingPlan"):
-                                st.success("บันทึกแผนเรียบร้อย!")
-                                st.cache_data.clear()
+                                # 1. จัดการข้อมูล Portfolio
+                                found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
+                                
+                                if "ซื้อ" in p_type and p_status != "Closed (ขายแล้ว)":
+                                    log_cash_transaction(date=transaction_date_str, trans_type="ซื้อหุ้น " + ticker_upper, amount=-(total_val + p_comm), note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}")
+                                    st.session_state.cash_balance -= (total_val + p_comm)
+                                    
+                                    if found_idx != -1:
+                                        old = st.session_state.my_portfolio[found_idx]
+                                        new_shares = old['shares'] + p_qty
+                                        new_cost = ((old['shares'] * old['avg_price']) + total_val) / new_shares
+                                        st.session_state.my_portfolio[found_idx] = {'หุ้น': ticker_upper, 'shares': new_shares, 'avg_price': new_cost, 'Sector': p_sector}
+                                    else:
+                                        st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price, 'Sector': p_sector})
+                                
+                                else: # กรณีขาย
+                                    log_cash_transaction(date=transaction_date_str, trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
+                                    st.session_state.cash_balance += (total_val - p_comm)
+                                    
+                                    if found_idx != -1:
+                                        st.session_state.my_portfolio[found_idx]['shares'] -= p_qty
+                                        if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
+                                            st.session_state.my_portfolio.pop(found_idx)
+                                
+                                # 2. เพิ่มข้อมูลเข้า Journal (รวม Sector)
+                                if "journal_data" not in st.session_state:
+                                    st.session_state.journal_data = []
+                                    
+                                new_entry = {
+                                    "วันที่": transaction_date_str, 
+                                    "วันที่ซื้อ": str(p_buy_date),
+                                    "วันที่ขาย": str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else "",
+                                    "หุ้น": ticker_upper,
+                                    "Sector": p_sector,
+                                    "สถานะ": p_status,
+                                    "ประเภท": p_type,
+                                    "กำไร/ขาดทุน (บาท)": final_result,
+                                    "ต้นทุน (บาท)": total_val,
+                                    "ราคาหุ้นที่ซื้อ (บาท/หุ้น)": p_price,
+                                    "จำนวนหุ้นที่ซื้อ": p_qty,
+                                    "เหตุผล": p_reason
+                                }
+                                st.session_state.journal_data.append(new_entry)
+                                
+                                # 3. บันทึกข้อมูล
+                                save_portfolio()
+                                save_journal()
+                                save_cash_balance(st.session_state.cash_balance)
+                                save_portfolio_snapshot()
+                                
+                                st.success(f"บันทึก {ticker_upper} สำเร็จ! (กำไร/ขาดทุน: {final_result:,.2f} ฿)")
                                 st.rerun()
-                            else:
-                                st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ")
-             
-                    # 2. ส่วนตารางแสดงผล
-                    st.divider()
-                    st.subheader("📊 ตารางแผนการเทรดของฉัน")
-                    plan_df = load_data("TradingPlan")
-                    
-                    # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
-                    cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
-                    
-                    if plan_df.empty or 'Ticker' not in plan_df.columns:
-                        plan_df = pd.DataFrame(columns=cols)
-                    else:
-                        plan_df.columns = plan_df.columns.str.strip()
-                    
-                    # คำนวณข้อมูล
-                    if not plan_df.empty and 'Ticker' in plan_df.columns:
-                        plan_df.columns = plan_df.columns.str.strip()
-                        
-                        # แปลงคอลัมน์ตัวเลข
-                        target_cols = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
-                        for c in target_cols:
-                            if c in plan_df.columns:
-                                plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
-                            else:
-                                plan_df[c] = 0.0
-                        
-                        # ดึงราคาตลาด (Batch)
-                        tickers = [f"{t}.BK" for t in plan_df['Ticker'].unique()]
-                        try:
-                            price_data = yf.download(tickers, period="1d", group_by='ticker', progress=False)['Close']
-                            def get_price(t):
-                                symbol = f"{t}.BK"
-                                try:
-                                    if isinstance(price_data, pd.DataFrame): return float(price_data[symbol].iloc[-1])
-                                    return float(price_data.iloc[-1])
-                                except: return 0.0
-                            plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(get_price)
-                        except:
-                            plan_df['ราคาตลาด'] = 0.0
-                    
-                        # คำนวณห่างจาก SL และสถานะ
-                        plan_df['ห่างจาก_SL(%)'] = np.where(plan_df['ราคาตลาด'] > 0, ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100), 0.0).round(2)
-                        plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-                    
-                    # แสดงตาราง (ลบ Alert_Date ออกจาก column_config แล้ว)
-                    edited_df = st.data_editor(
-                        plan_df[cols],
-                        column_config={
-                            "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
-                            "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
-                            "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
-                            "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
-                            "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
-                            "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
-                            "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
-                            "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
-                            "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"),
-                            "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
-                        },
-                        use_container_width=True, 
-                        key="fixed_plan_editor_v2", 
-                        num_rows="dynamic"
-                    )
-                    
-                    if st.button("💾 บันทึกการแก้ไข"):
-                        final_df = edited_df.copy()
-                        final_df['สถานะ'] = "" # ล้างค่าให้ระบบคำนวณใหม่
-                        
-                        for c in cols:
-                            if c not in final_df.columns: final_df[c] = ""
                                 
-                        if clear_and_save_data(final_df[cols], "TradingPlan"):
-                            st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
-                            st.cache_data.clear()
-                            st.rerun()
-        
-    ###################################################################
-    # # --- ฟังก์ชัน Main tap stock Finish---
-    ###################################################################
-    # 2. ส่วน TFEX
-    with tab_tfex:
-        st.subheader("📝 ระบบเทรด TFEX")
-        
-        # 1. โหลดข้อมูล
-        tfex_df = load_data("TFEX_History") 
-        cash_df = load_data("Cash_Flow")
-        
-        # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
-        # สมมติว่าถ้ายังไม่ปิด Close_Price จะเป็น 0 หรือเป็นค่าว่าง
-        # หากคอลัมน์พี่อ้ำชื่ออื่น (เช่น 'Status' ที่บอกว่า 'Open') ให้เปลี่ยนในบรรทัดถัดไปครับ
-        closed_trades = tfex_df[tfex_df['Close_Price'] > 0] if not tfex_df.empty and 'Close_Price' in tfex_df.columns else tfex_df
-        total_pnl = closed_trades['Net_Profit'].sum() if not closed_trades.empty and 'Net_Profit' in closed_trades.columns else 0
-        
-        # 3. คำนวณเงินต้นสุทธิ
-        # ใช้ .astype(str).str.lower() เพื่อป้องกันปัญหาตัวอักษรพิมพ์เล็ก/ใหญ่
-        total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum() if not cash_df.empty else 0
-        total_withdraw = cash_df[cash_df['Type'].astype(str).str.lower() == 'withdraw']['Amount'].sum() if not cash_df.empty else 0
-        net_capital = total_deposit - total_withdraw
-        
-        # 4. คำนวณพอร์ต (ใช้ Realized PnL)
-        net_worth = net_capital + total_pnl
-        growth_pct = (total_pnl / net_capital * 100) if net_capital > 0 else 0
-        
-        # แสดง Dashboard
-        c1, c2, c3 = st.columns(3)
-        c1.metric("มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท")
-        c2.metric("กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท")
-        c3.metric("การเติบโต", f"{growth_pct:.2f} %")
-        st.divider()
-    
-        # --- เริ่มแถวที่ 2: Performance Metrics (รวมเชิงลึก) ---
-        st.subheader("📊 Performance Monitor")
-        
-        # 1. สร้าง Filter ช่วงเวลา
-        period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
-        selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
-        
-        # 2. กรองข้อมูลตามช่วงเวลา
-        perf_df = closed_trades.copy()
-        perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
-        days_ago = period_options[selected_period]
-        if days_ago != 9999:
-            cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
-            perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
-    
-        # 3. คำนวณ Metrics ทั้งหมดจาก perf_df ที่กรองแล้ว
-        total_trades = len(perf_df)
-        win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
-        win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
-        
-        avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
-        avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if (total_trades - win_trades) > 0 else 0
-        rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
-        
-        gross_profit = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum()
-        gross_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()
-        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
-        
-        expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
-        
-        # คำนวณเชิงลึก (Efficiency Analysis)
-        perf_df['Points'] = perf_df['Net_Profit'] / 200
-        avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
-        avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
-        
-        # Max Drawdown (คำนวณจากช่วงที่กรอง)
-        temp_df = perf_df.sort_values('Date_Close')
-        temp_df['Cumulative'] = temp_df['Net_Profit'].cumsum()
-        max_drawdown = (temp_df['Cumulative'] - temp_df['Cumulative'].cummax()).min() if not temp_df.empty else 0
-        
-        # ระยะเวลาถือครอง
-        perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
-        perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
-        avg_hold = perf_df['Hold_Days'].mean() if not perf_df.empty else 0
-    
-        # 4. แสดงผลแบบ Grid
-        # แถวแรก
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Win Rate", f"{win_rate:.1f}%")
-        c2.metric("R:R Ratio", f"{rr_ratio:.2f}")
-        c3.metric("Profit Factor", f"{profit_factor:.2f}")
-        c4.metric("Expectancy", f"{expectancy:,.0f}")
-        
-        st.write("---") # เส้นคั่น
-        
-        # แถวสอง (เชิงลึก)
-        e1, e2, e3, e4 = st.columns(4)
-        e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
-        e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
-        e3.metric("Max Drawdown", f"{max_drawdown:,.0f} บาท")
-        e4.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
-        
-        st.divider()
-        
-        # 3. สร้าง 3 Tabs
-        sub_tfex_input, sub_tfex_close, sub_tfex_cash, sub_tfex_history = st.tabs([
-        "➕ บันทึกเทรดใหม่", 
-        "🏁 ปิดสถานะเทรด", 
-        "➕ บันทึกเติม/ถอนเงิน", 
-        "📜 ประวัติและ Portfolio"
-        ])
-        with sub_tfex_input:
-            st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
-            
-            # ดึงค่า ATR และ Multiplier ที่ใช้งานล่าสุดจาก session_state มาเป็นค่าตั้งต้น
-            current_atr = st.session_state.get('active_atr', 6.5)
-            
-            c1, c2, c3 = st.columns(3)
-            # เปลี่ยนเป็น Slider เลือกความเสี่ยง 0% ถึง 5% (เพิ่มทีละ 0.25% เพื่อความละเอียด)
-            risk_pct = c1.slider("ความเสี่ยงที่ยอมรับได้ (% ของพอร์ต)", min_value=0.0, max_value=5.0, value=1.0, step=0.25)
-            
-            # ⭐️ ช่องกรอก ATR ที่เชื่อมโยงกับค่ากลาง (สามารถพิมพ์แก้ไขเพื่อดูจาก TradingView ได้เช่นกัน)
-            user_atr = c2.number_input("ค่า ATR ปัจจุบัน (แก้ไขได้)", value=float(current_atr), step=0.1)
-            
-            # ช่องกรอกตัวคูณ Multiplier สำหรับ ATR
-            atr_multiplier = c3.number_input("ตัวคูณ ATR (Multiplier)", value=1.5, step=0.1)
-            
-            # คำนวณระยะ Stop Loss จาก ATR ที่ใช้งานจริง (ATR * Multiplier)
-            stop_loss_points = user_atr * atr_multiplier
-            st.caption(f"📍 ระยะจุดตัดขาดทุนคำนวณจาก ATR อัตโนมัติ: **{stop_loss_points:.2f} จุด** (ATR: {user_atr} x Multiplier: {atr_multiplier})")
-            
-            # คำนวณเงินที่ยอมขาดทุนได้จริงจากเปอร์เซ็นต์พอร์ต (Net Worth)
-            risk_amount = net_worth * (risk_pct / 100.0)
-            
-            # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
-            im_per_contract = IM_PER_CONTRACT 
-            
-            # คำนวณสัญญา (สมมติ 1 จุด TFEX = 200 บาท)
-            contract_by_risk = risk_amount / (stop_loss_points * 200) if (stop_loss_points * 200) > 0 else 0
-            contract_by_margin = net_worth / im_per_contract if im_per_contract > 0 else 0 # net_worth ดึงมาจาก Dashboard
-            
-            max_contracts = min(int(contract_by_risk), int(contract_by_margin))
-            
-            # แสดงผลแบบมืออาชีพ
-            st.info(f"📋 ข้อมูลการคำนวณ:")
-            st.write(f"- เงินต้นรวม (Net Worth): {net_worth:,.0f} บาท")
-            st.write(f"- ยอมขาดทุนได้สูงสุด: **{risk_amount:,.2f} บาท** ({risk_pct}%)")
-            st.write(f"- ค่า IM ปัจจุบัน: {im_per_contract:,.0f} บาท/สัญญา")
-            
-            if max_contracts <= 0:
-                st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
-            else:
-                st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
-                        
-            # 1. แสดงรายการที่ถืออยู่ (Open Positions)
-            # 1. แสดงรายการที่ถืออยู่ (Open Positions)
-            st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
-            
-            tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
-            open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
-            
-            if not open_positions.empty:
-                # ⭐️ เชื่อมโยงค่า ATR และ Multiplier ที่ผู้ใช้ใช้งานล่าสุด (จากฟอร์มด้านบน) มาแสดงและคำนวณในตาราง
-                open_positions['ATR'] = user_atr 
-                
-                # แปลงข้อมูลราคาเปิดและ ATR ให้เป็นตัวเลขเพื่อความปลอดภัย
-                open_positions['Open_Price'] = pd.to_numeric(open_positions['Open_Price'], errors='coerce')
-                open_positions['ATR'] = pd.to_numeric(open_positions['ATR'], errors='coerce')
-                
-                # คำนวณจุด Stop Loss จาก ATR แยกตามสถานะ Long / Short ของแต่ละไม้
-                # Long: ราคาเปิด - (ATR * Multiplier)
-                # Short: ราคาเปิด + (ATR * Multiplier)
-                open_positions['ATR_Stop_Loss'] = open_positions.apply(
-                    lambda row: (row['Open_Price'] - (row['ATR'] * atr_multiplier)) if row['Status'] == 'Long' 
-                    else (row['Open_Price'] + (row['ATR'] * atr_multiplier)), 
-                    axis=1
-                )
-                
-                # แสดงผลตารางพร้อมคอลัมน์ ATR และ Stop Loss ที่คำนวณสดๆ ตรงกัน
-                st.dataframe(
-                    open_positions[['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price', 'ATR', 'ATR_Stop_Loss']], 
-                    use_container_width=True
-                )
-            else:
-                st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
-            
-            # คำนวณ Margin Utilization
-            total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT 
-            utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
-            
-            # --- แบ่งหน้าจอเป็น 2 คอลัมน์ เพื่อวางกราฟคู่กัน ---
-            col_left, col_right = st.columns(2)
-            
-            with col_left:
-                st.subheader("🎯 สถิติแพ้ / ชนะ (Win / Loss)")
-                # กรองเฉพาะรายการที่ปิดสถานะแล้ว (Close_Price > 0) มาคำนวณ Win/Loss
-                closed_positions = tfex_df[tfex_df['Close_Price_Cleaned'] > 0]
-                
-                if not closed_positions.empty and 'Win_Lose' in closed_positions.columns:
-                    win_count = len(closed_positions[closed_positions['Win_Lose'] == 'Win'])
-                    lose_count = len(closed_positions[closed_positions['Win_Lose'] == 'Lose'])
-                else:
-                    win_count, lose_count = 0, 0
-                
-                # สร้างกราฟโดนัทแสดง Win/Loss ด้วย Plotly
-                fig_winloss = go.Figure(go.Pie(
-                    labels=['Win (ชนะ)', 'Lose (แพ้)'],
-                    values=[win_count, lose_count],
-                    hole=0.5,
-                    marker_colors=['#26A69A', '#EF5350']
-                ))
-                fig_winloss.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), showlegend=True)
-                st.plotly_chart(fig_winloss, use_container_width=True)
-            
-            with col_right:
-                # 2. สร้าง Gauge Chart (กราฟ Margin เดิมของคุณ)
-                fig_gauge = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = utilization,
-                    domain = {'x': [0, 1], 'y': [0, 1]},
-                    title = {'text': "Margin Utilization (%)"},
-                    gauge = {
-                        'axis': {'range': [0, 100]},
-                        'bar': {'color': "darkblue"},
-                        'steps': [
-                            {'range': [0, 50], 'color': "#26A69A"},
-                            {'range': [50, 80], 'color': "#FBC02D"},
-                            {'range': [80, 100], 'color': "#EF5350"}
-                        ],
-                        'threshold': {
-                            'line': {'color': "white", 'width': 4},
-                            'thickness': 0.75,
-                            'value': utilization
-                        }
-                    }
-                ))
-                
-                fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
-                st.plotly_chart(fig_gauge, use_container_width=True)
-                            
-            st.divider()
-            
-            # 2. ส่วนของฟอร์มรับค่าการเทรด TFEX และการดึง ATR อัตโนมัติด้วยปุ่มกด
-            with st.form("tfex_entry_form", clear_on_submit=True):
-                st.subheader("🛡 คำนวณขนาดสัญญาและระบบ ATR Stop Loss")
-                
-                # ส่วนสำหรับกดปุ่มดึงค่า ATR ล่าสุด
-                col_btn1, col_btn2 = st.columns([1, 2])
-                with col_btn1:
-                    fetch_atr_clicked = st.form_submit_button("🔄 ดึงค่า ATR ล่าสุด")
-                
-                # จัดการเก็บค่า ATR ไว้ใน session_state เมื่อมีการกดปุ่ม
-                if fetch_atr_clicked:
-                    with st.spinner("กำลังดึงข้อมูลราคาจากตลาด..."):
-                        latest_atr = get_auto_atr_cached("^SET50")
-                        st.session_state['active_atr'] = latest_atr
-                        st.success(f"ดึงค่า ATR สำเร็จ: {latest_atr} จุด")
-                
-                # กำหนดค่า ATR เริ่มต้นหากยังไม่เคยกดปุ่ม (Default เป็น 6.5 หรือค่าล่าสุดใน session)
-                default_atr = st.session_state.get('active_atr', 6.5)
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    date_open = st.date_input("วันที่เปิด")
-                    series = st.text_input("Series (เช่น S50U26)", value="S50U26")
-                    Status = st.selectbox("สถานะ:", ["Long", "Short"])
-                with col2:
-                    entry = st.number_input("ราคา Open:", format="%.2f", value=950.0)
-                    size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
-                    trade_id_input = st.text_input("Trade ID (เว้นว่างเพื่อรันอัตโนมัติ):")  
-                with col3:
-                    comm_input = st.number_input("ค่าคอมมิชชัน + ค่าธรรมเนียม (บาท):", min_value=0.0, step=10.0, value=50.0)
+                    # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
+                    st.divider()
+                    st.subheader("📊 สรุปพอร์ตการลงทุน")
                     
-                    # ⭐️ เพิ่มช่องให้พิมพ์แก้ไขค่า ATR ได้เอง (โดยดึงค่า default มาแสดง และยอมให้พิมพ์ทับได้เพื่อดูจาก TradingView)
-                    user_atr = st.number_input("ค่า ATR (แก้ไขได้):", min_value=0.1, step=0.1, value=float(default_atr))
+                    if "my_portfolio" not in st.session_state:
+                        load_portfolio()
                     
-                    # ตัวคูณ ATR (Multiplier)
-                    atr_multiplier = st.number_input("ตัวคูณ ATR (Multiplier):", min_value=0.5, step=0.1, value=1.5)
-                    
-                    # คำนวณจุด SL จากค่า ATR ที่ผู้ใช้ใช้งานจริง (user_atr)
-                    calculated_sl_pts = user_atr * atr_multiplier
-                    st.write(f"📌 Stop Loss แนะนำ: **{calculated_sl_pts:.2f} จุด** (จาก ATR: {user_atr})")
-                    
-                    reason = st.text_area("เหตุผลที่เข้าเทรด:")
-                
-                # ปุ่มยืนยันการเปิดสถานะเทรดจริง
-                submit_trade = st.form_submit_button("เปิดสถานะเทรด")
-                
-                if submit_trade:
-                    final_trade_id = trade_id_input.strip()
-                    if not final_trade_id:
-                        final_trade_id = f"TX-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
+                    if st.session_state.my_portfolio:
+                        portfolio_list = []
+                        total_invest = 0
+                        total_value = 0
                         
-                    # คำนวณราคา Stop Loss จริงบนกระดาน โดยใช้ calculated_sl_pts ที่คำนวณจาก user_atr
-                    calculated_sl_price = (entry - calculated_sl_pts) if Status == "Long" else (entry + calculated_sl_pts)
-                        
-                    new_record = {
-                        "Trade_ID": final_trade_id,
-                        "Date_Open": date_open.strftime("%Y-%m-%d"),
-                        "Date_Close": "",          
-                        "Series": series,
-                        "Status": Status,
-                        "Size": size,
-                        "Open_Price": entry,
-                        "Close_Price": 0,          
-                        "Realized": 0,            
-                        "Comm": comm_input,        
-                        "Net_Profit": 0,
-                        "Win_Lose": "",            
-                        "Reason": f"{reason} | ATR SL: {calculated_sl_price:.2f}"
-                    }
-                    
-                    df_to_save = pd.DataFrame([new_record])
-                    
-                    with st.spinner("⏳ กำลังเปิดสถานะและบันทึกลง Google Sheets..."):
-                        if save_data_to_sheet(df_to_save, "TFEX_History"):
-                            st.cache_data.clear()  
-                            st.toast("เปิดสถานะเทรดเรียบร้อย! 🎉", icon="✅")
-                            st.rerun()
-                            
-        with sub_tfex_close:
-            st.subheader("🏁 ปิดสถานะเทรด")
-            
-            # ดึงข้อมูลจากฟังก์ชัน load_data สดๆ ใหม่ๆ
-            tfex_df = load_data("TFEX_History")
-            
-            # กรองเฉพาะรายการที่ยังถืออยู่
-            tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
-            open_trades = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
-            
-            if not open_trades.empty:
-                # ให้เลือก Trade_ID
-                selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
-                
-                # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
-                trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
-                st.info(f"🔍 รายละเอียดออเดอร์เดิม: **{trade_detail['Status']}** จำนวน **{trade_detail['Size']}** สัญญา ที่ราคา **{trade_detail['Open_Price']}**")
-                
-                # ฟอร์มกรอกข้อมูลปิดสถานะ
-                c_col1, c_col2 = st.columns(2)
-                close_price = c_col1.number_input("ราคาปิด:", value=float(trade_detail['Open_Price']), step=0.1, format="%.2f")
-                close_date = c_col2.date_input("วันที่ปิด:")
-                
-                if st.button("ยืนยันการปิดสถานะ", use_container_width=True, type="primary"):
-                    # บันทึกปิดสถานะพร้อม Loading Spinner และล้าง Cache ทันที
-                    with st.spinner("⏳ กำลังบันทึกการปิดสถานะและคำนวณผลลัพธ์..."):
-                        success = update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
-                        if success:
-                            st.cache_data.clear()  # ล้าง Cache ข้อมูลในหน่วยความจำ
-                            st.toast("ปิดสถานะสำเร็จ และคำนวณกำไรเรียบร้อย! 🏁", icon="🏆")
-                            st.rerun()             # โหลดหน้าจอใหม่เพื่อให้ข้อมูลปัจจุบันที่สุดแสดงทันที
-            else:
-                st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
-                
-        with sub_tfex_cash:
-            st.subheader("💰 บันทึกเติม/ถอนเงิน")
-            
-            with st.form("cash_flow"):
-                col1, col2 = st.columns(2)
-                with col1:
-                    cash_date = st.date_input("วันที่:")
-                    cash_type = st.selectbox("ประเภท:", ["Deposit", "Withdraw"])
-                with col2:
-                    amount = st.number_input("จำนวนเงิน (บาท):", min_value=0.0, step=100.0)
-                    note = st.text_input("หมายเหตุ:")
-                
-                if st.form_submit_button("บันทึกรายการ"):
-                    new_cash = pd.DataFrame([{
-                        "Date": str(cash_date),
-                        "Type": cash_type,
-                        "Amount": amount,
-                        "Note": note
-                    }])
-                    if save_cash_to_gsheet(new_cash, "Cash_Flow"):
-                        st.success("บันทึกข้อมูลเงินเรียบร้อย!")
-                        st.rerun()
-    
-            st.divider()
-            st.write("รายการล่าสุด:")
-            st.dataframe(cash_df, use_container_width=True)
-        
-        with sub_tfex_history:
-            st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
-            
-            if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
-                # 1. จัดเตรียมข้อมูล
-                closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
-                closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
-                
-                # 3. ตารางแสดงราย Series (เปรียบเทียบว่า Series ไหนเทรดแล้วกำไรที่สุด)
-                st.write("📊 สรุปผลงานราย Series:")
-                series_perf = perf_df.groupby('Series').agg({
-                    'Net_Profit': 'sum',
-                    'Trade_ID': 'count'
-                }).rename(columns={'Trade_ID': 'Trades', 'Net_Profit': 'Total PnL'})
-                
-                st.dataframe(series_perf.sort_values(by='Total PnL', ascending=False), use_container_width=True)
-
-                # --- กราฟแสดงการเติบโตของพอร์ต TFEX ---
-                st.subheader("📈 กราฟการเติบโตของพอร์ต (Portfolio Growth)")
-
-                if not perf_df.empty:
-                    # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟ TFEX
-                    c_f1, c_f2 = st.columns([2, 2])
-                    with c_f1:
-                        tfex_view_range = st.selectbox(
-                            "⏳ เลือกช่วงเวลาแสดงผล (TFEX):",
-                            ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
-                            key="tfex_line_view_range"
-                        )
-                    
-                    # แปลงคอลัมน์วันที่ให้เป็น datetime
-                    perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'], errors='coerce')
-                    df_tfex_filtered = perf_df.dropna(subset=['Date_Close']).sort_values('Date_Close').copy()
-                    
-                    max_date = df_tfex_filtered['Date_Close'].max()
-                    initial_capital_base = net_capital  # เงินต้นเริ่มต้น
-                    
-                    # กรองข้อมูลตามช่วงเวลาที่เลือก และคำนวณกำไรย้อนหลังที่ถูกตัดออกไปรวมกับฐานเงินต้น
-                    if tfex_view_range == "3 เดือนล่าสุด":
-                        start_date = max_date - pd.DateOffset(months=3)
-                        past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
-                        initial_capital_base += past_slice['Net_Profit'].sum()
-                        df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
-                    elif tfex_view_range == "6 เดือนล่าสุด":
-                        start_date = max_date - pd.DateOffset(months=6)
-                        past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
-                        initial_capital_base += past_slice['Net_Profit'].sum()
-                        df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
-                    elif tfex_view_range == "1 ปีล่าสุด (YTD / 12M)":
-                        start_date = max_date - pd.DateOffset(years=1)
-                        past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
-                        initial_capital_base += past_slice['Net_Profit'].sum()
-                        df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
-                
-                    if not df_tfex_filtered.empty:
-                        # 2. Dynamic Aggregation: ถ้าระยะเวลานานกว่า 1 ปี ให้ยุบกลุ่มเป็น "รายเดือน" เพื่อความสะอาดของกราฟ
-                        date_span_days = (df_tfex_filtered['Date_Close'].max() - df_tfex_filtered['Date_Close'].min()).days
-                        
-                        if date_span_days > 365 and tfex_view_range == "ทั้งหมด (All Time)":
-                            df_tfex_filtered['Period_Key'] = df_tfex_filtered['Date_Close'].dt.to_period('M')
-                            df_tfex_filtered['Time_Label'] = df_tfex_filtered['Period_Key'].apply(lambda r: r.strftime('%b %Y'))
-                            df_tfex_filtered['Sort_Time'] = df_tfex_filtered['Period_Key'].dt.start_time
-                            agg_freq_text = "รายเดือน (มุมมองระยะยาว)"
-                        else:
-                            df_tfex_filtered['Period_Key'] = df_tfex_filtered['Date_Close'].dt.to_period('W-MON')
-                            df_tfex_filtered['Time_Label'] = df_tfex_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
-                            df_tfex_filtered['Sort_Time'] = df_tfex_filtered['Period_Key'].dt.start_time
-                            agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
-                
-                        with c_f2:
-                            st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
-                
-                        # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
-                        growth_df = df_tfex_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
-                            'Net_Profit': 'sum'
-                        }).sort_values('Sort_Time')
-                        
-                        # คำนวณมูลค่าพอร์ตสะสม
-                        growth_df['Cumulative_Profit'] = growth_df['Net_Profit'].cumsum()
-                        growth_df['Portfolio_Value'] = initial_capital_base + growth_df['Cumulative_Profit']
-                        
-                        # เพิ่มจุดเริ่มต้น (Start Point) ให้กราฟเริ่มสวยงามที่ฐานเงินต้น
-                        start_date_point = growth_df['Sort_Time'].min() - pd.Timedelta(days=1)
-                        start_row = pd.DataFrame({
-                            'Sort_Time': [start_date_point], 
-                            'Time_Label': ['จุดเริ่มต้น'], 
-                            'Portfolio_Value': [initial_capital_base]
-                        })
-                        growth_df = pd.concat([start_row, growth_df[['Sort_Time', 'Time_Label', 'Portfolio_Value']]], ignore_index=True)
-                        growth_df = growth_df.sort_values('Sort_Time').reset_index(drop=True)
-                
-                        # 3. สร้างกราฟเส้นด้วย Plotly
-                        fig_growth = px.line(
-                            growth_df, 
-                            x='Time_Label', 
-                            y='Portfolio_Value',
-                            markers=True,
-                            line_shape='spline'
-                        )
-                        
-                        # ปรับแต่งหน้าตาให้ดูมืออาชีพ พร้อมเผื่อสเกลแกน Y ด้านบนไม่ให้เส้นชนขอบ
-                        y_max = growth_df['Portfolio_Value'].max()
-                        y_min = growth_df['Portfolio_Value'].min()
-                        y_upper_margin = (y_max - y_min) * 0.15 if y_max != y_min else y_max * 0.15
-                
-                        fig_growth.update_traces(line=dict(color='#26A69A', width=3))
-                        fig_growth.update_layout(
-                            xaxis_title="ช่วงเวลา",
-                            yaxis_title="มูลค่าพอร์ต (บาท)",
-                            yaxis=dict(range=[y_min * 0.98, y_max + y_upper_margin]),
-                            margin=dict(l=20, r=20, t=30, b=20),
-                            hovermode="x unified"
-                        )
-                        
-                        st.plotly_chart(fig_growth, use_container_width=True)
-                    else:
-                        st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
-                else:
-                    st.info("ยังไม่มีข้อมูลประวัติการเทรด TFEX ที่ปิดสถานะ")
-
-                # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
-                st.divider()
-                st.subheader("🗓 สรุปผลรายเดือน")
-                if not closed_trades.empty:
-                    # 1. เพิ่มตัวเลือกช่วงเวลา (Quick Filter) สำหรับสรุปผลรายเดือน
-                    col_f1, col_f2 = st.columns([2, 2])
-                    with col_f1:
-                        monthly_view_range = st.selectbox(
-                            "⏳ เลือกช่วงเวลาแสดงผล (สรุปรายเดือน):",
-                            ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
-                            key="monthly_view_range"
-                        )
-                    
-                    # แปลงคอลัมน์วันที่ให้เป็น datetime และสำเนาข้อมูล
-                    closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'], errors='coerce')
-                    df_monthly_filtered = closed_trades.dropna(subset=['Date_Close']).sort_values('Date_Close').copy()
-                    
-                    max_date = df_monthly_filtered['Date_Close'].max()
-                    capital_base_for_monthly = net_capital  # เงินต้นเริ่มต้น
-                    
-                    # กรองข้อมูลตามช่วงเวลาที่ผู้ใช้เลือก
-                    if monthly_view_range == "3 เดือนล่าสุด":
-                        start_date = max_date - pd.DateOffset(months=3)
-                        past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
-                        capital_base_for_monthly += past_slice['Net_Profit'].sum()
-                        df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
-                    elif monthly_view_range == "6 เดือนล่าสุด":
-                        start_date = max_date - pd.DateOffset(months=6)
-                        past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
-                        capital_base_for_monthly += past_slice['Net_Profit'].sum()
-                        df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
-                    elif monthly_view_range == "1 ปีล่าสุด (YTD / 12M)":
-                        start_date = max_date - pd.DateOffset(years=1)
-                        past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
-                        capital_base_for_monthly += past_slice['Net_Profit'].sum()
-                        df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
-                
-                    if not df_monthly_filtered.empty:
-                        # 2. จัดเตรียมและคำนวณค่าต่างๆ ตามข้อมูลที่ถูกกรอง
-                        monthly_perf = df_monthly_filtered.groupby(df_monthly_filtered['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
-                        monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
-                        
-                        # คำนวณค่าสถิติต่างๆ ต่อเนื่อง
-                        monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
-                        monthly_perf['Portfolio_Value'] = capital_base_for_monthly + monthly_perf['Cumulative_Profit']
-                        monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / capital_base_for_monthly) * 100
-                        monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / capital_base_for_monthly) * 100
-                        
-                        # 3. คำนวณสเกลแกน Y ให้เผื่อ Gap ทั้งบนและล่าง (ป้องกันแท่งกราฟชนขอบ)
-                        y1_min = monthly_perf['Net_Profit'].min()
-                        y1_max = monthly_perf['Net_Profit'].max()
-                        # เผื่อสเกลแกน Y ฝั่งซ้าย (Net Profit) ขึ้น/ลง 20%
-                        y1_padding = (y1_max - y1_min) * 0.2 if y1_max != y1_min else abs(y1_max) * 0.2
-                        if y1_padding == 0: y1_padding = 1000
-                        y1_range = [min(0, y1_min) - y1_padding, y1_max + y1_padding]
-                
-                        y2_min = monthly_perf['Cumulative_Pct'].min()
-                        y2_max = monthly_perf['Cumulative_Pct'].max()
-                        # เผื่อสเกลแกน Y ฝั่งขวา (% สะสม) ขึ้น/ลง 20%
-                        y2_padding = (y2_max - y2_min) * 0.2 if y2_max != y2_min else abs(y2_max) * 0.2
-                        if y2_padding == 0: y2_padding = 5
-                        y2_range = [min(0, y2_min) - y2_padding, y2_max + y2_padding]
-                
-                        # 4. วาดกราฟ Plotly Combo
-                        bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in monthly_perf['Net_Profit']]
-                        fig = make_subplots(specs=[[{"secondary_y": True}]])
-                        
-                        fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน", marker_color=bar_colors), secondary_y=False)
-                        fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
-                        
-                        fig.update_layout(
-                            title_text=f"Monthly Performance ({monthly_view_range})", 
-                            height=400, 
-                            margin=dict(l=20, r=20, t=40, b=20), 
-                            showlegend=True
-                        )
-                        
-                        # กำหนดช่วงสเกลแกน Y ทั้งสองฝั่งให้มีระยะห่าง (Gap)
-                        fig.update_yaxes(title_text="กำไร/ขาดทุน (บาท)", range=y1_range, secondary_y=False)
-                        fig.update_yaxes(title_text="% สะสม", range=y2_range, secondary_y=True)
-                
-                        st.plotly_chart(fig, use_container_width=True)
-                        
-                        # 5. สร้างตารางสรุป
-                        def color_negative_red(val):
+                        # ฟังก์ชันกำหนดสีสำหรับตารางพอร์ต
+                        def color_portfolio(val):
                             if isinstance(val, (int, float)):
                                 color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
                                 return f'color: {color}'
                             return None
+                    
+                        for row in st.session_state.my_portfolio:
+                            ticker = row.get('หุ้น', '')
+                            shares = float(row.get('shares', 0))
+                            avg_price = float(row.get('avg_price', 0.0))
+                            sector_val = row.get('Sector', 'General / Unspecified') # ดึง Sector เผื่อไว้ใช้ต่อ
+                            
+                            try:
+                                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+                            except:
+                                m_price = avg_price
+                            
+                            cost_value = shares * avg_price
+                            market_value = shares * m_price
+                            profit = market_value - cost_value
+                            profit_pct = (profit / cost_value * 100) if cost_value > 0 else 0
+                            
+                            portfolio_list.append({
+                                "หุ้น": ticker,
+                                "Sector": sector_val, # เก็บ Sector ไว้ใน DataFrame ด้วย
+                                "จำนวน": shares,
+                                "ต้นทุนเฉลี่ย": avg_price,
+                                "มูลค่าต้นทุน": cost_value,
+                                "ราคาตลาด": m_price,
+                                "มูลค่าตลาด": market_value,
+                                "กำไร/ขาดทุน": profit,
+                                "% กำไร/ขาดทุน": profit_pct
+                            })
+                            total_invest += cost_value
+                            total_value += market_value
+                        
+                        # สรุปยอดรวม
+                        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                        col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.cash_balance:,.0f} ฿")
+                        col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
+                        col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
+                        diff = total_value - total_invest
+                        col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
+                    
+                        # แสดงตารางพอร์ตหลัก
+                        df_p = pd.DataFrame(portfolio_list)
+                        df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
+                        
+                        st.dataframe(
+                            df_display_p.style.format({
+                                "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
+                                "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
+                                "% กำไร/ขาดทุน": "{:.2f}%"
+                            })
+                            .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
+                            .set_properties(**{'text-align': 'right'})
+                            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'right')]}])
+                            , use_container_width=True
+                        )
+                        
+                        if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
+                            st.session_state.edit_mode = True
+                    
+                        # --- ส่วนแสดงกราฟสรุปพอร์ต ---
+                        st.divider()
+                        
+                        # แบ่งคอลัมน์สัดส่วน 25% : 25% : 50%
+                        col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
+                        
+                        # 1. Pie Chart: มูลค่าตลาด (25%)
+                        with col_p1:
+                            st.subheader("🥧 มูลค่าตลาด")
+                            fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4)
+                            fig_pie1.update_traces(
+                                textposition='outside', 
+                                textinfo='label+percent',
+                                textfont=dict(size=9),
+                                automargin=True
+                            )
+                            fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
+                            st.plotly_chart(fig_pie1, use_container_width=True)
+                            st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
+                    
+                        # 2. Pie Chart: มูลค่าต้นทุน (25%)
+                        with col_p2:
+                            st.subheader("🥧 มูลค่าต้นทุน")
+                            fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4)
+                            fig_pie2.update_traces(
+                                textposition='outside', 
+                                textinfo='label+percent',
+                                textfont=dict(size=9),
+                                automargin=True
+                            )
+                            fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
+                            st.plotly_chart(fig_pie2, use_container_width=True)
+                            st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
+                        
+                        # 3. Bar Chart: กำไร/ขาดทุน (50%)
+                        with col_p3:
+                            st.subheader("📈 กำไร/ขาดทุนรายตัว")
+                            text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} / {row['% กำไร/ขาดทุน']:.1f}%" for _, row in df_p.iterrows()]
+                            bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in df_p['กำไร/ขาดทุน']]
+                            
+                            fig_bar = go.Figure(data=[go.Bar(
+                                x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
+                                marker_color=bar_colors, text=text_labels, textposition='auto'
+                            )])
+                            fig_bar.update_traces(textfont_size=10)
+                            fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
+                            st.plotly_chart(fig_bar, use_container_width=True)
+                            st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
+                    
+                        # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
+                        # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
+                        st.divider()
+                        st.subheader("🥧 การกระจายตัวของพอร์ตตามกลุ่มอุตสาหกรรม (Sector Allocation)")
+                    
+                        if not df_p.empty:
+                            # จัดกลุ่มรวมตาม Sector ของหุ้นในพอร์ตปัจจุบัน (ใช้ as_index=False และ reset_index เพื่อความชัวร์)
+                            df_port_sector = df_p.groupby('Sector', as_index=False).agg({
+                                'มูลค่าตลาด': 'sum',
+                                'มูลค่าต้นทุน': 'sum',
+                                'หุ้น': lambda x: ', '.join(x.unique())
+                            }).reset_index(drop=True)
+                            
+                            # 1. คำนวณสัดส่วน % ตาม "มูลค่าตลาด"
+                            total_market_val = df_port_sector['มูลค่าตลาด'].sum()
+                            if total_market_val > 0:
+                                df_port_sector['Market_Weight_Pct'] = (df_port_sector['มูลค่าตลาด'] / total_market_val) * 100
+                            else:
+                                df_port_sector['Market_Weight_Pct'] = 0.0
+                    
+                            # 2. คำนวณสัดส่วน % ตาม "เงินลงทุน (ต้นทุน)"
+                            total_cost_val = df_port_sector['มูลค่าต้นทุน'].sum()
+                            if total_cost_val > 0:
+                                df_port_sector['Cost_Weight_Pct'] = (df_port_sector['มูลค่าต้นทุน'] / total_cost_val) * 100
+                            else:
+                                df_port_sector['Cost_Weight_Pct'] = 0.0
+                                
+                            # เรียงลำดับตามเงินลงทุนต้นทุนจากมากไปน้อย
+                            df_port_sector = df_port_sector.sort_values(by='มูลค่าต้นทุน', ascending=False).reset_index(drop=True)
+                    
+                            # 📊 แบ่ง 2 คอลัมน์สำหรับกราฟโดนัท (เงินลงทุนต้นทุน VS มูลค่าตลาด)
+                            col_sec1, col_sec2 = st.columns(2)
+                    
+                            with col_sec1:
+                                st.markdown("###### 🥧 สัดส่วนตามเงินลงทุน (Cost Weight)")
+                                fig_donut_cost = px.pie(
+                                    df_port_sector,
+                                    names='Sector',
+                                    values='มูลค่าต้นทุน',
+                                    hole=0.4,
+                                    color_discrete_sequence=px.colors.qualitative.Pastel
+                                )
+                                fig_donut_cost.update_traces(
+                                    textinfo='percent+label',
+                                    hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนต้นทุน:</b> %{value:,.2f} ฿<br><b>สัดส่วนต้นทุน:</b> %{percent}'
+                                )
+                                fig_donut_cost.update_layout(
+                                    height=380,
+                                    margin=dict(l=10, r=10, t=40, b=40),
+                                    showlegend=False
+                                )
+                                st.plotly_chart(fig_donut_cost, use_container_width=True)
+                    
+                            with col_sec2:
+                                st.markdown("###### 🥧 สัดส่วนตามมูลค่าตลาด (Market Weight)")
+                                fig_donut_market = px.pie(
+                                    df_port_sector,
+                                    names='Sector',
+                                    values='มูลค่าตลาด',
+                                    hole=0.4,
+                                    color_discrete_sequence=px.colors.qualitative.Set3
+                                )
+                                fig_donut_market.update_traces(
+                                    textinfo='percent+label',
+                                    hovertemplate='<b>Sector:</b> %{label}<br><b>มูลค่าตลาด:</b> %{value:,.2f} ฿<br><b>สัดส่วนตลาด:</b> %{percent}'
+                                )
+                                fig_donut_market.update_layout(
+                                    height=380,
+                                    margin=dict(l=10, r=10, t=40, b=40),
+                                    showlegend=True
+                                )
+                                st.plotly_chart(fig_donut_market, use_container_width=True)
+                    
+                            # 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่ม
+                            st.markdown("##### 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่มในพอร์ต")
+                            display_port_sector = df_port_sector[[
+                                'Sector', 'มูลค่าต้นทุน', 'Cost_Weight_Pct', 'มูลค่าตลาด', 'Market_Weight_Pct', 'หุ้น'
+                            ]].copy()
+                            
+                            display_port_sector.columns = [
+                                'กลุ่มอุตสาหกรรม (Sector)', 
+                                'เงินลงทุนต้นทุน (บาท)', 
+                                'สัดส่วนต้นทุน (%)', 
+                                'มูลค่าตลาดรวม (บาท)', 
+                                'สัดส่วนตลาด (%)', 
+                                'รายชื่อหุ้นในกลุ่ม'
+                            ]
+                            
+                            st.dataframe(
+                                display_port_sector.style.format({
+                                    'เงินลงทุนต้นทุน (บาท)': '{:,.2f}',
+                                    'สัดส่วนต้นทุน (%)': '{:.2f} %',
+                                    'มูลค่าตลาดรวม (บาท)': '{:,.2f}',
+                                    'สัดส่วนตลาด (%)': '{:.2f} %'
+                                }).set_properties(**{'text-align': 'right'}),
+                                use_container_width=True,
+                                hide_index=True  # เพิ่มคำสั่งนี้เพื่อซ่อนคอลัมน์ Index ที่เกินมาครับ
+                            )
+                                    
+                        else:
+                            st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
+                            
+                #########################
+                with tab_dividend:
+                    DATA_FILE = "dividend_database.csv"
+                    
+                    # โหลดข้อมูลจากไฟล์ CSV เข้า session_state ทุกครั้งที่เปิดหรือรีเฟรชแอป
+                    if "dividend_data" not in st.session_state:
+                        if os.path.exists(DATA_FILE):
+                            try:
+                                df_saved = pd.read_csv(DATA_FILE)
+                                if not df_saved.empty:
+                                    st.session_state.dividend_data = df_saved.to_dict('records')
+                                else:
+                                    st.session_state.dividend_data = []
+                            except Exception:
+                                st.session_state.dividend_data = []
+                        else:
+                            st.session_state.dividend_data = []
+                            
+                    st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
+                    
+                    # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV ---
+                    with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD หรือไฟล์ Excel/CSV"):
+                        uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
+                        if uploaded_div_file:
+                            if st.button("ยืนยันการนำเข้าไฟล์ปันผล"):
+                                try:
+                                    if uploaded_div_file.name.endswith('.csv'):
+                                        df_upload = pd.read_csv(uploaded_div_file)
+                                    else:
+                                        df_upload = pd.read_excel(uploaded_div_file)
+                                    
+                                    processed_rows = []
+                                    
+                                    if 'ชื่อย่อหลักทรัพย์' in df_upload.columns and 'วันที่จ่าย' in df_upload.columns:
+                                        for idx, row in df_upload.iterrows():
+                                            ticker = str(row.get('ชื่อย่อหลักทรัพย์', '')).strip().upper()
+                                            if not ticker or ticker == 'NAN':
+                                                continue
+                                            if not ticker.endswith('.BK'):
+                                                ticker = f"{ticker}.BK"
+                                                
+                                            pay_date = str(row.get('วันที่จ่าย', ''))[:10]
+                                            total_div_before_tax = 0.0
+                                            total_tax = 0.0
+                                            
+                                            for col in df_upload.columns:
+                                                col_str = str(col)
+                                                val = row.get(col, 0)
+                                                try:
+                                                    val_num = float(val) if pd.notna(val) else 0.0
+                                                except:
+                                                    val_num = 0.0
+                                                    
+                                                if 'จำนวนเงินปันผล' in col_str or 'ดอกเบี้ยหุ้นกู้' in col_str or 'เงินเทียบเท่าเงินปันผล' in col_str:
+                                                    total_div_before_tax += val_num
+                                                elif 'ภาษีของเงินปันผล' in col_str or 'ภาษีของดอกเบี้ย' in col_str:
+                                                    total_tax += val_num
+                                            
+                                            net_receive = total_div_before_tax - total_tax
+                                            
+                                            cost_val = 0.0
+                                            for cost_col in ['ต้นทุน', 'Cost', 'ทุนรวม', 'มูลค่าลงทุน']:
+                                                if cost_col in df_upload.columns:
+                                                    try:
+                                                        cost_val = float(row.get(cost_col, 0))
+                                                    except:
+                                                        pass
+                                            
+                                            processed_rows.append({
+                                                "วันที่ได้รับ": pay_date,
+                                                "Ticker": ticker,
+                                                "จำนวนหุ้น": 0.0,
+                                                "ปันผลต่อหุ้น": 0.0,
+                                                "ยอดรวมก่อนภาษี": total_div_before_tax,
+                                                "ภาษีหัก ณ ที่จ่าย": total_tax,
+                                                "ยอดรับสุทธิ": net_receive,
+                                                "ต้นทุนหุ้น": cost_val,
+                                                "หมายเหตุ": "นำเข้าจาก TSD Portal"
+                                            })
+                                    else:
+                                        if 'ต้นทุนหุ้น' not in df_upload.columns:
+                                            df_upload['ต้นทุนหุ้น'] = 0.0
+                                        processed_rows = df_upload.to_dict('records')
+                                    
+                                    existing_df = pd.DataFrame(st.session_state.dividend_data)
+                                    new_df = pd.DataFrame(processed_rows)
+                                    
+                                    if not existing_df.empty:
+                                        combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
+                                            subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], 
+                                            keep='first'
+                                        )
+                                        added_count = len(combined_df) - len(existing_df)
+                                    else:
+                                        combined_df = new_df.drop_duplicates(subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], keep='first')
+                                        added_count = len(combined_df)
+                                    
+                                    st.session_state.dividend_data = combined_df.to_dict('records')
+                                    save_dividend_data()
+                                    
+                                    if added_count > 0:
+                                        st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
+                                    else:
+                                        st.info("ℹ️ ข้อมูลในไฟล์นี้มีอยู่แล้วในระบบทั้งหมด จึงไม่มีการเพิ่มรายการซ้ำ")
+                                    st.rerun()
+                                        
+                                except Exception as e:
+                                    st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
+                                    
+                    # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
+                    with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=True):
+                        with st.form("dividend_form", clear_on_submit=True):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                div_date = st.date_input("วันที่ได้รับเงินปันผล", value=date.today())
+                                ticker = st.text_input("ชื่อหุ้น (Ticker)").upper()
+                                shares = st.number_input("จำนวนหุ้นที่ได้รับสิทธิ์", min_value=0.0, step=1.0)
+                                total_cost = st.number_input("ต้นทุนหุ้นรวม (บาท)", min_value=0.0, step=100.0, format="%.2f", help="มูลค่าเงินลงทุนหรือต้นทุนรวมของหุ้นตัวนี้")
+                            
+                            with col2:
+                                dps = st.number_input("เงินปันผลต่อหุ้น (บาท/หุ้น)", min_value=0.0000, format="%.4f", step=0.01)
+                                auto_gross = shares * dps
+                                gross_div = st.number_input("เงินปันผลรวมก่อนภาษี (บาท)", value=auto_gross, format="%.2f", step=1.0)
+                                
+                                tax_wht = gross_div * 0.10
+                                net_div = gross_div - tax_wht
+                                
+                                st.caption(f"💡 คำนวณอัตโนมัติ: ภาษีหัก ณ ที่จ่าย 10% = {tax_wht:,.2f} ฿ | รับสุทธิ = {net_div:,.2f} ฿")
+                            
+                            notes = st.text_input("หมายเหตุ (เช่น ปันผล Q2/2026)")
+                            submitted = st.form_submit_button("💾 บันทึกเงินปันผล")
+                            
+                            if submitted:
+                                if ticker:
+                                    formatted_ticker = ticker if ticker.endswith('.BK') else f"{ticker}.BK"
+                                    new_entry = {
+                                        "วันที่ได้รับ": str(div_date),
+                                        "Ticker": formatted_ticker,
+                                        "จำนวนหุ้น": shares,
+                                        "ปันผลต่อหุ้น": dps,
+                                        "ยอดรวมก่อนภาษี": gross_div,
+                                        "ภาษีหัก ณ ที่จ่าย": tax_wht,
+                                        "ยอดรับสุทธิ": net_div,
+                                        "ต้นทุนหุ้น": total_cost,
+                                        "หมายเหตุ": notes
+                                    }
+                                    st.session_state.dividend_data.append(new_entry)
+                                    save_dividend_data()
+                                    st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} เรียบร้อยแล้วครับ!")
+                                    st.rerun()
+                                else:
+                                    st.warning("⚠️ กรุณากรอกชื่อหุ้น (Ticker)")
+                                    
+                    # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
+                    st.markdown("---")
+                    st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
+                    
+                    if st.session_state.dividend_data:
+                        df_div = pd.DataFrame(st.session_state.dividend_data)
+                        
+                        total_received = df_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_div.columns else 0
+                        total_tax = df_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_div.columns else 0
+                        
+                        m1, m2 = st.columns(2)
+                        m1.metric("💰 เงินปันผลรับสุทธิรวมทั้งสิ้น", f"{total_received:,.2f} ฿")
+                        m2.metric("🏛️ ภาษีหัก ณ ที่จ่ายรวม", f"{total_tax:,.2f} ฿")
+                        
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        
+                        with st.expander("📂 ดูตารางประวัติและแก้ไขข้อมูลปันผล", expanded=False):
+                            edited_div_df = st.data_editor(df_div, use_container_width=True, key="div_editor")
+                            
+                            if st.button("💾 อัปเดตการแก้ไขตารางปันผล", key="update_div_btn"):
+                                st.session_state.dividend_data = edited_div_df.to_dict('records')
+                                save_dividend_data()
+                                st.success("✅ อัปเดตข้อมูลสำเร็จ!")
+                                st.rerun()
+                                
+                            csv_div = df_div.to_csv(index=False).encode('utf-8-sig')
+                            st.download_button("📥 Export ประวัติปันผลเป็น CSV", data=csv_div, file_name="dividend_history.csv", mime="text/csv", key="export_div_btn")
+                        
+                        # --- ส่วนที่ 4: กราฟวิเคราะห์และสรุปยอดเงินปันผลรับ ---
+                        st.markdown("---")
+                        st.markdown("##### 📊 วิเคราะห์ข้อมูลเงินปันผล (Dividend Analytics)")
+                        
+                        if 'วันที่ได้รับ' in df_div.columns:
+                            df_div['วันที่ได้รับ'] = pd.to_datetime(df_div['วันที่ได้รับ'], errors='coerce')
+                            df_div['Year'] = df_div['วันที่ได้รับ'].dt.year.fillna(0).astype(int)
+                        
+                        col_f1, col_f2 = st.columns([2, 2])
+                        with col_f1:
+                            available_years = sorted([y for y in df_div['Year'].unique() if y > 0], reverse=True)
+                            year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_years]
+                            selected_period = st.selectbox("📅 กรองช่วงเวลา (ปี):", year_options, key="div_year_filter")
+                        
+                        df_filtered_div = df_div.copy()
+                        if selected_period != "All Time (ทั้งหมด)":
+                            df_filtered_div = df_filtered_div[df_filtered_div['Year'] == int(selected_period)]
+                        
+                        if not df_filtered_div.empty:
+                            total_received_filtered = df_filtered_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_filtered_div.columns else 0
+                            total_tax_filtered = df_filtered_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_filtered_div.columns else 0
+                            
+                            mf1, mf2 = st.columns(2)
+                            mf1.metric(f"💰 เงินปันผลรับสุทธิ ({selected_period})", f"{total_received_filtered:,.2f} ฿")
+                            mf2.metric(f"🏛️ ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿")
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                        
+                            # --- ส่วนที่ 5: วิเคราะห์ Dividend Yield on Cost (%) ---
+                            st.markdown("---")
+                            st.markdown(f"##### 🎯 วิเคราะห์ผลตอบแทนจากเงินปันผลเทียบกับต้นทุนหุ้น (Dividend Yield on Cost) - [{selected_period}]")
+                            
+                            if 'Ticker' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns and 'ต้นทุนหุ้น' in df_filtered_div.columns and 'จำนวนหุ้น' in df_filtered_div.columns:
+                                df_calc = df_filtered_div.copy()
+                                
+                                if 'วันที่ได้รับ' in df_calc.columns:
+                                    df_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_calc['วันที่ได้รับ'], errors='coerce')
+                                    df_calc = df_calc.sort_values(by='วันที่ได้รับ_dt', ascending=True)
+                                
+                                df_div_sum = df_calc.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
+                                
+                                df_latest = df_calc.groupby('Ticker').agg({
+                                    'จำนวนหุ้น': 'last',
+                                    'ต้นทุนหุ้น': 'last'
+                                }).reset_index()
+                                
+                                df_yield_analysis = pd.merge(df_div_sum, df_latest, on='Ticker')
+                                df_yield_analysis['Total_Cost'] = df_yield_analysis['ต้นทุนหุ้น'] * df_yield_analysis['จำนวนหุ้น']
+                                
+                                df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
+                                    lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0, 
+                                    axis=1
+                                )
+                                
+                                valid_cost_df = df_yield_analysis[(df_yield_analysis['Total_Cost'] > 0) & (df_yield_analysis['Yield_on_Cost'] <= 1000)]
+                                
+                                if not valid_cost_df.empty:
+                                    total_portfolio_cost = valid_cost_df['Total_Cost'].sum()
+                                    total_portfolio_dividend = valid_cost_df['ยอดรับสุทธิ'].sum()
+                                    avg_yield_on_cost = (total_portfolio_dividend / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
+                                    
+                                    kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+                                    kpi_col1.metric(f"📊 Avg. Yield on Cost ({selected_period})", f"{avg_yield_on_cost:.2f}%")
+                                    kpi_col2.metric(f"💰 ปันผลรับรวม ({selected_period})", f"{total_portfolio_dividend:,.2f} ฿")
+                                    kpi_col3.metric("🏛️ ต้นทุนพอร์ตหุ้นรวม", f"{total_portfolio_cost:,.2f} ฿")
+                                    
+                                    st.markdown("<br>", unsafe_allow_html=True)
+                                    
+                                    df_yield_sorted = valid_cost_df.sort_values(by='Yield_on_Cost', ascending=True)
+                                    df_yield_sorted['Text_Label'] = df_yield_sorted['Yield_on_Cost'].apply(lambda x: f"{x:.2f}%")
+                                    
+                                    fig_yield_bar = px.bar(
+                                        df_yield_sorted,
+                                        x='Yield_on_Cost',
+                                        y='Ticker',
+                                        orientation='h',
+                                        text='Text_Label',
+                                        color='Yield_on_Cost',
+                                        color_continuous_scale='Tealgrn'
+                                    )
+                                    
+                                    fig_yield_bar.update_traces(textposition='outside')
+                                    fig_yield_bar.update_layout(
+                                        xaxis_title=f"Dividend Yield on Cost (%) [{selected_period}]",
+                                        yaxis_title="ชื่อหุ้น (Ticker)",
+                                        height=max(320, len(df_yield_sorted) * 40),
+                                        margin=dict(l=10, r=20, t=20, b=20),
+                                        coloraxis_showscale=False
+                                    )
+                                    st.plotly_chart(fig_yield_bar, use_container_width=True)
+                                    
+                                    st.markdown(f"##### 📋 ตารางสรุป Yield on Cost ({selected_period})")
+                                    df_table_display = df_yield_sorted[['Ticker', 'ยอดรับสุทธิ', 'Total_Cost', 'Yield_on_Cost']].copy()
+                                    
+                                    div_col_name = f"เงินปันผลรับรวม ({selected_period}) (บาท)"
+                                    df_table_display.columns = ['ชื่อหุ้น (Ticker)', div_col_name, 'ต้นทุนรวมทั้งหมด (บาท)', 'Dividend Yield on Cost (%)']
+                                    
+                                    df_table_display[div_col_name] = df_table_display[div_col_name].apply(lambda x: f"{x:,.2f}")
+                                    df_table_display['ต้นทุนรวมทั้งหมด (บาท)'] = df_table_display['ต้นทุนรวมทั้งหมด (บาท)'].apply(lambda x: f"{x:,.2f}")
+                                    df_table_display['Dividend Yield on Cost (%)'] = df_table_display['Dividend Yield on Cost (%)'].apply(lambda x: f"{x:.2f}%")
+                                    
+                                    st.dataframe(df_table_display.reset_index(drop=True), use_container_width=True)
+                                else:
+                                    st.info(f"💡 ไม่มีข้อมูลปันผลหรือต้นทุนหุ้นในช่วงเวลา {selected_period}")
+                            else:
+                                st.info("ยังไม่มีข้อมูลเพียงพอสำหรับวิเคราะห์ Yield on Cost")
+                                
+                        # --- ส่วนที่ 6: ปุ่มล้างข้อมูลทั้งหมด (Danger Zone) ---
+                        st.markdown("---")
+                        with st.expander("⚠️ พื้นที่จัดการข้อมูล (Danger Zone)", expanded=False):
+                            st.warning("การล้างข้อมูลจะทำการลบประวัติเงินปันผลทั้งหมดออกจากระบบอย่างถาวร กรุณาตรวจสอบให้แน่ใจก่อนดำเนินการ")
+                            
+                            if "confirm_clear_div" not in st.session_state:
+                                st.session_state.confirm_clear_div = False
+                                
+                            if not st.session_state.confirm_clear_div:
+                                if st.button("🗑️ ล้างข้อมูลเงินปันผลทั้งหมด", type="secondary", key="btn_clear_dividend_main"):
+                                    st.session_state.confirm_clear_div = True
+                                    st.rerun()
+                            else:
+                                st.error("❗ คุณแน่ใจจริงๆ หรือไม่ที่จะลบข้อมูลทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้")
+                                col_c1, col_c2, _ = st.columns([1, 1, 2])
+                                with col_c1:
+                                    if st.button("✔️ ยืนยันการลบ", type="primary", key="btn_confirm_clear_div"):
+                                        st.session_state.dividend_data = []
+                                        save_dividend_data()
+                                        st.session_state.confirm_clear_div = False
+                                        st.success("✅ ล้างข้อมูลเงินปันผลทั้งหมดเรียบร้อยแล้วครับ")
+                                        st.rerun()
+                                with col_c2:
+                                    if st.button("❌ ยกเลิก", key="btn_cancel_clear_div"):
+                                        st.session_state.confirm_clear_div = False
+                                        st.rerun()
+                        
+                        # ตรวจสอบว่ามีข้อมูลในระบบหรือไม่ ถ้าไม่มีให้แสดงข้อความแนะนำ
+                        if df_div.empty:
+                            st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
+                        else:
+                            # --- กราฟที่ 4: ยอดปันผลรับสุทธิสะสมรายปี (Yearly Bar Chart) ---
+                            st.markdown("---")
+                            st.markdown("##### 📅 ยอดปันผลรับสุทธิสะสมรายปี (Yearly Dividend)")
+                            if 'Year' in df_div.columns and 'ยอดรับสุทธิ' in df_div.columns:
+                                df_yearly_sum = df_div[df_div['Year'] > 0].groupby('Year')['ยอดรับสุทธิ'].sum().reset_index()
+                                df_yearly_sum['Year'] = df_yearly_sum['Year'].astype(str)
+                                
+                                fig_yearly = px.bar(
+                                    df_yearly_sum,
+                                    x='Year',
+                                    y='ยอดรับสุทธิ',
+                                    text=df_yearly_sum['ยอดรับสุทธิ'].apply(lambda x: f"{x:,.2f} ฿"),
+                                    color='ยอดรับสุทธิ',
+                                    color_continuous_scale='Blues'
+                                )
+                                fig_yearly.update_traces(textposition='outside')
+                                fig_yearly.update_layout(
+                                    xaxis_title="ปี (Year)",
+                                    yaxis_title="ยอดปันผลรับสุทธิ (บาท)",
+                                    height=380,
+                                    margin=dict(l=10, r=10, t=20, b=20),
+                                    coloraxis_showscale=False
+                                )
+                                st.plotly_chart(fig_yearly, use_container_width=True)
+                                
+                            # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี) ---
+                            st.markdown("---")
+                            st.markdown("##### 📊 ยอดปันผลรับสุทธิรายหุ้น (เรียงจากยอดมากไปน้อย แบ่งตามปีที่ได้รับ)")
+                            
+                            if 'Ticker' in df_filtered_div.columns and 'Year' in df_filtered_div.columns and 'ยอดรับสุทธิ' in df_filtered_div.columns:
+                                df_stacked = df_filtered_div[df_filtered_div['Year'] > 0].groupby(['Ticker', 'Year'])['ยอดรับสุทธิ'].sum().reset_index()
+                                
+                                if not df_stacked.empty:
+                                    df_ticker_totals = df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
+                                    df_ticker_totals = df_ticker_totals.sort_values(by='ยอดรับสุทธิ', ascending=True)
+                                    sorted_tickers = df_ticker_totals['Ticker'].tolist()
+                                    
+                                    df_stacked['Total_Stock_Sum'] = df_stacked['Ticker'].map(df_stacked.groupby('Ticker')['ยอดรับสุทธิ'].sum())
+                                    df_stacked['Percentage'] = (df_stacked['ยอดรับสุทธิ'] / df_stacked['Total_Stock_Sum']) * 100
+                                    df_stacked['Year_Str'] = df_stacked['Year'].astype(str)
+                                    
+                                    df_stacked['Text_Label'] = df_stacked.apply(
+                                        lambda row: f"{row['ยอดรับสุทธิ']:,.0f} ฿ ({row['Percentage']:.1f}%)" if row['Percentage'] > 5 else "", 
+                                        axis=1
+                                    )
+                                    
+                                    fig_stacked_bar = px.bar(
+                                        df_stacked,
+                                        x='ยอดรับสุทธิ',
+                                        y='Ticker',
+                                        color='Year_Str',
+                                        orientation='h',
+                                        text='Text_Label',
+                                        barmode='stack',
+                                        category_orders={'Ticker': sorted_tickers},
+                                        color_discrete_sequence=px.colors.qualitative.Bold
+                                    )
+                                    
+                                    fig_stacked_bar.update_traces(
+                                        textposition='inside', 
+                                        insidetextanchor='middle'
+                                    )
+                                    
+                                    fig_stacked_bar.update_layout(
+                                        xaxis_title="ยอดปันผลรับสุทธิรวม (บาท)",
+                                        yaxis_title="ชื่อหุ้น (Ticker)",
+                                        height=max(350, len(sorted_tickers) * 45),
+                                        margin=dict(l=10, r=20, t=20, b=20),
+                                        legend_title="ปีที่ได้รับ (Year)"
+                                    )
+                                    st.plotly_chart(fig_stacked_bar, use_container_width=True)
+                                else:
+                                    st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
+                            else:
+                                st.info(f"ไม่มีข้อมูลเงินปันผลในช่วงปีที่เลือก")
+                            
+                            # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost รายปี (ที่เคยขาดหายไป) ---
+                            st.markdown("---")
+                            st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
+                            
+                            if 'dividend_data' in st.session_state and st.session_state.dividend_data:
+                                df_div_local = pd.DataFrame(st.session_state.dividend_data)
+                            else:
+                                df_div_local = pd.DataFrame()
+                            
+                            if not df_div_local.empty and 'Ticker' in df_div_local.columns and 'ยอดรับสุทธิ' in df_div_local.columns and 'ต้นทุนหุ้น' in df_div_local.columns and 'จำนวนหุ้น' in df_div_local.columns:
+                                df_stack_calc = df_div_local.copy()
+                                
+                                if 'วันที่ได้รับ' in df_stack_calc.columns:
+                                    df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], errors='coerce')
+                                    df_stack_calc['Year'] = df_stack_calc['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
+                                else:
+                                    df_stack_calc['Year'] = 0
+                                    
+                                available_stack_years = sorted([y for y in df_stack_calc['Year'].unique() if y > 0], reverse=True)
+                                stack_year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_stack_years]
+                                
+                                selected_stack_period = st.selectbox(
+                                    "📅 กรองช่วงเวลากราฟ Stacked Bar:", 
+                                    stack_year_options, 
+                                    key="stack_bar_year_filter"
+                                )
+                                
+                                if selected_stack_period != "All Time (ทั้งหมด)":
+                                    df_stack_filtered = df_stack_calc[df_stack_calc['Year'] == int(selected_stack_period)].copy()
+                                else:
+                                    df_stack_filtered = df_stack_calc.copy()
+                                    
+                                if not df_stack_filtered.empty:
+                                    df_stack_filtered['Year_Str'] = df_stack_filtered['Year'].astype(str)
+                                    
+                                    df_latest = df_stack_calc.groupby('Ticker').agg({
+                                        'จำนวนหุ้น': 'last',
+                                        'ต้นทุนหุ้น': 'last'
+                                    }).reset_index()
+                                    df_latest['Total_Cost'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
+                                    
+                                    df_grouped_yearly = df_stack_filtered.groupby(['Ticker', 'Year_Str'])['ยอดรับสุทธิ'].sum().reset_index()
+                                    df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'Total_Cost']], on='Ticker')
+                                    
+                                    df_merged_yearly['Yield_on_Cost_Annual'] = df_merged_yearly.apply(
+                                        lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
+                                        axis=1
+                                    )
+                                    
+                                    if not df_merged_yearly.empty:
+                                        df_total_yield = df_merged_yearly.groupby('Ticker')['Yield_on_Cost_Annual'].sum().reset_index()
+                                        sorted_tickers_yield = df_total_yield.sort_values(by='Yield_on_Cost_Annual', ascending=True)['Ticker'].tolist()
+                                        
+                                        df_merged_yearly['Text_Label'] = df_merged_yearly['Yield_on_Cost_Annual'].apply(
+                                            lambda x: f"{x:.2f}%" if x > 0.5 else ""
+                                        )
                 
-                        monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
-                        monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
-                
-                        # --- CSS สำหรับจัดตารางให้ชิดขวา ---
-                        styled_df = monthly_df.style.format({
-                            'กำไร/ขาดทุน (บาท)': '{:,.2f}',
-                            '% รายเดือน': '{:+.2f} %', 
-                            'มูลค่าพอร์ต (บาท)': '{:,.2f}',
-                            '% สะสม': '{:+.2f} %'
-                        }) \
-                        .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']) \
-                        .set_properties(**{'text-align': 'right'}) \
-                        .set_table_styles([
-                            {'selector': 'th', 'props': [('text-align', 'right')]},
-                            {'selector': 'td', 'props': [('text-align', 'right')]}
-                        ])
-                
-                        # แสดงตารางผ่าน styled_df
-                        st.dataframe(styled_df, use_container_width=True)
+                                        fig_stacked = px.bar(
+                                            df_merged_yearly,
+                                            x='Yield_on_Cost_Annual',
+                                            y='Ticker',
+                                            color='Year_Str',
+                                            orientation='h',
+                                            barmode='stack',
+                                            category_orders={'Ticker': sorted_tickers_yield},
+                                            text='Text_Label',
+                                            color_discrete_sequence=px.colors.qualitative.Prism
+                                        )
+                                        
+                                        fig_stacked.update_traces(
+                                            textposition='inside', 
+                                            insidetextanchor='middle'
+                                        )
+                                        
+                                        fig_stacked.update_layout(
+                                            xaxis_title=f"Annual Dividend Yield on Cost (%) [{selected_stack_period}]",
+                                            yaxis_title="ชื่อหุ้น (Ticker)",
+                                            height=max(350, len(sorted_tickers_yield) * 45),
+                                            margin=dict(l=10, r=20, t=20, b=20),
+                                            legend_title="ปีที่ได้รับ (Year)"
+                                        )
+                                        st.plotly_chart(fig_stacked, use_container_width=True)
+                                    else:
+                                        st.info("ไม่มีข้อมูลเพียงพอสำหรับกราฟ Stacked Bar รายปีนี้")
+                                else:
+                                    st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือกสำหรับกราฟนี้")
                     else:
-                        st.warning("ไม่มีข้อมูลรายการเทรดในช่วงเวลาที่เลือกครับ")
+                        st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
+                                            
+                                                
+                #########################
+                with tab_journal:
+                    st.markdown("#### 📖 บันทึกผลการเทรด (Trading Journal)")
+                    
+                    # --- ส่วนการ Upload ไฟล์ ---
+                    with st.expander("📤 อัปโหลดข้อมูลจากไฟล์ Excel/CSV"):
+                        uploaded_file = st.file_uploader("เลือกไฟล์ของคุณ", type=['csv', 'xlsx', 'xls'])
+                        if uploaded_file:
+                            if st.button("ยืนยันการนำเข้าข้อมูล"):
+                                load_data_from_file(uploaded_file)
+                    # --------------------------
+                    
+                    ################ เรียกการคำนวนนับจำนวนวันถือหุ้น #####################
+                    def calculate_journal_stats(df):
+                        df = df[df['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
+                        
+                        # 1. จัดการคอลัมน์และคำนวณวันที่
+                        if 'วันที่ซื้อ' not in df.columns: df['วันที่ซื้อ'] = df['วันที่'] 
+                        if 'วันที่ขาย' not in df.columns: df['วันที่ขาย'] = df['วันที่'] 
+                        
+                        df['วันที่ซื้อ'] = pd.to_datetime(df['วันที่ซื้อ'])
+                        df['วันที่ขาย'] = pd.to_datetime(df['วันที่ขาย'])
+                        df['Holding_Days'] = (df['วันที่ขาย'] - df['วันที่ซื้อ']).dt.days.clip(lower=0)
+                        
+                        # 2. คำนวณเป็น % (Profit / Cost) * 100
+                        df['ROI_Percent'] = (df['กำไร/ขาดทุน (บาท)'] / df['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
+                        
+                        df['Year'] = df['วันที่ขาย'].dt.year
+                        df['Month'] = df['วันที่ขาย'].dt.month
+                        
+                        # 3. สรุปผลเป็น % ตามที่ต้องการ
+                        stats = df.groupby(['Year', 'Month']).agg(
+                            Avg_Profit_Pct=('ROI_Percent', lambda x: x[x>0].mean()),
+                            Avg_Loss_Pct=('ROI_Percent', lambda x: x[x<=0].mean()),
+                            Win_Rate=('ROI_Percent', lambda x: (x>0).mean() * 100),
+                            Trade_Count=('ROI_Percent', 'count'),
+                            Max_Profit_Pct=('ROI_Percent', 'max'),
+                            Max_Loss_Pct=('ROI_Percent', 'min'),
+                            Avg_Days_Win=('Holding_Days', lambda x: x[df['ROI_Percent']>0].mean()),
+                            Avg_Days_Loss=('Holding_Days', lambda x: x[df['ROI_Percent']<=0].mean())
+                        )
+                        stats = stats.round({'Avg_Days_Win': 0, 'Avg_Days_Loss': 0})
+                        stats = stats.round(2)
+                        return stats
+                    ########################################################################
+                
+                    ### แสดงข้อมูลสถิติ รายเดือน รายปี ####
+                    if st.session_state.journal_data:
+                        df_journal = pd.DataFrame(st.session_state.journal_data)
+                        
+                        # --- เริ่มต้น Data Migration ---
+                        cols_to_check = ['วันที่ซื้อ', 'วันที่ขาย']
+                        for col in cols_to_check:
+                            if col not in df_journal.columns:
+                                df_journal[col] = df_journal['วันที่']
+                        
+                        df_journal['วันที่ซื้อ'] = pd.to_datetime(df_journal['วันที่ซื้อ'], errors='coerce')
+                        df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
+                        st.session_state.journal_data = df_journal.to_dict('records')
+                        # --- จบการ Data Migration ---
+                    
+                        # 2. ส่วนสรุป Metric 3 ค่าด้านบน (อิงจากช่วงเวลาที่เลือก)
+                        with st.expander("📊 สถิติการเทรดรายเดือน", expanded=False):
+                            stats_df = calculate_journal_stats(df_journal)
+                            
+                            st.markdown("##### 🎯 สถิติการเทรดจริง & การปรับจุดคัทลอส (RR 2:1)")
+                            period = st.radio("ดูค่าเฉลี่ยย้อนหลัง:", ["3 เดือน", "6 เดือน", "1 ปี"], horizontal=True, key="stats_period")
+                            
+                            months_map = {"3 เดือน": 3, "6 เดือน": 6, "1 ปี": 12}
+                            cutoff_date = pd.Timestamp.now() - pd.DateOffset(months=months_map[period])
+                            
+                            if 'วันที่ขาย' not in df_journal.columns:
+                                df_journal['วันที่ขาย'] = df_journal['วันที่']
+                            
+                            df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
+                            
+                            df_period = df_journal[(df_journal['วันที่ขาย'] >= cutoff_date) & 
+                                                   (df_journal['สถานะ'] == 'Closed (ขายแล้ว)')].copy()
+                            
+                            if not df_period.empty:
+                                if 'วันที่ซื้อ' not in df_period.columns:
+                                    df_period['วันที่ซื้อ'] = df_period['วันที่']
+                                if 'วันที่ขาย' not in df_period.columns:
+                                    df_period['วันที่ขาย'] = df_period['วันที่']
+                                    
+                                df_period['วันที่ซื้อ'] = pd.to_datetime(df_period['วันที่ซื้อ'], errors='coerce')
+                                df_period['วันที่ขาย'] = pd.to_datetime(df_period['วันที่ขาย'], errors='coerce')
+                                df_period['Holding_Days'] = (df_period['วันที่ขาย'] - df_period['วันที่ซื้อ']).dt.days.clip(lower=0)
+                                
+                                col_profit_loss = 'กำไร/ขาดทุน (บาท)'
+                                col_cost = 'ต้นทุน (บาท)'
+                                
+                                df_period[col_profit_loss] = pd.to_numeric(df_period[col_profit_loss], errors='coerce')
+                                df_period[col_cost] = pd.to_numeric(df_period[col_cost], errors='coerce')
+                                
+                                w_rate = (df_period[col_profit_loss] > 0).mean() * 100
+                                
+                                profit_mask = (df_period[col_profit_loss] > 0) & (df_period[col_cost] > 0)
+                                profit_series = (df_period.loc[profit_mask, col_profit_loss] / df_period.loc[profit_mask, col_cost]) * 100
+                                avg_profit = profit_series.clip(upper=500).mean() if not profit_series.empty else 0
+                    
+                                loss_mask = (df_period[col_profit_loss] <= 0) & (df_period[col_cost] > 0)
+                                loss_series = (df_period.loc[loss_mask, col_profit_loss] / df_period.loc[loss_mask, col_cost]) * 100
+                                loss_series = loss_series[loss_series >= -100] 
+                                avg_loss = loss_series.mean() if not loss_series.empty else 0
+                                
+                                loss_adj = (avg_profit / 2) * -1
+                                
+                                c1, c2, c3 = st.columns(3)
+                                c1.metric("Win Rate", f"{w_rate:.1f} %")
+                                c2.metric("Avg P/L", f"{avg_profit:.1f}% / {avg_loss:.1f}%")
+                                c3.metric("Rec. Cut Loss (RR 2:1)", f"{loss_adj:.1f} %")
+                            else:
+                                st.info("ไม่มีข้อมูลย้อนหลังในช่วงเวลานี้")
+                            
+                            st.markdown("---")
+                            
+                            if not stats_df.empty:
+                                years = sorted(stats_df.index.get_level_values('Year').unique())
+                                selected_year = st.selectbox("เลือกปีที่ต้องการดูสถิติ:", years, key="stats_year")
+                                
+                                year_data = stats_df.loc[selected_year]
+                                
+                                styled_df = year_data.style.format({
+                                    'Avg_Profit_Pct': '{:.2f} %',
+                                    'Avg_Loss_Pct': '{:.2f} %',
+                                    'Win_Rate': '{:.2f} %',
+                                    'Max_Profit_Pct': '{:.2f} %',
+                                    'Max_Loss_Pct': '{:.2f} %',
+                                    'Avg_Days_Win': '{:.0f} วัน', 
+                                    'Avg_Days_Loss': '{:.0f} วัน'
+                                })
+                                st.table(styled_df)
+                    
+                        ########################################################################
+                        # 3. ตารางประวัติ 
+                        df_journal = pd.DataFrame(st.session_state.journal_data)
+                        df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])            
+                        
+                        df_journal['temp_sort'] = df_journal['สถานะ'].apply(lambda x: 0 if "Open" in x else 1)
+                        df_journal = df_journal.sort_values(by=['temp_sort', 'วันที่'], ascending=[True, False])
+                        df_journal = df_journal.drop(columns=['temp_sort'])
+                    
+                        with st.expander("📂 ดูประวัติการเทรดย้อนหลัง", expanded=False):
+                            items_per_page = 50
+                            total_pages = (len(df_journal) - 1) // items_per_page + 1
+                            page = st.number_input("หน้า:", min_value=1, max_value=total_pages, value=1, key="journal_page")
+                            
+                            start_idx = (page - 1) * items_per_page
+                            df_display = df_journal.iloc[start_idx : start_idx + items_per_page]
+                            
+                            edited_journal = st.data_editor(df_display, use_container_width=True, key="journal_editor")
+                            
+                            if st.button("💾 อัปเดตตารางหน้านี้", key="save_journal_page"):
+                                edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] = pd.to_numeric(edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'], errors='coerce')
+                                edited_journal['จำนวนหุ้นที่ซื้อ'] = pd.to_numeric(edited_journal['จำนวนหุ้นที่ซื้อ'], errors='coerce')
+                                edited_journal['ต้นทุน (บาท)'] = edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] * edited_journal['จำนวนหุ้นที่ซื้อ']
+                                
+                                date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
+                                for col in date_cols:
+                                    if col in edited_journal.columns:
+                                        edited_journal[col] = pd.to_datetime(edited_journal[col], errors='coerce').dt.strftime('%Y-%m-%d')
+                                
+                                st.session_state.journal_data = edited_journal.to_dict('records')
+                                save_journal()
+                                st.success("บันทึกข้อมูลเรียบร้อยแล้วครับ!")
+                            
+                            csv = df_journal.to_csv(index=False).encode('utf-8-sig')
+                            st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv", key="export_journal_csv")
+                    else:
+                        st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
+                
+                
+                    #################################################
+                    # --- ตารางแสดงแผนการเทรด ---
+                    with tab_plan:
+                        st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
+                        
+                        # 1. ส่วนฟอร์มเพิ่มหุ้นใหม่
+                        with st.form("trading_plan_form", clear_on_submit=True):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
+                                entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
+                                stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
+                                support = st.number_input("แนวรับ:", min_value=0.0, format="%.2f", value=0.0)
+                            with col2:
+                                resistance = st.number_input("แนวต้าน:", min_value=0.0, format="%.2f", value=0.0)
+                                take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
+                                image_url = st.text_input("วาง Link รูปภาพ (URL):")
+                            
+                            submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
+                        
+                        if submit_button:
+                            if not ticker:
+                                st.error("กรุณาระบุชื่อหุ้นครับ!")
+                            else:
+                                from datetime import datetime
+                                
+                                # 1. สร้าง Dictionary ของหุ้นใหม่
+                                new_data = {
+                                    'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
+                                    'Stop_Loss': stop_loss, 'แนวรับ': support, 'แนวต้าน': resistance, 
+                                    'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
+                                    'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                    'Image_URL': image_url, 'Alert_Date': ''
+                                }
+                                
+                                # 2. โหลดข้อมูลปัจจุบันจาก Google Sheet ออกมาก่อน
+                                current_df = load_data("TradingPlan")
+                                
+                                # ถ้าตารางว่าง ให้สร้าง DataFrame ใหม่ขึ้นมาเลย
+                                if current_df is None or current_df.empty:
+                                    final_df = pd.DataFrame([new_data])
+                                else:
+                                    # รวมหุ้นเดิมกับหุ้นใหม่เข้าด้วยกัน
+                                    new_df = pd.DataFrame([new_data])
+                                    final_df = pd.concat([current_df, new_df], ignore_index=True)
+                                    
+                                # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน clear_and_save_data
+                                # (เพราะฟังก์ชันนี้ลบของเก่าแล้วเขียนทับใหม่ เราจึงต้องส่ง 'ข้อมูลก้อนใหม่' ที่รวมตัวเก่าไปให้)
+                                if clear_and_save_data(final_df, "TradingPlan"):
+                                    st.success("บันทึกแผนเรียบร้อย!")
+                                    st.cache_data.clear()
+                                    st.rerun()
+                                else:
+                                    st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ")
+                 
+                        # 2. ส่วนตารางแสดงผล
+                        st.divider()
+                        st.subheader("📊 ตารางแผนการเทรดของฉัน")
+                        plan_df = load_data("TradingPlan")
+                        
+                        # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
+                        cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
+                        
+                        if plan_df.empty or 'Ticker' not in plan_df.columns:
+                            plan_df = pd.DataFrame(columns=cols)
+                        else:
+                            plan_df.columns = plan_df.columns.str.strip()
+                        
+                        # คำนวณข้อมูล
+                        if not plan_df.empty and 'Ticker' in plan_df.columns:
+                            plan_df.columns = plan_df.columns.str.strip()
+                            
+                            # แปลงคอลัมน์ตัวเลข
+                            target_cols = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
+                            for c in target_cols:
+                                if c in plan_df.columns:
+                                    plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
+                                else:
+                                    plan_df[c] = 0.0
+                            
+                            # ดึงราคาตลาด (Batch)
+                            tickers = [f"{t}.BK" for t in plan_df['Ticker'].unique()]
+                            try:
+                                price_data = yf.download(tickers, period="1d", group_by='ticker', progress=False)['Close']
+                                def get_price(t):
+                                    symbol = f"{t}.BK"
+                                    try:
+                                        if isinstance(price_data, pd.DataFrame): return float(price_data[symbol].iloc[-1])
+                                        return float(price_data.iloc[-1])
+                                    except: return 0.0
+                                plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(get_price)
+                            except:
+                                plan_df['ราคาตลาด'] = 0.0
+                        
+                            # คำนวณห่างจาก SL และสถานะ
+                            plan_df['ห่างจาก_SL(%)'] = np.where(plan_df['ราคาตลาด'] > 0, ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100), 0.0).round(2)
+                            plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
+                        
+                        # แสดงตาราง (ลบ Alert_Date ออกจาก column_config แล้ว)
+                        edited_df = st.data_editor(
+                            plan_df[cols],
+                            column_config={
+                                "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
+                                "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
+                                "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
+                                "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
+                                "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
+                                "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
+                                "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
+                                "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
+                                "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"),
+                                "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
+                            },
+                            use_container_width=True, 
+                            key="fixed_plan_editor_v2", 
+                            num_rows="dynamic"
+                        )
+                        
+                        if st.button("💾 บันทึกการแก้ไข"):
+                            final_df = edited_df.copy()
+                            final_df['สถานะ'] = "" # ล้างค่าให้ระบบคำนวณใหม่
+                            
+                            for c in cols:
+                                if c not in final_df.columns: final_df[c] = ""
+                                    
+                            if clear_and_save_data(final_df[cols], "TradingPlan"):
+                                st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
+                                st.cache_data.clear()
+                                st.rerun()
+            
+        ###################################################################
+        # # --- ฟังก์ชัน Main tap stock Finish---
+        ###################################################################
+        # 2. ส่วน TFEX
+        with tab_tfex:
+            st.subheader("📝 ระบบเทรด TFEX")
+            
+            # 1. โหลดข้อมูล
+            tfex_df = load_data("TFEX_History") 
+            cash_df = load_data("Cash_Flow")
+            
+            # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
+            # สมมติว่าถ้ายังไม่ปิด Close_Price จะเป็น 0 หรือเป็นค่าว่าง
+            # หากคอลัมน์พี่อ้ำชื่ออื่น (เช่น 'Status' ที่บอกว่า 'Open') ให้เปลี่ยนในบรรทัดถัดไปครับ
+            closed_trades = tfex_df[tfex_df['Close_Price'] > 0] if not tfex_df.empty and 'Close_Price' in tfex_df.columns else tfex_df
+            total_pnl = closed_trades['Net_Profit'].sum() if not closed_trades.empty and 'Net_Profit' in closed_trades.columns else 0
+            
+            # 3. คำนวณเงินต้นสุทธิ
+            # ใช้ .astype(str).str.lower() เพื่อป้องกันปัญหาตัวอักษรพิมพ์เล็ก/ใหญ่
+            total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum() if not cash_df.empty else 0
+            total_withdraw = cash_df[cash_df['Type'].astype(str).str.lower() == 'withdraw']['Amount'].sum() if not cash_df.empty else 0
+            net_capital = total_deposit - total_withdraw
+            
+            # 4. คำนวณพอร์ต (ใช้ Realized PnL)
+            net_worth = net_capital + total_pnl
+            growth_pct = (total_pnl / net_capital * 100) if net_capital > 0 else 0
+            
+            # แสดง Dashboard
+            c1, c2, c3 = st.columns(3)
+            c1.metric("มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท")
+            c2.metric("กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท")
+            c3.metric("การเติบโต", f"{growth_pct:.2f} %")
+            st.divider()
+        
+            # --- เริ่มแถวที่ 2: Performance Metrics (รวมเชิงลึก) ---
+            st.subheader("📊 Performance Monitor")
+            
+            # 1. สร้าง Filter ช่วงเวลา
+            period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
+            selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
+            
+            # 2. กรองข้อมูลตามช่วงเวลา
+            perf_df = closed_trades.copy()
+            perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
+            days_ago = period_options[selected_period]
+            if days_ago != 9999:
+                cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
+                perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
+        
+            # 3. คำนวณ Metrics ทั้งหมดจาก perf_df ที่กรองแล้ว
+            total_trades = len(perf_df)
+            win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
+            win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
+            
+            avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
+            avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if (total_trades - win_trades) > 0 else 0
+            rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
+            
+            gross_profit = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum()
+            gross_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()
+            profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
+            
+            expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
+            
+            # คำนวณเชิงลึก (Efficiency Analysis)
+            perf_df['Points'] = perf_df['Net_Profit'] / 200
+            avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
+            avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
+            
+            # Max Drawdown (คำนวณจากช่วงที่กรอง)
+            temp_df = perf_df.sort_values('Date_Close')
+            temp_df['Cumulative'] = temp_df['Net_Profit'].cumsum()
+            max_drawdown = (temp_df['Cumulative'] - temp_df['Cumulative'].cummax()).min() if not temp_df.empty else 0
+            
+            # ระยะเวลาถือครอง
+            perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
+            perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
+            avg_hold = perf_df['Hold_Days'].mean() if not perf_df.empty else 0
+        
+            # 4. แสดงผลแบบ Grid
+            # แถวแรก
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Win Rate", f"{win_rate:.1f}%")
+            c2.metric("R:R Ratio", f"{rr_ratio:.2f}")
+            c3.metric("Profit Factor", f"{profit_factor:.2f}")
+            c4.metric("Expectancy", f"{expectancy:,.0f}")
+            
+            st.write("---") # เส้นคั่น
+            
+            # แถวสอง (เชิงลึก)
+            e1, e2, e3, e4 = st.columns(4)
+            e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
+            e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
+            e3.metric("Max Drawdown", f"{max_drawdown:,.0f} บาท")
+            e4.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
+            
+            st.divider()
+            
+            # 3. สร้าง 3 Tabs
+            sub_tfex_input, sub_tfex_close, sub_tfex_cash, sub_tfex_history = st.tabs([
+            "➕ บันทึกเทรดใหม่", 
+            "🏁 ปิดสถานะเทรด", 
+            "➕ บันทึกเติม/ถอนเงิน", 
+            "📜 ประวัติและ Portfolio"
+            ])
+            with sub_tfex_input:
+                st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
+                
+                # ดึงค่า ATR และ Multiplier ที่ใช้งานล่าสุดจาก session_state มาเป็นค่าตั้งต้น
+                current_atr = st.session_state.get('active_atr', 6.5)
+                
+                c1, c2, c3 = st.columns(3)
+                # เปลี่ยนเป็น Slider เลือกความเสี่ยง 0% ถึง 5% (เพิ่มทีละ 0.25% เพื่อความละเอียด)
+                risk_pct = c1.slider("ความเสี่ยงที่ยอมรับได้ (% ของพอร์ต)", min_value=0.0, max_value=5.0, value=1.0, step=0.25)
+                
+                # ⭐️ ช่องกรอก ATR ที่เชื่อมโยงกับค่ากลาง (สามารถพิมพ์แก้ไขเพื่อดูจาก TradingView ได้เช่นกัน)
+                user_atr = c2.number_input("ค่า ATR ปัจจุบัน (แก้ไขได้)", value=float(current_atr), step=0.1)
+                
+                # ช่องกรอกตัวคูณ Multiplier สำหรับ ATR
+                atr_multiplier = c3.number_input("ตัวคูณ ATR (Multiplier)", value=1.5, step=0.1)
+                
+                # คำนวณระยะ Stop Loss จาก ATR ที่ใช้งานจริง (ATR * Multiplier)
+                stop_loss_points = user_atr * atr_multiplier
+                st.caption(f"📍 ระยะจุดตัดขาดทุนคำนวณจาก ATR อัตโนมัติ: **{stop_loss_points:.2f} จุด** (ATR: {user_atr} x Multiplier: {atr_multiplier})")
+                
+                # คำนวณเงินที่ยอมขาดทุนได้จริงจากเปอร์เซ็นต์พอร์ต (Net Worth)
+                risk_amount = net_worth * (risk_pct / 100.0)
+                
+                # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
+                im_per_contract = IM_PER_CONTRACT 
+                
+                # คำนวณสัญญา (สมมติ 1 จุด TFEX = 200 บาท)
+                contract_by_risk = risk_amount / (stop_loss_points * 200) if (stop_loss_points * 200) > 0 else 0
+                contract_by_margin = net_worth / im_per_contract if im_per_contract > 0 else 0 # net_worth ดึงมาจาก Dashboard
+                
+                max_contracts = min(int(contract_by_risk), int(contract_by_margin))
+                
+                # แสดงผลแบบมืออาชีพ
+                st.info(f"📋 ข้อมูลการคำนวณ:")
+                st.write(f"- เงินต้นรวม (Net Worth): {net_worth:,.0f} บาท")
+                st.write(f"- ยอมขาดทุนได้สูงสุด: **{risk_amount:,.2f} บาท** ({risk_pct}%)")
+                st.write(f"- ค่า IM ปัจจุบัน: {im_per_contract:,.0f} บาท/สัญญา")
+                
+                if max_contracts <= 0:
+                    st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
                 else:
-                    st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
+                    st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
+                            
+                # 1. แสดงรายการที่ถืออยู่ (Open Positions)
+                # 1. แสดงรายการที่ถืออยู่ (Open Positions)
+                st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
+                
+                tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+                open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
+                
+                if not open_positions.empty:
+                    # ⭐️ เชื่อมโยงค่า ATR และ Multiplier ที่ผู้ใช้ใช้งานล่าสุด (จากฟอร์มด้านบน) มาแสดงและคำนวณในตาราง
+                    open_positions['ATR'] = user_atr 
+                    
+                    # แปลงข้อมูลราคาเปิดและ ATR ให้เป็นตัวเลขเพื่อความปลอดภัย
+                    open_positions['Open_Price'] = pd.to_numeric(open_positions['Open_Price'], errors='coerce')
+                    open_positions['ATR'] = pd.to_numeric(open_positions['ATR'], errors='coerce')
+                    
+                    # คำนวณจุด Stop Loss จาก ATR แยกตามสถานะ Long / Short ของแต่ละไม้
+                    # Long: ราคาเปิด - (ATR * Multiplier)
+                    # Short: ราคาเปิด + (ATR * Multiplier)
+                    open_positions['ATR_Stop_Loss'] = open_positions.apply(
+                        lambda row: (row['Open_Price'] - (row['ATR'] * atr_multiplier)) if row['Status'] == 'Long' 
+                        else (row['Open_Price'] + (row['ATR'] * atr_multiplier)), 
+                        axis=1
+                    )
+                    
+                    # แสดงผลตารางพร้อมคอลัมน์ ATR และ Stop Loss ที่คำนวณสดๆ ตรงกัน
+                    st.dataframe(
+                        open_positions[['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price', 'ATR', 'ATR_Stop_Loss']], 
+                        use_container_width=True
+                    )
+                else:
+                    st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
+                
+                # คำนวณ Margin Utilization
+                total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT 
+                utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
+                
+                # --- แบ่งหน้าจอเป็น 2 คอลัมน์ เพื่อวางกราฟคู่กัน ---
+                col_left, col_right = st.columns(2)
+                
+                with col_left:
+                    st.subheader("🎯 สถิติแพ้ / ชนะ (Win / Loss)")
+                    # กรองเฉพาะรายการที่ปิดสถานะแล้ว (Close_Price > 0) มาคำนวณ Win/Loss
+                    closed_positions = tfex_df[tfex_df['Close_Price_Cleaned'] > 0]
+                    
+                    if not closed_positions.empty and 'Win_Lose' in closed_positions.columns:
+                        win_count = len(closed_positions[closed_positions['Win_Lose'] == 'Win'])
+                        lose_count = len(closed_positions[closed_positions['Win_Lose'] == 'Lose'])
+                    else:
+                        win_count, lose_count = 0, 0
+                    
+                    # สร้างกราฟโดนัทแสดง Win/Loss ด้วย Plotly
+                    fig_winloss = go.Figure(go.Pie(
+                        labels=['Win (ชนะ)', 'Lose (แพ้)'],
+                        values=[win_count, lose_count],
+                        hole=0.5,
+                        marker_colors=['#26A69A', '#EF5350']
+                    ))
+                    fig_winloss.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), showlegend=True)
+                    st.plotly_chart(fig_winloss, use_container_width=True)
+                
+                with col_right:
+                    # 2. สร้าง Gauge Chart (กราฟ Margin เดิมของคุณ)
+                    fig_gauge = go.Figure(go.Indicator(
+                        mode = "gauge+number",
+                        value = utilization,
+                        domain = {'x': [0, 1], 'y': [0, 1]},
+                        title = {'text': "Margin Utilization (%)"},
+                        gauge = {
+                            'axis': {'range': [0, 100]},
+                            'bar': {'color': "darkblue"},
+                            'steps': [
+                                {'range': [0, 50], 'color': "#26A69A"},
+                                {'range': [50, 80], 'color': "#FBC02D"},
+                                {'range': [80, 100], 'color': "#EF5350"}
+                            ],
+                            'threshold': {
+                                'line': {'color': "white", 'width': 4},
+                                'thickness': 0.75,
+                                'value': utilization
+                            }
+                        }
+                    ))
+                    
+                    fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
+                    st.plotly_chart(fig_gauge, use_container_width=True)
+                                
+                st.divider()
+                
+                # 2. ส่วนของฟอร์มรับค่าการเทรด TFEX และการดึง ATR อัตโนมัติด้วยปุ่มกด
+                with st.form("tfex_entry_form", clear_on_submit=True):
+                    st.subheader("🛡 คำนวณขนาดสัญญาและระบบ ATR Stop Loss")
+                    
+                    # ส่วนสำหรับกดปุ่มดึงค่า ATR ล่าสุด
+                    col_btn1, col_btn2 = st.columns([1, 2])
+                    with col_btn1:
+                        fetch_atr_clicked = st.form_submit_button("🔄 ดึงค่า ATR ล่าสุด")
+                    
+                    # จัดการเก็บค่า ATR ไว้ใน session_state เมื่อมีการกดปุ่ม
+                    if fetch_atr_clicked:
+                        with st.spinner("กำลังดึงข้อมูลราคาจากตลาด..."):
+                            latest_atr = get_auto_atr_cached("^SET50")
+                            st.session_state['active_atr'] = latest_atr
+                            st.success(f"ดึงค่า ATR สำเร็จ: {latest_atr} จุด")
+                    
+                    # กำหนดค่า ATR เริ่มต้นหากยังไม่เคยกดปุ่ม (Default เป็น 6.5 หรือค่าล่าสุดใน session)
+                    default_atr = st.session_state.get('active_atr', 6.5)
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        date_open = st.date_input("วันที่เปิด")
+                        series = st.text_input("Series (เช่น S50U26)", value="S50U26")
+                        Status = st.selectbox("สถานะ:", ["Long", "Short"])
+                    with col2:
+                        entry = st.number_input("ราคา Open:", format="%.2f", value=950.0)
+                        size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
+                        trade_id_input = st.text_input("Trade ID (เว้นว่างเพื่อรันอัตโนมัติ):")  
+                    with col3:
+                        comm_input = st.number_input("ค่าคอมมิชชัน + ค่าธรรมเนียม (บาท):", min_value=0.0, step=10.0, value=50.0)
+                        
+                        # ⭐️ เพิ่มช่องให้พิมพ์แก้ไขค่า ATR ได้เอง (โดยดึงค่า default มาแสดง และยอมให้พิมพ์ทับได้เพื่อดูจาก TradingView)
+                        user_atr = st.number_input("ค่า ATR (แก้ไขได้):", min_value=0.1, step=0.1, value=float(default_atr))
+                        
+                        # ตัวคูณ ATR (Multiplier)
+                        atr_multiplier = st.number_input("ตัวคูณ ATR (Multiplier):", min_value=0.5, step=0.1, value=1.5)
+                        
+                        # คำนวณจุด SL จากค่า ATR ที่ผู้ใช้ใช้งานจริง (user_atr)
+                        calculated_sl_pts = user_atr * atr_multiplier
+                        st.write(f"📌 Stop Loss แนะนำ: **{calculated_sl_pts:.2f} จุด** (จาก ATR: {user_atr})")
+                        
+                        reason = st.text_area("เหตุผลที่เข้าเทรด:")
+                    
+                    # ปุ่มยืนยันการเปิดสถานะเทรดจริง
+                    submit_trade = st.form_submit_button("เปิดสถานะเทรด")
+                    
+                    if submit_trade:
+                        final_trade_id = trade_id_input.strip()
+                        if not final_trade_id:
+                            final_trade_id = f"TX-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
+                            
+                        # คำนวณราคา Stop Loss จริงบนกระดาน โดยใช้ calculated_sl_pts ที่คำนวณจาก user_atr
+                        calculated_sl_price = (entry - calculated_sl_pts) if Status == "Long" else (entry + calculated_sl_pts)
+                            
+                        new_record = {
+                            "Trade_ID": final_trade_id,
+                            "Date_Open": date_open.strftime("%Y-%m-%d"),
+                            "Date_Close": "",          
+                            "Series": series,
+                            "Status": Status,
+                            "Size": size,
+                            "Open_Price": entry,
+                            "Close_Price": 0,          
+                            "Realized": 0,            
+                            "Comm": comm_input,        
+                            "Net_Profit": 0,
+                            "Win_Lose": "",            
+                            "Reason": f"{reason} | ATR SL: {calculated_sl_price:.2f}"
+                        }
+                        
+                        df_to_save = pd.DataFrame([new_record])
+                        
+                        with st.spinner("⏳ กำลังเปิดสถานะและบันทึกลง Google Sheets..."):
+                            if save_data_to_sheet(df_to_save, "TFEX_History"):
+                                st.cache_data.clear()  
+                                st.toast("เปิดสถานะเทรดเรียบร้อย! 🎉", icon="✅")
+                                st.rerun()
+                                
+            with sub_tfex_close:
+                st.subheader("🏁 ปิดสถานะเทรด")
+                
+                # ดึงข้อมูลจากฟังก์ชัน load_data สดๆ ใหม่ๆ
+                tfex_df = load_data("TFEX_History")
+                
+                # กรองเฉพาะรายการที่ยังถืออยู่
+                tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+                open_trades = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
+                
+                if not open_trades.empty:
+                    # ให้เลือก Trade_ID
+                    selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
+                    
+                    # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
+                    trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
+                    st.info(f"🔍 รายละเอียดออเดอร์เดิม: **{trade_detail['Status']}** จำนวน **{trade_detail['Size']}** สัญญา ที่ราคา **{trade_detail['Open_Price']}**")
+                    
+                    # ฟอร์มกรอกข้อมูลปิดสถานะ
+                    c_col1, c_col2 = st.columns(2)
+                    close_price = c_col1.number_input("ราคาปิด:", value=float(trade_detail['Open_Price']), step=0.1, format="%.2f")
+                    close_date = c_col2.date_input("วันที่ปิด:")
+                    
+                    if st.button("ยืนยันการปิดสถานะ", use_container_width=True, type="primary"):
+                        # บันทึกปิดสถานะพร้อม Loading Spinner และล้าง Cache ทันที
+                        with st.spinner("⏳ กำลังบันทึกการปิดสถานะและคำนวณผลลัพธ์..."):
+                            success = update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
+                            if success:
+                                st.cache_data.clear()  # ล้าง Cache ข้อมูลในหน่วยความจำ
+                                st.toast("ปิดสถานะสำเร็จ และคำนวณกำไรเรียบร้อย! 🏁", icon="🏆")
+                                st.rerun()             # โหลดหน้าจอใหม่เพื่อให้ข้อมูลปัจจุบันที่สุดแสดงทันที
+                else:
+                    st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
+                    
+            with sub_tfex_cash:
+                st.subheader("💰 บันทึกเติม/ถอนเงิน")
+                
+                with st.form("cash_flow"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        cash_date = st.date_input("วันที่:")
+                        cash_type = st.selectbox("ประเภท:", ["Deposit", "Withdraw"])
+                    with col2:
+                        amount = st.number_input("จำนวนเงิน (บาท):", min_value=0.0, step=100.0)
+                        note = st.text_input("หมายเหตุ:")
+                    
+                    if st.form_submit_button("บันทึกรายการ"):
+                        new_cash = pd.DataFrame([{
+                            "Date": str(cash_date),
+                            "Type": cash_type,
+                            "Amount": amount,
+                            "Note": note
+                        }])
+                        if save_cash_to_gsheet(new_cash, "Cash_Flow"):
+                            st.success("บันทึกข้อมูลเงินเรียบร้อย!")
+                            st.rerun()
+        
+                st.divider()
+                st.write("รายการล่าสุด:")
+                st.dataframe(cash_df, use_container_width=True)
+            
+            with sub_tfex_history:
+                st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
+                
+                if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
+                    # 1. จัดเตรียมข้อมูล
+                    closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
+                    closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
+                    
+                    # 3. ตารางแสดงราย Series (เปรียบเทียบว่า Series ไหนเทรดแล้วกำไรที่สุด)
+                    st.write("📊 สรุปผลงานราย Series:")
+                    series_perf = perf_df.groupby('Series').agg({
+                        'Net_Profit': 'sum',
+                        'Trade_ID': 'count'
+                    }).rename(columns={'Trade_ID': 'Trades', 'Net_Profit': 'Total PnL'})
+                    
+                    st.dataframe(series_perf.sort_values(by='Total PnL', ascending=False), use_container_width=True)
+    
+                    # --- กราฟแสดงการเติบโตของพอร์ต TFEX ---
+                    st.subheader("📈 กราฟการเติบโตของพอร์ต (Portfolio Growth)")
+    
+                    if not perf_df.empty:
+                        # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟ TFEX
+                        c_f1, c_f2 = st.columns([2, 2])
+                        with c_f1:
+                            tfex_view_range = st.selectbox(
+                                "⏳ เลือกช่วงเวลาแสดงผล (TFEX):",
+                                ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
+                                key="tfex_line_view_range"
+                            )
+                        
+                        # แปลงคอลัมน์วันที่ให้เป็น datetime
+                        perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'], errors='coerce')
+                        df_tfex_filtered = perf_df.dropna(subset=['Date_Close']).sort_values('Date_Close').copy()
+                        
+                        max_date = df_tfex_filtered['Date_Close'].max()
+                        initial_capital_base = net_capital  # เงินต้นเริ่มต้น
+                        
+                        # กรองข้อมูลตามช่วงเวลาที่เลือก และคำนวณกำไรย้อนหลังที่ถูกตัดออกไปรวมกับฐานเงินต้น
+                        if tfex_view_range == "3 เดือนล่าสุด":
+                            start_date = max_date - pd.DateOffset(months=3)
+                            past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
+                            initial_capital_base += past_slice['Net_Profit'].sum()
+                            df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
+                        elif tfex_view_range == "6 เดือนล่าสุด":
+                            start_date = max_date - pd.DateOffset(months=6)
+                            past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
+                            initial_capital_base += past_slice['Net_Profit'].sum()
+                            df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
+                        elif tfex_view_range == "1 ปีล่าสุด (YTD / 12M)":
+                            start_date = max_date - pd.DateOffset(years=1)
+                            past_slice = df_tfex_filtered[df_tfex_filtered['Date_Close'] < start_date]
+                            initial_capital_base += past_slice['Net_Profit'].sum()
+                            df_tfex_filtered = df_tfex_filtered[df_tfex_filtered['Date_Close'] >= start_date]
+                    
+                        if not df_tfex_filtered.empty:
+                            # 2. Dynamic Aggregation: ถ้าระยะเวลานานกว่า 1 ปี ให้ยุบกลุ่มเป็น "รายเดือน" เพื่อความสะอาดของกราฟ
+                            date_span_days = (df_tfex_filtered['Date_Close'].max() - df_tfex_filtered['Date_Close'].min()).days
+                            
+                            if date_span_days > 365 and tfex_view_range == "ทั้งหมด (All Time)":
+                                df_tfex_filtered['Period_Key'] = df_tfex_filtered['Date_Close'].dt.to_period('M')
+                                df_tfex_filtered['Time_Label'] = df_tfex_filtered['Period_Key'].apply(lambda r: r.strftime('%b %Y'))
+                                df_tfex_filtered['Sort_Time'] = df_tfex_filtered['Period_Key'].dt.start_time
+                                agg_freq_text = "รายเดือน (มุมมองระยะยาว)"
+                            else:
+                                df_tfex_filtered['Period_Key'] = df_tfex_filtered['Date_Close'].dt.to_period('W-MON')
+                                df_tfex_filtered['Time_Label'] = df_tfex_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
+                                df_tfex_filtered['Sort_Time'] = df_tfex_filtered['Period_Key'].dt.start_time
+                                agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
+                    
+                            with c_f2:
+                                st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
+                    
+                            # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
+                            growth_df = df_tfex_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
+                                'Net_Profit': 'sum'
+                            }).sort_values('Sort_Time')
+                            
+                            # คำนวณมูลค่าพอร์ตสะสม
+                            growth_df['Cumulative_Profit'] = growth_df['Net_Profit'].cumsum()
+                            growth_df['Portfolio_Value'] = initial_capital_base + growth_df['Cumulative_Profit']
+                            
+                            # เพิ่มจุดเริ่มต้น (Start Point) ให้กราฟเริ่มสวยงามที่ฐานเงินต้น
+                            start_date_point = growth_df['Sort_Time'].min() - pd.Timedelta(days=1)
+                            start_row = pd.DataFrame({
+                                'Sort_Time': [start_date_point], 
+                                'Time_Label': ['จุดเริ่มต้น'], 
+                                'Portfolio_Value': [initial_capital_base]
+                            })
+                            growth_df = pd.concat([start_row, growth_df[['Sort_Time', 'Time_Label', 'Portfolio_Value']]], ignore_index=True)
+                            growth_df = growth_df.sort_values('Sort_Time').reset_index(drop=True)
+                    
+                            # 3. สร้างกราฟเส้นด้วย Plotly
+                            fig_growth = px.line(
+                                growth_df, 
+                                x='Time_Label', 
+                                y='Portfolio_Value',
+                                markers=True,
+                                line_shape='spline'
+                            )
+                            
+                            # ปรับแต่งหน้าตาให้ดูมืออาชีพ พร้อมเผื่อสเกลแกน Y ด้านบนไม่ให้เส้นชนขอบ
+                            y_max = growth_df['Portfolio_Value'].max()
+                            y_min = growth_df['Portfolio_Value'].min()
+                            y_upper_margin = (y_max - y_min) * 0.15 if y_max != y_min else y_max * 0.15
+                    
+                            fig_growth.update_traces(line=dict(color='#26A69A', width=3))
+                            fig_growth.update_layout(
+                                xaxis_title="ช่วงเวลา",
+                                yaxis_title="มูลค่าพอร์ต (บาท)",
+                                yaxis=dict(range=[y_min * 0.98, y_max + y_upper_margin]),
+                                margin=dict(l=20, r=20, t=30, b=20),
+                                hovermode="x unified"
+                            )
+                            
+                            st.plotly_chart(fig_growth, use_container_width=True)
+                        else:
+                            st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
+                    else:
+                        st.info("ยังไม่มีข้อมูลประวัติการเทรด TFEX ที่ปิดสถานะ")
+    
+                    # --- สรุปผลรายเดือนแบบ Combo Chart & Table ---
+                    st.divider()
+                    st.subheader("🗓 สรุปผลรายเดือน")
+                    if not closed_trades.empty:
+                        # 1. เพิ่มตัวเลือกช่วงเวลา (Quick Filter) สำหรับสรุปผลรายเดือน
+                        col_f1, col_f2 = st.columns([2, 2])
+                        with col_f1:
+                            monthly_view_range = st.selectbox(
+                                "⏳ เลือกช่วงเวลาแสดงผล (สรุปรายเดือน):",
+                                ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
+                                key="monthly_view_range"
+                            )
+                        
+                        # แปลงคอลัมน์วันที่ให้เป็น datetime และสำเนาข้อมูล
+                        closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'], errors='coerce')
+                        df_monthly_filtered = closed_trades.dropna(subset=['Date_Close']).sort_values('Date_Close').copy()
+                        
+                        max_date = df_monthly_filtered['Date_Close'].max()
+                        capital_base_for_monthly = net_capital  # เงินต้นเริ่มต้น
+                        
+                        # กรองข้อมูลตามช่วงเวลาที่ผู้ใช้เลือก
+                        if monthly_view_range == "3 เดือนล่าสุด":
+                            start_date = max_date - pd.DateOffset(months=3)
+                            past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
+                            capital_base_for_monthly += past_slice['Net_Profit'].sum()
+                            df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
+                        elif monthly_view_range == "6 เดือนล่าสุด":
+                            start_date = max_date - pd.DateOffset(months=6)
+                            past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
+                            capital_base_for_monthly += past_slice['Net_Profit'].sum()
+                            df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
+                        elif monthly_view_range == "1 ปีล่าสุด (YTD / 12M)":
+                            start_date = max_date - pd.DateOffset(years=1)
+                            past_slice = df_monthly_filtered[df_monthly_filtered['Date_Close'] < start_date]
+                            capital_base_for_monthly += past_slice['Net_Profit'].sum()
+                            df_monthly_filtered = df_monthly_filtered[df_monthly_filtered['Date_Close'] >= start_date]
+                    
+                        if not df_monthly_filtered.empty:
+                            # 2. จัดเตรียมและคำนวณค่าต่างๆ ตามข้อมูลที่ถูกกรอง
+                            monthly_perf = df_monthly_filtered.groupby(df_monthly_filtered['Date_Close'].dt.to_period('M'))['Net_Profit'].sum().reset_index()
+                            monthly_perf['Month'] = monthly_perf['Date_Close'].dt.strftime('%Y-%m')
+                            
+                            # คำนวณค่าสถิติต่างๆ ต่อเนื่อง
+                            monthly_perf['Cumulative_Profit'] = monthly_perf['Net_Profit'].cumsum()
+                            monthly_perf['Portfolio_Value'] = capital_base_for_monthly + monthly_perf['Cumulative_Profit']
+                            monthly_perf['Monthly_Return_Pct'] = (monthly_perf['Net_Profit'] / capital_base_for_monthly) * 100
+                            monthly_perf['Cumulative_Pct'] = (monthly_perf['Cumulative_Profit'] / capital_base_for_monthly) * 100
+                            
+                            # 3. คำนวณสเกลแกน Y ให้เผื่อ Gap ทั้งบนและล่าง (ป้องกันแท่งกราฟชนขอบ)
+                            y1_min = monthly_perf['Net_Profit'].min()
+                            y1_max = monthly_perf['Net_Profit'].max()
+                            # เผื่อสเกลแกน Y ฝั่งซ้าย (Net Profit) ขึ้น/ลง 20%
+                            y1_padding = (y1_max - y1_min) * 0.2 if y1_max != y1_min else abs(y1_max) * 0.2
+                            if y1_padding == 0: y1_padding = 1000
+                            y1_range = [min(0, y1_min) - y1_padding, y1_max + y1_padding]
+                    
+                            y2_min = monthly_perf['Cumulative_Pct'].min()
+                            y2_max = monthly_perf['Cumulative_Pct'].max()
+                            # เผื่อสเกลแกน Y ฝั่งขวา (% สะสม) ขึ้น/ลง 20%
+                            y2_padding = (y2_max - y2_min) * 0.2 if y2_max != y2_min else abs(y2_max) * 0.2
+                            if y2_padding == 0: y2_padding = 5
+                            y2_range = [min(0, y2_min) - y2_padding, y2_max + y2_padding]
+                    
+                            # 4. วาดกราฟ Plotly Combo
+                            bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in monthly_perf['Net_Profit']]
+                            fig = make_subplots(specs=[[{"secondary_y": True}]])
+                            
+                            fig.add_trace(go.Bar(x=monthly_perf['Month'], y=monthly_perf['Net_Profit'], name="กำไร/ขาดทุน", marker_color=bar_colors), secondary_y=False)
+                            fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
+                            
+                            fig.update_layout(
+                                title_text=f"Monthly Performance ({monthly_view_range})", 
+                                height=400, 
+                                margin=dict(l=20, r=20, t=40, b=20), 
+                                showlegend=True
+                            )
+                            
+                            # กำหนดช่วงสเกลแกน Y ทั้งสองฝั่งให้มีระยะห่าง (Gap)
+                            fig.update_yaxes(title_text="กำไร/ขาดทุน (บาท)", range=y1_range, secondary_y=False)
+                            fig.update_yaxes(title_text="% สะสม", range=y2_range, secondary_y=True)
+                    
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # 5. สร้างตารางสรุป
+                            def color_negative_red(val):
+                                if isinstance(val, (int, float)):
+                                    color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
+                                    return f'color: {color}'
+                                return None
+                    
+                            monthly_df = monthly_perf[['Month', 'Net_Profit', 'Monthly_Return_Pct', 'Portfolio_Value', 'Cumulative_Pct']]
+                            monthly_df.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', '% รายเดือน', 'มูลค่าพอร์ต (บาท)', '% สะสม']
+                    
+                            # --- CSS สำหรับจัดตารางให้ชิดขวา ---
+                            styled_df = monthly_df.style.format({
+                                'กำไร/ขาดทุน (บาท)': '{:,.2f}',
+                                '% รายเดือน': '{:+.2f} %', 
+                                'มูลค่าพอร์ต (บาท)': '{:,.2f}',
+                                '% สะสม': '{:+.2f} %'
+                            }) \
+                            .map(color_negative_red, subset=['กำไร/ขาดทุน (บาท)', '% รายเดือน', '% สะสม']) \
+                            .set_properties(**{'text-align': 'right'}) \
+                            .set_table_styles([
+                                {'selector': 'th', 'props': [('text-align', 'right')]},
+                                {'selector': 'td', 'props': [('text-align', 'right')]}
+                            ])
+                    
+                            # แสดงตารางผ่าน styled_df
+                            st.dataframe(styled_df, use_container_width=True)
+                        else:
+                            st.warning("ไม่มีข้อมูลรายการเทรดในช่วงเวลาที่เลือกครับ")
+                    else:
+                        st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
+            
+
+    # ==========================================================
+    # TAB ที่ 2: ภาพรวมความมั่งคั่ง (เพิ่มใหม่สำหรับสินทรัพย์อื่นๆ)
+    # ==========================================================
+    with main_tab_wealth:
+        st.subheader("📊 ระบบจัดการสินทรัพย์ระยะยาวและความมั่งคั่งรวม (Net Worth)")
+        
+        wealth_tab_overview, wealth_tab_form = st.tabs([
+            "📈 ภาพรวม Net Worth & สัดส่วนสินทรัพย์", 
+            "📝 บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน)"
+        ])
+        
+        with wealth_tab_overview:
+            col1, col2, col3 = st.columns(3)
+            col1.metric("มูลค่าพอร์ตหุ้นรวม", "0.00 ฿")
+            col2.metric("สินทรัพย์มั่นคง (PVD/สหกรณ์/ประกัน)", "0.00 ฿")
+            col3.metric("ความมั่งคั่งสุทธิรวม (Net Worth)", "0.00 ฿")
+            
+            st.divider()
+            st.info("📌 พื้นที่สำหรับแสดงกราฟ Donut สัดส่วนสินทรัพย์ และกราฟเติบโต Net Worth ในขั้นตอนถัดไป")
+
+        with wealth_tab_form:
+            with st.form("other_assets_form"):
+                st.write("### เพิ่ม/อัปเดตข้อมูลสินทรัพย์อื่นๆ")
+                asset_category = st.selectbox(
+                    "ประเภทสินทรัพย์", 
+                    ["กองทุนสำรองเลี้ยงชีพ (PVD)", "สหกรณ์ออมทรัพย์", "ประกันสะสมทรัพย์", "อื่นๆ"]
+                )
+                asset_title = st.text_input("ชื่อรายการ / สถาบันการเงิน")
+                asset_val = st.number_input("มูลค่าปัจจุบัน (บาท)", min_value=0.0, step=1000.0)
+                asset_note = st.text_area("หมายเหตุ / ผลตอบแทน / เงื่อนไข")
+                
+                submitted_asset = st.form_submit_button("💾 บันทึกสินทรัพย์")
+                if submitted_asset:
+                    st.success(f"บันทึกข้อมูล {asset_category} สำเร็จ!")
+                    
+    
 
 # ------------------------------
 if __name__ == "__main__":
