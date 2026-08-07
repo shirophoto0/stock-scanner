@@ -4766,7 +4766,70 @@ def main():
                     
             except Exception as e:
                 st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
+
+    ########## ประกันภัย ###############
+    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked) รายเดือน", expanded=False):
+    
+        with st.form("insurance_upload_form"):
+            col_y, col_m = st.columns(2)
+            
+            with col_y:
+                # ใช้เลือกปี ค.ศ. โดยตรง (ค่าเริ่มต้นปี 2026 ตามปัจจุบัน)
+                ins_year_ce = st.number_input("ปี ค.ศ.", min_value=2000, max_value=2050, value=2026)
+            with col_m:
+                months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", 
+                               "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+                ins_month = st.selectbox("เลือกเดือนสิ้นงวด", months_list, key="ins_month_select")
                 
+            ins_redemption_value = st.number_input(
+                "มูลค่ารับซื้อคืนหน่วยลงทุนสิ้นเดือน (บาท)", 
+                min_value=0.0, 
+                format="%.2f", 
+                value=0.0,
+                help="กรอกยอดมูลค่าพอร์ตประกันตามใบแจ้งยอดหรือแอปพลิเคชัน ณ สิ้นเดือนนั้นๆ"
+            )
+            
+            submitted_ins = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลประกันภัย")
+            
+            if submitted_ins:
+                if ins_redemption_value > 0:
+                    try:
+                        client = get_gsheet_client()
+                        sheet_ins = client.open('MyStockData').worksheet('Insurance')
+                        
+                        existing_data = sheet_ins.get_all_records()
+                        df_existing_ins = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
+                        
+                        is_duplicate = False
+                        
+                        # เช็คข้อมูลซ้ำจาก ปี ค.ศ. และ เดือน
+                        if not df_existing_ins.empty and 'Year_CE' in df_existing_ins.columns and 'Month' in df_existing_ins.columns:
+                            match_idx = df_existing_ins[
+                                (df_existing_ins['Year_CE'].astype(str) == str(ins_year_ce)) & 
+                                (df_existing_ins['Month'] == ins_month)
+                            ].index
+                            
+                            if len(match_idx) > 0:
+                                is_duplicate = True
+                                row_num = match_idx[0] + 2 
+                                
+                                # โครงสร้างคอลัมน์ในชีท Insurance ตอนนี้จะมีแค่: [Year_CE, Month, Redemption_Value] (3 คอลัมน์)
+                                updated_values = [ins_year_ce, ins_month, ins_redemption_value]
+                                sheet_ins.update(f"A{row_num}:C{row_num}", [updated_values])
+                                st.success(f"✅ อัปเดตมูลค่าประกันของ **{ins_month} ค.ศ. {ins_year_ce}** เป็น **{ins_redemption_value:,.2f} บาท** เรียบร้อยแล้ว!")
+                        
+                        if not is_duplicate:
+                            new_row = [ins_year_ce, ins_month, ins_redemption_value]
+                            sheet_ins.append_row(new_row)
+                            st.success(f"✅ บันทึกข้อมูลใหม่ของ **{ins_month} ค.ศ. {ins_year_ce}** เรียบร้อยแล้ว!")
+                            
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลประกัน: {e}")
+                else:
+                    st.warning("กรุณากรอกมูลค่ารับซื้อคืนหน่วยลงทุนให้มากกว่า 0")
+                    
 # ------------------------------
 if __name__ == "__main__":
     main()
