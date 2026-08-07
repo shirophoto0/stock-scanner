@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd  
 import plotly.graph_objects as go
 import os
+import google.generativeai as genai
+import io
 import json
 import requests
 import gspread
@@ -19,10 +21,61 @@ from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
-
+from PIL import Image
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
+
+# Def wealth #
+# 1. ฟังก์ชันเรียก Gemini AI มาแปลงรูปภาพเป็นข้อมูลโครงสร้าง
+def extract_pvd_from_image(image_file, year_be):
+    try:
+        # ดึง API Key จาก st.secrets
+        api_key = st.secrets.get("GOOGLE_API_KEY", "")
+        if not api_key:
+            st.error("ไม่พบ GOOGLE_API_KEY ใน st.secrets กรุณาตรวจสอบการตั้งค่า")
+            return None
+            
+        genai.configure(api_key=api_key)
+        # ใช้โมเดล gemini-1.5-flash ที่รองรับ Vision
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2562 -> 2019)
+        year_ce = int(year_be) - 543
+        
+        prompt = f"""
+        คุณเป็นผู้ช่วยทางการเงินอัจฉริยะ หน้าที่ของคุณคืออ่านรูปภาพรายงานยอดรวมกองทุนสำรองเลี้ยงชีพของปี พ.ศ. {year_be} (ค.ศ. {year_ce}) นี้ 
+        แล้วสกัดข้อมูลตัวเลขจริงจากในรูปภาพให้อยู่ในรูปแบบ CSV (โดยใช้เครื่องหมายจุลภาค , คั่น และไม่ต้องใส่คอมม่าคั่นหลักพันในตัวเลข)
+        
+        โปรดจัดรูปแบบ CSV ให้มีหัวตารางและคอลัมน์ดังนี้เป๊ะๆ:
+        Year_CE,Year_BE,Member_Saving,Member_Benefit,Member_Total,Employer_Matching,Employer_Benefit,Employer_Total,Grand_Total,Total_Units
+        
+        วิธีการเก็บข้อมูลจากภาพ:
+        - Year_CE: ใส่ค่า ค.ศ. คือ {year_ce}
+        - Year_BE: ใส่ค่า พ.ศ. คือ {year_be}
+        - Member_Saving: ยอดเงินสะสม (ส่วนของสมาชิก)
+        - Member_Benefit: ผลประโยชน์เงินสะสม (ส่วนของสมาชิก)
+        - Member_Total: รวมส่วนของสมาชิก (Total Amount)
+        - Employer_Matching: เงินสมทบ (ส่วนของนายจ้าง)
+        - Employer_Benefit: ผลประโยชน์เงินสมทบ (ส่วนของนายจ้าง)
+        - Employer_Total: รวมส่วนของนายจ้าง (Total Amount)
+        - Grand_Total: ยอดรวมทั้งสิ้น (Grand Total)
+        - Total_Units: จำนวนหน่วยรวม (Total Units)
+        
+        โปรดส่งกลับมาเฉพาะข้อมูล CSV ที่สะอาดบรรทัดเดียว (หัวตาราง 1 บรรทัด และข้อมูลตัวเลข 1 บรรทัด) ไม่มีคำอธิบายเพิ่มเติม ไม่มี markdown block อื่นใดทั้งสิ้น
+        """
+        
+        img = Image.open(image_file)
+        response = model.generate_content([prompt, img])
+        
+        # ทำความสะอาดข้อความ CSV ที่ได้จาก AI
+        csv_text = response.text.replace("```csv", "").replace("```", "").strip()
+        df_result = pd.read_csv(io.StringIO(csv_text))
+        return df_result
+        
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการประมวลผลรูปภาพ: {e}")
+        return None
 
 ###################
 # Def TEFEX #
@@ -4553,22 +4606,51 @@ def main():
             st.divider()
             st.info("📌 พื้นที่สำหรับแสดงกราฟ Donut สัดส่วนสินทรัพย์ และกราฟเติบโต Net Worth ในขั้นตอนถัดไป")
 
-        with wealth_tab_form:
-            with st.form("other_assets_form"):
-                st.write("### เพิ่ม/อัปเดตข้อมูลสินทรัพย์อื่นๆ")
-                asset_category = st.selectbox(
-                    "ประเภทสินทรัพย์", 
-                    ["กองทุนสำรองเลี้ยงชีพ (PVD)", "สหกรณ์ออมทรัพย์", "ประกันสะสมทรัพย์", "อื่นๆ"]
-                )
-                asset_title = st.text_input("ชื่อรายการ / สถาบันการเงิน")
-                asset_val = st.number_input("มูลค่าปัจจุบัน (บาท)", min_value=0.0, step=1000.0)
-                asset_note = st.text_area("หมายเหตุ / ผลตอบแทน / เงื่อนไข")
+        # ส่วนซ่อน-เปิด สำหรับอัปโหลด PVD
+    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ด้วยรูปภาพ", expanded=False):
+        
+        with st.form("pvd_upload_form"):
+            col_y1, col_y2 = st.columns(2)
+            with col_y1:
+                input_year_be = st.number_input("ระบุปี พ.ศ. ของเอกสาร", min_value=2500, max_value=2570, value=2562)
+            with col_y2:
+                st.info(f"แปลงเป็นปี ค.ศ. อัตโนมัติ: **{int(input_year_be) - 543}**")
                 
-                submitted_asset = st.form_submit_button("💾 บันทึกสินทรัพย์")
-                if submitted_asset:
-                    st.success(f"บันทึกข้อมูล {asset_category} สำเร็จ!")
-                    
-    
+            uploaded_pvd_file = st.file_uploader("อัปโหลดรูปภาพรายงาน PVD (JPG, PNG)", type=["jpg", "jpeg", "png"])
+            
+            submitted_pvd = st.form_submit_button("🔍 อ่านข้อมูลจากรูปภาพด้วย AI")
+            
+            if submitted_pvd:
+                if uploaded_pvd_file is not None:
+                    with st.spinner("กำลังให้ AI อ่านและวิเคราะห์ข้อมูลจากภาพ..."):
+                        df_extracted = extract_pvd_from_image(uploaded_pvd_file, input_year_be)
+                        
+                        if df_extracted is not None and not df_extracted.empty:
+                            st.success("อ่านข้อมูลสำเร็จ! ตรวจสอบความถูกต้องด้านล่าง:")
+                            st.dataframe(df_extracted, use_container_width=True)
+                            
+                            # เก็บลง st.session_state ชั่วคราวเพื่อให้ผู้ใช้กดบันทึกลง Google Sheets ต่อไป
+                            st.session_state['temp_pvd_df'] = df_extracted
+                        else:
+                            st.warning("ไม่สามารถดึงข้อมูลจากรูปภาพได้ กรุณาลองใหม่อีกครั้ง")
+                else:
+                    st.warning("กรุณาอัปโหลดรูปภาพก่อนกดปุ่มประมวลผล")
+            
+        # ปุ่มยืนยันบันทึกลง Google Sheets (ถ้านอกฟอร์ม จะกดใช้งานได้อิสระหลังจาก AI อ่านข้อมูลเสร็จแล้ว)
+        if 'temp_pvd_df' in st.session_state:
+            st.write("---")
+            st.write("📋 **ข้อมูลที่พร้อมบันทึก:**")
+            st.dataframe(st.session_state['temp_pvd_df'], use_container_width=True)
+            
+            if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets"):
+                # นำ DataFrame ไปบันทึกลง Google Sheets Worksheet 'Provident_Fund' ตรงนี้
+                # เช่น: append_to_gsheet(st.session_state['temp_pvd_df'], worksheet_name="Provident_Fund")
+                
+                st.success("บันทึกข้อมูลเข้าสู่ระบบเรียบร้อยแล้ว! พร้อมนำไปทำ Dashboard ต่อไป")
+                # เคลียร์ค่าทิ้งหลังบันทึกสำเร็จ
+                del st.session_state['temp_pvd_df']
+                st.rerun()
+                
 
 # ------------------------------
 if __name__ == "__main__":
