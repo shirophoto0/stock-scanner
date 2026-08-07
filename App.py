@@ -18,6 +18,7 @@ import plotly.express as px
 import datetime
 import plotly
 from datetime import date
+from datetime import datetime
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
