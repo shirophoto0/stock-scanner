@@ -11,7 +11,6 @@ import google.generativeai as genai
 import io
 import json
 import requests
-#from datetime import date
 import datetime
 import gspread
 import seaborn as sns
@@ -19,7 +18,7 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
-from datetime import date
+#from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
