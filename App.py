@@ -4722,151 +4722,63 @@ def main():
             # ==========================================
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
+                # 1. ดึงข้อมูล
                 client = get_gsheet_client()
-                
-                sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
-                sheet_ins = client.open('MyStockData').worksheet('Insurance')
-                sheet_coop = client.open('MyStockData').worksheet('Coop')
-                
-                df_pvd = pd.DataFrame(sheet_pvd.get_all_records())
-                df_ins = pd.DataFrame(sheet_ins.get_all_records())
-                df_coop = pd.DataFrame(sheet_coop.get_all_records())
-                
-                import plotly.graph_objects as go
-                fig_line = go.Figure()
-                has_data = False
-                
-                # เตรียมตัวแปรพอร์ตหุ้นปัจจุบัน
-                current_stock_val = total_stock_value if 'total_value' in locals() or 'total_stock_value' in locals() else 0.0
-                if 'total_stock_value' not in locals() and 'total_value' in locals():
-                    current_stock_val = total_value
+                df_pvd = pd.DataFrame(client.open('MyStockData').worksheet('Provident_Fund').get_all_records())
+                df_ins = pd.DataFrame(client.open('MyStockData').worksheet('Insurance').get_all_records())
+                df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
 
-                # 1. จัดการข้อมูล PVD (รองรับทั้งแบบรายปี 2019-2025 และรายเดือน 2026)
-                df_pvd_clean = pd.DataFrame(columns=['Date', 'PVD'])
-                if not df_pvd.empty:
-                    thai_months = {
-                        "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4, 
-                        "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8, 
-                        "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
-                    }
+                # 2. ฟังก์ชันช่วยเตรียมข้อมูล Date
+                def clean_df(df, date_col, val_col, name):
+                    df = df.copy()
+                    # แปลงวันที่
+                    if date_col == 'Month': # เฉพาะ PVD ที่มีคอลัมน์ Month
+                        df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df[date_col].replace('', '12').map({
+                            'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
+                            'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08',
+                            'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'
+                        }).fillna('12') + '-01')
+                    else:
+                        df['Date'] = pd.to_datetime(df[date_col])
                     
-                    if 'Year_CE' in df_pvd.columns and 'Grand_Total' in df_pvd.columns:
-                        def parse_pvd_date(row):
-                            year = row.get('Year_CE', '')
-                            month = row.get('Month', '')
-                            if not year:
-                                return pd.NaT
-                            try:
-                                year_int = int(str(year).strip())
-                                if month in thai_months:
-                                    month_int = thai_months[month]
-                                    return pd.to_datetime(f"{year_int}-{month_int:02d}-01")
-                                else:
-                                    return pd.to_datetime(f"{year_int}-12-31")
-                            except:
-                                return pd.NaT
+                    df['Value'] = df[val_col].astype(str).str.replace(',', '').astype(float)
+                    df['Type'] = name
+                    return df[['Date', 'Value', 'Type']]
 
-                        df_pvd['Date'] = df_pvd.apply(parse_pvd_date, axis=1)
-                        df_pvd_clean = df_pvd.dropna(subset=['Date']).copy()
-                        df_pvd_clean['PVD'] = df_pvd_clean['Grand_Total'].astype(str).str.replace(',', '').astype(float)
-                        df_pvd_clean = df_pvd_clean[['Date', 'PVD']]
+                # เตรียมแต่ละรายการ
+                list_dfs = []
+                if not df_pvd.empty: list_dfs.append(clean_df(df_pvd, 'Month', 'Grand_Total', 'PVD'))
+                if not df_ins.empty: list_dfs.append(clean_df(df_ins, 'Date', 'Redemption_Value', 'Insurance'))
+                if not df_coop.empty: list_dfs.append(clean_df(df_coop, 'Date', 'Coop_Value', 'Coop'))
 
-                # 2. จัดการข้อมูลประกัน Unit Linked
-                df_ins_clean = pd.DataFrame(columns=['Date', 'Insurance'])
-                if not df_ins.empty and 'Date' in df_ins.columns and 'Redemption_Value' in df_ins.columns:
-                    df_ins_clean = df_ins.copy()
-                    df_ins_clean['Date'] = pd.to_datetime(df_ins_clean['Date'], errors='coerce')
-                    df_ins_clean = df_ins_clean.dropna(subset=['Date'])
-                    df_ins_clean['Insurance'] = df_ins_clean['Redemption_Value'].astype(str).str.replace(',', '').astype(float)
-                    df_ins_clean = df_ins_clean[['Date', 'Insurance']]
-
-                # 3. จัดการข้อมูลสหกรณ์ก๊าซ ปตท.
-                df_coop_clean = pd.DataFrame(columns=['Date', 'Coop'])
-                if not df_coop.empty and 'Date' in df_coop.columns and 'Coop_Value' in df_coop.columns:
-                    df_coop_clean = df_coop.copy()
-                    df_coop_clean['Date'] = pd.to_datetime(df_coop_clean['Date'], errors='coerce')
-                    df_coop_clean = df_coop_clean.dropna(subset=['Date'])
-                    df_coop_clean['Coop'] = df_coop_clean['Coop_Value'].astype(str).str.replace(',', '').astype(float)
-                    df_coop_clean = df_coop_clean[['Date', 'Coop']]
-
-                # 4. รวมข้อมูลทั้งหมดเข้าด้วยกันเพื่อสร้างเส้น Total Net Worth
-                if not df_pvd_clean.empty or not df_ins_clean.empty or not df_coop_clean.empty:
-                    # เริ่มจาก PVD เป็นฐาน
-                    df_total = df_pvd_clean.copy() if not df_pvd_clean.empty else pd.DataFrame(columns=['Date'])
+                if list_dfs:
+                    df_all = pd.concat(list_dfs)
                     
-                    if not df_ins_clean.empty:
-                        df_total = pd.merge(df_total, df_ins_clean, on='Date', how='outer')
-                    if not df_coop_clean.empty:
-                        df_total = pd.merge(df_total, df_coop_clean, on='Date', how='outer')
+                    # 3. สร้างเส้นรวม (Total)
+                    df_total = df_all.groupby('Date')['Value'].sum().reset_index()
+                    df_total['Type'] = 'Total Net Worth'
                     
-                    df_total = df_total.sort_values('Date').fillna(0)
+                    # รวมทุกอย่างเข้าด้วยกัน
+                    df_final = pd.concat([df_all, df_total])
+
+                    # 4. วาดกราฟด้วย Plotly Express (ใช้งานง่ายและไม่ค่อยพัง)
+                    import plotly.express as px
+                    fig = px.line(df_final, x='Date', y='Value', color='Type', 
+                                  markers=True, title="แนวโน้มความมั่งคั่งสุทธิ")
                     
-                    # เติมค่าสะสมย้อนหลังให้ประกัน/สหกรณ์กรณีข้อมูลยังไม่มีในปีก่อนหน้า (Forward fill)
-                    if 'Insurance' in df_total.columns:
-                        df_total['Insurance'] = df_total['Insurance'].replace(0, method='ffill').fillna(0)
-                    if 'Coop' in df_total.columns:
-                        df_total['Coop'] = df_total['Coop'].replace(0, method='ffill').fillna(0)
-                    if 'PVD' in df_total.columns:
-                        df_total['PVD'] = df_total['PVD'].replace(0, method='ffill').fillna(0)
-
-                    # คำนวณ Total Net Worth (PVD + Insurance + Coop + หุ้นปัจจุบัน)
-                    cols_to_sum = [c for c in ['PVD', 'Insurance', 'Coop'] if c in df_total.columns]
-                    df_total['Total_NW'] = df_total[cols_to_sum].sum(axis=1) + current_stock_val
-
-                    # --- วาดเส้นกราฟทั้งหมด ---
-                    
-                    # เส้นหลัก: Total Net Worth (เส้นหนา สีเข้ม)
-                    if 'Total_NW' in df_total.columns and not df_total['Total_NW'].empty:
-                        fig_line.add_trace(go.Scatter(
-                            x=df_total['Date'], y=df_total['Total_NW'],
-                            mode='lines+markers', name='Total Net Worth (รวมทั้งหมด)',
-                            line=dict(width=3, color='#1f77b4')
-                        ))
-                        has_data = True
-
-                    # เส้นย่อย: PVD
-                    if not df_pvd_clean.empty:
-                        fig_line.add_trace(go.Scatter(
-                            x=df_pvd_clean['Date'], y=df_pvd_clean['PVD'],
-                            mode='lines', name='กองทุนสำรองเลี้ยงชีพ (PVD)',
-                            line=dict(dash='dash')
-                        ))
-
-                    # เส้นย่อย: ประกัน Unit Linked
-                    if not df_ins_clean.empty:
-                        fig_line.add_trace(go.Scatter(
-                            x=df_ins_clean['Date'], y=df_ins_clean['Insurance'],
-                            mode='lines+markers', name='ประกัน Unit Linked'
-                        ))
-
-                    # เส้นย่อย: สหกรณ์ก๊าซ ปตท.
-                    if not df_coop_clean.empty:
-                        fig_line.add_trace(go.Scatter(
-                            x=df_coop_clean['Date'], y=df_coop_clean['Coop'],
-                            mode='lines+markers', name='สหกรณ์ก๊าซ ปตท.'
-                        ))
-
-                    # คำนวณหายอดสูงสุดเพื่อขยายแกน Y ให้เผื่อที่ว่างด้านบน 20% เสมอ
-                    max_val = df_total['Total_NW'].max() if 'Total_NW' in df_total.columns else 8000000
-                    upper_limit = max_val * 1.2 if max_val > 0 else 8000000
-
-                    fig_line.update_layout(
-                        xaxis_title="วันที่",
-                        yaxis_title="บาท",
-                        margin=dict(t=20, b=20, l=20, r=20),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                        yaxis=dict(
-                            range=[0, upper_limit],  # ขยายแกน Y เริ่มจาก 0 ถึงค่าสูงสุด + 20%
-                            tickformat=",d"
-                        )
+                    # ขยายแกน Y ให้สวยงาม
+                    max_y = df_total['Value'].max() * 1.2
+                    fig.update_layout(
+                        yaxis=dict(range=[0, max_y], tickformat=",.0f"),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
-                    st.plotly_chart(fig_line, use_container_width=True)
-                    st.caption("หมายเหตุ: ประวัติข้อมูล PVD เริ่มเก็บตั้งแต่ปี 2562 ส่วนสินทรัพย์อื่นๆ เริ่มเก็บประวัติเมื่อบันทึกข้อมูลครั้งแรก")
-                else:
-                    st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
                     
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("ยังไม่มีข้อมูลใน Spreadsheet ครับ")
+
             except Exception as e:
-                st.info(f"💡 กำลังเตรียมข้อมูลสำหรับกราฟประวัติการเติบโต... (รายละเอียด: {e})")
+                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
                 
 
         # ==========================================
