@@ -4649,13 +4649,16 @@ def main():
         # TAB ย่อยที่ 1: ภาพรวม Net Worth & สัดส่วนสินทรัพย์
         # ==========================================
         with wealth_tab_overview:
-
+            
             # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน
             pvd_value = get_latest_pvd_value()
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
-            # --- เพิ่มส่วนนี้: ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
+            # --- เพิ่มส่วนนี้: มูลค่าประกันบำนาญแบบ Fix Value ---
+            pension_insurance_value = 1337703.0
+            
+            # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
             sheet_bank = client.open('MyStockData').worksheet('Bank_Account')
             bank_data = sheet_bank.get_all_records()
             bank_balance = float(str(bank_data[-1]['Balance']).replace(',', '')) if bank_data else 0.0
@@ -4663,27 +4666,31 @@ def main():
             # 2. มูลค่าพอร์ตหุ้นรวม
             total_stock_value = total_value if 'total_value' in locals() else 0.0
             
-            # 3. คำนวณ Net Worth รวมทุกกระเป๋า
-            net_worth = total_stock_value + pvd_value + insurance_value + coop_value + bank_balance
+            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมประกันบำนาญด้วย)
+            net_worth = total_stock_value + pvd_value + insurance_value + coop_value + pension_insurance_value + bank_balance
             
-            # 4. แสดงผลใน Metrics (ปรับเป็น 5 ช่อง หรือจะขยายเป็น 6 ถ้าอยากเห็นแยกชัดๆ)
-            # ในกรณีนี้ผมปรับให้แสดง 5 ช่อง โดยรวม Bank เข้าไปในกลุ่มนี้ครับ
-            col1, col2, col3, col4, col5 = st.columns(5)
+            # 4. แสดงผลใน Metrics (ขยายเป็น 6 ช่อง เพื่อความสมดุล)
+            col1, col2, col3, col4, col5, col6 = st.columns(6)
             col1.metric("พอร์ตหุ้น", f"{total_stock_value:,.0f} ฿")
             col2.metric("PVD", f"{pvd_value:,.0f} ฿")
-            col3.metric("ประกัน", f"{insurance_value:,.0f} ฿")
+            col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
             col4.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
             col5.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
             
-            st.metric("Net Worth รวมทั้งหมด", f"{net_worth:,.0f} ฿") # แยกออกมาให้เด่นๆ
+            # แสดง Metric ประกันบำนาญ พร้อม Caption ตัวเล็กๆ ด้านใต้
+            with col6:
+                st.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
+                st.caption("เวนคืนประกันอายุ 60 ปี")
+            
+            st.metric("Net Worth รวมทั้งหมด", f"{net_worth:,.0f} ฿") # แสดงยอดรวมเด่นๆ
             
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
 
-            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม Bank เข้าไปใน List)
+            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม "ประกันบำนาญ" เข้าไปใน List)
             asset_data = {
-                "Asset_Type": ["พอร์ตหุ้น", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "บัญชีธนาคาร"],
-                "Value": [total_stock_value, pvd_value, insurance_value, coop_value, bank_balance]
+                "Asset_Type": ["พอร์ตหุ้น", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "บัญชีธนาคาร", "ประกันบำนาญ"],
+                "Value": [total_stock_value, pvd_value, insurance_value, coop_value, bank_balance, pension_insurance_value]
             }
             df_assets = pd.DataFrame(asset_data)
             df_assets = df_assets[df_assets["Value"] > 0]
