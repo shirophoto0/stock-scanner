@@ -4646,65 +4646,47 @@ def main():
             
             if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets"):
                 try:
-                    # 1. เชื่อมต่อ Google Sheets ไฟล์ MyStockData -> ชีท Provident_Fund
                     client = get_gsheet_client()
                     sheet = client.open('MyStockData').worksheet('Provident_Fund')
                     
-                    # 2. เตรียมข้อมูล (ดึงเฉพาะส่วนของค่าตัวเลข ไม่เอา Header ซ้ำ)
-                    df_to_save = st.session_state['temp_pvd_df']
-                    df_to_save = df_to_save.fillna(0)
-                    rows_to_append = df_to_save.values.tolist()
-                    
-                    # 3. ต่อท้ายข้อมูลลงใน Sheet (Append Row)
-                    for row in rows_to_append:
+                    df_to_save = st.session_state['temp_pvd_df'].fillna(0)
+                    for row in df_to_save.values.tolist():
                         sheet.append_row(row)
                         
-                    st.success("✅ บันทึกข้อมูลเข้าสู่ระบบเรียบร้อยแล้ว! ข้อมูลจะไม่หายแม้อัปเดตโค้ดหรือปิดแอป")
-                    
-                    # 4. ล้างค่าใน Session หลังบันทึกสำเร็จ
+                    st.success("✅ บันทึกข้อมูลเรียบร้อยแล้ว!")
                     del st.session_state['temp_pvd_df']
                     st.rerun()
-                    
                 except Exception as e:
+                    st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
         
-            # ส่วนแสดงตารางสรุปข้อมูล PVD ทั้งหมดแบบซ่อน/เปิดได้
-            with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
+        # --- ส่วนที่ 2: ตารางสรุป (แยกออกมาอยู่ข้างนอกบล็อกการบันทึก) ---
+        st.write("---") # ขีดคั่นระหว่างส่วนอัปโหลดและตาราง
+        with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
+            
+            if st.button("🔄 โหลดข้อมูลล่าสุด"):
+                st.rerun()
                 
-                # ปุ่มสำหรับรีเฟรชข้อมูลจาก Google Sheets
-                if st.button("🔄 โหลดข้อมูลล่าสุดจาก Google Sheets"):
-                    st.rerun()
+            try:
+                client = get_gsheet_client()
+                sheet = client.open('MyStockData').worksheet('Provident_Fund')
+                data = sheet.get_all_records()
+                
+                if data:
+                    df_pvd_all = pd.DataFrame(data)
+                    if 'Year_CE' in df_pvd_all.columns:
+                        df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
                     
-                try:
-                    # 1. เชื่อมต่อและดึงข้อมูลทั้งหมดจาก Google Sheets (Worksheet: Provident_Fund)
-                    client = get_gsheet_client()
-                    sheet = client.open('MyStockData').worksheet('Provident_Fund')
-                    data = sheet.get_all_records()
+                    st.dataframe(df_pvd_all, use_container_width=True, hide_index=True)
                     
-                    if data:
-                        # 2. แปลงข้อมูลเป็น DataFrame
-                        df_pvd_all = pd.DataFrame(data)
-                        
-                        # จัดเรียงตามปี ค.ศ. หรือ พ.ศ. จากน้อยไปมาก (เก่าไปใหม่)
-                        if 'Year_CE' in df_pvd_all.columns:
-                            df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
-                            
-                        # 3. แสดงผลตารางบน Streamlit
-                        st.dataframe(
-                            df_pvd_all,
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                        
-                        # แสดงยอดรวมล่าสุด (ปีล่าสุด)
-                        latest_row = df_pvd_all.iloc[-1]
-                        st.info(f"📌 **ยอดรวมสะสมล่าสุด (ปี พ.ศ. {latest_row.get('Year_BE', '-')})**: **{float(latest_row.get('Grand_Total', 0)):,.2f}** บาท (จำนวนหน่วย: {float(latest_row.get('Total_Units', 0)):,.4f} หน่วย)")
-                        
-                    else:
-                        st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund กรุณาอัปโหลดรูปภาพและบันทึกข้อมูลก่อนครับ")
-                        
-                except Exception as e:
-                    st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
+                    latest_row = df_pvd_all.iloc[-1]
+                    st.info(f"📌 **ยอดรวมสะสมล่าสุด (ปี พ.ศ. {latest_row.get('Year_BE', '-')})**: "
+                            f"**{float(str(latest_row.get('Grand_Total', 0)).replace(',', '')):,.2f}** บาท")
+                else:
+                    st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund")
                     
+            except Exception as e:
+                st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
+                
 # ------------------------------
 if __name__ == "__main__":
     main()
