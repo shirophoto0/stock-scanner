@@ -4661,7 +4661,90 @@ def main():
             col5.metric("Net Worth รวม", f"{net_worth:,.0f} ฿")
             
             st.divider()
-            st.info("📌 พื้นที่สำหรับแสดงกราฟ Donut สัดส่วนสินทรัพย์ และกราฟเติบโต Net Worth ในขั้นตอนถัดไป")
+            st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
+
+            # สร้างข้อมูลสำหรับกราฟ Donut สัดส่วนสินทรัพย์ปัจจุบัน
+            asset_data = {
+                "Asset_Type": ["พอร์ตหุ้น", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท."],
+                "Value": [total_stock_value, pvd_value, insurance_value, coop_value]
+            }
+            df_assets = pd.DataFrame(asset_data)
+            # กรองเฉพาะสินทรัพย์ที่มีค่ามากกว่า 0 เพื่อไม่ให้กราฟพัง
+            df_assets = df_assets[df_assets["Value"] > 0]
+
+            col_chart1, col_chart2 = st.columns(2)
+
+            with col_chart1:
+                st.markdown("### 🍩 สัดส่วนสินทรัพย์ปัจจุบัน")
+                if not df_assets.empty:
+                    import plotly.express as px
+                    fig_donut = px.pie(
+                        df_assets, 
+                        names="Asset_Type", 
+                        values="Value", 
+                        hole=0.4,
+                        color_discrete_sequence=px.colors.qualitative.Pastel
+                    )
+                    fig_donut.update_traces(textposition='inside', textinfo='percent+label')
+                    fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
+                    st.plotly_chart(fig_donut, use_container_width=True)
+                else:
+                    st.info("ยังไม่มีข้อมูลสินทรัพย์สำหรับแสดงสัดส่วน")
+
+            with col_chart2:
+                st.markdown("### 📊 มูลค่าแยกตามประเภทสินทรัพย์")
+                if not df_assets.empty:
+                    fig_bar = px.bar(
+                        df_assets, 
+                        x="Asset_Type", 
+                        y="Value", 
+                        text="Value",
+                        color="Asset_Type",
+                        color_discrete_sequence=px.colors.qualitative.Pastel
+                    )
+                    fig_bar.update_traces(texttemplate='%{text:,.0f} ฿', textposition='outside')
+                    fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, xaxis_title="", yaxis_title="บาท")
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                else:
+                    st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
+
+            # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
+            st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
+            try:
+                client = get_gsheet_client()
+                
+                # ดึงข้อมูลจากชีทต่างๆ มาทำ Historical Trend (สมมติเก็บประวัติไว้)
+                # สำหรับชีท Insurance และ Coop เรามีเก็บ Date ไว้แล้ว สามารถนำมา Merge หรือ Plot ร่วมกันได้
+                sheet_ins = client.open('MyStockData').worksheet('Insurance')
+                sheet_coop = client.open('MyStockData').worksheet('Coop')
+                
+                df_ins_hist = pd.DataFrame(sheet_ins.get_all_records())
+                df_coop_hist = pd.DataFrame(sheet_coop.get_all_records())
+                
+                if not df_ins_hist.empty and not df_coop_hist.empty and 'Date' in df_ins_hist.columns and 'Date' in df_coop_hist.columns:
+                    # รวมข้อมูลตามวันที่เพื่อทำกราฟเส้น
+                    df_merged = pd.merge(df_ins_hist, df_coop_hist, on='Date', how='outer', suffixes=('_Ins', '_Coop')).fillna(0)
+                    df_merged = df_merged.sort_values('Date')
+                    
+                    import plotly.graph_objects as go
+                    fig_line = go.Figure()
+                    if 'Redemption_Value' in df_merged.columns:
+                        fig_line.add_trace(go.Scatter(x=df_merged['Date'], y=df_merged['Redemption_Value'], mode='lines+markers', name='ประกัน Unit Linked'))
+                    if 'Coop_Value' in df_merged.columns:
+                        fig_line.add_trace(go.Scatter(x=df_merged['Date'], y=df_merged['Coop_Value'], mode='lines+markers', name='สหกรณ์ก๊าซ ปตท.'))
+                    
+                    fig_line.update_layout(
+                        xaxis_title="วันที่",
+                        yaxis_title="บาท",
+                        margin=dict(t=20, b=20, l=20, r=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig_line, use_container_width=True)
+                else:
+                    st.info("💡 ทริค: เมื่อคุณบันทึกข้อมูลประกันและสหกรณ์อย่างน้อย 2 ช่วงเวลา กราฟแนวโน้มประวัติการเติบโตจะแสดงขึ้นมาอัตโนมัติครับ")
+            except Exception:
+                st.info("💡 กำลังเตรียมข้อมูลสำหรับกราฟประวัติการเติบโต...")
+                
 
     # ส่วนซ่อน-เปิด สำหรับอัปโหลด PVD
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=False):
