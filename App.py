@@ -934,8 +934,6 @@ def get_latest_prices(tickers):
             prices[clean_t] = 0.0
     return prices
 
-from datetime import datetime
-
 def check_alerts(row):
     # 1. จัดการข้อมูลให้เป็นตัวเลขที่นำไปคำนวณได้จริง
     try:
