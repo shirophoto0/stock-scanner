@@ -4637,20 +4637,34 @@ def main():
                     st.warning("กรุณาอัปโหลดรูปภาพก่อนกดปุ่มประมวลผล")
             
         # ปุ่มยืนยันบันทึกลง Google Sheets (ถ้านอกฟอร์ม จะกดใช้งานได้อิสระหลังจาก AI อ่านข้อมูลเสร็จแล้ว)
-        if 'temp_pvd_df' in st.session_state:
+        if 'temp_pvd_df' in st.session_state and st.session_state['temp_pvd_df'] is not None:
             st.write("---")
             st.write("📋 **ข้อมูลที่พร้อมบันทึก:**")
             st.dataframe(st.session_state['temp_pvd_df'], use_container_width=True)
             
             if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets"):
-                # นำ DataFrame ไปบันทึกลง Google Sheets Worksheet 'Provident_Fund' ตรงนี้
-                # เช่น: append_to_gsheet(st.session_state['temp_pvd_df'], worksheet_name="Provident_Fund")
-                
-                st.success("บันทึกข้อมูลเข้าสู่ระบบเรียบร้อยแล้ว! พร้อมนำไปทำ Dashboard ต่อไป")
-                # เคลียร์ค่าทิ้งหลังบันทึกสำเร็จ
-                del st.session_state['temp_pvd_df']
-                st.rerun()
-                
+                try:
+                    # 1. เชื่อมต่อ Google Sheets ไฟล์ MyStockData -> ชีท Provident_Fund
+                    client = get_gsheet_client()
+                    sheet = client.open('MyStockData').worksheet('Provident_Fund')
+                    
+                    # 2. เตรียมข้อมูล (ดึงเฉพาะส่วนของค่าตัวเลข ไม่เอา Header ซ้ำ)
+                    df_to_save = st.session_state['temp_pvd_df']
+                    df_to_save = df_to_save.fillna(0)
+                    rows_to_append = df_to_save.values.tolist()
+                    
+                    # 3. ต่อท้ายข้อมูลลงใน Sheet (Append Row)
+                    for row in rows_to_append:
+                        sheet.append_row(row)
+                        
+                    st.success("✅ บันทึกข้อมูลเข้าสู่ระบบเรียบร้อยแล้ว! ข้อมูลจะไม่หายแม้อัปเดตโค้ดหรือปิดแอป")
+                    
+                    # 4. ล้างค่าใน Session หลังบันทึกสำเร็จ
+                    del st.session_state['temp_pvd_df']
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
 
 # ------------------------------
 if __name__ == "__main__":
