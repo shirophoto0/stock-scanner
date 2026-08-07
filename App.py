@@ -23,13 +23,44 @@ from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
 from PIL import Image
-
+from datetime import datetime, timedelta
 # =============================================================
 # 1. ฟังก์ชันจัดการ Google Sheets (Utility)
 # =============================================================
 
 # Def wealth #
 # 1. ฟังก์ชันเรียก Gemini AI มาแปลงรูปภาพเป็นข้อมูลโครงสร้าง
+def check_and_auto_stamp_portfolio(client, current_total_value):
+    try:
+        # เปลี่ยนชื่อชีทเป็น Stock_TFEX_History เพื่อไม่ให้ชนกับชื่อเดิม
+        sheet_history = client.open('MyStockData').worksheet('Stock_TFEX_History')
+        data = sheet_history.get_all_records()
+        
+        # หาวันที่สุดท้ายที่มีการบันทึกใน Google Sheets
+        last_recorded_month = ""
+        if data:
+            last_date_str = str(data[-1].get('Date', ''))
+            if last_date_str:
+                last_recorded_month = last_date_str[:7] # ตัดเอาแค่ 'YYYY-MM'
+        
+        # กำหนดให้เดือนที่ควรบันทึกคือ "เดือนก่อนหน้า"
+        today = datetime.today()
+        prev_month_date = today.replace(day=1) - timedelta(days=5)
+        target_month_str = prev_month_date.strftime('%Y-%m')
+        target_date_str = prev_month_date.strftime('%Y-%m-%d')
+        
+        # ถ้าเดือนเป้าหมายยังไม่เคยถูกบันทึก ให้ทำการบันทึกอัตโนมัติทันที!
+        if last_recorded_month != target_month_str:
+            sheet_history.append_row([target_date_str, current_total_value])
+            st.toast(f"📊 ระบบบันทึกยอดพอร์ตหุ้น+TFEX สิ้นเดือนอัตโนมัติเรียบร้อย: {target_month_str}", icon="✅")
+            
+    except Exception as e:
+        pass
+
+# --- วิธีเรียกใช้งาน (นำไปวางในส่วนโหลดข้อมูลกราฟ) ---
+# client = get_gsheet_client()
+# check_and_auto_stamp_portfolio(client, total_stock_and_tfex)
+
 def extract_pvd_from_image(image_file, year_be):
     try:
         # ดึง API Key จาก st.secrets
@@ -4745,41 +4776,41 @@ def main():
             # ==========================================
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
-                # เรียก client ให้แน่ใจว่ามีตัวตนอยู่ในบล็อกนี้แน่นอน ป้องกัน UnboundLocalError
                 client = get_gsheet_client()
                 
-                # 1. ดึงข้อมูล
+                # 1. ดึงข้อมูลรวมถึง Portfolio_History ที่สร้างใหม่
                 df_pvd = pd.DataFrame(client.open('MyStockData').worksheet('Provident_Fund').get_all_records())
                 df_ins = pd.DataFrame(client.open('MyStockData').worksheet('Insurance').get_all_records())
                 df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
                 df_bank = pd.DataFrame(client.open('MyStockData').worksheet('Bank_Account').get_all_records())
+                
+                # ดึงข้อมูลประวัติพอร์ตหุ้น+TFEX จากแท็บใหม่
+                try:
+                    df_portfolio_hist = pd.DataFrame(client.open('MyStockData').worksheet('Stock_TFEX_History').get_all_records())
+                except:
+                    df_portfolio_hist = pd.DataFrame()
 
-                # 2. ฟังก์ชันเตรียมข้อมูล
+                # 2. ฟังก์ชันเตรียมข้อมูล (เหมือนเดิม)
                 def prepare_series(df, date_col, val_col, name):
                     df = df.copy()
                     if df.empty:
                         return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
                     
-                    if date_col == 'Month':
-                        df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df[date_col].replace('', '12').map({
-                            'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
-                            'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08',
-                            'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'
-                        }).fillna('12') + '-01')
-                    else:
-                        df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
-                    
+                    df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
                     df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
                     return df.dropna(subset=['Date']).set_index('Date')[[name]]
 
-                # 3. เตรียม Series
+                # 3. เตรียม Series (เพิ่ม s_port เข้าไป)
                 s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                 s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
                 s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
+                
+                # เตรียม Series พอร์ตหุ้น+TFEX ย้อนหลัง
+                s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
 
-                # 4. รวมข้อมูล
-                series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank] if not s.empty]
+                # 4. รวมข้อมูลทั้งหมดเข้าด้วยกัน
+                series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_port] if not s.empty]
                 
                 if series_list:
                     df_merged = series_list[0]
@@ -4788,11 +4819,10 @@ def main():
                     
                     df_merged = df_merged.sort_index().ffill().fillna(0)
                     
-                    # --- ใช้ค่า พอร์ตหุ้น + TFEX ที่คำนวณไว้มารวมในกราฟ ---
-                    stock_tfex_value = total_stock_and_tfex if 'total_stock_and_tfex' in locals() else 0
-                    df_merged['Total'] = df_merged.sum(axis=1) + stock_tfex_value
+                    # คำนวณผลรวม Total จากทุกคอลัมน์ที่ดึงมาได้เลย (ไม่ต้องบวก current_stock แยกอีกแล้วเพราะบันทึกเข้าตารางตามเวลาจริงแล้ว)
+                    df_merged['Total'] = df_merged.sum(axis=1)
 
-                    # 5. วาดกราฟ
+                    # 5. วาดกราฟ Plotly (ใช้โค้ดปรับแกน Y เดิมของคุณได้เลย)
                     import plotly.graph_objects as go
                     fig = go.Figure()
                     
@@ -4800,20 +4830,15 @@ def main():
                         fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col,
                                                 line=dict(width=3 if col == 'Total' else 2)))
     
-                    # --- ปรับแกน Y ให้ครอบคลุมยอดรวมสูงสุด + 20% ---
                     max_total = df_merged['Total'].max()
                     upper_limit = (max_total * 1.2) if max_total > 0 else 12000000
                     
                     fig.update_layout(
-                        yaxis=dict(
-                            range=[0, upper_limit], 
-                            tickformat=",.0f"
-                        ),
+                        yaxis=dict(range=[0, upper_limit], tickformat=",.0f"),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
     
                     st.plotly_chart(fig, use_container_width=True)
-                    
                 else:
                     st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
 
