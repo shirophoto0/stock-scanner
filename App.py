@@ -4716,16 +4716,21 @@ def main():
             # ==========================================
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
+                # เรียก client ให้แน่ใจว่ามีตัวตนอยู่ในบล็อกนี้แน่นอน ป้องกัน UnboundLocalError
                 client = get_gsheet_client()
+                
                 # 1. ดึงข้อมูล
                 df_pvd = pd.DataFrame(client.open('MyStockData').worksheet('Provident_Fund').get_all_records())
                 df_ins = pd.DataFrame(client.open('MyStockData').worksheet('Insurance').get_all_records())
                 df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
-                df_bank = pd.DataFrame(client.open('MyStockData').worksheet('Bank_Account').get_all_records()) # ดึง Bank
+                df_bank = pd.DataFrame(client.open('MyStockData').worksheet('Bank_Account').get_all_records())
 
                 # 2. ฟังก์ชันเตรียมข้อมูล
                 def prepare_series(df, date_col, val_col, name):
                     df = df.copy()
+                    if df.empty:
+                        return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
+                    
                     if date_col == 'Month':
                         df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df[date_col].replace('', '12').map({
                             'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
@@ -4742,37 +4747,39 @@ def main():
                 s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                 s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
-                s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank') # เตรียม Bank
+                s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
 
-                # 4. รวมข้อมูล (ใช้อันนี้ครับ)
-                df_merged = s_pvd.join([s_ins, s_coop, s_bank], how='outer').sort_index()
-
-                # *** ส่วนสำคัญ: เติมค่าว่าง ***
-                # ใช้ ffill() เฉพาะส่วนที่ต้องสะสมยอด
-                df_merged = df_merged.ffill().fillna(0)
+                # 4. รวมข้อมูล
+                series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank] if not s.empty]
                 
-                # บวกหุ้นปัจจุบันเข้าไป
-                current_stock = total_stock_value if 'total_stock_value' in locals() else 0
-                df_merged['Total'] = df_merged.sum(axis=1) + current_stock
+                if series_list:
+                    df_merged = series_list[0]
+                    for s in series_list[1:]:
+                        df_merged = df_merged.join(s, how='outer')
+                    
+                    df_merged = df_merged.sort_index().ffill().fillna(0)
+                    
+                    current_stock = total_stock_value if 'total_stock_value' in locals() else 0
+                    df_merged['Total'] = df_merged.sum(axis=1) + current_stock
 
-                # 5. วาดกราฟ
-                import plotly.graph_objects as go
-                fig = go.Figure()
-                
-                for col in df_merged.columns:
-                    # ถ้าชื่อคอลัมน์เป็น Total ให้ทำเส้นหนา
-                    fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col,
-                                            line=dict(width=4 if col == 'Total' else 2)))
+                    # 5. วาดกราฟ
+                    import plotly.graph_objects as go
+                    fig = go.Figure()
+                    
+                    for col in df_merged.columns:
+                        fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col,
+                                                line=dict(width=4 if col == 'Total' else 2)))
 
-                max_y = df_merged['Total'].max() * 1.1
-                fig.update_layout(yaxis=dict(range=[0, max_y], tickformat=",.0f"),
-                                  legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                    max_y = df_merged['Total'].max() * 1.1 if not df_merged['Total'].empty else 1000000
+                    fig.update_layout(yaxis=dict(range=[0, max_y], tickformat=",.0f"),
+                                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
-                st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
 
             except Exception as e:
                 st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
-                
 
         # ==========================================
         # TAB ย่อยที่ 2: บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน)
