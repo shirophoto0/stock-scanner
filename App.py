@@ -4717,14 +4717,11 @@ def main():
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
 
-
-            # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
             # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
                 client = get_gsheet_client()
                 
-                # ดึงข้อมูลจาก Google Sheets
                 sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
                 sheet_ins = client.open('MyStockData').worksheet('Insurance')
                 sheet_coop = client.open('MyStockData').worksheet('Coop')
@@ -4737,23 +4734,38 @@ def main():
                 fig_line = go.Figure()
                 has_data = False
                 
-                # 1. เส้นกราฟ PVD (ย้อนหลังตั้งแต่ 2562)
+                # 1. เส้นกราฟ PVD (รองรับทั้งแบบรายปีและรายเดือน)
                 if not df_pvd.empty:
-                    # แปลงเดือนไทยเป็นตัวเลข
                     thai_months = {
                         "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4, 
                         "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8, 
                         "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
                     }
                     
-                    if 'Month' in df_pvd.columns and 'Year_BE' in df_pvd.columns and 'Grand_Total' in df_pvd.columns:
-                        df_pvd['Month_Num'] = df_pvd['Month'].map(thai_months).fillna(1)
-                        df_pvd['Year_CE'] = pd.to_numeric(df_pvd['Year_BE']) - 543
-                        df_pvd['Date'] = pd.to_datetime(df_pvd['Year_CE'].astype(str) + '-' + df_pvd['Month_Num'].astype(str) + '-01', errors='coerce')
-                        
+                    if 'Year_CE' in df_pvd.columns and 'Grand_Total' in df_pvd.columns:
+                        # สร้างฟังก์ชันแปลงวันที่ยืดหยุ่น (ถ้ามีเดือนให้ใช้เดือนนั้น, ถ้าไม่มีให้ใช้วันที่ 31 ธันวาคมของปีนั้น)
+                        def parse_pvd_date(row):
+                            year = row.get('Year_CE', '')
+                            month = row.get('Month', '')
+                            if not year:
+                                return pd.NaT
+                            
+                            try:
+                                year_int = int(str(year).strip())
+                                if month in thai_months:
+                                    month_int = thai_months[month]
+                                    # สำหรับเดือนปัจจุบัน ให้ใช้วันที่ 1 หรือวันสิ้นเดือนก็ได้
+                                    return pd.to_datetime(f"{year_int}-{month_int:02d}-01")
+                                else:
+                                    # กรณีไม่มีระบุเดือน (ข้อมูลรายปี 2019-2025) ให้ลงท้ายปี
+                                    return pd.to_datetime(f"{year_int}-12-31")
+                            except:
+                                return pd.NaT
+
+                        df_pvd['Date'] = df_pvd.apply(parse_pvd_date, axis=1)
                         df_pvd = df_pvd.dropna(subset=['Date']).sort_values('Date')
                         
-                        # ทำความสะอาดข้อมูลตัวเลข Grand_Total (แปลง comma เป็น float)
+                        # ทำความสะอาดข้อมูลตัวเลข Grand_Total
                         df_pvd['Grand_Total_Num'] = df_pvd['Grand_Total'].astype(str).str.replace(',', '').astype(float)
                         
                         fig_line.add_trace(go.Scatter(
