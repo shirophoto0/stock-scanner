@@ -9,3 +9,4 @@ seaborn
 matplotlib
 oauth2client
 openpyxl
+google-generativeai
