@@ -1235,7 +1235,9 @@ def main():
     import plotly.express as px
     import plotly.graph_objects as go
     from datetime import date
+
     # 1. ประกาศตัวแปรเริ่มต้น
+    client = get_gsheet_client()
     df_all_stocks = pd.DataFrame() 
     filtered_df = None
     
