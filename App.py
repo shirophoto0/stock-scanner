@@ -4634,39 +4634,48 @@ def main():
             st.info("📌 พื้นที่สำหรับแสดงกราฟ Donut สัดส่วนสินทรัพย์ และกราฟเติบโต Net Worth ในขั้นตอนถัดไป")
 
     # ส่วนซ่อน-เปิด สำหรับอัปโหลด PVD
-    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ด้วยรูปภาพ", expanded=False):
-        
+    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=False):
+            
         with st.form("pvd_upload_form"):
-            col_y1, col_y2 = st.columns(2)
+            col_y1, col_y2, col_m = st.columns(3)
+            
             with col_y1:
-                input_year_be = st.number_input("ระบุปี พ.ศ. ของเอกสาร", min_value=2500, max_value=2570, value=2562)
+                input_year_be = st.number_input("ปี พ.ศ.", min_value=2500, max_value=2570, value=2569)
             with col_y2:
-                st.info(f"แปลงเป็นปี ค.ศ. อัตโนมัติ: **{int(input_year_be) - 543}**")
-                
-            uploaded_pvd_file = st.file_uploader("อัปโหลดรูปภาพรายงาน PVD (JPG, PNG)", type=["jpg", "jpeg", "png"])
+                st.info(f"ค.ศ.: **{int(input_year_be) - 543}**")
+            with col_m:
+                # เพิ่มตัวเลือกเดือน สำหรับเก็บข้อมูลรายเดือน
+                months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", 
+                               "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+                selected_month = st.selectbox("เลือกเดือน", months_list)
+                    
+            uploaded_pvd_file = st.file_uploader("อัปโหลดรูปภาพรายงาน PVD รายเดือน (JPG, PNG)", type=["jpg", "jpeg", "png"])
             
             submitted_pvd = st.form_submit_button("🔍 อ่านข้อมูลจากรูปภาพด้วย AI")
             
             if submitted_pvd:
                 if uploaded_pvd_file is not None:
                     with st.spinner("กำลังให้ AI อ่านและวิเคราะห์ข้อมูลจากภาพ..."):
+                        # ส่งปีไปประมวลผล (คุณสามารถปรับฟังก์ชัน extract_pvd_from_image ให้รับค่า month เพิ่มได้ถ้าต้องการให้ AI ช่วยตรวจสอบ)
                         df_extracted = extract_pvd_from_image(uploaded_pvd_file, input_year_be)
                         
                         if df_extracted is not None and not df_extracted.empty:
+                            # เพิ่มคอลัมน์ Month เข้าไปใน DataFrame ที่ AI อ่านมาได้
+                            df_extracted.insert(0, 'Month', selected_month)
+                            
                             st.success("อ่านข้อมูลสำเร็จ! ตรวจสอบความถูกต้องด้านล่าง:")
                             st.dataframe(df_extracted, use_container_width=True)
                             
-                            # เก็บลง st.session_state ชั่วคราวเพื่อให้ผู้ใช้กดบันทึกลง Google Sheets ต่อไป
                             st.session_state['temp_pvd_df'] = df_extracted
                         else:
                             st.warning("ไม่สามารถดึงข้อมูลจากรูปภาพได้ กรุณาลองใหม่อีกครั้ง")
                 else:
                     st.warning("กรุณาอัปโหลดรูปภาพก่อนกดปุ่มประมวลผล")
-            
-        # ปุ่มยืนยันบันทึกลง Google Sheets (ถ้านอกฟอร์ม จะกดใช้งานได้อิสระหลังจาก AI อ่านข้อมูลเสร็จแล้ว)
+        
+        # ส่วนยืนยันบันทึกข้อมูล (นอกฟอร์ม)
         if 'temp_pvd_df' in st.session_state and st.session_state['temp_pvd_df'] is not None:
             st.write("---")
-            st.write("📋 **ข้อมูลที่พร้อมบันทึก:**")
+            st.write("📋 **ข้อมูลที่พร้อมบันทึก (ระบุเดือนแล้ว):**")
             st.dataframe(st.session_state['temp_pvd_df'], use_container_width=True)
             
             if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets"):
@@ -4674,16 +4683,43 @@ def main():
                     client = get_gsheet_client()
                     sheet = client.open('MyStockData').worksheet('Provident_Fund')
                     
+                    # ดึงข้อมูลเดิมที่มีทั้งหมดมาเช็ค
+                    existing_data = sheet.get_all_records()
+                    df_existing = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
+                    
                     df_to_save = st.session_state['temp_pvd_df'].fillna(0)
-                    for row in df_to_save.values.tolist():
-                        sheet.append_row(row)
+                    
+                    # ตรวจสอบว่ามีคอลัมน์ Month และ Year_BE หรือยัง ถ้ามีให้เช็คการบันทึกซ้ำ
+                    is_duplicate = False
+                    if not df_existing.empty and 'Month' in df_existing.columns and 'Year_BE' in df_existing.columns:
+                        # แปลงชนิดข้อมูลให้ตรงกันเพื่อเทียบเงื่อนไข
+                        match_idx = df_existing[
+                            (df_existing['Year_BE'].astype(str) == str(input_year_be)) & 
+                            (df_existing['Month'] == selected_month)
+                        ].index
                         
-                    st.success("✅ บันทึกข้อมูลเรียบร้อยแล้ว!")
+                        if len(match_idx) > 0:
+                            is_duplicate = True
+                            row_number_to_update = match_idx[0] + 2 # บวก 2 เพราะ Google Sheets เริ่มที่แถว 2 (นับ Header เป็นแถว 1)
+                            
+                            # อัปเดตข้อมูลทับแถวเดิม (ไม่สร้างแถวใหม่)
+                            values_to_write = list(df_to_save.iloc[0].values)
+                            sheet.update(f"A{row_number_to_update}", [values_to_write])
+                            st.success(f"✅ อัปเดตข้อมูลของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว (ไมโครอัปเดตทับข้อมูลเดิม)")
+                    
+                    if not is_duplicate:
+                        # ถ้ายังไม่มีข้อมูลเดือนนี้ ให้เพิ่มแถวใหม่ต่อท้ายปกติ
+                        for row in df_to_save.values.tolist():
+                            sheet.append_row(row)
+                        st.success(f"✅ บันทึกข้อมูลใหม่ของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
+                    
+                    # ล้างค่าใน Session
                     del st.session_state['temp_pvd_df']
                     st.rerun()
+                    
                 except Exception as e:
                     st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
-        
+            
         # --- ส่วนที่ 2: ตารางสรุป (แยกออกมาอยู่ข้างนอกบล็อกการบันทึก) ---
         st.write("---") # ขีดคั่นระหว่างส่วนอัปโหลดและตาราง
         with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
