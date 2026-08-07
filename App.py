@@ -79,6 +79,20 @@ def extract_pvd_from_image(image_file, year_be):
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลรูปภาพ: {e}")
         return None
 
+def get_latest_pvd_value():
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet('Provident_Fund')
+        data = sheet.get_all_records()
+        if data:
+            df = pd.DataFrame(data)
+            # ดึงค่าแถวสุดท้าย (ล่าสุด) ของคอลัมน์ Grand_Total
+            latest_val = str(df.iloc[-1]['Grand_Total']).replace(',', '')
+            return float(latest_val)
+    except:
+        return 0.0
+    return 0.0
+    
 ###################
 # Def TEFEX #
 ###################
@@ -4600,15 +4614,26 @@ def main():
         ])
         
         with wealth_tab_overview:
+            # 1. ดึงมูลค่า PVD ล่าสุดจาก Google Sheets
+            pvd_value = get_latest_pvd_value()
+            
+            # 2. ดึงมูลค่าพอร์ตหุ้นรวมจากตัวแปรที่คุณคำนวณไว้ในหน้าพอร์ต
+            # (ตรวจสอบให้แน่ใจว่าบล็อกคำนวณ st.subheader("📊 สรุปพอร์ตการลงทุน") อยู่ก่อนหน้านี้ เพื่อให้ตัวแปร total_value มีค่าพร้อมใช้งาน)
+            total_stock_value = total_value if 'total_value' in locals() else 0.0
+            
+            # 3. คำนวณความมั่งคั่งสุทธิรวม (Net Worth)
+            net_worth = total_stock_value + pvd_value
+            
+            # 4. แสดงผลใน Metrics
             col1, col2, col3 = st.columns(3)
-            col1.metric("มูลค่าพอร์ตหุ้นรวม", "0.00 ฿")
-            col2.metric("สินทรัพย์มั่นคง (PVD/สหกรณ์/ประกัน)", "0.00 ฿")
-            col3.metric("ความมั่งคั่งสุทธิรวม (Net Worth)", "0.00 ฿")
+            col1.metric("มูลค่าพอร์ตหุ้นรวม", f"{total_stock_value:,.0f} ฿")
+            col2.metric("สินทรัพย์มั่นคง (PVD)", f"{pvd_value:,.0f} ฿")
+            col3.metric("ความมั่งคั่งสุทธิรวม (Net Worth)", f"{net_worth:,.0f} ฿")
             
             st.divider()
             st.info("📌 พื้นที่สำหรับแสดงกราฟ Donut สัดส่วนสินทรัพย์ และกราฟเติบโต Net Worth ในขั้นตอนถัดไป")
 
-        # ส่วนซ่อน-เปิด สำหรับอัปโหลด PVD
+    # ส่วนซ่อน-เปิด สำหรับอัปโหลด PVD
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ด้วยรูปภาพ", expanded=False):
         
         with st.form("pvd_upload_form"):
