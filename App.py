@@ -4669,20 +4669,36 @@ def main():
             # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมประกันบำนาญด้วย)
             net_worth = total_stock_value + pvd_value + insurance_value + coop_value + pension_insurance_value + bank_balance
             
-            # 4. แสดงผลใน Metrics (ขยายเป็น 6 ช่อง เพื่อความสมดุล)
-            col1, col2, col3, col4, col5, col6 = st.columns(6)
-            col1.metric("พอร์ตหุ้น", f"{total_stock_value:,.0f} ฿")
-            col2.metric("PVD", f"{pvd_value:,.0f} ฿")
-            col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
-            col4.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
-            col5.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
-            
-            # แสดง Metric ประกันบำนาญ พร้อม Caption ตัวเล็กๆ ด้านใต้
-            with col6:
+            # 4. แสดงผลใน Metrics (แบ่งเป็น 3 คอลัมน์ x 2 แถว)
+            # แถวที่ 1
+            row1_col1, row1_col2, row1_col3 = st.columns(3)
+            row1_col1.metric("พอร์ตหุ้น", f"{total_stock_value:,.0f} ฿")
+            row1_col2.metric("PVD", f"{pvd_value:,.0f} ฿")
+            row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
+
+            # แถวที่ 2
+            row2_col1, row2_col2, row2_col3 = st.columns(3)
+            row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
+            row2_col2.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
+            with row2_col3:
                 st.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
                 st.caption("เวนคืนประกันอายุ 60 ปี")
             
-            st.metric("Net Worth รวมทั้งหมด", f"{net_worth:,.0f} ฿") # แสดงยอดรวมเด่นๆ
+            st.divider()
+
+            # 5. แสดง Total Net Worth (ให้อยู่กึ่งกลางหน้าจอ, สีเขียว, ขยายใหญ่ขึ้น)
+            # ใช้เทคนิคแบ่ง 3 คอลัมน์ แล้วเอาข้อความไว้ตรงกลาง (col_center)
+            c_left, c_center, c_right = st.columns([1, 2, 1])
+            with c_center:
+                st.markdown(
+                    f"""
+                    <div style="text-align: center; padding: 10px;">
+                        <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
+                        <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth:,.0f} ฿</h1>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
             
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
