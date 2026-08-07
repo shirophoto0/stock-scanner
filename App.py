@@ -4788,11 +4788,11 @@ def main():
                     
                     df_merged = df_merged.sort_index().ffill().fillna(0)
                     
-                    current_stock = total_stock_value if 'total_stock_value' in locals() else 0
-                    df_merged['Total'] = df_merged.sum(axis=1) + current_stock
+                    # --- ใช้ค่า พอร์ตหุ้น + TFEX ที่คำนวณไว้มารวมในกราฟ ---
+                    stock_tfex_value = total_stock_and_tfex if 'total_stock_and_tfex' in locals() else 0
+                    df_merged['Total'] = df_merged.sum(axis=1) + stock_tfex_value
 
                     # 5. วาดกราฟ
-                    # 4. วาดกราฟ
                     import plotly.graph_objects as go
                     fig = go.Figure()
                     
@@ -4802,7 +4802,6 @@ def main():
     
                     # --- ปรับแกน Y ให้ครอบคลุมยอดรวมสูงสุด + 20% ---
                     max_total = df_merged['Total'].max()
-                    # ถ้า max_total เป็น 0 ให้กำหนดเป็น 10 ล้านเพื่อกันกราฟว่าง
                     upper_limit = (max_total * 1.2) if max_total > 0 else 12000000
                     
                     fig.update_layout(
