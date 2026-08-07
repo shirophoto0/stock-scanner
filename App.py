@@ -93,6 +93,7 @@ def get_latest_pvd_value():
         return 0.0
     return 0.0
 
+# ฟังก์ชันดึงมูลค่าประกันล่าสุด
 def get_latest_insurance_value():
     try:
         client = get_gsheet_client()
@@ -101,12 +102,25 @@ def get_latest_insurance_value():
         if data:
             df_ins = pd.DataFrame(data)
             if not df_ins.empty and 'Redemption_Value' in df_ins.columns:
-                # แปลงเป็นตัวเลขและดึงค่าแถวสุดท้าย (ล่าสุดตามวันที่บันทึก)
                 return float(str(df_ins.iloc[-1]['Redemption_Value']).replace(',', ''))
     except Exception:
         pass
     return 0.0
-    
+
+# ฟังก์ชันดึงมูลค่าสหกรณ์ล่าสุด
+def get_latest_coop_value():
+    try:
+        client = get_gsheet_client()
+        sheet_coop = client.open('MyStockData').worksheet('MyStockData' if False else 'Coop') # worksheet ชื่อ Coop
+        data = sheet_coop.get_all_records()
+        if data:
+            df_coop = pd.DataFrame(data)
+            if not df_coop.empty and 'Coop_Value' in df_coop.columns:
+                return float(str(df_coop.iloc[-1]['Coop_Value']).replace(',', ''))
+    except Exception:
+        pass
+    return 0.0
+
 ###################
 # Def TEFEX #
 ###################
@@ -4626,23 +4640,25 @@ def main():
         ])
         
         with wealth_tab_overview:
-
-            # 1. ดึงมูลค่า PVD และ ประกัน ล่าสุดจาก Google Sheets
+            
+            # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน
             pvd_value = get_latest_pvd_value()
             insurance_value = get_latest_insurance_value()
+            coop_value = get_latest_coop_value()
             
-            # 2. ดึงมูลค่าพอร์ตหุ้นรวมจากตัวแปรที่คุณคำนวณไว้ในหน้าพอร์ต
+            # 2. มูลค่าพอร์ตหุ้นรวม
             total_stock_value = total_value if 'total_value' in locals() else 0.0
             
-            # 3. คำนวณความมั่งคั่งสุทธิรวม (Net Worth) [หุ้น + PVD + ประกัน]
-            net_worth = total_stock_value + pvd_value + insurance_value
+            # 3. คำนวณ Net Worth รวมทุกกระเป๋า
+            net_worth = total_stock_value + pvd_value + insurance_value + coop_value
             
-            # 4. แสดงผลใน Metrics (ปรับเป็น 4 คอลัมน์)
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("มูลค่าพอร์ตหุ้นรวม", f"{total_stock_value:,.0f} ฿")
-            col2.metric("สินทรัพย์มั่นคง (PVD)", f"{pvd_value:,.0f} ฿")
-            col3.metric("ประกันควบการลงทุน", f"{insurance_value:,.0f} ฿")
-            col4.metric("ความมั่งคั่งสุทธิรวม (Net Worth)", f"{net_worth:,.0f} ฿")
+            # 4. แสดงผลใน Metrics (แบ่งเป็น 5 ช่อง)
+            col1, col2, col3, col4, col5 = st.columns(5)
+            col1.metric("พอร์ตหุ้นรวม", f"{total_stock_value:,.0f} ฿")
+            col2.metric("PVD", f"{pvd_value:,.0f} ฿")
+            col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
+            col4.metric("สหกรณ์ก๊าซ ปตท.", f"{coop_value:,.0f} ฿")
+            col5.metric("Net Worth รวม", f"{net_worth:,.0f} ฿")
             
             st.divider()
             st.info("📌 พื้นที่สำหรับแสดงกราฟ Donut สัดส่วนสินทรัพย์ และกราฟเติบโต Net Worth ในขั้นตอนถัดไป")
@@ -4839,6 +4855,64 @@ def main():
                         st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลประกัน: {e}")
                 else:
                     st.warning("กรุณากรอกมูลค่ารับซื้อคืนหน่วยลงทุนให้มากกว่า 0")
+
+    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลสหกรณ์ก๊าซ ปตท.", expanded=False):
+    
+        with st.form("coop_upload_form"):
+            col_d, col_v = st.columns(2)
+            
+            with col_d:
+                coop_date = st.date_input("เลือกวันที่อัปเดตข้อมูลสหกรณ์", value=date.today(), key="coop_date_input")
+                
+            with col_v:
+                coop_value = st.number_input(
+                    "ยอดเงินสหกรณ์ / มูลค่าหุ้นสหกรณ์ (บาท)", 
+                    min_value=0.0, 
+                    format="%.2f", 
+                    value=0.0,
+                    key="coop_value_input",
+                    help="กรอกยอดเงินสะสมหรือยอดรวมในสหกรณ์ก๊าซ ปตท. ณ วันที่อัปเดต"
+                )
+            
+            submitted_coop = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลสหกรณ์")
+            
+            if submitted_coop:
+                if coop_value > 0:
+                    try:
+                        client = get_gsheet_client()
+                        # สร้าง Worksheet ชื่อ 'Coop' ใน Google Sheets (MyStockData)
+                        sheet_coop = client.open('MyStockData').worksheet('Coop')
+                        
+                        existing_data = sheet_coop.get_all_records()
+                        df_existing_coop = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
+                        
+                        date_str = coop_date.strftime("%Y-%m-%d")
+                        year_ce = coop_date.year
+                        
+                        is_duplicate = False
+                        
+                        if not df_existing_coop.empty and 'Date' in df_existing_coop.columns:
+                            match_idx = df_existing_coop[df_existing_coop['Date'].astype(str) == date_str].index
+                            
+                            if len(match_idx) > 0:
+                                is_duplicate = True
+                                row_num = match_idx[0] + 2 
+                                
+                                updated_values = [date_str, year_ce, coop_value]
+                                sheet_coop.update(f"A{row_num}:C{row_num}", [updated_values])
+                                st.success(f"✅ อัปเดตข้อมูลสหกรณ์ของวันที่ **{date_str}** เป็น **{coop_value:,.2f} บาท** เรียบร้อยแล้ว!")
+                        
+                        if not is_duplicate:
+                            new_row = [date_str, year_ce, coop_value]
+                            sheet_coop.append_row(new_row)
+                            st.success(f"✅ บันทึกข้อมูลใหม่สหกรณ์ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                            
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลสหกรณ์: {e}")
+                else:
+                    st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
                     
 # ------------------------------
 if __name__ == "__main__":
