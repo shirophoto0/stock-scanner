@@ -4768,26 +4768,23 @@ def main():
                 st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
 
     ########## ประกันภัย ###############
-    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked) รายเดือน", expanded=False):
-    
+    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
+        
         with st.form("insurance_upload_form"):
-            col_y, col_m = st.columns(2)
+            col_d, col_v = st.columns(2)
             
-            with col_y:
-                # ใช้เลือกปี ค.ศ. โดยตรง (ค่าเริ่มต้นปี 2026 ตามปัจจุบัน)
-                ins_year_ce = st.number_input("ปี ค.ศ.", min_value=2000, max_value=2050, value=2026)
-            with col_m:
-                months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", 
-                               "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
-                ins_month = st.selectbox("เลือกเดือนสิ้นงวด", months_list, key="ins_month_select")
+            with col_d:
+                # ใช้ date_input ให้เลือกวันที่อิสระ (ค่าเริ่มต้นเป็นวันปัจจุบัน ปี 2026)
+                ins_date = st.date_input("เลือกวันที่อัปเดตข้อมูล", value=datetime.date.today())
                 
-            ins_redemption_value = st.number_input(
-                "มูลค่ารับซื้อคืนหน่วยลงทุนสิ้นเดือน (บาท)", 
-                min_value=0.0, 
-                format="%.2f", 
-                value=0.0,
-                help="กรอกยอดมูลค่าพอร์ตประกันตามใบแจ้งยอดหรือแอปพลิเคชัน ณ สิ้นเดือนนั้นๆ"
-            )
+            with col_v:
+                ins_redemption_value = st.number_input(
+                    "มูลค่ารับซื้อคืนหน่วยลงทุน (บาท)", 
+                    min_value=0.0, 
+                    format="%.2f", 
+                    value=0.0,
+                    help="กรอกยอดมูลค่าพอร์ตประกันตามใบแจ้งยอดหรือแอปพลิเคชัน ณ วันที่อัปเดต"
+                )
             
             submitted_ins = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลประกันภัย")
             
@@ -4800,28 +4797,29 @@ def main():
                         existing_data = sheet_ins.get_all_records()
                         df_existing_ins = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
                         
+                        # แปลงวันที่เป็นข้อความรูปแบบ YYYY-MM-DD เพื่อใช้เช็คและบันทึก
+                        date_str = ins_date.strftime("%Y-%m-%d")
+                        year_ce = ins_date.year
+                        
                         is_duplicate = False
                         
-                        # เช็คข้อมูลซ้ำจาก ปี ค.ศ. และ เดือน
-                        if not df_existing_ins.empty and 'Year_CE' in df_existing_ins.columns and 'Month' in df_existing_ins.columns:
-                            match_idx = df_existing_ins[
-                                (df_existing_ins['Year_CE'].astype(str) == str(ins_year_ce)) & 
-                                (df_existing_ins['Month'] == ins_month)
-                            ].index
+                        # เช็คข้อมูลซ้ำ: ถ้านำวันที่เดียวกันมาคีย์ซ้ำ จะทำการอัปเดตทับอัตโนมัติ
+                        if not df_existing_ins.empty and 'Date' in df_existing_ins.columns:
+                            match_idx = df_existing_ins[df_existing_ins['Date'].astype(str) == date_str].index
                             
                             if len(match_idx) > 0:
                                 is_duplicate = True
-                                row_num = match_idx[0] + 2 
+                                row_num = match_idx[0] + 2 # Google Sheets เริ่มแถว 2
                                 
-                                # โครงสร้างคอลัมน์ในชีท Insurance ตอนนี้จะมีแค่: [Year_CE, Month, Redemption_Value] (3 คอลัมน์)
-                                updated_values = [ins_year_ce, ins_month, ins_redemption_value]
+                                # โครงสร้างคอลัมน์: [Date, Year_CE, Redemption_Value]
+                                updated_values = [date_str, year_ce, ins_redemption_value]
                                 sheet_ins.update(f"A{row_num}:C{row_num}", [updated_values])
-                                st.success(f"✅ อัปเดตมูลค่าประกันของ **{ins_month} ค.ศ. {ins_year_ce}** เป็น **{ins_redemption_value:,.2f} บาท** เรียบร้อยแล้ว!")
+                                st.success(f"✅ อัปเดตมูลค่าประกันของวันที่ **{date_str}** เป็น **{ins_redemption_value:,.2f} บาท** เรียบร้อยแล้ว!")
                         
                         if not is_duplicate:
-                            new_row = [ins_year_ce, ins_month, ins_redemption_value]
+                            new_row = [date_str, year_ce, ins_redemption_value]
                             sheet_ins.append_row(new_row)
-                            st.success(f"✅ บันทึกข้อมูลใหม่ของ **{ins_month} ค.ศ. {ins_year_ce}** เรียบร้อยแล้ว!")
+                            st.success(f"✅ บันทึกข้อมูลใหม่ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
                             
                         st.rerun()
                         
