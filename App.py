@@ -4719,11 +4719,12 @@ def main():
 
 
             # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
+            # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
                 client = get_gsheet_client()
                 
-                # ดึงข้อมูลทั้ง 3 ชีท
+                # ดึงข้อมูลจาก Google Sheets
                 sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
                 sheet_ins = client.open('MyStockData').worksheet('Insurance')
                 sheet_coop = client.open('MyStockData').worksheet('Coop')
@@ -4732,48 +4733,79 @@ def main():
                 df_ins = pd.DataFrame(sheet_ins.get_all_records())
                 df_coop = pd.DataFrame(sheet_coop.get_all_records())
                 
-                # เตรียมข้อมูล PVD (ใช้ Grand_Total) - สมมติว่ามีคอลัมน์ 'Year_CE' หรือ 'Date'
-                # ถ้า PVD เก็บเป็นรายเดือน อาจจะต้องแปลงให้เป็นรูปแบบวันที่มาตรฐานก่อน
-                if not df_pvd.empty:
-                    # ปรับให้ PVD มีคอลัมน์ Date เพื่อใช้ merge
-                    # (ถ้าใน PVD มีแค่ Year/Month แนะนำให้สร้างคอลัมน์ Date สมมติเป็นวันสิ้นเดือน)
-                    df_pvd['Date'] = pd.to_datetime(df_pvd['Year_CE'].astype(str) + '-' + df_pvd['Month_Number'].astype(str) + '-01')
-                    df_plot = df_pvd[['Date', 'Grand_Total']].rename(columns={'Grand_Total': 'PVD'})
-                else:
-                    df_plot = pd.DataFrame(columns=['Date', 'PVD'])
-
-                # Merge กับข้อมูลอื่น (ถ้ามี)
-                for df_other, name in [(df_ins, 'Insurance'), (df_coop, 'Coop')]:
-                    if not df_other.empty and 'Date' in df_other.columns:
-                        df_other['Date'] = pd.to_datetime(df_other['Date'])
-                        df_plot = pd.merge(df_plot, df_other, on='Date', how='outer')
-                
-                df_plot = df_plot.sort_values('Date').fillna(0)
-                
-                # แสดงกราฟ
                 import plotly.graph_objects as go
                 fig_line = go.Figure()
+                has_data = False
                 
-                if 'PVD' in df_plot.columns:
-                    fig_line.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['PVD'], mode='lines+markers', name='กองทุนสำรองเลี้ยงชีพ (PVD)'))
-                if 'Redemption_Value' in df_plot.columns:
-                    fig_line.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Redemption_Value'], mode='lines+markers', name='ประกัน Unit Linked'))
-                if 'Coop_Value' in df_plot.columns:
-                    fig_line.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Coop_Value'], mode='lines+markers', name='สหกรณ์ก๊าซ ปตท.'))
-                
-                fig_line.update_layout(
-                    xaxis_title="วันที่",
-                    yaxis_title="บาท",
-                    margin=dict(t=20, b=20, l=20, r=20),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                )
-                st.plotly_chart(fig_line, use_container_width=True)
-                
-                # เพิ่มหมายเหตุสีเทา
-                st.caption("หมายเหตุ: ประวัติข้อมูล PVD เริ่มเก็บตั้งแต่ปี 2562 ส่วนสินทรัพย์อื่นๆ เริ่มเก็บประวัติเมื่อบันทึกข้อมูลครั้งแรก")
-                
+                # 1. เส้นกราฟ PVD (ย้อนหลังตั้งแต่ 2562)
+                if not df_pvd.empty:
+                    # แปลงเดือนไทยเป็นตัวเลข
+                    thai_months = {
+                        "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4, 
+                        "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8, 
+                        "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
+                    }
+                    
+                    if 'Month' in df_pvd.columns and 'Year_BE' in df_pvd.columns and 'Grand_Total' in df_pvd.columns:
+                        df_pvd['Month_Num'] = df_pvd['Month'].map(thai_months).fillna(1)
+                        df_pvd['Year_CE'] = pd.to_numeric(df_pvd['Year_BE']) - 543
+                        df_pvd['Date'] = pd.to_datetime(df_pvd['Year_CE'].astype(str) + '-' + df_pvd['Month_Num'].astype(str) + '-01', errors='coerce')
+                        
+                        df_pvd = df_pvd.dropna(subset=['Date']).sort_values('Date')
+                        
+                        # ทำความสะอาดข้อมูลตัวเลข Grand_Total (แปลง comma เป็น float)
+                        df_pvd['Grand_Total_Num'] = df_pvd['Grand_Total'].astype(str).str.replace(',', '').astype(float)
+                        
+                        fig_line.add_trace(go.Scatter(
+                            x=df_pvd['Date'], 
+                            y=df_pvd['Grand_Total_Num'], 
+                            mode='lines+markers', 
+                            name='กองทุนสำรองเลี้ยงชีพ (PVD)'
+                        ))
+                        has_data = True
+
+                # 2. เส้นกราฟประกัน Unit Linked
+                if not df_ins.empty and 'Date' in df_ins.columns and 'Redemption_Value' in df_ins.columns:
+                    df_ins['Date'] = pd.to_datetime(df_ins['Date'], errors='coerce')
+                    df_ins = df_ins.dropna(subset=['Date']).sort_values('Date')
+                    df_ins['Redemption_Value'] = pd.to_numeric(df_ins['Redemption_Value'].astype(str).str.replace(',', ''), errors='coerce')
+                    
+                    fig_line.add_trace(go.Scatter(
+                        x=df_ins['Date'], 
+                        y=df_ins['Redemption_Value'], 
+                        mode='lines+markers', 
+                        name='ประกัน Unit Linked'
+                    ))
+                    has_data = True
+
+                # 3. เส้นกราฟสหกรณ์ก๊าซ ปตท.
+                if not df_coop.empty and 'Date' in df_coop.columns and 'Coop_Value' in df_coop.columns:
+                    df_coop['Date'] = pd.to_datetime(df_coop['Date'], errors='coerce')
+                    df_coop = df_coop.dropna(subset=['Date']).sort_values('Date')
+                    df_coop['Coop_Value'] = pd.to_numeric(df_coop['Coop_Value'].astype(str).str.replace(',', ''), errors='coerce')
+                    
+                    fig_line.add_trace(go.Scatter(
+                        x=df_coop['Date'], 
+                        y=df_coop['Coop_Value'], 
+                        mode='lines+markers', 
+                        name='สหกรณ์ก๊าซ ปตท.'
+                    ))
+                    has_data = True
+
+                if has_data:
+                    fig_line.update_layout(
+                        xaxis_title="วันที่",
+                        yaxis_title="บาท",
+                        margin=dict(t=20, b=20, l=20, r=20),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+                    st.plotly_chart(fig_line, use_container_width=True)
+                    st.caption("หมายเหตุ: ประวัติข้อมูล PVD เริ่มเก็บตั้งแต่ปี 2562 ส่วนสินทรัพย์อื่นๆ เริ่มเก็บประวัติเมื่อบันทึกข้อมูลครั้งแรก")
+                else:
+                    st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
+                    
             except Exception as e:
-                st.info("💡 กำลังเตรียมข้อมูลสำหรับกราฟประวัติการเติบโต...")
+                st.info(f"💡 กำลังเตรียมข้อมูลสำหรับกราฟประวัติการเติบโต... (รายละเอียด: {e})")
                 
 
         # ==========================================
