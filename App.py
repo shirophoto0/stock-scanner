@@ -11,6 +11,7 @@ import google.generativeai as genai
 import io
 import json
 import requests
+#from datetime import date
 import datetime
 import gspread
 import seaborn as sns
@@ -4776,6 +4777,7 @@ def main():
             
             with col_d:
                 # ใช้ date_input ให้เลือกวันที่อิสระ (ค่าเริ่มต้นเป็นวันปัจจุบัน ปี 2026)
+                # ใช้ datetime.date.today() โดยตรง
                 ins_date = st.date_input("เลือกวันที่อัปเดตข้อมูล", value=datetime.date.today())
                 
             with col_v:
