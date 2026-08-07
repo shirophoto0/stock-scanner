@@ -4667,44 +4667,44 @@ def main():
                     
                 except Exception as e:
         
-        # ส่วนแสดงตารางสรุปข้อมูล PVD ทั้งหมดแบบซ่อน/เปิดได้
-        with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
-            
-            # ปุ่มสำหรับรีเฟรชข้อมูลจาก Google Sheets
-            if st.button("🔄 โหลดข้อมูลล่าสุดจาก Google Sheets"):
-                st.rerun()
+            # ส่วนแสดงตารางสรุปข้อมูล PVD ทั้งหมดแบบซ่อน/เปิดได้
+            with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
                 
-            try:
-                # 1. เชื่อมต่อและดึงข้อมูลทั้งหมดจาก Google Sheets (Worksheet: Provident_Fund)
-                client = get_gsheet_client()
-                sheet = client.open('MyStockData').worksheet('Provident_Fund')
-                data = sheet.get_all_records()
-                
-                if data:
-                    # 2. แปลงข้อมูลเป็น DataFrame
-                    df_pvd_all = pd.DataFrame(data)
+                # ปุ่มสำหรับรีเฟรชข้อมูลจาก Google Sheets
+                if st.button("🔄 โหลดข้อมูลล่าสุดจาก Google Sheets"):
+                    st.rerun()
                     
-                    # จัดเรียงตามปี ค.ศ. หรือ พ.ศ. จากน้อยไปมาก (เก่าไปใหม่)
-                    if 'Year_CE' in df_pvd_all.columns:
-                        df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
+                try:
+                    # 1. เชื่อมต่อและดึงข้อมูลทั้งหมดจาก Google Sheets (Worksheet: Provident_Fund)
+                    client = get_gsheet_client()
+                    sheet = client.open('MyStockData').worksheet('Provident_Fund')
+                    data = sheet.get_all_records()
+                    
+                    if data:
+                        # 2. แปลงข้อมูลเป็น DataFrame
+                        df_pvd_all = pd.DataFrame(data)
                         
-                    # 3. แสดงผลตารางบน Streamlit
-                    st.dataframe(
-                        df_pvd_all,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                        # จัดเรียงตามปี ค.ศ. หรือ พ.ศ. จากน้อยไปมาก (เก่าไปใหม่)
+                        if 'Year_CE' in df_pvd_all.columns:
+                            df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
+                            
+                        # 3. แสดงผลตารางบน Streamlit
+                        st.dataframe(
+                            df_pvd_all,
+                            use_container_width=True,
+                            hide_index=True
+                        )
+                        
+                        # แสดงยอดรวมล่าสุด (ปีล่าสุด)
+                        latest_row = df_pvd_all.iloc[-1]
+                        st.info(f"📌 **ยอดรวมสะสมล่าสุด (ปี พ.ศ. {latest_row.get('Year_BE', '-')})**: **{float(latest_row.get('Grand_Total', 0)):,.2f}** บาท (จำนวนหน่วย: {float(latest_row.get('Total_Units', 0)):,.4f} หน่วย)")
+                        
+                    else:
+                        st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund กรุณาอัปโหลดรูปภาพและบันทึกข้อมูลก่อนครับ")
+                        
+                except Exception as e:
+                    st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
                     
-                    # แสดงยอดรวมล่าสุด (ปีล่าสุด)
-                    latest_row = df_pvd_all.iloc[-1]
-                    st.info(f"📌 **ยอดรวมสะสมล่าสุด (ปี พ.ศ. {latest_row.get('Year_BE', '-')})**: **{float(latest_row.get('Grand_Total', 0)):,.2f}** บาท (จำนวนหน่วย: {float(latest_row.get('Total_Units', 0)):,.4f} หน่วย)")
-                    
-                else:
-                    st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund กรุณาอัปโหลดรูปภาพและบันทึกข้อมูลก่อนครับ")
-                    
-            except Exception as e:
-                st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
-                
 # ------------------------------
 if __name__ == "__main__":
     main()
