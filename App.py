@@ -38,7 +38,7 @@ def extract_pvd_from_image(image_file, year_be):
             
         genai.configure(api_key=api_key)
         # ใช้โมเดล gemini-1.5-flash ที่รองรับ Vision
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
         # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2562 -> 2019)
         year_ce = int(year_be) - 543
