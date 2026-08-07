@@ -382,6 +382,30 @@ if "dividend_data" not in st.session_state:
             st.session_state.dividend_data = []
     else:
         st.session_state.dividend_data = []
+
+def save_dividend_data(df_div):
+    """ฟังก์ชันรองรับการบันทึกข้อมูลปันผลจากการอัปโหลด Excel"""
+    try:
+        # 1. บันทึกลง session_state ก่อน
+        st.session_state.dividend_data = df_div.to_dict('records')
+        
+        # 2. บันทึกลง CSV ตามระบบเดิม
+        df_div.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+        
+        # 3. (ถ้าต้องการ) บันทึกลง Google Sheets ชีท 'Dividend' ด้วยเพื่อความสอดคล้อง
+        try:
+            client = get_gsheet_client()
+            sheet = client.open('MyStockData').worksheet('Dividend')
+            sheet.clear()
+            data_to_write = [df_div.columns.tolist()] + df_div.astype(str).values.tolist()
+            sheet.update(data_to_write)
+        except:
+            pass # ถ้าต่อ Google Sheets ไม่ได้ อย่างน้อยก็เซฟลง CSV สำเร็จ
+            
+        return True
+    except Exception as e:
+        print(f"Error saving dividend data: {e}")
+        return False
         
 def calculate_atr(df, period=14):
     """คำนวณค่า Average True Range (ATR) จากข้อมูลราคา"""
