@@ -4677,7 +4677,7 @@ def main():
             # แถวที่ 1
             row1_col1, row1_col2, row1_col3 = st.columns(3)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
-            row1_col2.metric("PVD", f"{pvd_value:,.0f} ฿")
+            row1_col2.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
             row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
 
             # แถวที่ 2
