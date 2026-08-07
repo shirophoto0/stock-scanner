@@ -4778,38 +4778,46 @@ def main():
             try:
                 client = get_gsheet_client()
                 
-                # 1. ดึงข้อมูลรวมถึง Portfolio_History ที่สร้างใหม่
+                # 1. ดึงข้อมูล
                 df_pvd = pd.DataFrame(client.open('MyStockData').worksheet('Provident_Fund').get_all_records())
                 df_ins = pd.DataFrame(client.open('MyStockData').worksheet('Insurance').get_all_records())
                 df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
                 df_bank = pd.DataFrame(client.open('MyStockData').worksheet('Bank_Account').get_all_records())
                 
-                # ดึงข้อมูลประวัติพอร์ตหุ้น+TFEX จากแท็บใหม่
                 try:
                     df_portfolio_hist = pd.DataFrame(client.open('MyStockData').worksheet('Stock_TFEX_History').get_all_records())
                 except:
                     df_portfolio_hist = pd.DataFrame()
 
-                # 2. ฟังก์ชันเตรียมข้อมูล (เหมือนเดิม)
+                # 2. ฟังก์ชันเตรียมข้อมูล (ปรับปรุงการแปลงวันที่ของ PVD ให้แม่นยำขึ้น)
                 def prepare_series(df, date_col, val_col, name):
                     df = df.copy()
                     if df.empty:
                         return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
                     
-                    df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
+                    if date_col == 'Month':
+                        # แปลงชื่อเดือนไทยเป็นตัวเลข
+                        thai_months = {
+                            'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
+                            'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08',
+                            'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'
+                        }
+                        df['Month_Num'] = df[date_col].map(thai_months).fillna('12')
+                        df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df['Month_Num'] + '-01', errors='coerce')
+                    else:
+                        df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
+                    
                     df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
                     return df.dropna(subset=['Date']).set_index('Date')[[name]]
 
-                # 3. เตรียม Series (เพิ่ม s_port เข้าไป)
+                # 3. เตรียม Series ทั้งหมด
                 s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                 s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
                 s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
-                
-                # เตรียม Series พอร์ตหุ้น+TFEX ย้อนหลัง
                 s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
 
-                # 4. รวมข้อมูลทั้งหมดเข้าด้วยกัน
+                # 4. รวมข้อมูลโดยใช้ Outer Join และเติมค่าข้อมูลเก่า (ffill)
                 series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_port] if not s.empty]
                 
                 if series_list:
@@ -4817,12 +4825,13 @@ def main():
                     for s in series_list[1:]:
                         df_merged = df_merged.join(s, how='outer')
                     
+                    # เรียงลำดับวันที่จากอดีต -> ปัจจุบัน และใช้ ffill() เพื่อดึงค่าสินทรัพย์ตัวเก่ามาทบในเดือนที่ไม่มีการบันทึก
                     df_merged = df_merged.sort_index().ffill().fillna(0)
                     
-                    # คำนวณผลรวม Total จากทุกคอลัมน์ที่ดึงมาได้เลย (ไม่ต้องบวก current_stock แยกอีกแล้วเพราะบันทึกเข้าตารางตามเวลาจริงแล้ว)
+                    # คำนวณ Total จากผลรวมทุกคอลัมน์ในแต่ละแถวเวลา
                     df_merged['Total'] = df_merged.sum(axis=1)
 
-                    # 5. วาดกราฟ Plotly (ใช้โค้ดปรับแกน Y เดิมของคุณได้เลย)
+                    # 5. วาดกราฟ Plotly
                     import plotly.graph_objects as go
                     fig = go.Figure()
                     
@@ -4831,7 +4840,7 @@ def main():
                             x=df_merged.index, 
                             y=df_merged[col], 
                             name=col,
-                            mode='lines+markers', # <-- เพิ่มบรรทัดนี้ เพื่อบังคับให้แสดงทั้งเส้นและจุด
+                            mode='lines+markers',
                             line=dict(width=3 if col == 'Total' else 2)
                         ))
     
