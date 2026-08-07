@@ -15,8 +15,8 @@ import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
-import plotly.graph_objects as go
 import datetime
+import plotly
 from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
