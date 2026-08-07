@@ -38,9 +38,14 @@ def extract_pvd_from_image(image_file, year_be):
             
         genai.configure(api_key=api_key)
         # ใช้โมเดล gemini-1.5-flash ที่รองรับ Vision
-        # ใช้ชื่อรุ่นนี้ครับ (เป็นรุ่นที่เสถียรที่สุดสำหรับ Free Tier)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # เพิ่มโค้ดนี้ลงใน main() ชั่วคราวเพื่อเช็คโมเดลที่ใช้งานได้
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                st.write(f"โมเดลที่ใช้งานได้: {m.name}")
+                
         # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2562 -> 2019)
         year_ce = int(year_be) - 543
         
