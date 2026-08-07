@@ -92,6 +92,20 @@ def get_latest_pvd_value():
     except:
         return 0.0
     return 0.0
+
+def get_latest_insurance_value():
+    try:
+        client = get_gsheet_client()
+        sheet_ins = client.open('MyStockData').worksheet('Insurance')
+        data = sheet_ins.get_all_records()
+        if data:
+            df_ins = pd.DataFrame(data)
+            if not df_ins.empty and 'Redemption_Value' in df_ins.columns:
+                # แปลงเป็นตัวเลขและดึงค่าแถวสุดท้าย (ล่าสุดตามวันที่บันทึก)
+                return float(str(df_ins.iloc[-1]['Redemption_Value']).replace(',', ''))
+    except Exception:
+        pass
+    return 0.0
     
 ###################
 # Def TEFEX #
@@ -4612,21 +4626,23 @@ def main():
         ])
         
         with wealth_tab_overview:
-            # 1. ดึงมูลค่า PVD ล่าสุดจาก Google Sheets
+
+            # 1. ดึงมูลค่า PVD และ ประกัน ล่าสุดจาก Google Sheets
             pvd_value = get_latest_pvd_value()
+            insurance_value = get_latest_insurance_value()
             
             # 2. ดึงมูลค่าพอร์ตหุ้นรวมจากตัวแปรที่คุณคำนวณไว้ในหน้าพอร์ต
-            # (ตรวจสอบให้แน่ใจว่าบล็อกคำนวณ st.subheader("📊 สรุปพอร์ตการลงทุน") อยู่ก่อนหน้านี้ เพื่อให้ตัวแปร total_value มีค่าพร้อมใช้งาน)
             total_stock_value = total_value if 'total_value' in locals() else 0.0
             
-            # 3. คำนวณความมั่งคั่งสุทธิรวม (Net Worth)
-            net_worth = total_stock_value + pvd_value
+            # 3. คำนวณความมั่งคั่งสุทธิรวม (Net Worth) [หุ้น + PVD + ประกัน]
+            net_worth = total_stock_value + pvd_value + insurance_value
             
-            # 4. แสดงผลใน Metrics
-            col1, col2, col3 = st.columns(3)
+            # 4. แสดงผลใน Metrics (ปรับเป็น 4 คอลัมน์)
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("มูลค่าพอร์ตหุ้นรวม", f"{total_stock_value:,.0f} ฿")
             col2.metric("สินทรัพย์มั่นคง (PVD)", f"{pvd_value:,.0f} ฿")
-            col3.metric("ความมั่งคั่งสุทธิรวม (Net Worth)", f"{net_worth:,.0f} ฿")
+            col3.metric("ประกันควบการลงทุน", f"{insurance_value:,.0f} ฿")
+            col4.metric("ความมั่งคั่งสุทธิรวม (Net Worth)", f"{net_worth:,.0f} ฿")
             
             st.divider()
             st.info("📌 พื้นที่สำหรับแสดงกราฟ Donut สัดส่วนสินทรัพย์ และกราฟเติบโต Net Worth ในขั้นตอนถัดไป")
