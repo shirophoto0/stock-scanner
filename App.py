@@ -4748,257 +4748,257 @@ def main():
             except Exception:
                 st.info("💡 กำลังเตรียมข้อมูลสำหรับกราฟประวัติการเติบโต...")
                 
-     # ส่วนซ่อน-เปิด สำหรับอัปโหลด PVD
-    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=False):
-            
-        with st.form("pvd_upload_form"):
-            col_y1, col_y2, col_m = st.columns(3)
-            
-            with col_y1:
-                input_year_be = st.number_input("ปี พ.ศ.", min_value=2500, max_value=2570, value=2569)
-            with col_y2:
-                st.info(f"ค.ศ.: **{int(input_year_be) - 543}**")
-            with col_m:
-                # เพิ่มตัวเลือกเดือน สำหรับเก็บข้อมูลรายเดือน
-                months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", 
-                               "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
-                selected_month = st.selectbox("เลือกเดือน", months_list)
-                    
-            uploaded_pvd_file = st.file_uploader("อัปโหลดรูปภาพรายงาน PVD รายเดือน (JPG, PNG)", type=["jpg", "jpeg", "png"])
-            
-            submitted_pvd = st.form_submit_button("🔍 อ่านข้อมูลจากรูปภาพด้วย AI")
-            
-            if submitted_pvd:
-                if uploaded_pvd_file is not None:
-                    with st.spinner("กำลังให้ AI อ่านและวิเคราะห์ข้อมูลจากภาพ..."):
-                        # ส่งปีไปประมวลผล (คุณสามารถปรับฟังก์ชัน extract_pvd_from_image ให้รับค่า month เพิ่มได้ถ้าต้องการให้ AI ช่วยตรวจสอบ)
-                        df_extracted = extract_pvd_from_image(uploaded_pvd_file, input_year_be)
+         # ส่วนซ่อน-เปิด สำหรับอัปโหลด PVD
+        with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=False):
+                
+            with st.form("pvd_upload_form"):
+                col_y1, col_y2, col_m = st.columns(3)
+                
+                with col_y1:
+                    input_year_be = st.number_input("ปี พ.ศ.", min_value=2500, max_value=2570, value=2569)
+                with col_y2:
+                    st.info(f"ค.ศ.: **{int(input_year_be) - 543}**")
+                with col_m:
+                    # เพิ่มตัวเลือกเดือน สำหรับเก็บข้อมูลรายเดือน
+                    months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", 
+                                   "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+                    selected_month = st.selectbox("เลือกเดือน", months_list)
                         
-                        if df_extracted is not None and not df_extracted.empty:
-                            # เพิ่มคอลัมน์ Month เข้าไปใน DataFrame ที่ AI อ่านมาได้
-                            df_extracted.insert(0, 'Month', selected_month)
+                uploaded_pvd_file = st.file_uploader("อัปโหลดรูปภาพรายงาน PVD รายเดือน (JPG, PNG)", type=["jpg", "jpeg", "png"])
+                
+                submitted_pvd = st.form_submit_button("🔍 อ่านข้อมูลจากรูปภาพด้วย AI")
+                
+                if submitted_pvd:
+                    if uploaded_pvd_file is not None:
+                        with st.spinner("กำลังให้ AI อ่านและวิเคราะห์ข้อมูลจากภาพ..."):
+                            # ส่งปีไปประมวลผล (คุณสามารถปรับฟังก์ชัน extract_pvd_from_image ให้รับค่า month เพิ่มได้ถ้าต้องการให้ AI ช่วยตรวจสอบ)
+                            df_extracted = extract_pvd_from_image(uploaded_pvd_file, input_year_be)
                             
-                            st.success("อ่านข้อมูลสำเร็จ! ตรวจสอบความถูกต้องด้านล่าง:")
-                            st.dataframe(df_extracted, use_container_width=True)
+                            if df_extracted is not None and not df_extracted.empty:
+                                # เพิ่มคอลัมน์ Month เข้าไปใน DataFrame ที่ AI อ่านมาได้
+                                df_extracted.insert(0, 'Month', selected_month)
+                                
+                                st.success("อ่านข้อมูลสำเร็จ! ตรวจสอบความถูกต้องด้านล่าง:")
+                                st.dataframe(df_extracted, use_container_width=True)
+                                
+                                st.session_state['temp_pvd_df'] = df_extracted
+                            else:
+                                st.warning("ไม่สามารถดึงข้อมูลจากรูปภาพได้ กรุณาลองใหม่อีกครั้ง")
+                    else:
+                        st.warning("กรุณาอัปโหลดรูปภาพก่อนกดปุ่มประมวลผล")
+            
+                # ส่วนยืนยันบันทึกข้อมูล (นอกฟอร์ม)
+                if 'temp_pvd_df' in st.session_state and st.session_state['temp_pvd_df'] is not None:
+                    st.write("---")
+                    st.write("📋 **ข้อมูลที่พร้อมบันทึก (ระบุเดือนแล้ว):**")
+                    st.dataframe(st.session_state['temp_pvd_df'], use_container_width=True)
+                    
+                    if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets"):
+                        try:
+                            client = get_gsheet_client()
+                            sheet = client.open('MyStockData').worksheet('Provident_Fund')
                             
-                            st.session_state['temp_pvd_df'] = df_extracted
+                            # ดึงข้อมูลเดิมที่มีทั้งหมดมาเช็ค
+                            existing_data = sheet.get_all_records()
+                            df_existing = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
+                            
+                            df_to_save = st.session_state['temp_pvd_df'].fillna(0)
+                            
+                            # ตรวจสอบว่ามีคอลัมน์ Month และ Year_BE หรือยัง ถ้ามีให้เช็คการบันทึกซ้ำ
+                            is_duplicate = False
+                            if not df_existing.empty and 'Month' in df_existing.columns and 'Year_BE' in df_existing.columns:
+                                # แปลงชนิดข้อมูลให้ตรงกันเพื่อเทียบเงื่อนไข
+                                match_idx = df_existing[
+                                    (df_existing['Year_BE'].astype(str) == str(input_year_be)) & 
+                                    (df_existing['Month'] == selected_month)
+                                ].index
+                                
+                                if len(match_idx) > 0:
+                                    is_duplicate = True
+                                    row_number_to_update = match_idx[0] + 2 # บวก 2 เพราะ Google Sheets เริ่มที่แถว 2 (นับ Header เป็นแถว 1)
+                                    
+                                    # อัปเดตข้อมูลทับแถวเดิม (ไม่สร้างแถวใหม่)
+                                    values_to_write = list(df_to_save.iloc[0].values)
+                                    sheet.update(f"A{row_number_to_update}", [values_to_write])
+                                    st.success(f"✅ อัปเดตข้อมูลของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว (ไมโครอัปเดตทับข้อมูลเดิม)")
+                            
+                            if not is_duplicate:
+                                # ถ้ายังไม่มีข้อมูลเดือนนี้ ให้เพิ่มแถวใหม่ต่อท้ายปกติ
+                                for row in df_to_save.values.tolist():
+                                    sheet.append_row(row)
+                                st.success(f"✅ บันทึกข้อมูลใหม่ของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
+                            
+                            # ล้างค่าใน Session
+                            del st.session_state['temp_pvd_df']
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
+                    
+                # --- ส่วนที่ 2: ตารางสรุป (แยกออกมาอยู่ข้างนอกบล็อกการบันทึก) ---
+                st.write("---") # ขีดคั่นระหว่างส่วนอัปโหลดและตาราง
+                with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
+                    
+                    if st.button("🔄 โหลดข้อมูลล่าสุด"):
+                        st.rerun()
+                        
+                    try:
+                        client = get_gsheet_client()
+                        sheet = client.open('MyStockData').worksheet('Provident_Fund')
+                        data = sheet.get_all_records()
+                        
+                        if data:
+                            df_pvd_all = pd.DataFrame(data)
+                            
+                            # 1. จัดการตัวเลขในตารางให้เป็นจำนวนเต็มและมีคอมม่า (แปลงเป็น String สำหรับแสดงผล)
+                            cols_to_format = ['Member_Saving', 'Member_Benefit', 'Member_Total', 
+                                              'Employer_Matching', 'Employer_Benefit', 'Employer_Total', 'Grand_Total']
+                            
+                            for col in cols_to_format:
+                                if col in df_pvd_all.columns:
+                                    df_pvd_all[col] = df_pvd_all[col].apply(
+                                        lambda x: "{:,.0f}".format(float(str(x).replace(',', '')))
+                                    )
+                            
+                            # จัดเรียงลำดับ
+                            if 'Year_CE' in df_pvd_all.columns:
+                                df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
+                            
+                            # เก็บข้อมูลแถวสุดท้ายไว้แสดงผล info ก่อนซ่อนคอลัมน์
+                            latest_row = df_pvd_all.iloc[-1]
+                            
+                            # 2. ซ่อนคอลัมน์ Year_BE และ Total_Units เฉพาะตอนแสดงผลตาราง
+                            cols_to_drop = ['Year_BE', 'Total_Units']
+                            df_display = df_pvd_all.drop(columns=[col for col in cols_to_drop if col in df_pvd_all.columns])
+                            
+                            # แสดงผลตารางแบบไม่มี Year_BE และ Total_Units
+                            st.dataframe(df_display, use_container_width=True, hide_index=True)
+                            
+                            # 3. แสดงยอดรวมล่าสุด (ดึงข้อมูลล่าสุด)
+                            st.info(f"📌 **ยอดรวมสะสมล่าสุด**: **{latest_row.get('Grand_Total', '0')}** บาท")
                         else:
-                            st.warning("ไม่สามารถดึงข้อมูลจากรูปภาพได้ กรุณาลองใหม่อีกครั้ง")
-                else:
-                    st.warning("กรุณาอัปโหลดรูปภาพก่อนกดปุ่มประมวลผล")
-        
-        # ส่วนยืนยันบันทึกข้อมูล (นอกฟอร์ม)
-        if 'temp_pvd_df' in st.session_state and st.session_state['temp_pvd_df'] is not None:
-            st.write("---")
-            st.write("📋 **ข้อมูลที่พร้อมบันทึก (ระบุเดือนแล้ว):**")
-            st.dataframe(st.session_state['temp_pvd_df'], use_container_width=True)
-            
-            if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets"):
-                try:
-                    client = get_gsheet_client()
-                    sheet = client.open('MyStockData').worksheet('Provident_Fund')
-                    
-                    # ดึงข้อมูลเดิมที่มีทั้งหมดมาเช็ค
-                    existing_data = sheet.get_all_records()
-                    df_existing = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
-                    
-                    df_to_save = st.session_state['temp_pvd_df'].fillna(0)
-                    
-                    # ตรวจสอบว่ามีคอลัมน์ Month และ Year_BE หรือยัง ถ้ามีให้เช็คการบันทึกซ้ำ
-                    is_duplicate = False
-                    if not df_existing.empty and 'Month' in df_existing.columns and 'Year_BE' in df_existing.columns:
-                        # แปลงชนิดข้อมูลให้ตรงกันเพื่อเทียบเงื่อนไข
-                        match_idx = df_existing[
-                            (df_existing['Year_BE'].astype(str) == str(input_year_be)) & 
-                            (df_existing['Month'] == selected_month)
-                        ].index
-                        
-                        if len(match_idx) > 0:
-                            is_duplicate = True
-                            row_number_to_update = match_idx[0] + 2 # บวก 2 เพราะ Google Sheets เริ่มที่แถว 2 (นับ Header เป็นแถว 1)
+                            st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund")
                             
-                            # อัปเดตข้อมูลทับแถวเดิม (ไม่สร้างแถวใหม่)
-                            values_to_write = list(df_to_save.iloc[0].values)
-                            sheet.update(f"A{row_number_to_update}", [values_to_write])
-                            st.success(f"✅ อัปเดตข้อมูลของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว (ไมโครอัปเดตทับข้อมูลเดิม)")
-                    
-                    if not is_duplicate:
-                        # ถ้ายังไม่มีข้อมูลเดือนนี้ ให้เพิ่มแถวใหม่ต่อท้ายปกติ
-                        for row in df_to_save.values.tolist():
-                            sheet.append_row(row)
-                        st.success(f"✅ บันทึกข้อมูลใหม่ของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
-                    
-                    # ล้างค่าใน Session
-                    del st.session_state['temp_pvd_df']
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
-            
-    # --- ส่วนที่ 2: ตารางสรุป (แยกออกมาอยู่ข้างนอกบล็อกการบันทึก) ---
-    st.write("---") # ขีดคั่นระหว่างส่วนอัปโหลดและตาราง
-    with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
-        
-        if st.button("🔄 โหลดข้อมูลล่าสุด"):
-            st.rerun()
-            
-        try:
-            client = get_gsheet_client()
-            sheet = client.open('MyStockData').worksheet('Provident_Fund')
-            data = sheet.get_all_records()
-            
-            if data:
-                df_pvd_all = pd.DataFrame(data)
-                
-                # 1. จัดการตัวเลขในตารางให้เป็นจำนวนเต็มและมีคอมม่า (แปลงเป็น String สำหรับแสดงผล)
-                cols_to_format = ['Member_Saving', 'Member_Benefit', 'Member_Total', 
-                                  'Employer_Matching', 'Employer_Benefit', 'Employer_Total', 'Grand_Total']
-                
-                for col in cols_to_format:
-                    if col in df_pvd_all.columns:
-                        df_pvd_all[col] = df_pvd_all[col].apply(
-                            lambda x: "{:,.0f}".format(float(str(x).replace(',', '')))
-                        )
-                
-                # จัดเรียงลำดับ
-                if 'Year_CE' in df_pvd_all.columns:
-                    df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
-                
-                # เก็บข้อมูลแถวสุดท้ายไว้แสดงผล info ก่อนซ่อนคอลัมน์
-                latest_row = df_pvd_all.iloc[-1]
-                
-                # 2. ซ่อนคอลัมน์ Year_BE และ Total_Units เฉพาะตอนแสดงผลตาราง
-                cols_to_drop = ['Year_BE', 'Total_Units']
-                df_display = df_pvd_all.drop(columns=[col for col in cols_to_drop if col in df_pvd_all.columns])
-                
-                # แสดงผลตารางแบบไม่มี Year_BE และ Total_Units
-                st.dataframe(df_display, use_container_width=True, hide_index=True)
-                
-                # 3. แสดงยอดรวมล่าสุด (ดึงข้อมูลล่าสุด)
-                st.info(f"📌 **ยอดรวมสะสมล่าสุด**: **{latest_row.get('Grand_Total', '0')}** บาท")
-            else:
-                st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund")
-                
-        except Exception as e:
-            st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
-
-    ########## ประกันภัย ###############
-    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
-    
-        with st.form("insurance_upload_form"):
-            col_d, col_v = st.columns(2)
-            
-            with col_d:
-                # ใช้ date.today() โดยตรง (มั่นใจว่าด้านบนไฟล์มี from datetime import date แล้ว)
-                ins_date = st.date_input("เลือกวันที่อัปเดตข้อมูล", value=date.today(), key="ins_date_input")
-                
-            with col_v:
-                ins_redemption_value = st.number_input(
-                    "มูลค่ารับซื้อคืนหน่วยลงทุน (บาท)", 
-                    min_value=0.0, 
-                    format="%.2f", 
-                    value=0.0,
-                    key="ins_redemption_input",
-                    help="กรอกยอดมูลค่าพอร์ตประกันตามใบแจ้งยอดหรือแอปพลิเคชัน ณ วันที่อัปเดต"
-                )
-            
-            submitted_ins = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลประกันภัย")
-            
-            if submitted_ins:
-                if ins_redemption_value > 0:
-                    try:
-                        client = get_gsheet_client()
-                        sheet_ins = client.open('MyStockData').worksheet('Insurance')
-                        
-                        existing_data = sheet_ins.get_all_records()
-                        df_existing_ins = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
-                        
-                        date_str = ins_date.strftime("%Y-%m-%d")
-                        year_ce = ins_date.year
-                        
-                        is_duplicate = False
-                        
-                        if not df_existing_ins.empty and 'Date' in df_existing_ins.columns:
-                            match_idx = df_existing_ins[df_existing_ins['Date'].astype(str) == date_str].index
-                            
-                            if len(match_idx) > 0:
-                                is_duplicate = True
-                                row_num = match_idx[0] + 2 
-                                
-                                updated_values = [date_str, year_ce, ins_redemption_value]
-                                sheet_ins.update(f"A{row_num}:C{row_num}", [updated_values])
-                                st.success(f"✅ อัปเดตมูลค่าประกันของวันที่ **{date_str}** เป็น **{ins_redemption_value:,.2f} บาท** เรียบร้อยแล้ว!")
-                        
-                        if not is_duplicate:
-                            new_row = [date_str, year_ce, ins_redemption_value]
-                            sheet_ins.append_row(new_row)
-                            st.success(f"✅ บันทึกข้อมูลใหม่ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
-                            
-                        st.rerun()
-                        
                     except Exception as e:
-                        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลประกัน: {e}")
-                else:
-                    st.warning("กรุณากรอกมูลค่ารับซื้อคืนหน่วยลงทุนให้มากกว่า 0")
-
-    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลสหกรณ์ก๊าซ ปตท.", expanded=False):
-    
-        with st.form("coop_upload_form"):
-            col_d, col_v = st.columns(2)
+                        st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
             
-            with col_d:
-                coop_date = st.date_input("เลือกวันที่อัปเดตข้อมูลสหกรณ์", value=date.today(), key="coop_date_input")
+        ########## ประกันภัย ###############
+        with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
+        
+            with st.form("insurance_upload_form"):
+                col_d, col_v = st.columns(2)
                 
-            with col_v:
-                coop_value = st.number_input(
-                    "ยอดเงินสหกรณ์ / มูลค่าหุ้นสหกรณ์ (บาท)", 
-                    min_value=0.0, 
-                    format="%.2f", 
-                    value=0.0,
-                    key="coop_value_input",
-                    help="กรอกยอดเงินสะสมหรือยอดรวมในสหกรณ์ก๊าซ ปตท. ณ วันที่อัปเดต"
-                )
-            
-            submitted_coop = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลสหกรณ์")
-            
-            if submitted_coop:
-                if coop_value > 0:
-                    try:
-                        client = get_gsheet_client()
-                        # สร้าง Worksheet ชื่อ 'Coop' ใน Google Sheets (MyStockData)
-                        sheet_coop = client.open('MyStockData').worksheet('Coop')
-                        
-                        existing_data = sheet_coop.get_all_records()
-                        df_existing_coop = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
-                        
-                        date_str = coop_date.strftime("%Y-%m-%d")
-                        year_ce = coop_date.year
-                        
-                        is_duplicate = False
-                        
-                        if not df_existing_coop.empty and 'Date' in df_existing_coop.columns:
-                            match_idx = df_existing_coop[df_existing_coop['Date'].astype(str) == date_str].index
-                            
-                            if len(match_idx) > 0:
-                                is_duplicate = True
-                                row_num = match_idx[0] + 2 
-                                
-                                updated_values = [date_str, year_ce, coop_value]
-                                sheet_coop.update(f"A{row_num}:C{row_num}", [updated_values])
-                                st.success(f"✅ อัปเดตข้อมูลสหกรณ์ของวันที่ **{date_str}** เป็น **{coop_value:,.2f} บาท** เรียบร้อยแล้ว!")
-                        
-                        if not is_duplicate:
-                            new_row = [date_str, year_ce, coop_value]
-                            sheet_coop.append_row(new_row)
-                            st.success(f"✅ บันทึกข้อมูลใหม่สหกรณ์ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
-                            
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลสหกรณ์: {e}")
-                else:
-                    st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
+                with col_d:
+                    # ใช้ date.today() โดยตรง (มั่นใจว่าด้านบนไฟล์มี from datetime import date แล้ว)
+                    ins_date = st.date_input("เลือกวันที่อัปเดตข้อมูล", value=date.today(), key="ins_date_input")
                     
+                with col_v:
+                    ins_redemption_value = st.number_input(
+                        "มูลค่ารับซื้อคืนหน่วยลงทุน (บาท)", 
+                        min_value=0.0, 
+                        format="%.2f", 
+                        value=0.0,
+                        key="ins_redemption_input",
+                        help="กรอกยอดมูลค่าพอร์ตประกันตามใบแจ้งยอดหรือแอปพลิเคชัน ณ วันที่อัปเดต"
+                    )
+                
+                submitted_ins = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลประกันภัย")
+                
+                if submitted_ins:
+                    if ins_redemption_value > 0:
+                        try:
+                            client = get_gsheet_client()
+                            sheet_ins = client.open('MyStockData').worksheet('Insurance')
+                            
+                            existing_data = sheet_ins.get_all_records()
+                            df_existing_ins = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
+                            
+                            date_str = ins_date.strftime("%Y-%m-%d")
+                            year_ce = ins_date.year
+                            
+                            is_duplicate = False
+                            
+                            if not df_existing_ins.empty and 'Date' in df_existing_ins.columns:
+                                match_idx = df_existing_ins[df_existing_ins['Date'].astype(str) == date_str].index
+                                
+                                if len(match_idx) > 0:
+                                    is_duplicate = True
+                                    row_num = match_idx[0] + 2 
+                                    
+                                    updated_values = [date_str, year_ce, ins_redemption_value]
+                                    sheet_ins.update(f"A{row_num}:C{row_num}", [updated_values])
+                                    st.success(f"✅ อัปเดตมูลค่าประกันของวันที่ **{date_str}** เป็น **{ins_redemption_value:,.2f} บาท** เรียบร้อยแล้ว!")
+                            
+                            if not is_duplicate:
+                                new_row = [date_str, year_ce, ins_redemption_value]
+                                sheet_ins.append_row(new_row)
+                                st.success(f"✅ บันทึกข้อมูลใหม่ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                                
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลประกัน: {e}")
+                    else:
+                        st.warning("กรุณากรอกมูลค่ารับซื้อคืนหน่วยลงทุนให้มากกว่า 0")
+    
+        with st.expander("📤 เพิ่ม/อัปเดตข้อมูลสหกรณ์ก๊าซ ปตท.", expanded=False):
+        
+            with st.form("coop_upload_form"):
+                col_d, col_v = st.columns(2)
+                
+                with col_d:
+                    coop_date = st.date_input("เลือกวันที่อัปเดตข้อมูลสหกรณ์", value=date.today(), key="coop_date_input")
+                    
+                with col_v:
+                    coop_value = st.number_input(
+                        "ยอดเงินสหกรณ์ / มูลค่าหุ้นสหกรณ์ (บาท)", 
+                        min_value=0.0, 
+                        format="%.2f", 
+                        value=0.0,
+                        key="coop_value_input",
+                        help="กรอกยอดเงินสะสมหรือยอดรวมในสหกรณ์ก๊าซ ปตท. ณ วันที่อัปเดต"
+                    )
+                
+                submitted_coop = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลสหกรณ์")
+                
+                if submitted_coop:
+                    if coop_value > 0:
+                        try:
+                            client = get_gsheet_client()
+                            # สร้าง Worksheet ชื่อ 'Coop' ใน Google Sheets (MyStockData)
+                            sheet_coop = client.open('MyStockData').worksheet('Coop')
+                            
+                            existing_data = sheet_coop.get_all_records()
+                            df_existing_coop = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
+                            
+                            date_str = coop_date.strftime("%Y-%m-%d")
+                            year_ce = coop_date.year
+                            
+                            is_duplicate = False
+                            
+                            if not df_existing_coop.empty and 'Date' in df_existing_coop.columns:
+                                match_idx = df_existing_coop[df_existing_coop['Date'].astype(str) == date_str].index
+                                
+                                if len(match_idx) > 0:
+                                    is_duplicate = True
+                                    row_num = match_idx[0] + 2 
+                                    
+                                    updated_values = [date_str, year_ce, coop_value]
+                                    sheet_coop.update(f"A{row_num}:C{row_num}", [updated_values])
+                                    st.success(f"✅ อัปเดตข้อมูลสหกรณ์ของวันที่ **{date_str}** เป็น **{coop_value:,.2f} บาท** เรียบร้อยแล้ว!")
+                            
+                            if not is_duplicate:
+                                new_row = [date_str, year_ce, coop_value]
+                                sheet_coop.append_row(new_row)
+                                st.success(f"✅ บันทึกข้อมูลใหม่สหกรณ์ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                                
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลสหกรณ์: {e}")
+                    else:
+                        st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
+                        
 # ------------------------------
 if __name__ == "__main__":
     main()
