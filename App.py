@@ -1232,7 +1232,9 @@ SET100_TICKERS = [
 st.set_page_config(layout="wide")
 
 def main():
-    import plotly.express as px  # <--- เพิ่มตรงนี้ไว้บรรทัดแรกสุดในฟังก์ชัน main()
+    import plotly.express as px
+    import plotly.graph_objects as go
+    from datetime import date
     # 1. ประกาศตัวแปรเริ่มต้น
     df_all_stocks = pd.DataFrame() 
     filtered_df = None
