@@ -4655,7 +4655,7 @@ def main():
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
-            # --- เพิ่มส่วนนี้: มูลค่าประกันบำนาญแบบ Fix Value ---
+            # --- มูลค่าประกันบำนาญแบบ Fix Value ---
             pension_insurance_value = 1337703.0
             
             # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
@@ -4663,16 +4663,20 @@ def main():
             bank_data = sheet_bank.get_all_records()
             bank_balance = float(str(bank_data[-1]['Balance']).replace(',', '')) if bank_data else 0.0
             
-            # 2. มูลค่าพอร์ตหุ้นรวม
-            total_stock_value = total_value if 'total_value' in locals() else 0.0
+            # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX (ดึงตัวแปร net_worth จาก tab_tfex มาใช้)
+            base_stock_value = total_value if 'total_value' in locals() else 0.0
+            tfex_portfolio_value = net_worth if 'net_worth' in locals() and 'tab_tfex' in globals() else 0.0 # อ้างอิงจากยอดพอร์ต TFEX
             
-            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมประกันบำนาญด้วย)
-            net_worth = total_stock_value + pvd_value + insurance_value + coop_value + pension_insurance_value + bank_balance
+            # รวมพอร์ตหุ้นและ TFEX เข้าด้วยกันตามที่ขอ
+            total_stock_and_tfex = base_stock_value + tfex_portfolio_value
+            
+            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (ใช้ total_stock_and_tfex แทนพอร์ตหุ้นเดิม)
+            net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + pension_insurance_value + bank_balance
             
             # 4. แสดงผลใน Metrics (แบ่งเป็น 3 คอลัมน์ x 2 แถว)
             # แถวที่ 1
             row1_col1, row1_col2, row1_col3 = st.columns(3)
-            row1_col1.metric("พอร์ตหุ้น", f"{total_stock_value:,.0f} ฿")
+            row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
             row1_col2.metric("PVD", f"{pvd_value:,.0f} ฿")
             row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
 
@@ -4687,14 +4691,13 @@ def main():
             st.divider()
 
             # 5. แสดง Total Net Worth (ให้อยู่กึ่งกลางหน้าจอ, สีเขียว, ขยายใหญ่ขึ้น)
-            # ใช้เทคนิคแบ่ง 3 คอลัมน์ แล้วเอาข้อความไว้ตรงกลาง (col_center)
             c_left, c_center, c_right = st.columns([1, 2, 1])
             with c_center:
                 st.markdown(
                     f"""
                     <div style="text-align: center; padding: 10px;">
                         <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
-                        <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth:,.0f} ฿</h1>
+                        <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
                     </div>
                     """, 
                     unsafe_allow_html=True
@@ -4703,10 +4706,10 @@ def main():
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
 
-            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม "ประกันบำนาญ" เข้าไปใน List)
+            # สร้างข้อมูลสำหรับกราฟ (เปลี่ยนป้ายเป็น "พอร์ตหุ้น + TFEX")
             asset_data = {
-                "Asset_Type": ["พอร์ตหุ้น", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "บัญชีธนาคาร", "ประกันบำนาญ"],
-                "Value": [total_stock_value, pvd_value, insurance_value, coop_value, bank_balance, pension_insurance_value]
+                "Asset_Type": ["พอร์ตหุ้น + TFEX", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "บัญชีธนาคาร", "ประกันบำนาญ"],
+                "Value": [total_stock_and_tfex, pvd_value, insurance_value, coop_value, bank_balance, pension_insurance_value]
             }
             df_assets = pd.DataFrame(asset_data)
             df_assets = df_assets[df_assets["Value"] > 0]
@@ -4737,7 +4740,7 @@ def main():
                     st.plotly_chart(fig_bar, use_container_width=True)
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
-
+          
             # ==========================================
             # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
             # ==========================================
