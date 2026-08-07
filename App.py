@@ -4630,10 +4630,6 @@ def main():
                     else:
                         st.warning("ยังไม่มีข้อมูลรายการเทรดที่ปิดสถานะแล้วครับ")
             
-
-    # ==========================================================
-    # TAB ที่ 2: ภาพรวมความมั่งคั่ง (เพิ่มใหม่สำหรับสินทรัพย์อื่นๆ)
-    # ==========================================================
     # ==========================================================
     # TAB ที่ 2: ภาพรวมความมั่งคั่ง (เพิ่มใหม่สำหรับสินทรัพย์อื่นๆ)
     # ==========================================================
@@ -4649,36 +4645,43 @@ def main():
         # TAB ย่อยที่ 1: ภาพรวม Net Worth & สัดส่วนสินทรัพย์
         # ==========================================
         with wealth_tab_overview:
-            
+
             # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน
             pvd_value = get_latest_pvd_value()
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
+            # --- เพิ่มส่วนนี้: ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
+            sheet_bank = client.open('MyStockData').worksheet('Bank_Account')
+            bank_data = sheet_bank.get_all_records()
+            bank_balance = float(str(bank_data[-1]['Balance']).replace(',', '')) if bank_data else 0.0
+            
             # 2. มูลค่าพอร์ตหุ้นรวม
             total_stock_value = total_value if 'total_value' in locals() else 0.0
             
             # 3. คำนวณ Net Worth รวมทุกกระเป๋า
-            net_worth = total_stock_value + pvd_value + insurance_value + coop_value
+            net_worth = total_stock_value + pvd_value + insurance_value + coop_value + bank_balance
             
-            # 4. แสดงผลใน Metrics (แบ่งเป็น 5 ช่อง)
+            # 4. แสดงผลใน Metrics (ปรับเป็น 5 ช่อง หรือจะขยายเป็น 6 ถ้าอยากเห็นแยกชัดๆ)
+            # ในกรณีนี้ผมปรับให้แสดง 5 ช่อง โดยรวม Bank เข้าไปในกลุ่มนี้ครับ
             col1, col2, col3, col4, col5 = st.columns(5)
-            col1.metric("พอร์ตหุ้นรวม", f"{total_stock_value:,.0f} ฿")
+            col1.metric("พอร์ตหุ้น", f"{total_stock_value:,.0f} ฿")
             col2.metric("PVD", f"{pvd_value:,.0f} ฿")
-            col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
-            col4.metric("สหกรณ์ก๊าซ ปตท.", f"{coop_value:,.0f} ฿")
-            col5.metric("Net Worth รวม", f"{net_worth:,.0f} ฿")
+            col3.metric("ประกัน", f"{insurance_value:,.0f} ฿")
+            col4.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
+            col5.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
+            
+            st.metric("Net Worth รวมทั้งหมด", f"{net_worth:,.0f} ฿") # แยกออกมาให้เด่นๆ
             
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
 
-            # สร้างข้อมูลสำหรับกราฟ Donut สัดส่วนสินทรัพย์ปัจจุบัน
+            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม Bank เข้าไปใน List)
             asset_data = {
-                "Asset_Type": ["พอร์ตหุ้น", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท."],
-                "Value": [total_stock_value, pvd_value, insurance_value, coop_value]
+                "Asset_Type": ["พอร์ตหุ้น", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "บัญชีธนาคาร"],
+                "Value": [total_stock_value, pvd_value, insurance_value, coop_value, bank_balance]
             }
             df_assets = pd.DataFrame(asset_data)
-            # กรองเฉพาะสินทรัพย์ที่มีค่ามากกว่า 0 เพื่อไม่ให้กราฟพัง
             df_assets = df_assets[df_assets["Value"] > 0]
 
             col_chart1, col_chart2 = st.columns(2)
@@ -4688,28 +4691,19 @@ def main():
                 if not df_assets.empty:
                     import plotly.express as px
                     fig_donut = px.pie(
-                        df_assets, 
-                        names="Asset_Type", 
-                        values="Value", 
-                        hole=0.4,
+                        df_assets, names="Asset_Type", values="Value", hole=0.4,
                         color_discrete_sequence=px.colors.qualitative.Pastel
                     )
                     fig_donut.update_traces(textposition='inside', textinfo='percent+label')
                     fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
                     st.plotly_chart(fig_donut, use_container_width=True)
-                else:
-                    st.info("ยังไม่มีข้อมูลสินทรัพย์สำหรับแสดงสัดส่วน")
 
             with col_chart2:
                 st.markdown("### 📊 มูลค่าแยกตามประเภทสินทรัพย์")
                 if not df_assets.empty:
                     fig_bar = px.bar(
-                        df_assets, 
-                        x="Asset_Type", 
-                        y="Value", 
-                        text="Value",
-                        color="Asset_Type",
-                        color_discrete_sequence=px.colors.qualitative.Pastel
+                        df_assets, x="Asset_Type", y="Value", text="Value",
+                        color="Asset_Type", color_discrete_sequence=px.colors.qualitative.Pastel
                     )
                     fig_bar.update_traces(texttemplate='%{text:,.0f} ฿', textposition='outside')
                     fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, xaxis_title="", yaxis_title="บาท")
@@ -4722,13 +4716,14 @@ def main():
             # ==========================================
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
-                # 1. ดึงข้อมูลเหมือนเดิม
                 client = get_gsheet_client()
+                # 1. ดึงข้อมูล
                 df_pvd = pd.DataFrame(client.open('MyStockData').worksheet('Provident_Fund').get_all_records())
                 df_ins = pd.DataFrame(client.open('MyStockData').worksheet('Insurance').get_all_records())
                 df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
+                df_bank = pd.DataFrame(client.open('MyStockData').worksheet('Bank_Account').get_all_records()) # ดึง Bank
 
-                # 2. ฟังก์ชันเตรียมข้อมูล (เน้นให้มี Date เป็น index)
+                # 2. ฟังก์ชันเตรียมข้อมูล
                 def prepare_series(df, date_col, val_col, name):
                     df = df.copy()
                     if date_col == 'Month':
@@ -4738,33 +4733,37 @@ def main():
                             'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'
                         }).fillna('12') + '-01')
                     else:
-                        df['Date'] = pd.to_datetime(df[date_col])
+                        df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
                     
                     df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
-                    return df.set_index('Date')[[name]]
+                    return df.dropna(subset=['Date']).set_index('Date')[[name]]
 
-                # 3. รวมทุกอย่างเข้าด้วยกันด้วย Outer Join
+                # 3. เตรียม Series
                 s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                 s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
+                s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank') # เตรียม Bank
 
-                df_merged = s_pvd.join([s_ins, s_coop], how='outer').sort_index()
+                # 4. รวมข้อมูล (ใช้อันนี้ครับ)
+                df_merged = s_pvd.join([s_ins, s_coop, s_bank], how='outer').sort_index()
 
-                # *** ส่วนสำคัญ: Forward Fill (เติมค่าล่าสุดให้ช่องที่ว่าง) ***
+                # *** ส่วนสำคัญ: เติมค่าว่าง ***
+                # ใช้ ffill() เฉพาะส่วนที่ต้องสะสมยอด
                 df_merged = df_merged.ffill().fillna(0)
                 
                 # บวกหุ้นปัจจุบันเข้าไป
-                df_merged['Total'] = df_merged.sum(axis=1) + (total_stock_value if 'total_stock_value' in locals() else 0)
+                current_stock = total_stock_value if 'total_stock_value' in locals() else 0
+                df_merged['Total'] = df_merged.sum(axis=1) + current_stock
 
-                # 4. วาดกราฟ
+                # 5. วาดกราฟ
                 import plotly.graph_objects as go
                 fig = go.Figure()
                 
                 for col in df_merged.columns:
+                    # ถ้าชื่อคอลัมน์เป็น Total ให้ทำเส้นหนา
                     fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col,
-                                            line=dict(width=3 if col == 'Total' else 2)))
+                                            line=dict(width=4 if col == 'Total' else 2)))
 
-                # ปรับแกน Y
                 max_y = df_merged['Total'].max() * 1.1
                 fig.update_layout(yaxis=dict(range=[0, max_y], tickformat=",.0f"),
                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
@@ -4772,8 +4771,7 @@ def main():
                 st.plotly_chart(fig, use_container_width=True)
 
             except Exception as e:
-                st.error(f"เกิดข้อผิดพลาด: {e}")
-
+                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
                 
 
         # ==========================================
@@ -5013,6 +5011,39 @@ def main():
                                 st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลสหกรณ์: {e}")
                         else:
                             st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
+                            
+            # 1. Expander สำหรับบัญชีธนาคาร (กระแสเงินสด)
+            with st.expander("💰 บันทึก/อัปเดต บัญชีเงินฝากกระแสเงินสด", expanded=False):
+                with st.form("bank_account_form"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        bank_date = st.date_input("วันที่", value=datetime.now())
+                        bank_type = st.selectbox("ประเภท", ["ฝากเงิน (Deposit)", "ถอนเงิน (Withdraw)"])
+                    with col2:
+                        bank_amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=100.0)
+                        bank_desc = st.text_input("หมายเหตุ")
+                    
+                    submitted_bank = st.form_submit_button("บันทึกรายการบัญชี")
+                    
+                    if submitted_bank:
+                        # คำนวณฝาก/ถอน
+                        in_val = bank_amount if "ฝาก" in bank_type else 0
+                        out_val = bank_amount if "ถอน" in bank_type else 0
+                        
+                        # ดึงข้อมูลเดิมเพื่อคำนวณ Balance แถวสุดท้าย
+                        sheet_bank = client.open('MyStockData').worksheet('Bank_Account')
+                        all_bank_data = sheet_bank.get_all_records()
+                        last_balance = 0
+                        if all_bank_data:
+                            last_balance = float(str(all_bank_data[-1]['Balance']).replace(',', ''))
+                        
+                        new_balance = last_balance + in_val - out_val
+                        
+                        # Append ข้อมูล
+                        sheet_bank.append_row([str(bank_date), bank_type, bank_desc, in_val, out_val, new_balance])
+                        st.success("บันทึกรายการบัญชีเรียบร้อย!")
+                        st.rerun()
+                        
 # ------------------------------
 if __name__ == "__main__":
     main()
