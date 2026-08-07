@@ -1271,11 +1271,9 @@ def main():
 
     # 1. ประกาศตัวแปรเริ่มต้น
     client = get_gsheet_client()
-    df_all_stocks = pd.DataFrame() 
     filtered_df = None
     
     # 🌟 โหลดชีท Sector_Mapping จาก Google Sheets ไว้ล่วงหน้า
-    # (เปลี่ยนชื่อฟังก์ชันโหลดให้ตรงกับฟังก์ชันที่คุณใช้เชื่อมต่อ Google Sheets เช่น gsheets_conn.read หรือ load_from_gsheet)
     try:
         df_sector_map = conn.read(worksheet="Sector_Mapping", ttl=600)
     except:
@@ -1286,7 +1284,7 @@ def main():
         print("GitHub Mode: กำลังเริ่มสแกน...")
         df_new = load_and_calculate_stock_data_optimized()
         
-        # 🟢 เติม Sector อัตโนมัติใน GitHub Mode (ถ้ามีคอลัมน์หุ้นหรือ Ticker)
+        # 🟢 เติม Sector อัตโนมัติใน GitHub Mode
         if not df_new.empty and 'Sector' in df_new.columns and not df_sector_map.empty:
             df_new['Sector'] = df_new['หุ้น'].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
             
@@ -1294,31 +1292,28 @@ def main():
         print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
         return # จบการทำงานทันที
 
-        # ถ้าโหลดไม่ขึ้น ให้ลองดึงจาก Yahoo ให้อัตโนมัติครั้งเดียว
-        if df_all_stocks is None or df_all_stocks.empty:
-            st.warning("ไม่พบข้อมูลใน Sheet กำลังดึงจาก Yahoo ใหม่...")
-            df_all_stocks = load_and_calculate_stock_data()
-            
-            if not df_all_stocks.empty and not df_sector_map.empty:
-                target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else 'Ticker'
-                if target_col in df_all_stocks.columns:
-                    df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
-                    
-            save_to_gsheet(df_all_stocks)
+    # 3. จัดการสถานะข้อมูลหุ้นด้วย st.session_state (รองรับการย้ายปุ่มมาไว้ในแท็บหุ้น)
+    if 'df_all_stocks' not in st.session_state:
+        try:
+            st.session_state.df_all_stocks = load_from_gsheet()
+        except:
+            st.session_state.df_all_stocks = pd.DataFrame()
 
-    # 🟢 เติม Sector อัตโนมัติให้ df_all_stocks (และ df_p สำหรับพอร์ตปัจจุบัน) ทันทีที่โหลดข้อมูลเสร็จ
+    df_all_stocks = st.session_state.df_all_stocks
+
+    # 🟢 เติม Sector อัตโนมัติให้ df_all_stocks ทันทีที่โหลดข้อมูลเสร็จ
     if not df_all_stocks.empty and not df_sector_map.empty:
         target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else ('Ticker' if 'Ticker' in df_all_stocks.columns else None)
         if target_col:
             df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
 
-    # ตรวจสอบก่อนแสดงผล
+    # ตรวจสอบก่อนแสดงผล (นำข้อความ error สีแดงออก เพื่อไม่ให้แจ้งเตือนค้างหน้าจอ)
     if not df_all_stocks.empty:
-        # ใช้ filtered_df ถ้ามี (เช่นจากการ Filter ของผู้ใช้) ถ้าไม่มีก็ใช้ df_all_stocks
         df_to_show = filtered_df if filtered_df is not None else df_all_stocks
         # st.dataframe(df_to_show, use_container_width=True)
     else:
-        st.error("ไม่สามารถโหลดข้อมูลหุ้นได้เลย กรุณาตรวจสอบการเชื่อมต่อ Google Sheets")
+        # ปล่อยว่างไว้ ให้แท็บหุ้นเป็นตัวแจ้งเตือนหรือแสดงปุ่มกดดึงข้อมูลแทน
+        pass
 
     # ==========================================================
     # ปรับโครงสร้าง Tab ระดับบนสุดของแอป (แบ่งหมวดหมู่ชัดเจน)
@@ -1434,27 +1429,37 @@ def main():
                 
                     # กรองคอลัมน์ที่เลือกให้โชว์
                     valid_cols = [c for c in show_columns if c in filtered_df.columns]
-                ##########################
+                    
+            ##########################
             # 4. ส่วนการเลือกหุ้น (เป็นตัวกลางส่งค่าไป Fundamental และ กราฟ)
             
             st.subheader("🔍 1. วิเคราะห์กราฟเทคนิคัลอัจฉริยะ (Multi-Timeframe & RS vs SET Index)")
 
-            # ส่วนจัดการการโหลดข้อมูล
+            # ส่วนจัดการการโหลดข้อมูล (ปรับแก้ให้เข้ากับ Session State)
             if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
                 with st.spinner("กำลังดึงข้อมูล..."):
-                    df_all_stocks = load_and_calculate_stock_data()
+                    df_new = load_and_calculate_stock_data()
                     
                     # 🟢 เติม Sector อัตโนมัติหลังกดอัปเดตจาก Yahoo
-                    if not df_all_stocks.empty and not df_sector_map.empty:
-                        target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else 'Ticker'
-                        if target_col in df_all_stocks.columns:
-                            df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+                    if not df_new.empty and 'df_sector_map' in locals() and not df_sector_map.empty:
+                        target_col = 'หุ้น' if 'หุ้น' in df_new.columns else 'Ticker'
+                        if target_col in df_new.columns:
+                            df_new['Sector'] = df_new[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
                     
-                    save_to_gsheet(df_all_stocks)
+                    save_to_gsheet(df_new)
+                    
+                    # 📌 อัปเดตข้อมูลลง Session State เพื่อให้หน้าเว็บรับข้อมูลชุดใหม่ทันที
+                    st.session_state.df_all_stocks = df_new 
                     st.success("อัปเดตข้อมูลจาก Yahoo สำเร็จ!")
+                    st.rerun()  # 📌 สั่งรีเฟรชหน้าเบาๆ ให้กราฟและ Selectbox ด้านล่างเปลี่ยนตาม
             else:
-                # โหลดปกติจาก Google Sheets
-                df_all_stocks = load_from_gsheet()
+                # 📌 ดึงข้อมูลจาก Session State ที่โหลดไว้แล้วจาก def main() แทนการโหลดซ้ำจาก Google Sheets
+                df_all_stocks = st.session_state.get('df_all_stocks', pd.DataFrame())
+                
+                # ถ้าใน Session State ยังว่างเปล่า (เช่นเปิดแอปมาครั้งแรกแล้วโหลดไม่ติด) ค่อยดึงจาก Sheet อีกรอบ
+                if df_all_stocks.empty:
+                    df_all_stocks = load_from_gsheet()
+                    st.session_state.df_all_stocks = df_all_stocks
                 
             col_input, col_metrics = st.columns([1, 3])
             
