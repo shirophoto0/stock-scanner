@@ -11,14 +11,13 @@ import google.generativeai as genai
 import io
 import json
 import requests
-import datetime
 import gspread
 import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
-#from datetime import date
+from datetime import date
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
@@ -4768,14 +4767,13 @@ def main():
 
     ########## ประกันภัย ###############
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
-        
+    
         with st.form("insurance_upload_form"):
             col_d, col_v = st.columns(2)
             
             with col_d:
-                # ใช้ date_input ให้เลือกวันที่อิสระ (ค่าเริ่มต้นเป็นวันปัจจุบัน ปี 2026)
-                # ใช้ datetime.date.today() โดยตรง
-                ins_date = st.date_input("เลือกวันที่อัปเดตข้อมูล", value=datetime.date.today())
+                # ใช้ date.today() โดยตรง (มั่นใจว่าด้านบนไฟล์มี from datetime import date แล้ว)
+                ins_date = st.date_input("เลือกวันที่อัปเดตข้อมูล", value=date.today(), key="ins_date_input")
                 
             with col_v:
                 ins_redemption_value = st.number_input(
@@ -4783,6 +4781,7 @@ def main():
                     min_value=0.0, 
                     format="%.2f", 
                     value=0.0,
+                    key="ins_redemption_input",
                     help="กรอกยอดมูลค่าพอร์ตประกันตามใบแจ้งยอดหรือแอปพลิเคชัน ณ วันที่อัปเดต"
                 )
             
@@ -4797,21 +4796,18 @@ def main():
                         existing_data = sheet_ins.get_all_records()
                         df_existing_ins = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
                         
-                        # แปลงวันที่เป็นข้อความรูปแบบ YYYY-MM-DD เพื่อใช้เช็คและบันทึก
                         date_str = ins_date.strftime("%Y-%m-%d")
                         year_ce = ins_date.year
                         
                         is_duplicate = False
                         
-                        # เช็คข้อมูลซ้ำ: ถ้านำวันที่เดียวกันมาคีย์ซ้ำ จะทำการอัปเดตทับอัตโนมัติ
                         if not df_existing_ins.empty and 'Date' in df_existing_ins.columns:
                             match_idx = df_existing_ins[df_existing_ins['Date'].astype(str) == date_str].index
                             
                             if len(match_idx) > 0:
                                 is_duplicate = True
-                                row_num = match_idx[0] + 2 # Google Sheets เริ่มแถว 2
+                                row_num = match_idx[0] + 2 
                                 
-                                # โครงสร้างคอลัมน์: [Date, Year_CE, Redemption_Value]
                                 updated_values = [date_str, year_ce, ins_redemption_value]
                                 sheet_ins.update(f"A{row_num}:C{row_num}", [updated_values])
                                 st.success(f"✅ อัปเดตมูลค่าประกันของวันที่ **{date_str}** เป็น **{ins_redemption_value:,.2f} บาท** เรียบร้อยแล้ว!")
