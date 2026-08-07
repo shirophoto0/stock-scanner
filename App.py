@@ -1294,23 +1294,6 @@ def main():
         print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
         return # จบการทำงานทันที
 
-    # ส่วนจัดการการโหลดข้อมูล
-    if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
-        with st.spinner("กำลังดึงข้อมูล..."):
-            df_all_stocks = load_and_calculate_stock_data()
-            
-            # 🟢 เติม Sector อัตโนมัติหลังกดอัปเดตจาก Yahoo
-            if not df_all_stocks.empty and not df_sector_map.empty:
-                target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else 'Ticker'
-                if target_col in df_all_stocks.columns:
-                    df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
-            
-            save_to_gsheet(df_all_stocks)
-            st.success("อัปเดตข้อมูลจาก Yahoo สำเร็จ!")
-    else:
-        # โหลดปกติจาก Google Sheets
-        df_all_stocks = load_from_gsheet()
-        
         # ถ้าโหลดไม่ขึ้น ให้ลองดึงจาก Yahoo ให้อัตโนมัติครั้งเดียว
         if df_all_stocks is None or df_all_stocks.empty:
             st.warning("ไม่พบข้อมูลใน Sheet กำลังดึงจาก Yahoo ใหม่...")
@@ -1455,7 +1438,24 @@ def main():
             # 4. ส่วนการเลือกหุ้น (เป็นตัวกลางส่งค่าไป Fundamental และ กราฟ)
             
             st.subheader("🔍 1. วิเคราะห์กราฟเทคนิคัลอัจฉริยะ (Multi-Timeframe & RS vs SET Index)")
-            
+
+            # ส่วนจัดการการโหลดข้อมูล
+            if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
+                with st.spinner("กำลังดึงข้อมูล..."):
+                    df_all_stocks = load_and_calculate_stock_data()
+                    
+                    # 🟢 เติม Sector อัตโนมัติหลังกดอัปเดตจาก Yahoo
+                    if not df_all_stocks.empty and not df_sector_map.empty:
+                        target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else 'Ticker'
+                        if target_col in df_all_stocks.columns:
+                            df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+                    
+                    save_to_gsheet(df_all_stocks)
+                    st.success("อัปเดตข้อมูลจาก Yahoo สำเร็จ!")
+            else:
+                # โหลดปกติจาก Google Sheets
+                df_all_stocks = load_from_gsheet()
+                
             col_input, col_metrics = st.columns([1, 3])
             
             with col_input:
