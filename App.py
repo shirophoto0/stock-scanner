@@ -452,7 +452,6 @@ def load_data(sheet_name):
         st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {e}")
         return pd.DataFrame()
         
-@st.cache_data(ttl=3600) # จำข้อมูลไว้ 1 ชม. ค่อยดึงใหม่
 @st.cache_data(ttl=3600)  # แคชข้อมูลไว้ 1 ชั่วโมงเพื่อลดการเรียกซ้ำ
 def get_cached_stock_info(ticker):
     try:
@@ -613,11 +612,11 @@ def log_portfolio_snapshot():
 def calculate_total_portfolio_value():
     """คำนวณมูลค่าหุ้นในพอร์ตปัจจุบัน (Market Value ของหุ้นทั้งหมด)"""
     # ตรวจสอบว่ามีข้อมูลใน session_state หรือไม่ และไม่เป็นค่าว่าง
-    if 'journal_data' not in st.session_state or not st.session_state.journal_data:
+    if 'JournalData' not in st.session_state or not st.session_state.JournalData:
         return 0.0
         
     try:
-        df = pd.DataFrame(st.session_state.journal_data)
+        df = pd.DataFrame(st.session_state.JournalData)
         if df.empty:
             return 0.0
             
