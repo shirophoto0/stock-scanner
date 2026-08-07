@@ -4827,8 +4827,13 @@ def main():
                     fig = go.Figure()
                     
                     for col in df_merged.columns:
-                        fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col,
-                                                line=dict(width=3 if col == 'Total' else 2)))
+                        fig.add_trace(go.Scatter(
+                            x=df_merged.index, 
+                            y=df_merged[col], 
+                            name=col,
+                            mode='lines+markers', # <-- เพิ่มบรรทัดนี้ เพื่อบังคับให้แสดงทั้งเส้นและจุด
+                            line=dict(width=3 if col == 'Total' else 2)
+                        ))
     
                     max_total = df_merged['Total'].max()
                     upper_limit = (max_total * 1.2) if max_total > 0 else 12000000
