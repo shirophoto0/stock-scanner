@@ -4717,39 +4717,64 @@ def main():
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
 
+
             # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
             try:
                 client = get_gsheet_client()
                 
+                # ดึงข้อมูลทั้ง 3 ชีท
+                sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
                 sheet_ins = client.open('MyStockData').worksheet('Insurance')
                 sheet_coop = client.open('MyStockData').worksheet('Coop')
                 
-                df_ins_hist = pd.DataFrame(sheet_ins.get_all_records())
-                df_coop_hist = pd.DataFrame(sheet_coop.get_all_records())
+                df_pvd = pd.DataFrame(sheet_pvd.get_all_records())
+                df_ins = pd.DataFrame(sheet_ins.get_all_records())
+                df_coop = pd.DataFrame(sheet_coop.get_all_records())
                 
-                if not df_ins_hist.empty and not df_coop_hist.empty and 'Date' in df_ins_hist.columns and 'Date' in df_coop_hist.columns:
-                    df_merged = pd.merge(df_ins_hist, df_coop_hist, on='Date', how='outer', suffixes=('_Ins', '_Coop')).fillna(0)
-                    df_merged = df_merged.sort_values('Date')
-                    
-                    import plotly.graph_objects as go
-                    fig_line = go.Figure()
-                    if 'Redemption_Value' in df_merged.columns:
-                        fig_line.add_trace(go.Scatter(x=df_merged['Date'], y=df_merged['Redemption_Value'], mode='lines+markers', name='ประกัน Unit Linked'))
-                    if 'Coop_Value' in df_merged.columns:
-                        fig_line.add_trace(go.Scatter(x=df_merged['Date'], y=df_merged['Coop_Value'], mode='lines+markers', name='สหกรณ์ก๊าซ ปตท.'))
-                    
-                    fig_line.update_layout(
-                        xaxis_title="วันที่",
-                        yaxis_title="บาท",
-                        margin=dict(t=20, b=20, l=20, r=20),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                    )
-                    st.plotly_chart(fig_line, use_container_width=True)
+                # เตรียมข้อมูล PVD (ใช้ Grand_Total) - สมมติว่ามีคอลัมน์ 'Year_CE' หรือ 'Date'
+                # ถ้า PVD เก็บเป็นรายเดือน อาจจะต้องแปลงให้เป็นรูปแบบวันที่มาตรฐานก่อน
+                if not df_pvd.empty:
+                    # ปรับให้ PVD มีคอลัมน์ Date เพื่อใช้ merge
+                    # (ถ้าใน PVD มีแค่ Year/Month แนะนำให้สร้างคอลัมน์ Date สมมติเป็นวันสิ้นเดือน)
+                    df_pvd['Date'] = pd.to_datetime(df_pvd['Year_CE'].astype(str) + '-' + df_pvd['Month_Number'].astype(str) + '-01')
+                    df_plot = df_pvd[['Date', 'Grand_Total']].rename(columns={'Grand_Total': 'PVD'})
                 else:
-                    st.info("💡 ทริค: เมื่อคุณบันทึกข้อมูลประกันและสหกรณ์อย่างน้อย 2 ช่วงเวลา กราฟแนวโน้มประวัติการเติบโตจะแสดงขึ้นมาอัตโนมัติครับ")
-            except Exception:
+                    df_plot = pd.DataFrame(columns=['Date', 'PVD'])
+
+                # Merge กับข้อมูลอื่น (ถ้ามี)
+                for df_other, name in [(df_ins, 'Insurance'), (df_coop, 'Coop')]:
+                    if not df_other.empty and 'Date' in df_other.columns:
+                        df_other['Date'] = pd.to_datetime(df_other['Date'])
+                        df_plot = pd.merge(df_plot, df_other, on='Date', how='outer')
+                
+                df_plot = df_plot.sort_values('Date').fillna(0)
+                
+                # แสดงกราฟ
+                import plotly.graph_objects as go
+                fig_line = go.Figure()
+                
+                if 'PVD' in df_plot.columns:
+                    fig_line.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['PVD'], mode='lines+markers', name='กองทุนสำรองเลี้ยงชีพ (PVD)'))
+                if 'Redemption_Value' in df_plot.columns:
+                    fig_line.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Redemption_Value'], mode='lines+markers', name='ประกัน Unit Linked'))
+                if 'Coop_Value' in df_plot.columns:
+                    fig_line.add_trace(go.Scatter(x=df_plot['Date'], y=df_plot['Coop_Value'], mode='lines+markers', name='สหกรณ์ก๊าซ ปตท.'))
+                
+                fig_line.update_layout(
+                    xaxis_title="วันที่",
+                    yaxis_title="บาท",
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                )
+                st.plotly_chart(fig_line, use_container_width=True)
+                
+                # เพิ่มหมายเหตุสีเทา
+                st.caption("หมายเหตุ: ประวัติข้อมูล PVD เริ่มเก็บตั้งแต่ปี 2562 ส่วนสินทรัพย์อื่นๆ เริ่มเก็บประวัติเมื่อบันทึกข้อมูลครั้งแรก")
+                
+            except Exception as e:
                 st.info("💡 กำลังเตรียมข้อมูลสำหรับกราฟประวัติการเติบโต...")
+                
 
         # ==========================================
         # TAB ย่อยที่ 2: บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน)
