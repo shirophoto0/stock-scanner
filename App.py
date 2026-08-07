@@ -4723,7 +4723,7 @@ def main():
         # --- ส่วนที่ 2: ตารางสรุป (แยกออกมาอยู่ข้างนอกบล็อกการบันทึก) ---
         st.write("---") # ขีดคั่นระหว่างส่วนอัปโหลดและตาราง
         with st.expander("📊 ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด", expanded=True):
-    
+            
             if st.button("🔄 โหลดข้อมูลล่าสุด"):
                 st.rerun()
                 
@@ -4736,13 +4736,11 @@ def main():
                     df_pvd_all = pd.DataFrame(data)
                     
                     # 1. จัดการตัวเลขในตารางให้เป็นจำนวนเต็มและมีคอมม่า (แปลงเป็น String สำหรับแสดงผล)
-                    # ระบุชื่อคอลัมน์ที่เป็นตัวเลขเงินทั้งหมดที่ต้องการปรับ
                     cols_to_format = ['Member_Saving', 'Member_Benefit', 'Member_Total', 
                                       'Employer_Matching', 'Employer_Benefit', 'Employer_Total', 'Grand_Total']
                     
                     for col in cols_to_format:
                         if col in df_pvd_all.columns:
-                            # แปลงเป็นตัวเลข -> ปัดเศษเป็นจำนวนเต็ม -> ใส่คอมม่า
                             df_pvd_all[col] = df_pvd_all[col].apply(
                                 lambda x: "{:,.0f}".format(float(str(x).replace(',', '')))
                             )
@@ -4751,19 +4749,23 @@ def main():
                     if 'Year_CE' in df_pvd_all.columns:
                         df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
                     
-                    # 2. แสดงผลตาราง
-                    st.dataframe(df_pvd_all, use_container_width=True, hide_index=True)
+                    # เก็บข้อมูลแถวสุดท้ายไว้แสดงผล info ก่อนซ่อนคอลัมน์
+                    latest_row = df_pvd_all.iloc[-1]
+                    
+                    # 2. ซ่อนคอลัมน์ Year_BE และ Total_Units เฉพาะตอนแสดงผลตาราง
+                    cols_to_drop = ['Year_BE', 'Total_Units']
+                    df_display = df_pvd_all.drop(columns=[col for col in cols_to_drop if col in df_pvd_all.columns])
+                    
+                    # แสดงผลตารางแบบไม่มี Year_BE และ Total_Units
+                    st.dataframe(df_display, use_container_width=True, hide_index=True)
                     
                     # 3. แสดงยอดรวมล่าสุด (ดึงข้อมูลล่าสุด)
-                    latest_row = df_pvd_all.iloc[-1]
-                    st.info(f"📌 **ยอดรวมสะสมล่าสุด (ปี พ.ศ. {latest_row.get('Year_BE', '-')})**: "
-                            f"**{latest_row.get('Grand_Total', '0')}** บาท")
+                    st.info(f"📌 **ยอดรวมสะสมล่าสุด**: **{latest_row.get('Grand_Total', '0')}** บาท")
                 else:
                     st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund")
                     
             except Exception as e:
                 st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
-                
                 
 # ------------------------------
 if __name__ == "__main__":
