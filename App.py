@@ -4767,18 +4767,29 @@ def main():
                     df_merged['Total'] = df_merged.sum(axis=1) + current_stock
 
                     # 5. วาดกราฟ
+                    # 4. วาดกราฟ
                     import plotly.graph_objects as go
                     fig = go.Figure()
                     
                     for col in df_merged.columns:
                         fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col,
-                                                line=dict(width=4 if col == 'Total' else 2)))
-
-                    max_y = df_merged['Total'].max() * 1.1 if not df_merged['Total'].empty else 1000000
-                    fig.update_layout(yaxis=dict(range=[0, max_y], tickformat=",.0f"),
-                                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-
+                                                line=dict(width=3 if col == 'Total' else 2)))
+    
+                    # --- ปรับแกน Y ให้ครอบคลุมยอดรวมสูงสุด + 20% ---
+                    max_total = df_merged['Total'].max()
+                    # ถ้า max_total เป็น 0 ให้กำหนดเป็น 10 ล้านเพื่อกันกราฟว่าง
+                    upper_limit = (max_total * 1.2) if max_total > 0 else 12000000
+                    
+                    fig.update_layout(
+                        yaxis=dict(
+                            range=[0, upper_limit], 
+                            tickformat=",.0f"
+                        ),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+    
                     st.plotly_chart(fig, use_container_width=True)
+                    
                 else:
                     st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
 
