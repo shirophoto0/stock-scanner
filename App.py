@@ -4805,17 +4805,14 @@ def main():
                     has_data = True
 
                 if has_data:
-                    # คำนวณหาค่าสูงสุดจากทุกเส้นเพื่อเผื่อเพดานแกน Y ให้สูงกว่าค่าสูงสุดประมาณ 15-20%
-                    # หรือกำหนดตัวเลขคร่าวๆ เช่น 10 ล้าน (10,000,000) หรือให้ระบบคำนวณอัตโนมัติ
-                    
                     fig_line.update_layout(
                         xaxis_title="วันที่",
                         yaxis_title="บาท",
                         margin=dict(t=20, b=20, l=20, r=20),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                         yaxis=dict(
-                            autorange=True, # ให้ Plotly ปรับอัตโนมัติ หรือจะใส่ range เผื่อไว้ก็ได้ครับ
-                            rangemode="tozero" # ให้แกน Y เริ่มจาก 0 เสมอ จะได้เห็นสัดส่วนที่แท้จริง
+                            range=[0, 8000000],  # บังคับให้แกน Y เริ่มจาก 0 ถึง 8,000,000 บาท (ปรับตัวเลขนี้เพิ่มลดได้ตามต้องการครับ)
+                            tickformat=",d"      # จัดรูปแบบตัวเลขแกน Y ให้มีคอมม่าคั่นสวยงาม
                         )
                     )
                     st.plotly_chart(fig_line, use_container_width=True)
