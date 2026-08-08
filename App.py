@@ -4880,11 +4880,21 @@ def main():
             
             # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
             sheet_bank = get_worksheet_safely(client, 'MyStockData', 'Bank_Account')
+            
+            bank_data = []
             if sheet_bank is not None:
-                data_bank = sheet_bank.get_all_records()
-                # ดำเนินการต่อด้วยข้อมูล data_bank...
-            bank_data = sheet_bank.get_all_records()
-            bank_balance = float(str(bank_data[-1]['Balance']).replace(',', '')) if bank_data else 0.0
+                try:
+                    bank_data = sheet_bank.get_all_records()
+                except Exception as e:
+                    st.error(f"❌ ไม่สามารถดึงข้อมูลจากชีต Bank_Account ได้: {e}")
+            
+            # คำนวณยอดเงิน (รองรับกรณี bank_data ว่างเปล่าเพื่อไม่ให้แอปพัง)
+            bank_balance = 0.0
+            if bank_data:
+                try:
+                    bank_balance = float(str(bank_data[-1].get('Balance', 0)).replace(',', ''))
+                except:
+                    bank_balance = 0.0
             
             # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
             base_stock_value = total_value if 'total_value' in locals() else 0.0
