@@ -5236,7 +5236,7 @@ def main():
                         
                         chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
                         
-                        st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้ (ใหม่):**", chart_data)
+                        #st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้ (ใหม่):**", chart_data)
                         st.bar_chart(chart_data)
                     else:
                         st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
