@@ -2378,7 +2378,24 @@ def main():
                 ##############################
                 with tab_dashboard:
                     st.markdown("### 📊 Trading Performance Dashboard")
-                    
+
+                    # 🟢 1. ดึงข้อมูลจาก Google Sheets เติมเข้า session_state อัตโนมัติถ้ายังไม่มีข้อมูล
+                    if "journal_data" not in st.session_state or not st.session_state.journal_data:
+                        try:
+                            client = get_gsheet_client()
+                            # เช็คชื่อชีทให้ตรงกับใน Google Sheets ของคุณ (เช่น 'Journal')
+                            sheet_journal = client.open('MyStockData').worksheet('Journal')
+                            data_journal = sheet_journal.get_all_records()
+                            
+                            if data_journal:
+                                import pandas as pd
+                                import numpy as np
+                                df_j = pd.DataFrame(data_journal)
+                                df_j = df_j.replace({np.nan: "", float('inf'): "", float('-inf'): ""})
+                                st.session_state.journal_data = df_j.to_dict('records')
+                        except Exception as e:
+                            print(f"Auto-load Journal Error: {e}")
+                            
                     if not st.session_state.get('journal_data'):
                         st.info("ยังไม่มีข้อมูลรายการเทรดครับ")
                     else:
