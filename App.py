@@ -5193,51 +5193,61 @@ def main():
                         # ฟังก์ชันช่วยทำความสะอาดข้อความให้เป็นตัวเลขที่แท้จริง
                         def clean_num(series):
                             if series is None:
-                                return pd.Series(0, index=df_pvd_history.index)
+                                return pd.Series(0.0, index=df_pvd_history.index)
                             return pd.to_numeric(
                                 series.astype(str)
                                 .str.replace(',', '', regex=False)
                                 .str.replace(' ', '', regex=False)
                                 .str.replace('%', '', regex=False),
                                 errors='coerce'
-                            ).fillna(0)
+                            ).fillna(0.0)
             
-                        # 1. ทำความสะอาดข้อมูลแต่ละคอลัมน์
+                        # 1. ดึงข้อมูลตัวเลขจากทุกคอลัมน์ที่เกี่ยวข้องกับต้นทุนและมูลค่ารวม
                         grand_total = clean_num(df_pvd_history.get('Grand_Total'))
-                        member_total = clean_num(df_pvd_history.get('Member_Total'))
-                        employer_total = clean_num(df_pvd_history.get('Employer_Total'))
                         
-                        # รวมเงินสะสมทั้งหมดเป็นต้นทุน
-                        total_cost = member_total + employer_total
+                        # รวมเงินต้นทุกส่วน (ยอดสะสม + ยอดสมทบ + ยอดยกมา + ยอดโอนย้าย)
+                        total_cost = (
+                            clean_num(df_pvd_history.get('Brought_Forward_Member_Saving')) +
+                            clean_num(df_pvd_history.get('Brought_Forward_Employer_Matching')) +
+                            clean_num(df_pvd_history.get('Transferred_Member_Saving')) +
+                            clean_num(df_pvd_history.get('Transferred_Employer_Matching')) +
+                            clean_num(df_pvd_history.get('Member_Saving')) +
+                            clean_num(df_pvd_history.get('Employer_Matching'))
+                        )
                         
-                        # 2. คำนวณ % ผลตอบแทนอัตโนมัติ: ((Grand_Total - ต้นทุน) / ต้นทุน) * 100
-                        if (total_cost > 0).any():
-                            df_pvd_history['Auto_Benefit_Pct'] = ((grand_total - total_cost) / total_cost) * 100
-                            chart_col = 'Auto_Benefit_Pct'
-                        else:
-                            # ถ้าต้นทุนรวมเป็น 0 ให้ลองใช้คอลัมน์ '% Benefit' เดิมที่ทำความสะอาดแล้ว
-                            df_pvd_history['Clean_%_Benefit'] = clean_num(df_pvd_history.get('% Benefit'))
-                            chart_col = 'Clean_%_Benefit'
+                        # 2. คำนวณ % ผลตอบแทนอัตโนมัติ: ((Grand_Total - ต้นทุนทั้งหมด) / ต้นทุนทั้งหมด) * 100
+                        calculated_benefit = pd.Series(0.0, index=df_pvd_history.index)
+                        valid_mask = total_cost > 0
+                        
+                        calculated_benefit[valid_mask] = (
+                            (grand_total[valid_mask] - total_cost[valid_mask]) / total_cost[valid_mask]
+                        ) * 100
+                        
+                        df_pvd_history['Auto_Benefit_Pct'] = calculated_benefit
+                        chart_col = 'Auto_Benefit_Pct'
                             
                     except Exception as e:
                         st.warning(f"⚠️ เกิดข้อผิดพลาดในการคำนวณ: {e}")
-                        chart_col = '% Benefit'
+                        chart_col = None
             
                     # 3. เตรียมข้อมูลแกน X (Period)
-                    if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
-                        df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
-                        chart_data = df_pvd_history.set_index('Period')[chart_col]
+                    if chart_col and chart_col in df_pvd_history.columns:
+                        if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
+                            df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
+                            chart_data = df_pvd_history.set_index('Period')[chart_col]
+                        else:
+                            chart_data = df_pvd_history[chart_col]
+                        
+                        # แปลงข้อมูลเป็นตัวเลขรอบสุดท้าย
+                        chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
+                        
+                        # 🔍 พิมพ์ค่าตัวเลขที่จะเอาไปวาดกราฟออกมาดูเพื่อเช็กความถูกต้อง
+                        st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้:**", chart_data)
+                        
+                        # แสดงกราฟแท่ง
+                        st.bar_chart(chart_data)
                     else:
-                        chart_data = df_pvd_history[chart_col]
-                    
-                    # แปลงข้อมูลเป็นตัวเลขรอบสุดท้าย
-                    chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0)
-                    
-                    # 🔍 พิมพ์ค่าตัวเลขที่จะเอาไปวาดกราฟออกมาดู
-                    st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้:**", chart_data)
-                    
-                    # แสดงกราฟแท่ง
-                    st.bar_chart(chart_data)
+                        st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
                 else:
                     st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลเดือนแรกก่อนครับ")
             
