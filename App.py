@@ -5048,6 +5048,34 @@ def main():
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
+            # --- คำนวณมูลค่าทองคำรวมจาก Tab ทองคำ (ถ้ามี) ---
+            total_gold_value = 0.0
+            if 'gold_portfolio' in st.session_state and len(st.session_state['gold_portfolio']) > 0:
+                try:
+                    # ใช้ราคาอ้างอิงเดียวกันกับ Tab ทองคำเพื่อคำนวณมูลค่าปัจจุบัน
+                    def get_thaigold_prices_for_overview():
+                        try:
+                            import requests
+                            url = "https://api.chnwt.dev/thai-gold-api/"
+                            response = requests.get(url, timeout=3)
+                            if response.status_code == 200:
+                                data = response.json()
+                                if data.get("status") == "success":
+                                    p = data["response"]["price"]
+                                    return float(p["gold_bar"]["sell"].replace(",", "")), float(p["gold"]["sell"].replace(",", ""))
+                        except Exception:
+                            pass
+                        return 41000.0, 41500.0
+                    
+                    ref_bar, ref_jewel = get_thaigold_prices_for_overview()
+                    for g_item in st.session_state['gold_portfolio']:
+                        if g_item["ประเภท"] == "ทองคำแท่ง":
+                            total_gold_value += (g_item["น้ำหนัก"] / 15.244) * ref_bar
+                        elif g_item["ประเภท"] == "ทองรูปพรรณ":
+                            total_gold_value += g_item["น้ำหนัก"] * ref_jewel
+                except Exception:
+                    total_gold_value = 0.0
+        
             # --- ดึงมูลค่าประกันสังคมล่าสุด ---
             try:
                 sheet_sso = client.open('MyStockData').worksheet('SSO')
@@ -5069,7 +5097,6 @@ def main():
                 except Exception as e:
                     st.error(f"❌ ไม่สามารถดึงข้อมูลจากชีต Bank_Account ได้: {e}")
             
-            # คำนวณยอดเงิน (รองรับกรณี bank_data ว่างเปล่าเพื่อไม่ให้แอปพัง)
             bank_balance = 0.0
             if bank_data:
                 try:
@@ -5083,8 +5110,8 @@ def main():
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมประกันสังคม sso_value ด้วย)
-            net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + sso_value + pension_insurance_value + bank_balance
+            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำด้วย)
+            net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + sso_value + pension_insurance_value + bank_balance + total_gold_value
             
             # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (ชิดซ้าย, สีเขียว, ใหญ่พิเศษ) ---
             st.markdown(
@@ -5098,7 +5125,7 @@ def main():
             )
                         
             st.divider()
-
+        
             # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็น 4 คอลัมน์ x 2 แถว) ---
             # แถวที่ 1 (4 คอลัมน์)
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
@@ -5106,30 +5133,28 @@ def main():
             row1_col2.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
             row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
             row1_col4.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
-
+        
             # แถวที่ 2 (4 คอลัมน์)
             row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
             row2_col1.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
             row2_col2.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
-            with row2_col3:
-                st.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
-                st.caption("เวนคืนประกันอายุ 60 ปี")
-            # ช่องว่างแถวที่ 2 คอลัมน์ที่ 4 ปล่อยว่างไว้เพื่อความสมดุล (หรือเพิ่มข้อความได้ตามต้องการ)
-            row2_col4.empty()
+            row2_col3.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
+            # นำทองคำมาใส่ช่องที่ 4 แถวที่ 2 แทนที่ช่องว่าง
+            row2_col4.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
             
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
-
-            # สร้างข้อมูลสำหรับกราฟ (เพิ่มประกันสังคม 'SSO' เข้าไป)
+        
+            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม 'ทองคำ' เข้าไปในสัดส่วน)
             asset_data = {
-                "Asset_Type": ["พอร์ตหุ้น + TFEX", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "ประกันสังคม", "บัญชีธนาคาร", "ประกันบำนาญ"],
-                "Value": [total_stock_and_tfex, pvd_value, insurance_value, coop_value, sso_value, bank_balance, pension_insurance_value]
+                "Asset_Type": ["พอร์ตหุ้น + TFEX", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "ประกันสังคม", "บัญชีธนาคาร", "ประกันบำนาญ", "ทองคำ"],
+                "Value": [total_stock_and_tfex, pvd_value, insurance_value, coop_value, sso_value, bank_balance, pension_insurance_value, total_gold_value]
             }
             df_assets = pd.DataFrame(asset_data)
             df_assets = df_assets[df_assets["Value"] > 0]
-
+        
             col_chart1, col_chart2 = st.columns(2)
-
+        
             with col_chart1:
                 st.markdown("### 🍩 สัดส่วนสินทรัพย์ปัจจุบัน")
                 if not df_assets.empty:
@@ -5141,7 +5166,7 @@ def main():
                     fig_donut.update_traces(textposition='inside', textinfo='percent+label')
                     fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
                     st.plotly_chart(fig_donut, use_container_width=True)
-
+        
             with col_chart2:
                 st.markdown("### 📊 มูลค่าแยกตามประเภทสินทรัพย์")
                 if not df_assets.empty:
