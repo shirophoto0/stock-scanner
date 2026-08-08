@@ -2378,12 +2378,13 @@ def main():
                 ##############################
                 with tab_dashboard:
                     st.markdown("### 📊 Trading Performance Dashboard")
-
-                    # 🟢 1. ดึงข้อมูลจาก Google Sheets เติมเข้า session_state อัตโนมัติถ้ายังไม่มีข้อมูล
-                    if "journal_data" not in st.session_state or not st.session_state.journal_data:
+                    
+                    # 🟢 เพิ่มปุ่มกดบังคับโหลดข้อมูลจาก Google Sheets (เผื่อระบบอัตโนมัติพลาด)
+                    col_sync1, col_sync2 = st.columns([2, 5])
+                    if col_sync1.button("🔄 โหลดข้อมูลเทรดจาก Google Sheets"):
                         try:
                             client = get_gsheet_client()
-                            # เช็คชื่อชีทให้ตรงกับใน Google Sheets ของคุณ (เช่น 'Journal')
+                            # 🔍 ตรวจสอบชื่อชีทใน Google Sheets ของคุณให้แน่ใจว่าชื่อ 'Journal' หรือชื่ออื่น (เช่น 'TradeLog', 'History')
                             sheet_journal = client.open('MyStockData').worksheet('Journal')
                             data_journal = sheet_journal.get_all_records()
                             
@@ -2393,91 +2394,114 @@ def main():
                                 df_j = pd.DataFrame(data_journal)
                                 df_j = df_j.replace({np.nan: "", float('inf'): "", float('-inf'): ""})
                                 st.session_state.journal_data = df_j.to_dict('records')
+                                st.success("✅ โหลดข้อมูลสำเร็จ!")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ ไม่พบข้อมูลในชีท Journal ของ Google Sheets")
+                        except Exception as e:
+                            st.error(f"❌ เกิดข้อผิดพลาดในการโหลดชีท Journal: {e}")
+                
+                    # 1. โหลดอัตโนมัติรอบแรกถ้า session ว่าง
+                    if not st.session_state.get('journal_data'):
+                        try:
+                            client = get_gsheet_client()
+                            sheet_journal = client.open('MyStockData').worksheet('Journal')
+                            data_journal = sheet_journal.get_all_records()
+                            if data_journal:
+                                import pandas as pd
+                                import numpy as np
+                                df_j = pd.DataFrame(data_journal)
+                                df_j = df_j.replace({np.nan: "", float('inf'): "", float('-inf'): ""})
+                                st.session_state.journal_data = df_j.to_dict('records')
+                                st.rerun() # รีรันเพื่อให้หน้าเว็บหยิบข้อมูลมาแสดงทันที
                         except Exception as e:
                             print(f"Auto-load Journal Error: {e}")
-                            
+                
+                    # 2. เช็คอีกรอบหลังจากพยายามโหลดแล้ว
                     if not st.session_state.get('journal_data'):
-                        st.info("ยังไม่มีข้อมูลรายการเทรดครับ")
+                        st.info("ยังไม่มีข้อมูลรายการเทรดครับ (หากมีข้อมูลใน Google Sheets แล้ว ลองกดปุ่ม '🔄 โหลดข้อมูลเทรดจาก Google Sheets' ด้านบนได้เลยครับ)")
                     else:
                         df_journal = pd.DataFrame(st.session_state.journal_data)
-                        df_journal['วันที่'] = pd.to_datetime(df_journal['วันที่'])
-                        df_closed = df_journal[df_journal['สถานะ'] == 'Closed (ขายแล้ว)'].copy()
                         
-                        if df_closed.empty:
-                            st.info("ยังไม่มีข้อมูลรายการที่ปิดสถานะ (Closed) เพื่อสรุปผลงานครับ")
+                        # ตรวจสอบชื่อคอลัมน์วันที่ (ป้องกันกรณีชื่อคอลัมน์ในชีทไม่ตรงกัน)
+                        date_col = 'วันที่' if 'วันที่' in df_journal.columns else ('Date' if 'Date' in df_journal.columns else None)
+                        status_col = 'สถานะ' if 'สถานะ' in df_journal.columns else ('Status' if 'Status' in df_journal.columns else None)
+                        
+                        if not date_col or not status_col:
+                            st.error(f"❌ ไม่พบคอลัมน์ 'วันที่' หรือ 'สถานะ' ในข้อมูล Google Sheets (คอลัมน์ที่มี: {df_journal.columns.tolist()})")
                         else:
-                            # ทำความสะอาดข้อมูล
-                            df_closed['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed['กำไร/ขาดทุน (บาท)'], errors='coerce')
-                            df_closed['ต้นทุน (บาท)'] = pd.to_numeric(df_closed['ต้นทุน (บาท)'], errors='coerce')
-                            df_clean = df_closed.dropna(subset=['กำไร/ขาดทุน (บาท)', 'ต้นทุน (บาท)'])
-                            df_clean = df_clean[df_clean['ต้นทุน (บาท)'] > 100]
-                            df_clean['% ROI'] = (df_clean['กำไร/ขาดทุน (บาท)'] / df_clean['ต้นทุน (บาท)']) * 100
-                
-                            # Filter
-                            col_f1, col_f2 = st.columns([1, 3])
-                            filter_type = col_f1.selectbox("แสดงผลตาม:", ["ทั้งหมด", "รายปี", "รายเดือน"])
+                            df_journal[date_col] = pd.to_datetime(df_journal[date_col], errors='coerce')
+                            df_closed = df_journal[df_journal[status_col] == 'Closed (ขายแล้ว)'].copy()
                             
-                            df_filtered = df_clean.copy()
-                            if filter_type == "รายปี":
-                                year = col_f2.selectbox("เลือกปี:", sorted(df_clean['วันที่'].dt.year.unique(), reverse=True))
-                                df_filtered = df_clean[df_clean['วันที่'].dt.year == year]
-                            elif filter_type == "รายเดือน":
-                                year = col_f2.selectbox("เลือกปี:", sorted(df_clean['วันที่'].dt.year.unique(), reverse=True))
-                                month = col_f2.selectbox("เลือกเดือน:", range(1, 13))
-                                df_filtered = df_clean[(df_clean['วันที่'].dt.year == year) & (df_clean['วันที่'].dt.month == month)]
-                
-                            # คำนวณ Metric
-                            wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                            losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
-                            avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if not wins.empty else 0
-                            avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if not losses.empty else 1
-                            rr_ratio_actual = avg_win / avg_loss
-                            
-                            col1, col2, col3, col4, col5 = st.columns(5)
-                            # กำหนดยอดกำไรในอดีตที่ต้องการบวกเพิ่ม
-                            historical_profit = 77420.5
-                            total_net_profit = df_filtered['กำไร/ขาดทุน (บาท)'].sum() + historical_profit
-                            
-                            # แสดง Metric กำไร/ขาดทุนสุทธิ
-                            col1.metric("กำไร/ขาดทุนสุทธิ", f"{total_net_profit:,.2f} ฿")
-                            
-                            # ใส่ Note สีเทาอ่อนไว้ใต้ Metric ของ col1
-                            col1.markdown(
-                                "<span style='color: #888888; font-size: 0.8em;'>historical profit 2018-2025 = 77,420.50</span>", 
-                                unsafe_allow_html=True
-                            )
-                            col2.metric("ค่าเฉลี่ยต่อไม้ (%):", f"{df_clean['% ROI'].mean():.2f} %")
-                            col3.metric("Win Rate", f"{(len(wins)/len(df_filtered)*100):.1f}%" if not df_filtered.empty else "0%")
-                            col4.metric("Profit Factor", f"{(wins['กำไร/ขาดทุน (บาท)'].sum() / abs(losses['กำไร/ขาดทุน (บาท)'].sum())):.2f}" if not losses.empty and losses['กำไร/ขาดทุน (บาท)'].sum() != 0 else "N/A")
-                            col5.metric("Realized R:R", f"{rr_ratio_actual:.2f} : 1")
-                
-                            st.markdown("---")
-                            st.markdown("##### 🔍 สถิติการเทรดเชิงลึก")
-                            col_s1, col_s2, col_s3 = st.columns(3)
-                            
-                            # 1. คำนวณกำไร/ขาดทุนต่อไม้ (เพื่อหา Best/Worst)
-                            df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)']) * 100
-                            idx_best = df_filtered['กำไร/ขาดทุน (บาท)'].idxmax()
-                            idx_worst = df_filtered['กำไร/ขาดทุน (บาท)'].idxmin()
-                            
-                            # 2. คำนวณ Max Drawdown จากประวัติมูลค่าพอร์ตสะสม (สมมติว่าคุณมี df_history หรือคำนวณจากยอดสะสม)
-                            # กรณีนี้ผมใช้ logic หาค่า Drawdown สูงสุดจากยอดสะสมใน df_filtered
-                            cumulative_profit = df_filtered['กำไร/ขาดทุน (บาท)'].cumsum()
-                            running_max = cumulative_profit.cummax()
-                            drawdown = (cumulative_profit - running_max) / (running_max + abs(df_filtered['ต้นทุน (บาท)'].sum())) # ประมาณการ MDD
-                            max_drawdown = drawdown.min() * 100
-                            
-                            # 3. ดึงค่า Best/Worst
-                            best_val = df_filtered.loc[idx_best, 'กำไร/ขาดทุน (บาท)']
-                            best_pct = df_filtered.loc[idx_best, 'Profit_Pct']
-                            worst_val = df_filtered.loc[idx_worst, 'กำไร/ขาดทุน (บาท)']
-                            worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
-                            
-                            # 4. แสดงผล 3 ช่อง
-                            col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
-                            col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
-                            col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
-                            
+                            if df_closed.empty:
+                                st.info("ยังไม่มีข้อมูลรายการที่ปิดสถานะ (Closed) เพื่อสรุปผลงานครับ")
+                            else:
+                                # ทำความสะอาดข้อมูลตัวเลข
+                                profit_col = 'กำไร/ขาดทุน (บาท)' if 'กำไร/ขาดทุน (บาท)' in df_closed.columns else 'Profit'
+                                cost_col_name = 'ต้นทุน (บาท)' if 'ต้นทุน (บาท)' in df_closed.columns else 'Cost'
+                                
+                                df_closed[profit_col] = pd.to_numeric(df_closed[profit_col], errors='coerce')
+                                df_closed[cost_col_name] = pd.to_numeric(df_closed[cost_col_name], errors='coerce')
+                                df_clean = df_closed.dropna(subset=[profit_col, cost_col_name])
+                                df_clean = df_clean[df_clean[cost_col_name] > 100]
+                                df_clean['% ROI'] = (df_clean[profit_col] / df_clean[cost_col_name]) * 100
+                                
+                                # Filter
+                                col_f1, col_f2 = st.columns([1, 3])
+                                filter_type = col_f1.selectbox("แสดงผลตาม:", ["ทั้งหมด", "รายปี", "รายเดือน"], key="dash_filter_type")
+                                
+                                df_filtered = df_clean.copy()
+                                if filter_type == "รายปี":
+                                    year = col_f2.selectbox("เลือกปี:", sorted(df_clean[date_col].dt.year.unique(), reverse=True), key="dash_year")
+                                    df_filtered = df_clean[df_clean[date_col].dt.year == year]
+                                elif filter_type == "รายเดือน":
+                                    year = col_f2.selectbox("เลือกปี:", sorted(df_clean[date_col].dt.year.unique(), reverse=True), key="dash_year_m")
+                                    month = col_f2.selectbox("เลือกเดือน:", range(1, 13), key="dash_month")
+                                    df_filtered = df_clean[(df_clean[date_col].dt.year == year) & (df_clean[date_col].dt.month == month)]
+                                
+                                # คำนวณ Metric
+                                wins = df_filtered[df_filtered[profit_col] > 0]
+                                losses = df_filtered[df_filtered[profit_col] < 0]
+                                avg_win = wins[profit_col].mean() if not wins.empty else 0
+                                avg_loss = abs(losses[profit_col].mean()) if not losses.empty else 1
+                                rr_ratio_actual = avg_win / avg_loss
+                                
+                                col1, col2, col3, col4, col5 = st.columns(5)
+                                historical_profit = 77420.5
+                                total_net_profit = df_filtered[profit_col].sum() + historical_profit
+                                
+                                col1.metric("กำไร/ขาดทุนสุทธิ", f"{total_net_profit:,.2f} ฿")
+                                col1.markdown(
+                                    "<span style='color: #888888; font-size: 0.8em;'>historical profit 2018-2025 = 77,420.50</span>", 
+                                    unsafe_allow_html=True
+                                )
+                                col2.metric("ค่าเฉลี่ยต่อไม้ (%):", f"{df_clean['% ROI'].mean():.2f} %")
+                                col3.metric("Win Rate", f"{(len(wins)/len(df_filtered)*100):.1f}%" if not df_filtered.empty else "0%")
+                                col4.metric("Profit Factor", f"{(wins[profit_col].sum() / abs(losses[profit_col].sum())):.2f}" if not losses.empty and losses[profit_col].sum() != 0 else "N/A")
+                                col5.metric("Realized R:R", f"{rr_ratio_actual:.2f} : 1")
+                                
+                                st.markdown("---")
+                                st.markdown("##### 🔍 สถิติการเทรดเชิงลึก")
+                                col_s1, col_s2, col_s3 = st.columns(3)
+                                
+                                df_filtered['Profit_Pct'] = (df_filtered[profit_col] / df_filtered[cost_col_name]) * 100
+                                idx_best = df_filtered[profit_col].idxmax()
+                                idx_worst = df_filtered[profit_col].idxmin()
+                                
+                                cumulative_profit = df_filtered[profit_col].cumsum()
+                                running_max = cumulative_profit.cummax()
+                                drawdown = (cumulative_profit - running_max) / (running_max + abs(df_filtered[cost_col_name].sum()))
+                                max_drawdown = drawdown.min() * 100
+                                
+                                best_val = df_filtered.loc[idx_best, profit_col]
+                                best_pct = df_filtered.loc[idx_best, 'Profit_Pct']
+                                worst_val = df_filtered.loc[idx_filtered_worst := idx_worst, profit_col] # ป้องกันตัวแปรชน
+                                worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
+                                
+                                col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
+                                col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
+                                col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
+                                            
                             ######### กราฟรายเดือน vs พร์อตสะสม ###################
                             st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
                             # --- 0. เตรียมข้อมูลรายการที่ขายแล้ว (Closed) และยึด "วันที่ขาย" เป็นหลัก ---
