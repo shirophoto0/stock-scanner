@@ -354,54 +354,35 @@ def save_data_to_sheet(new_df, sheet_name):
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
         return False
 
-DATA_FILE = "dividend_database.csv"
-
-def save_dividend_data_global():
+def save_dividend_data(df_div=None):
+    """ฟังก์ชันบันทึกข้อมูลปันผล ทั้ง CSV และ Google Sheets"""
     try:
-        if "dividend_data" in st.session_state and st.session_state.dividend_data:
-            df_save = pd.DataFrame(st.session_state.dividend_data)
-            df_save.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
-        else:
-            pd.DataFrame(columns=[
-                "วันที่ได้รับ", "Ticker", "จำนวนหุ้น", "ปันผลต่อหุ้น", 
-                "ยอดรวมก่อนภาษี", "ภาษีหัก ณ ที่จ่าย", "ยอดรับสุทธิ", "ต้นทุนหุ้น", "หมายเหตุ"
-            ]).to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
-    except Exception as e:
-        print(f"Error saving file: {e}")
-
-# โหลดข้อมูลเข้า session_state ตั้งแต่เริ่มเปิดแอป
-if "dividend_data" not in st.session_state:
-    if os.path.exists(DATA_FILE):
-        try:
-            df_saved = pd.read_csv(DATA_FILE)
-            if not df_saved.empty:
-                st.session_state.dividend_data = df_saved.to_dict('records')
+        # ถ้าไม่ได้ส่ง df_div มา ให้แปลงจาก session_state ปัจจุบัน
+        if df_div is None:
+            if "dividend_data" in st.session_state and st.session_state.dividend_data:
+                df_div = pd.DataFrame(st.session_state.dividend_data)
             else:
-                st.session_state.dividend_data = []
-        except Exception:
-            st.session_state.dividend_data = []
-    else:
-        st.session_state.dividend_data = []
+                df_div = pd.DataFrame(columns=[
+                    "วันที่ได้รับ", "Ticker", "จำนวนหุ้น", "ปันผลต่อหุ้น", 
+                    "ยอดรวมก่อนภาษี", "ภาษีหัก ณ ที่จ่าย", "ยอดรับสุทธิ", "ต้นทุนหุ้น", "หมายเหตุ"
+                ])
 
-def save_dividend_data(df_div):
-    """ฟังก์ชันรองรับการบันทึกข้อมูลปันผลจากการอัปโหลด Excel"""
-    try:
-        # 1. บันทึกลง session_state ก่อน
+        # 1. บันทึกลง session_state
         st.session_state.dividend_data = df_div.to_dict('records')
-        
-        # 2. บันทึกลง CSV ตามระบบเดิม
+         
+        # 2. บันทึกลง CSV
         df_div.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
-        
-        # 3. (ถ้าต้องการ) บันทึกลง Google Sheets ชีท 'Dividend' ด้วยเพื่อความสอดคล้อง
+         
+        # 3. บันทึกลง Google Sheets ชีท 'Dividend'
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
             sheet.clear()
             data_to_write = [df_div.columns.tolist()] + df_div.astype(str).values.tolist()
             sheet.update(data_to_write)
-        except:
-            pass # ถ้าต่อ Google Sheets ไม่ได้ อย่างน้อยก็เซฟลง CSV สำเร็จ
-            
+        except Exception as e:
+            print(f"Google Sheets sync error: {e}") # ปริ้นท์เตือนเฉยๆ แต่ไม่ให้แอปพัง
+             
         return True
     except Exception as e:
         print(f"Error saving dividend data: {e}")
@@ -3451,14 +3432,16 @@ def main():
                                         added_count = len(combined_df)
                                     
                                     st.session_state.dividend_data = combined_df.to_dict('records')
-                                    save_dividend_data()
+                                    
+                                    # 🟢 ส่ง combined_df เข้าไปในฟังก์ชันบันทึกเพื่อป้องกัน Error missing positional argument
+                                    save_dividend_data(combined_df)
                                     
                                     if added_count > 0:
                                         st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
                                     else:
                                         st.info("ℹ️ ข้อมูลในไฟล์นี้มีอยู่แล้วในระบบทั้งหมด จึงไม่มีการเพิ่มรายการซ้ำ")
                                     st.rerun()
-                                        
+                                    
                                 except Exception as e:
                                     st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
                                     
@@ -3500,12 +3483,16 @@ def main():
                                         "หมายเหตุ": notes
                                     }
                                     st.session_state.dividend_data.append(new_entry)
-                                    save_dividend_data()
+                                    
+                                    # แปลง session_state ทั้งหมดเป็น DataFrame แล้วส่งให้ save_dividend_data() บันทึก
+                                    final_df = pd.DataFrame(st.session_state.dividend_data)
+                                    save_dividend_data(final_df)
+                                    
                                     st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} เรียบร้อยแล้วครับ!")
                                     st.rerun()
                                 else:
                                     st.warning("⚠️ กรุณากรอกชื่อหุ้น (Ticker)")
-                                    
+                                                        
                     # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                     st.markdown("---")
                     st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
