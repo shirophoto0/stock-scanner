@@ -5188,7 +5188,7 @@ def main():
    
                 # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
                 st.markdown("---")
-                st.subheader("📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุน")
+                st.subheader("📊 กราฟแสดง % ผลตอบแทนรายบุคคล (YTD Net Return %)")
                 
                 if not df_pvd_history.empty:
                     try:
@@ -5203,32 +5203,19 @@ def main():
                                 errors='coerce'
                             ).fillna(0.0)
             
-                        # ดึงยอดผลประโยชน์รวม (Member_Benefit + Employer_Benefit) และยอดเงินต้นรวม
-                        member_benefit = clean_num(df_pvd_history.get('Member_Benefit'))
-                        employer_benefit = clean_num(df_pvd_history.get('Employer_Benefit'))
-                        total_benefit = member_benefit + employer_benefit
-                        
-                        member_saving = clean_num(df_pvd_history.get('Member_Saving'))
-                        employer_matching = clean_num(df_pvd_history.get('Employer_Matching'))
-                        
-                        # ต้นทุนหลักในงวดนั้นๆ
-                        total_principal = member_saving + employer_matching
-                        
-                        # คำนวณ % ผลตอบแทนจาก (ผลประโยชน์รวม / เงินต้นรวม) * 100 
-                        # หรือถ้าต้องการใช้ Grand_Total ตั้ง ให้ใช้: ((Grand_Total - (Grand_Total - ผลประโยชน์)) / ต้นทุน)
-                        calculated_benefit = pd.Series(0.0, index=df_pvd_history.index)
-                        valid_mask = total_principal > 0
-                        
-                        # คำนวณจากผลประโยชน์สุทธิเทียบกับเงินต้น
-                        calculated_benefit[valid_mask] = (total_benefit[valid_mask] / total_principal[valid_mask]) * 100
-                        
-                        df_pvd_history['Auto_Benefit_Pct'] = calculated_benefit
-                        chart_col = 'Auto_Benefit_Pct'
+                        # ดึงข้อมูลจากคอลัมน์ YTD_Net_Return_Pct โดยตรง
+                        if 'YTD_Net_Return_Pct' in df_pvd_history.columns:
+                            chart_col = 'YTD_Net_Return_Pct'
+                            df_pvd_history[chart_col] = clean_num(df_pvd_history[chart_col])
+                        else:
+                            # เผื่อกรณียังไม่มีคอลัมน์นี้ในชีต ให้สร้างเป็น 0 ไปก่อนเพื่อกัน error
+                            df_pvd_history['YTD_Net_Return_Pct'] = 0.0
+                            chart_col = 'YTD_Net_Return_Pct'
                             
                     except Exception as e:
-                        st.warning(f"⚠️ เกิดข้อผิดพลาดในการคำนวณ: {e}")
+                        st.warning(f"⚠️ เกิดข้อผิดพลาดในการอ่านข้อมูลกราฟ: {e}")
                         chart_col = None
-            
+                        
                     if chart_col and chart_col in df_pvd_history.columns:
                         if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
                             df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
@@ -5238,12 +5225,12 @@ def main():
                         
                         chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
                         
-                        #st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้ (ใหม่):**", chart_data)
+                        # แสดงกราฟแท่ง
                         st.bar_chart(chart_data)
                     else:
                         st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
                 else:
-                    st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลเดือนแรกก่อนครับ")
+                    st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลก่อนครับ")
             
                 # --- 3. ส่วนแสดงตารางสรุปการเติบโต ---
                 st.markdown("---")
