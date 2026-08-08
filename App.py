@@ -4769,6 +4769,14 @@ def main():
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
+            # --- ดึงมูลค่าประกันสังคมล่าสุด ---
+            try:
+                sheet_sso = client.open('MyStockData').worksheet('SSO')
+                sso_data = sheet_sso.get_all_records()
+                sso_value = float(str(sso_data[-1]['Value']).replace(',', '')) if sso_data else 0.0
+            except Exception:
+                sso_value = 0.0
+            
             # --- มูลค่าประกันบำนาญแบบ Fix Value ---
             pension_insurance_value = 1337703.0
             
@@ -4783,8 +4791,8 @@ def main():
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth รวมทุกกระเป๋า
-            net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + pension_insurance_value + bank_balance
+            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมประกันสังคม sso_value ด้วย)
+            net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + sso_value + pension_insurance_value + bank_balance
             
             # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (กึ่งกลางหน้าจอ, สีเขียว, ใหญ่พิเศษ) ---
             c_left, c_center, c_right = st.columns([1, 2, 1])
@@ -4801,28 +4809,31 @@ def main():
             
             st.divider()
 
-            # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็น 3 คอลัมน์ x 2 แถว) ---
-            # แถวที่ 1
-            row1_col1, row1_col2, row1_col3 = st.columns(3)
+            # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็น 4 คอลัมน์ x 2 แถว) ---
+            # แถวที่ 1 (4 คอลัมน์)
+            row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
             row1_col2.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
             row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
+            row1_col4.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
 
-            # แถวที่ 2
-            row2_col1, row2_col2, row2_col3 = st.columns(3)
-            row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
+            # แถวที่ 2 (4 คอลัมน์)
+            row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+            row2_col1.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
             row2_col2.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
             with row2_col3:
                 st.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
                 st.caption("เวนคืนประกันอายุ 60 ปี")
+            # ช่องว่างแถวที่ 2 คอลัมน์ที่ 4 ปล่อยว่างไว้เพื่อความสมดุล (หรือเพิ่มข้อความได้ตามต้องการ)
+            row2_col4.empty()
             
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
 
-            # สร้างข้อมูลสำหรับกราฟ
+            # สร้างข้อมูลสำหรับกราฟ (เพิ่มประกันสังคม 'SSO' เข้าไป)
             asset_data = {
-                "Asset_Type": ["พอร์ตหุ้น + TFEX", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "บัญชีธนาคาร", "ประกันบำนาญ"],
-                "Value": [total_stock_and_tfex, pvd_value, insurance_value, coop_value, bank_balance, pension_insurance_value]
+                "Asset_Type": ["พอร์ตหุ้น + TFEX", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "ประกันสังคม", "บัญชีธนาคาร", "ประกันบำนาญ"],
+                "Value": [total_stock_and_tfex, pvd_value, insurance_value, coop_value, sso_value, bank_balance, pension_insurance_value]
             }
             df_assets = pd.DataFrame(asset_data)
             df_assets = df_assets[df_assets["Value"] > 0]
@@ -4867,6 +4878,12 @@ def main():
                 df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
                 df_bank = pd.DataFrame(client.open('MyStockData').worksheet('Bank_Account').get_all_records())
                 
+                # ดึงข้อมูลประกันสังคม (SSO) เพิ่มเติม
+                try:
+                    df_sso = pd.DataFrame(client.open('MyStockData').worksheet('SSO').get_all_records())
+                except:
+                    df_sso = pd.DataFrame()
+                
                 try:
                     df_portfolio_hist = pd.DataFrame(client.open('MyStockData').worksheet('Stock_TFEX_History').get_all_records())
                 except:
@@ -4896,9 +4913,18 @@ def main():
                 # 3. เตรียม Series ทั้งหมด
                 s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                 s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
+                s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO') # เตรียม Series ของประกันสังคม
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
                 s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
                 s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
+
+                # รวม Insurance และ SSO เข้าด้วยกันให้อยู่ในคอลัมน์ 'Insurance'
+                if not s_ins.empty and not s_sso.empty:
+                    s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
+                    s_ins['Insurance'] = s_ins['Insurance'] + s_ins['SSO']
+                    s_ins = s_ins[['Insurance']] # คงไว้แค่คอลัมน์ Insurance ที่บวกยอด SSO แล้ว
+                elif s_ins.empty and not s_sso.empty:
+                    s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
 
                 # 4. รวมข้อมูลโดยใช้ Outer Join และเติมค่าข้อมูลเก่า (ffill)
                 series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_port] if not s.empty]
@@ -5177,6 +5203,64 @@ def main():
                                 
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลสหกรณ์: {e}")
+                        else:
+                            st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
+                            
+            with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันสังคม", expanded=False):
+                with st.form("sso_upload_form"):
+                    col_d, col_v = st.columns(2)
+                    
+                    with col_d:
+                        sso_date = st.date_input("เลือกวันที่อัปเดตข้อมูลประกันสังคม", value=date.today(), key="sso_date_input")
+                        
+                    with col_v:
+                        sso_value = st.number_input(
+                            "ยอดสะสมประกันสังคม / เงินสมทบ (บาท)", 
+                            min_value=0.0, 
+                            format="%.2f", 
+                            value=0.0,
+                            key="sso_value_input",
+                            help="กรอกยอดเงินสะสมหรือเงินสมทบประกันสังคม ณ วันที่อัปเดต"
+                        )
+                    
+                    submitted_sso = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลประกันสังคม")
+                    
+                    if submitted_sso:
+                        if sso_value > 0:
+                            try:
+                                client = get_gsheet_client()
+                                # ตรวจสอบให้แน่ใจว่าใน Google Sheets ของคุณมี Worksheet ชื่อ 'Insurance' หรือ 'SSO' 
+                                # (ในที่นี้ตั้งชื่อชีทไว้ว่า 'Insurance' ตามแท็บในรูปตัวอย่างของคุณครับ)
+                                sheet_sso = client.open('MyStockData').worksheet('SSO')
+                                
+                                existing_data = sheet_sso.get_all_records()
+                                df_existing_sso = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
+                                
+                                date_str = sso_date.strftime("%Y-%m-%d")
+                                year_ce = sso_date.year
+                                
+                                is_duplicate = False
+                                
+                                if not df_existing_sso.empty and 'Date' in df_existing_sso.columns:
+                                    match_idx = df_existing_sso[df_existing_sso['Date'].astype(str) == date_str].index
+                                    
+                                    if len(match_idx) > 0:
+                                        is_duplicate = True
+                                        row_num = match_idx[0] + 2 
+                                        
+                                        updated_values = [date_str, year_ce, sso_value]
+                                        sheet_sso.update(f"A{row_num}:C{row_num}", [updated_values])
+                                        st.success(f"✅ อัปเดตข้อมูลประกันสังคมของวันที่ **{date_str}** เป็น **{sso_value:,.2f} บาท** เรียบร้อยแล้ว!")
+                                
+                                if not is_duplicate:
+                                    new_row = [date_str, year_ce, sso_value]
+                                    sheet_sso.append_row(new_row)
+                                    st.success(f"✅ บันทึกข้อมูลใหม่ประกันสังคมของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                                    
+                                st.rerun()
+                                
+                            except Exception as e:
+                                st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลประกันสังคม: {e}")
                         else:
                             st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
                             
