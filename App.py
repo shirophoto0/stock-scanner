@@ -443,32 +443,34 @@ if "dividend_data" not in st.session_state:
         st.session_state.dividend_data = []
 
 def save_dividend_data(df_div):
-    """ฟังก์ชันรองรับการบันทึกข้อมูลปันผลจากการอัปโหลด Excel"""
+    """ฟังก์ชันรองรับการบันทึกข้อมูลปันผลจากการอัปโหลด Excel พร้อมจัดการค่า NaN"""
     try:
-        # 1. บันทึกลง session_state ก่อน
+        # แทนที่ค่า NaN, NaT, หรือ Inf ทั้งหมดใน DataFrame ให้เป็นค่าว่างหรือ None ที่รองรับ JSON ได้
+        df_div = df_div.replace({np.nan: None})
+        
+        # 1. บันทึกลง session_state 
         st.session_state.dividend_data = df_div.to_dict('records')
         
         # 2. บันทึกลง CSV ตามระบบเดิม
         df_div.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
         
-        # 3. บันทึกลง Google Sheets ชีท 'Dividend' พร้อมระบบป้องกัน Rate Limit (429)
+        # 3. บันทึกลง Google Sheets ชีท 'Dividend'
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
             
-            # เคลียร์ข้อมูลเดิม
             sheet.clear()
-            time.sleep(1) # หน่วงเวลา 1 วินาที เพื่อป้องกันการยิง API ถี่เกินไป (Error 429)
+            time.sleep(1) 
             
-            # เตรียมข้อมูลและอัปเดต
-            data_to_write = [df_div.columns.tolist()] + df_div.astype(str).values.tolist()
+            # แปลงค่า None กลับเป็น string ว่าง หรือปล่อยไว้ก่อนส่งเข้า Sheets
+            df_cleaned = df_div.fillna("")
+            data_to_write = [df_cleaned.columns.tolist()] + df_cleaned.astype(str).values.tolist()
             sheet.update(data_to_write)
             
             st.success("✅ บันทึกข้อมูลลง Google Sheets ('Dividend') สำเร็จแล้วครับ!")
         except Exception as gsheet_err:
-            # แจ้งเตือนข้อผิดพลาดที่เกี่ยวกับ Google Sheets ให้ชัดเจน พร้อมใส่เครื่องหมายคำพูดครอบ string
             print(f"Google Sheets Error: {gsheet_err}")
-            st.warning(f"⚠️ ไม่สามารถบันทึกลง Google Sheets ได้ (อาจติดโควตา API 429): {gsheet_err}")
+            st.warning(f"⚠️ ไม่สามารถบันทึกลง Google Sheets ได้: {gsheet_err}")
             
         return True
     except Exception as e:
