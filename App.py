@@ -4990,34 +4990,44 @@ def main():
             # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
             # ==========================================
             st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
-            try:
-                client = get_gsheet_client()
-                
-                # 1. ดึงข้อมูล
-                df_pvd = pd.DataFrame(client.open('MyStockData').worksheet('Provident_Fund').get_all_records())
-                df_ins = pd.DataFrame(client.open('MyStockData').worksheet('Insurance').get_all_records())
-                df_coop = pd.DataFrame(client.open('MyStockData').worksheet('Coop').get_all_records())
-                df_bank = pd.DataFrame(client.open('MyStockData').worksheet('Bank_Account').get_all_records())
-                
-                # ดึงข้อมูลประกันสังคม (SSO) เพิ่มเติม
-                try:
-                    df_sso = pd.DataFrame(client.open('MyStockData').worksheet('SSO').get_all_records())
-                except:
-                    df_sso = pd.DataFrame()
-                
-                try:
-                    df_portfolio_hist = pd.DataFrame(client.open('MyStockData').worksheet('Stock_TFEX_History').get_all_records())
-                except:
-                    df_portfolio_hist = pd.DataFrame()
 
-                # 2. ฟังก์ชันเตรียมข้อมูล (ปรับปรุงการแปลงวันที่ของ PVD ให้แม่นยำขึ้น)
+            try:
+                import time
+            
+                # ฟังก์ชันช่วยดึงข้อมูลแบบมี Cache และระบบลองใหม่ (Retry) อัตโนมัติ ป้องกัน API Error
+                @st.cache_data(ttl=600, show_spinner=False) # แคชข้อมูลเก็บไว้ 10 นาที
+                def fetch_all_wealth_data():
+                    client = get_gsheet_client()
+                    
+                    def get_ws_with_retry(ws_name, max_retries=3):
+                        for i in range(max_retries):
+                            try:
+                                return pd.DataFrame(client.open('MyStockData').worksheet(ws_name).get_all_records())
+                            except Exception:
+                                if i == max_retries - 1:
+                                    return pd.DataFrame()
+                                time.sleep(1 + i) # รอแป๊บเดียวก่อนลองใหม่
+                        return pd.DataFrame()
+            
+                    df_pvd = get_ws_with_retry('Provident_Fund')
+                    df_ins = get_ws_with_retry('Insurance')
+                    df_coop = get_ws_with_retry('Coop')
+                    df_bank = get_ws_with_retry('Bank_Account')
+                    df_sso = get_ws_with_retry('SSO')
+                    df_portfolio_hist = get_ws_with_retry('Stock_TFEX_History')
+                    
+                    return df_pvd, df_ins, df_coop, df_bank, df_sso, df_portfolio_hist
+            
+                # 1. ดึงข้อมูลผ่านระบบ Cache ปลอดภัยหายห่วงเรื่อง API ล่ม
+                df_pvd, df_ins, df_coop, df_bank, df_sso, df_portfolio_hist = fetch_all_wealth_data()
+                        
+                # 2. ฟังก์ชันเตรียมข้อมูล
                 def prepare_series(df, date_col, val_col, name):
                     df = df.copy()
                     if df.empty:
                         return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
                     
                     if date_col == 'Month':
-                        # แปลงชื่อเดือนไทยเป็นตัวเลข
                         thai_months = {
                             'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
                             'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08',
@@ -5030,24 +5040,24 @@ def main():
                     
                     df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
                     return df.dropna(subset=['Date']).set_index('Date')[[name]]
-
+            
                 # 3. เตรียม Series ทั้งหมด
                 s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                 s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
-                s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO') # เตรียม Series ของประกันสังคม
+                s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
                 s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
                 s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
-
-                # รวม Insurance และ SSO เข้าด้วยกันให้อยู่ในคอลัมน์ 'Insurance'
+            
+                # รวม Insurance และ SSO เข้าด้วยกัน
                 if not s_ins.empty and not s_sso.empty:
                     s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
                     s_ins['Insurance'] = s_ins['Insurance'] + s_ins['SSO']
-                    s_ins = s_ins[['Insurance']] # คงไว้แค่คอลัมน์ Insurance ที่บวกยอด SSO แล้ว
+                    s_ins = s_ins[['Insurance']]
                 elif s_ins.empty and not s_sso.empty:
                     s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
-
-                # 4. รวมข้อมูลโดยใช้ Outer Join และเติมค่าข้อมูลเก่า (ffill)
+            
+                # 4. รวมข้อมูลโดยใช้ Outer Join และ ffill
                 series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_port] if not s.empty]
                 
                 if series_list:
@@ -5055,12 +5065,9 @@ def main():
                     for s in series_list[1:]:
                         df_merged = df_merged.join(s, how='outer')
                     
-                    # เรียงลำดับวันที่จากอดีต -> ปัจจุบัน และใช้ ffill() เพื่อดึงค่าสินทรัพย์ตัวเก่ามาทบในเดือนที่ไม่มีการบันทึก
                     df_merged = df_merged.sort_index().ffill().fillna(0)
-                    
-                    # คำนวณ Total จากผลรวมทุกคอลัมน์ในแต่ละแถวเวลา
                     df_merged['Total'] = df_merged.sum(axis=1)
-
+            
                     # 5. วาดกราฟ Plotly
                     import plotly.graph_objects as go
                     fig = go.Figure()
@@ -5073,7 +5080,7 @@ def main():
                             mode='lines+markers',
                             line=dict(width=3 if col == 'Total' else 2)
                         ))
-    
+            
                     max_total = df_merged['Total'].max()
                     upper_limit = (max_total * 1.2) if max_total > 0 else 12000000
                     
@@ -5081,11 +5088,11 @@ def main():
                         yaxis=dict(range=[0, upper_limit], tickformat=",.0f"),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
-    
+            
                     st.plotly_chart(fig, use_container_width=True)
                 else:
                     st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
-
+            
             except Exception as e:
                 st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
 
