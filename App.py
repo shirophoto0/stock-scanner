@@ -10,6 +10,7 @@ import os
 import google.generativeai as genai
 import io
 import json
+import time
 import requests
 import gspread
 import seaborn as sns
@@ -450,19 +451,29 @@ def save_dividend_data(df_div):
         # 2. บันทึกลง CSV ตามระบบเดิม
         df_div.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
         
-        # 3. (ถ้าต้องการ) บันทึกลง Google Sheets ชีท 'Dividend' ด้วยเพื่อความสอดคล้อง
+        # 3. บันทึกลง Google Sheets ชีท 'Dividend' พร้อมระบบป้องกัน Rate Limit (429)
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
+            
+            # เคลียร์ข้อมูลเดิม
             sheet.clear()
+            time.sleep(1) # หน่วงเวลา 1 วินาที เพื่อป้องกันการยิง API ถี่เกินไป (Error 429)
+            
+            # เตรียมข้อมูลและอัปเดต
             data_to_write = [df_div.columns.tolist()] + df_div.astype(str).values.tolist()
             sheet.update(data_to_write)
-        except:
-            pass # ถ้าต่อ Google Sheets ไม่ได้ อย่างน้อยก็เซฟลง CSV สำเร็จ
+            
+            st.success("✅ บันทึกข้อมูลลง Google Sheets ('Dividend') สำเร็จแล้วครับ!")
+        except Exception as gsheet_err:
+            # แจ้งเตือนข้อผิดพลาดที่เกี่ยวกับ Google Sheets ให้ชัดเจน ไม่กลืน Error ทิ้ง
+            print(f"Google Sheets Error: {gsheet_err}")
+            st.warning(⚠️ ไม่สามารถบันทึกลง Google Sheets ได้ (อาจติดโควตา API 429): {gsheet_err})
             
         return True
     except Exception as e:
         print(f"Error saving dividend data: {e}")
+        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล: {e}")
         return False
         
 def calculate_atr(df, period=14):
