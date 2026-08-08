@@ -354,8 +354,21 @@ def save_data_to_sheet(new_df, sheet_name):
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
         return False
 
+DIVIDEND_FILE = "dividend_data.csv"
+
+# --- 1. ฟังก์ชันโหลดข้อมูล ---
+def load_dividend_data():
+    if os.path.exists(DIVIDEND_FILE):
+        try:
+            df = pd.read_csv(DIVIDEND_FILE)
+            return df.to_dict('records')
+        except Exception as e:
+            print(f"Error loading CSV: {e}")
+            return []
+    return []
+
+# --- 2. ฟังก์ชันบันทึกข้อมูล (แก้ไขให้สอดคล้องและเขียนชีทได้ชัวร์) ---
 def save_dividend_data(df_div=None):
-    """ฟังก์ชันบันทึกข้อมูลปันผล ทั้ง CSV และ Google Sheets"""
     try:
         # ถ้าไม่ได้ส่ง df_div มา ให้แปลงจาก session_state ปัจจุบัน
         if df_div is None:
@@ -370,29 +383,30 @@ def save_dividend_data(df_div=None):
         # 1. บันทึกลง session_state
         st.session_state.dividend_data = df_div.to_dict('records')
          
-        # 2. บันทึกลง CSV
-        df_div.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
+        # 2. บันทึกลง CSV (ใช้ตัวแปร DIVIDEND_FILE ให้ตรงกัน)
+        df_div.to_csv(DIVIDEND_FILE, index=False, encoding='utf-8-sig')
          
-        # 3. บันทึกลง Google Sheets ชีท 'Dividend'
+        # 3. บันทึกลง Google Sheets ชีท 'Dividend' (ปรับวิธีส่งค่าให้ถูกต้องตามมาตรฐาน gspread)
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
             
-            # ล้างข้อมูลเก่าทั้งหมดก่อน (ถ้าต้องการรีเฟรชใหม่ทั้งหมดทุกครั้งที่กดบันทึก)
+            # เคลียร์ข้อมูลเก่าทั้งหมด
             sheet.clear()
             
-            # เตรียมข้อมูลหัวตาราง + ข้อมูลทั้งหมด
+            # เตรียมข้อมูลหัวตารางและข้อมูลทั้งหมดเป็น List ของ List
             data_to_write = [df_div.columns.tolist()] + df_div.astype(str).values.tolist()
             
-            # ใช้คำสั่งอัปเดตแบบระบุจุดเริ่มต้น A1 เพื่อความเสถียร
+            # อัปเดตข้อมูลโดยระบุ Range 'A1' เพื่อให้ Google Sheets รับค่าได้อย่างถูกต้อง
             sheet.update(range_name='A1', values=data_to_write)
             
         except Exception as e:
-            print(f"Google Sheets sync error: {e}")
+            # ใช้ st.error เพื่อให้แสดงผลบนหน้าจอหากเชื่อมต่อ Google Sheets ไม่ผ่าน
+            st.error(f"Google Sheets sync error: {e}")
              
         return True
     except Exception as e:
-        print(f"Error saving dividend data: {e}")
+        st.error(f"Error saving dividend data: {e}")
         return False
         
 def calculate_atr(df, period=14):
@@ -440,17 +454,6 @@ def save_cash_to_gsheet(df):
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Cash_Flow: {e}")
         return False        
 ####################
-DIVIDEND_FILE = "dividend_data.csv"
-
-# --- 1. ฟังก์ชันโหลดและบันทึกข้อมูลถาวร ---
-def load_dividend_data():
-    if os.path.exists(DIVIDEND_FILE):
-        try:
-            df = pd.read_csv(DIVIDEND_FILE)
-            return df.to_dict('records')
-        except:
-            return []
-    return []
         
 @st.cache_data(ttl=60)
 def load_data(sheet_name):
