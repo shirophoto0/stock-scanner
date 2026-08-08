@@ -3690,11 +3690,13 @@ def main():
                                     'ต้นทุนหุ้น': 'last'
                                 }).reset_index()
                                 
-                                df_yield_analysis = pd.merge(df_div_sum, df_latest, on='Ticker')
-                                df_yield_analysis['Total_Cost'] = df_yield_analysis['ต้นทุนหุ้น'] * df_yield_analysis['จำนวนหุ้น']
+                                # แปลงข้อมูลให้เป็นตัวเลขอย่างปลอดภัย (ถ้าแปลงไม่ได้ให้มองเป็น 0)
+                                df_yield_analysis['ยอดรับสุทธิ'] = pd.to_numeric(df_yield_analysis['ยอดรับสุทธิ'], errors='coerce').fillna(0)
+                                df_yield_analysis['Total_Cost'] = pd.to_numeric(df_yield_analysis['Total_Cost'], errors='coerce').fillna(0)
                                 
+                                # คำนวณ Yield_on_Cost ตามเดิม
                                 df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
-                                    lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0, 
+                                    lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
                                     axis=1
                                 )
                                 
