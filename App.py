@@ -5178,23 +5178,19 @@ def main():
                     pass
    
                 # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
+                # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (พร้อม Debug ค่าตัวเลข) ---
                 st.markdown("---")
                 st.subheader("📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุน")
                 
                 if not df_pvd_history.empty:
                     try:
-                        # 1. แปลงข้อมูลตัวเลขหลักๆ ให้พร้อมคำนวณ
+                        # 1. แปลงข้อมูลตัวเลขหลักๆ ให้พร้อมคำนวณอย่างปลอดภัย
                         grand_total = pd.to_numeric(df_pvd_history['Grand_Total'].astype(str).str.replace(',', ''), errors='coerce')
-                        
-                        # รวมเงินสะสมทั้งหมดที่เป็นต้นทุน (Member_Total + Employer_Total หรือจากยอดยกมาบวกเพิ่ม)
-                        # เพื่อความแม่นยำ ลองใช้ Grand_Total ตั้ง แล้วหักลบกำไร หรือคำนวณคร่าวๆ จาก (Grand_Total - ต้นทุนสะสม)
-                        # ในที่นี้ใช้ Member_Total + Employer_Total เป็นตัวแทนของเงินสะสมรวม (ต้นทุน)
                         member_total = pd.to_numeric(df_pvd_history.get('Member_Total', 0).astype(str).str.replace(',', ''), errors='coerce')
                         employer_total = pd.to_numeric(df_pvd_history.get('Employer_Total', 0).astype(str).str.replace(',', ''), errors='coerce')
                         total_cost = member_total + employer_total
                         
-                        # 2. คำนวณ % ผลตอบแทนอัตโนมัติ: ((Grand_Total - ต้นทุน) / ต้นทุน) * 100
-                        # (ถ้าต้นทุนเป็น 0 หรือหาไม่ได้ ให้ลองใช้คอลัมน์ '% Benefit' เดิม)
+                        # 2. คำนวณ % ผลตอบแทนอัตโนมัติ
                         if not grand_total.isna().all() and not total_cost.isna().all() and (total_cost > 0).any():
                             df_pvd_history['Auto_Benefit_Pct'] = ((grand_total - total_cost) / total_cost) * 100
                             chart_col = 'Auto_Benefit_Pct'
@@ -5204,16 +5200,19 @@ def main():
                     except Exception:
                         chart_col = '% Benefit'
             
-                    # 3. เตรียมข้อมูลแกน X (Period) และวาดกราฟ
+                    # 3. เตรียมข้อมูลแกน X (Period)
                     if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
                         df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
                         chart_data = df_pvd_history.set_index('Period')[chart_col]
                     else:
                         chart_data = df_pvd_history[chart_col]
                     
-                    # แปลงข้อมูลเป็นตัวเลขและแทนที่ค่าว่างด้วย 0 เพื่อความปลอดภัย
+                    # แปลงข้อมูลเป็นตัวเลข
                     chart_data = chart_data.astype(str).str.replace('%', '', regex=False)
                     chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0)
+                    
+                    # 🔍 พิมพ์ค่าตัวเลขที่จะเอาไปวาดกราฟออกมาดูบนหน้าจอชั่วคราว เพื่อตรวจสอบ
+                    st.write("🔍 **ค่าตัวเลขที่จะนำไปวาดกราฟ:**", chart_data)
                     
                     # แสดงกราฟแท่ง
                     st.bar_chart(chart_data)
