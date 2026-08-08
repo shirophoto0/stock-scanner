@@ -404,6 +404,7 @@ def save_dividend_to_gsheet_smart(df_new):
         st.error(f"เกิดข้อผิดพลาดในการบันทึกปันผลลง Google Sheets: {e}")
         return False
 
+@st.cache_data(ttl=600)
 def load_dividend_from_gsheet():
     """โหลดข้อมูลปันผลจาก Google Sheets ตอนเปิดแอป"""
     if 'dividend_data' not in st.session_state or not st.session_state.dividend_data:
@@ -533,7 +534,7 @@ def load_dividend_data():
             return []
     return []
         
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600)
 def load_data(sheet_name):
     try:
         client = get_gsheet_client()
@@ -643,7 +644,7 @@ def save_journal():
     # ล้างข้อมูลเดิมและเขียนใหม่ (Header + Data)
     sheet.clear()
     sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
-
+@st.cache_data(ttl=300)
 def load_journal():
     try:
         client = get_gsheet_client()
@@ -796,7 +797,7 @@ def save_portfolio_snapshot():
     # บันทึกข้อมูลลงในตาราง Portfolio_History
     # รูปแบบ: [วันที่, มูลค่าพอร์ตรวม, เงินต้นสะสม]
     log_to_sheet("Portfolio_History", [str(datetime.now().date()), total_equity, total_invested_capital()])
-    
+@st.cache_data(ttl=300)    
 def display_performance_dashboard():
     # 1. โหลดข้อมูล
     client = get_gsheet_client()
@@ -975,7 +976,7 @@ def load_data_from_file(uploaded_file):
             st.rerun()
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
-
+@st.cache_data(ttl=300)
 def get_equity_curve_data():
     # 1. เตรียมข้อมูล Journal
     if "journal_data" not in st.session_state or not st.session_state.journal_data:
@@ -3456,17 +3457,37 @@ def main():
                             
                 #########################
                 with tab_dividend:
-                    # โหลดข้อมูลปันผลจาก Google Sheets เข้า session_state ทุกครั้งที่เปิดหรือรีเฟรชแป
+                    # 1. เช็คแค่ว่ามีข้อมูลอยู่ใน session_state หรือยัง (ไม่ต้องวิ่งไปเรียก Google Sheets ทุกครั้งที่คลิกเปลี่ยนแท็บ)
                     if "dividend_data" not in st.session_state:
-                        try:
-                            client = get_gsheet_client()
-                            sheet = client.open('MyStockData').worksheet('Dividend')
-                            records = sheet.get_all_records()
-                            st.session_state.dividend_data = records if records else []
-                        except Exception:
-                            # ถ้ายังไม่มีแท็บ Dividend หรือดึงข้อมูลไม่ได้ ให้สร้างเป็น List ว่างไว้ก่อน
+                        # พยายามโหลดจากไฟล์ CSV ในเครื่องก่อนเป็นอันดับแรก (ปลอดภัย ไม่ติดโควตา Google)
+                        import os
+                        import pandas as pd
+                        
+                        if os.path.exists("dividend_data.csv"): # (ปรับชื่อไฟล์ CSV ตามที่คุณใช้งานจริง)
+                            try:
+                                df_local = pd.read_csv("dividend_data.csv")
+                                st.session_state.dividend_data = df_local.to_dict('records')
+                            except:
+                                st.session_state.dividend_data = []
+                        else:
                             st.session_state.dividend_data = []
                             
+                    # เพิ่มปุ่มให้ผู้ใช้กด "ซิงค์ข้อมูลล่าสุดจาก Google Sheets" เองด้วยความสมัครใจ
+                    if st.button("🔄 ซิงค์ข้อมูลปันผลจาก Google Sheets", key="btn_sync_div"):
+                        with st.spinner("กำลังดึงข้อมูลจาก Google Sheets..."):
+                            try:
+                                client = get_gsheet_client()
+                                sheet = client.open('MyStockData').worksheet('Dividend')
+                                records = sheet.get_all_records()
+                                if records:
+                                    st.session_state.dividend_data = records
+                                    # เซฟสำรองลง CSV ด้วย
+                                    pd.DataFrame(records).to_csv("dividend_data.csv", index=False, encoding='utf-8-sig')
+                                    st.success("✅ ซิงค์ข้อมูลสำเร็จ!")
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ ซิงค์ไม่สำเร็จ (อาจติดโควตา 429): {e}")
+                                            
                     st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
                     
                     # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV/Excel ---
