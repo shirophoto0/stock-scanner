@@ -4469,7 +4469,13 @@ def main():
         
             # 3. คำนวณ Metrics ทั้งหมดจาก perf_df ที่กรองแล้ว
             total_trades = len(perf_df)
-            win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
+            # ป้องกัน KeyError กรณีไม่มีคอลัมน์ Net_Profit
+            if 'Net_Profit' in perf_df.columns:
+                win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
+            elif 'กำไรสุทธิ' in perf_df.columns:
+                win_trades = len(perf_df[perf_df['กำไรสุทธิ'] > 0])
+            else:
+                win_trades = 0
             win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
             
             avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
