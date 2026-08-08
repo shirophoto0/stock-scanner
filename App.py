@@ -466,9 +466,9 @@ def save_dividend_data(df_div):
             
             st.success("✅ บันทึกข้อมูลลง Google Sheets ('Dividend') สำเร็จแล้วครับ!")
         except Exception as gsheet_err:
-            # แจ้งเตือนข้อผิดพลาดที่เกี่ยวกับ Google Sheets ให้ชัดเจน ไม่กลืน Error ทิ้ง
+            # แจ้งเตือนข้อผิดพลาดที่เกี่ยวกับ Google Sheets ให้ชัดเจน พร้อมใส่เครื่องหมายคำพูดครอบ string
             print(f"Google Sheets Error: {gsheet_err}")
-            st.warning(⚠️ ไม่สามารถบันทึกลง Google Sheets ได้ (อาจติดโควตา API 429): {gsheet_err})
+            st.warning(f"⚠️ ไม่สามารถบันทึกลง Google Sheets ได้ (อาจติดโควตา API 429): {gsheet_err}")
             
         return True
     except Exception as e:
