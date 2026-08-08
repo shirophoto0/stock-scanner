@@ -3690,11 +3690,14 @@ def main():
                                     'ต้นทุนหุ้น': 'last'
                                 }).reset_index()
                                 
-                                # แปลงข้อมูลให้เป็นตัวเลขอย่างปลอดภัย (ถ้าแปลงไม่ได้ให้มองเป็น 0)
+                                # 1. สร้าง DataFrame จากข้อมูลปันผลก่อน (ถ้ายังไม่ได้สร้าง)
+                                df_yield_analysis = pd.DataFrame(st.session_state.dividend_data)
+                                
+                                # 2. จากนั้นค่อยทำการแปลงข้อมูลตัวเลขด้วย pd.to_numeric ตามที่คุณต้องการ
                                 df_yield_analysis['ยอดรับสุทธิ'] = pd.to_numeric(df_yield_analysis['ยอดรับสุทธิ'], errors='coerce').fillna(0)
                                 df_yield_analysis['Total_Cost'] = pd.to_numeric(df_yield_analysis['Total_Cost'], errors='coerce').fillna(0)
                                 
-                                # คำนวณ Yield_on_Cost ตามเดิม
+                                # 3. คำนวณ Yield_on_Cost ต่อ
                                 df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
                                     lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
                                     axis=1
