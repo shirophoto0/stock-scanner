@@ -5167,7 +5167,7 @@ def main():
                             st.cache_data.clear()
                             # --------------------------------------------------------------------------------
                             
-                            st.rerun(experimental=True) if hasattr(st, 'rerun') else st.experimental_rerun()
+                            st.rerun()
                             
                         except Exception as e:
                             if "429" in str(e) or "Quota exceeded" in str(e):
