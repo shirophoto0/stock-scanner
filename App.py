@@ -4039,7 +4039,8 @@ def main():
                     ########################################################################
                 
                     ### แสดงข้อมูลสถิติ รายเดือน รายปี ####
-                    if st.session_state.journal_data:
+                    # ป้องกัน Error กรณีที่ยังไม่มีตัวแปร journal_data ใน session_state
+                    if "journal_data" in st.session_state and st.session_state.journal_data:
                         df_journal = pd.DataFrame(st.session_state.journal_data)
                         
                         # --- เริ่มต้น Data Migration ---
