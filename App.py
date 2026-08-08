@@ -1454,25 +1454,27 @@ def main():
     # 1. ประกาศตัวแปรเริ่มต้น
     client = get_gsheet_client()
     filtered_df = None
-    df_sector_map = pd.DataFrame() # กำหนดค่าเริ่มต้นเป็น DataFrame ว่างไว้ก่อนกันเหนียว
     
-    # ถ้าโปรเจกต์ใช้ st.connection ให้ประกาศ conn ไว้ตรงนี้ หรือเช็คว่ามีอยู่จริงไหม
-    # conn = st.connection("gsheets", type=GSheetsConnection) # (เปิดใช้งานบรรทัดนี้หากระบบของคุณใช้ st.connection)
-
-    # 🌟 โหลดชีท Sector_Mapping จาก Google Sheets ไว้ล่วงหน้า
+    # 🌟 โหลดชีท Sector_Mapping จาก Google Sheets ไว้ล่วงหน้า (ใช้ตัวแปรชั่วคราวรับค่าก่อน)
+    temp_sector_data = []
     try:
         if 'conn' in globals() or 'conn' in locals():
-            df_sector_map = conn.read(worksheet="Sector_Mapping", ttl=600)
+            temp_df = conn.read(worksheet="Sector_Mapping", ttl=600)
+            if not temp_df.empty:
+                temp_sector_data = temp_df
         else:
-            # กรณีไม่ได้ใช้ conn แต่ใช้ gspread client ตัวอื่น สามารถดึงผ่าน client ปกติได้ครับ
             sheet_sector = client.open('MyStockData').worksheet('Sector_Mapping')
             data_sector = sheet_sector.get_all_records()
             if data_sector:
-                df_sector_map = pd.DataFrame(data_sector)
+                temp_sector_data = pd.DataFrame(data_sector)
     except Exception as e:
         print(f"Warning: ไม่สามารถโหลด Sector_Mapping ได้: {e}")
-        df_sector_map = pd.DataFrame()
-        
+    
+    # กำหนดค่าให้ df_sector_map อย่างเป็นทางการครั้งเดียวตรงนี้
+    if isinstance(temp_sector_data, pd.DataFrame):
+        df_sector_map = temp_sector_data
+    else:
+        df_sector_map = pd.DataFrame(temp_sector_data)
 
     # 2. โหมด GitHub (ทำงานจบในตัว)
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
