@@ -4282,7 +4282,12 @@ def main():
             
             # 2. กรองข้อมูลตามช่วงเวลา
             perf_df = closed_trades.copy()
-            perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
+            if 'Date_Close' in perf_df.columns:
+                perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
+            else:
+                # ถ้าไม่มีคอลัมน์ Date_Close ให้ลองเช็คว่ามีคอลัมน์วันที่ชื่ออื่นไหม เช่น 'Date' หรือข้ามไปก่อน
+                if 'Date' in perf_df.columns:
+                    perf_df['Date_Close'] = pd.to_datetime(perf_df['Date'])
             days_ago = period_options[selected_period]
             if days_ago != 9999:
                 cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
