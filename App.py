@@ -5165,7 +5165,31 @@ def main():
                                 st.error("❌ Google Sheets API เกินโควตาชั่วคราว (Rate Limit 429) กรุณารอสัก 30 วินาที แล้วลองกดบันทึกใหม่อีกครั้งครับ")
                             else:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
-            
+                                
+                # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit / ROI) ---
+                if 'df_pvd_history' in locals() and not df_pvd_history.empty:
+                    st.write("#### 📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุนแต่ละช่วงเวลา")
+                    
+                    # ค้นหาคอลัมน์ที่เก็บ % ผลตอบแทน และคอลัมน์ป้ายกำกับเวลา (เช่น Month, Year_BE)
+                    # รองรับชื่อคอลัมน์ที่เป็นไปได้ เช่น ROI_Percent, Benefit_Pct, %_Benefit ฯลฯ
+                    benefit_col = next((c for c in ['ROI_Percent', 'Benefit_Pct', '% Benefit', 'Return_Pct', 'Benefit'] if c in df_pvd_history.columns), None)
+                    
+                    if benefit_col:
+                        # สร้างคอลัมน์ป้ายกำกับสำหรับแกน X (เช่น "มกราคม 2569")
+                        if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
+                            df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
+                            chart_data = df_pvd_history.set_index('Period')[benefit_col]
+                        else:
+                            chart_data = df_pvd_history[benefit_col]
+                        
+                        # แปลงข้อมูลให้เป็นตัวเลขเพื่อความปลอดภัยในการวาดกราฟ
+                        chart_data = pd.to_numeric(chart_data, errors='coerce')
+                        
+                        # แสดงกราฟแท่ง
+                        st.bar_chart(chart_data)
+                    else:
+                        st.info("💡 ไม่พบคอลัมน์สำหรับ % ผลตอบแทน (เช่น 'ROI_Percent' หรือ 'Benefit_Pct') ใน Google Sheets กรุณาตรวจสอบชื่อคอลัมน์ให้ตรงกันเพื่อให้ระบบแสดงกราฟได้ครับ")
+                        
                 # --- ส่วนแสดงตารางสรุปผลตอบแทนและการเติบโต (Performance & Growth Summary) ---
                 st.markdown("---")
                 st.subheader("📈 ตารางสรุปการเติบโตและผลตอบแทนกองทุน PVD")
