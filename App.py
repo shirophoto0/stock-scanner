@@ -1451,6 +1451,9 @@ def main():
     import plotly.graph_objects as go
     from datetime import date
     from datetime import datetime
+    import pandas as pd
+    import numpy as np
+    import os
 
     # 1. ประกาศตัวแปรเริ่มต้น
     client = get_gsheet_client()
@@ -1505,14 +1508,11 @@ def main():
         if target_col:
             df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
 
-    # ตรวจสอบก่อนแสดงผล (นำข้อความ error สีแดงออก เพื่อไม่ให้แจ้งเตือนค้างหน้าจอ)
+    # ตรวจสอบก่อนแสดงผล
     if not df_all_stocks.empty:
         df_to_show = filtered_df if filtered_df is not None else df_all_stocks
-        # st.dataframe(df_to_show, use_container_width=True)
     else:
-        # ปล่อยว่างไว้ ให้แท็บหุ้นเป็นตัวแจ้งเตือนหรือแสดงปุ่มกดดึงข้อมูลแทน
         pass
-
     # ==========================================================
     # ปรับโครงสร้าง Tab ระดับบนสุดของแอป (แบ่งหมวดหมู่ชัดเจน)
     # ==========================================================
