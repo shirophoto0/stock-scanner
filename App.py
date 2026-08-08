@@ -3706,7 +3706,7 @@ def main():
                                 valid_cost_df = df_yield_analysis[(df_yield_analysis['ต้นทุนหุ้น'] > 0) & (df_yield_analysis['Yield_on_Cost'] <= 1000)]
                                 
                                 if not valid_cost_df.empty:
-                                    total_portfolio_cost = valid_cost_df['Total_Cost'].sum()
+                                    total_portfolio_cost = valid_cost_df['ต้นทุนหุ้น'].sum()
                                     total_portfolio_dividend = valid_cost_df['ยอดรับสุทธิ'].sum()
                                     avg_yield_on_cost = (total_portfolio_dividend / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
                                     
@@ -3741,7 +3741,7 @@ def main():
                                     st.plotly_chart(fig_yield_bar, use_container_width=True)
                                     
                                     st.markdown(f"##### 📋 ตารางสรุป Yield on Cost ({selected_period})")
-                                    df_table_display = df_yield_sorted[['Ticker', 'ยอดรับสุทธิ', 'Total_Cost', 'Yield_on_Cost']].copy()
+                                    df_table_display = df_yield_sorted[['Ticker', 'ยอดรับสุทธิ', 'ต้นทุนหุ้น', 'Yield_on_Cost']].copy()
                                     
                                     div_col_name = f"เงินปันผลรับรวม ({selected_period}) (บาท)"
                                     df_table_display.columns = ['ชื่อหุ้น (Ticker)', div_col_name, 'ต้นทุนรวมทั้งหมด (บาท)', 'Dividend Yield on Cost (%)']
