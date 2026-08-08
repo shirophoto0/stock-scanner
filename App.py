@@ -3607,7 +3607,19 @@ def main():
                     # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                     st.markdown("---")
                     st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
+
+                    # 🛠️ [เพิ่มส่วนนี้] เช็คและดึงข้อมูลจาก Google Sheets เสมอ หากใน session_state ยังไม่มีข้อมูล
+                    if 'dividend_data' not in st.session_state or not st.session_state.dividend_data:
+                        try:
+                            client = get_gsheet_client()
+                            # ดึงข้อมูลจาก worksheet ชื่อ 'Dividend' (ปรับชื่อให้ตรงกับชีตจริงของคุณ เช่น 'Dividend' หรือ 'Dividend_History')
+                            div_records = client.open('MyStockData').worksheet('Dividend').get_all_records()
+                            st.session_state.dividend_data = div_records
+                        except Exception as e:
+                            # ถ้าดึงไม่สำเร็จหรือยังไม่มีชีต ให้ปล่อยเป็น list เปล่า
+                            st.session_state.dividend_data = []
                     
+                    # หลังจากดึงข้อมูลแล้ว โค้ดส่วนเดิมของคุณจะทำงานต่อได้อย่างปกติครับ
                     if st.session_state.dividend_data:
                         df_div = pd.DataFrame(st.session_state.dividend_data)
                         
