@@ -3690,20 +3690,20 @@ def main():
                                     'ต้นทุนหุ้น': 'last'
                                 }).reset_index()
                                 
-                                # 1. สร้าง DataFrame จากข้อมูลปันผลก่อน (ถ้ายังไม่ได้สร้าง)
-                                df_yield_analysis = pd.DataFrame(st.session_state.dividend_data)
+                                # 1. รวมข้อมูลยอดรับสุทธิและต้นทุนหุ้นรายตัวหุ้นเข้าด้วยกัน
+                                df_yield_analysis = pd.merge(df_div_sum, df_latest, on='Ticker', how='inner')
                                 
-                                # 2. จากนั้นค่อยทำการแปลงข้อมูลตัวเลขด้วย pd.to_numeric ตามที่คุณต้องการ
+                                # 2. แปลงข้อมูลตัวเลขด้วย pd.to_numeric อย่างปลอดภัย
                                 df_yield_analysis['ยอดรับสุทธิ'] = pd.to_numeric(df_yield_analysis['ยอดรับสุทธิ'], errors='coerce').fillna(0)
-                                df_yield_analysis['Total_Cost'] = pd.to_numeric(df_yield_analysis['Total_Cost'], errors='coerce').fillna(0)
+                                df_yield_analysis['ต้นทุนหุ้น'] = pd.to_numeric(df_yield_analysis['ต้นทุนหุ้น'], errors='coerce').fillna(0)
                                 
-                                # 3. คำนวณ Yield_on_Cost ต่อ
+                                # 3. คำนวณ Yield_on_Cost โดยใช้คอลัมน์ 'ต้นทุนหุ้น'
                                 df_yield_analysis['Yield_on_Cost'] = df_yield_analysis.apply(
-                                    lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
+                                    lambda row: (row['ยอดรับสุทธิ'] / row['ต้นทุนหุ้น'] * 100) if row['ต้นทุนหุ้น'] > 0 else 0.0,
                                     axis=1
                                 )
                                 
-                                valid_cost_df = df_yield_analysis[(df_yield_analysis['Total_Cost'] > 0) & (df_yield_analysis['Yield_on_Cost'] <= 1000)]
+                                valid_cost_df = df_yield_analysis[(df_yield_analysis['ต้นทุนหุ้น'] > 0) & (df_yield_analysis['Yield_on_Cost'] <= 1000)]
                                 
                                 if not valid_cost_df.empty:
                                     total_portfolio_cost = valid_cost_df['Total_Cost'].sum()
