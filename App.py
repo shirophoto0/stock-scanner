@@ -1495,28 +1495,34 @@ def main():
             
             st.markdown("---")
             st.markdown("#### 📝 บันทึกข้อมูลการถือครองทองคำ")
-        
+
             # ฟอร์มรับข้อมูล
             with st.form("gold_investment_form"):
                 col_f1, col_f2, col_f3 = st.columns(3)
                 
                 with col_f1:
-                    gold_type = st.selectbox("ประเภททองคำ", ["ทองคำแท่ง", "ทองรูปพรรณ", "เทรดทอง (Coming Soon)"])
+                    gold_type = st.selectbox(
+                        "ประเภททองคำ", 
+                        ["ทองคำแท่ง", "ทองรูปพรรณ", "เทรดทอง (Coming Soon)"],
+                        key="form_gold_type_select"
+                    )
+                    
                 with col_f2:
-                    # ถ้าเป็นทองคำแท่ง ใส่หน่วยเป็นกรัม, ทองรูปพรรณใส่หน่วยเป็นบาท
+                    # แยกเงื่อนไขการรับค่าให้ชัดเจนตามประเภทที่เลือก
                     if gold_type == "ทองคำแท่ง":
-                        weight_input = st.number_input("น้ำหนัก (กรัม)", min_value=0.0, step=1.0, value=0.0)
+                        weight_input = st.number_input("น้ำหนัก (กรัม)", min_value=0.0, step=1.0, value=0.0, key="weight_gram")
                     elif gold_type == "ทองรูปพรรณ":
-                        weight_input = st.number_input("น้ำหนัก (บาททองคำ)", min_value=0.0, step=0.25, value=0.0)
+                        # บังคับชัดเจนว่าเป็นหน่วย "บาททองคำ" (เช่น 1 บาท, 2 บาท, 0.5 บาท)
+                        weight_input = st.number_input("น้ำหนัก (บาททองคำ)", min_value=0.0, step=0.25, value=1.0, key="weight_baht")
                     else:
-                        weight_input = st.number_input("มูลค่า/สัญญา (เทรดทอง)", min_value=0.0, step=1000.0, value=0.0, disabled=True)
+                        weight_input = st.number_input("มูลค่า/สัญญา (เทรดทอง)", min_value=0.0, step=1000.0, value=0.0, disabled=True, key="weight_trade")
+                        
                 with col_f3:
-                    note_input = st.text_input("หมายเหตุ / สาขา / รายละเอียด", placeholder="เช่น ซองฮั่วเซ่งเฮง")
+                    note_input = st.text_input("หมายเหตุ / สาขา / รายละเอียด", placeholder="เช่น ฮั่วเซ่งเฮง, เยาวราช", key="gold_note")
                     
                 submitted = st.form_submit_button("➕ เพิ่มรายการทองคำเข้าพอร์ต")
                 
                 if submitted:
-                    # เก็บข้อมูลลง session_state เพื่อจำลองตารางพอร์ตทองคำ
                     if 'gold_portfolio' not in st.session_state:
                         st.session_state['gold_portfolio'] = []
                     
@@ -1527,7 +1533,7 @@ def main():
                             "หน่วย": "กรัม" if gold_type == "ทองคำแท่ง" else "บาททองคำ",
                             "หมายเหตุ": note_input
                         })
-                        st.success("บันทึกข้อมูลทองคำสำเร็จ!")
+                        st.success(f"บันทึกข้อมูล {gold_type} น้ำหนัก {weight_input} {'กรัม' if gold_type == 'ทองคำแท่ง' else 'บาททองคำ'} สำเร็จ!")
                     elif gold_type == "เทรดทอง (Coming Soon)":
                         st.warning("ระบบเทรดทองยังไม่เปิดใช้งานในเวอร์ชันนี้ครับ")
                     else:
