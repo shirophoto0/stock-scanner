@@ -1379,35 +1379,47 @@ def main():
     import plotly.graph_objects as go
     from datetime import date
     from datetime import datetime
+    import pandas as pd
+    import os
 
-    # 1. ประกาศตัวแปรเริ่มต้น
-    client = get_gsheet_client()
+    # 0. ประกาศตัวแปรป้องกัน UnboundLocalError เบื้องต้นทั้งหมด
+    df_sector_map = pd.DataFrame()
     filtered_df = None
-    
+
+    # 1. เชื่อมต่อ Google Sheets (ปลอดภัยขึ้นด้วย try-except)
+    try:
+        client = get_gsheet_client()
+    except Exception:
+        client = None
+
     # 🌟 โหลดชีท Sector_Mapping จาก Google Sheets ไว้ล่วงหน้า
     try:
-        df_sector_map = conn.read(worksheet="Sector_Mapping", ttl=600)
-    except:
+        if 'conn' in globals() or 'conn' in locals():
+            df_sector_map = conn.read(worksheet="Sector_Mapping", ttl=600)
+    except Exception:
         df_sector_map = pd.DataFrame()
 
     # 2. โหมด GitHub (ทำงานจบในตัว)
     if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
         print("GitHub Mode: กำลังเริ่มสแกน...")
-        df_new = load_and_calculate_stock_data_optimized()
-        
-        # 🟢 เติม Sector อัตโนมัติใน GitHub Mode
-        if not df_new.empty and 'Sector' in df_new.columns and not df_sector_map.empty:
-            df_new['Sector'] = df_new['หุ้น'].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+        try:
+            df_new = load_and_calculate_stock_data_optimized()
             
-        save_to_gsheet(df_new)
-        print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
+            # 🟢 เติม Sector อัตโนมัติใน GitHub Mode
+            if not df_new.empty and 'Sector' in df_new.columns and not df_sector_map.empty:
+                df_new['Sector'] = df_new['หุ้น'].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+                
+            save_to_gsheet(df_new)
+            print("GitHub Mode: บันทึกข้อมูลสำเร็จ")
+        except Exception as e:
+            print(f"GitHub Mode Error: {e}")
         return # จบการทำงานทันที
 
-    # 3. จัดการสถานะข้อมูลหุ้นด้วย st.session_state (รองรับการย้ายปุ่มมาไว้ในแท็บหุ้น)
+    # 3. จัดการสถานะข้อมูลหุ้นด้วย st.session_state
     if 'df_all_stocks' not in st.session_state:
         try:
             st.session_state.df_all_stocks = load_from_gsheet()
-        except:
+        except Exception:
             st.session_state.df_all_stocks = pd.DataFrame()
 
     df_all_stocks = st.session_state.df_all_stocks
@@ -1416,7 +1428,10 @@ def main():
     if not df_all_stocks.empty and not df_sector_map.empty:
         target_col = 'หุ้น' if 'หุ้น' in df_all_stocks.columns else ('Ticker' if 'Ticker' in df_all_stocks.columns else None)
         if target_col:
-            df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+            try:
+                df_all_stocks['Sector'] = df_all_stocks[target_col].apply(lambda x: get_sector_from_mapping(x, df_sector_map))
+            except Exception:
+                pass
 
     # ตรวจสอบก่อนแสดงผล (นำข้อความ error สีแดงออก เพื่อไม่ให้แจ้งเตือนค้างหน้าจอ)
     if not df_all_stocks.empty:
@@ -1425,7 +1440,6 @@ def main():
     else:
         # ปล่อยว่างไว้ ให้แท็บหุ้นเป็นตัวแจ้งเตือนหรือแสดงปุ่มกดดึงข้อมูลแทน
         pass
-
     # ==========================================================
     # ปรับโครงสร้าง Tab ระดับบนสุดของแอป (แบ่งหมวดหมู่ชัดเจน)
     # ==========================================================
