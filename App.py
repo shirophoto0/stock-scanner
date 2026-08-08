@@ -4224,6 +4224,7 @@ def main():
                         # 2. ส่วนตารางแสดงผล
                         st.divider()
                         st.subheader("📊 ตารางแผนการเทรดของฉัน")
+                        import numpy as np
                         plan_df = load_data("TradingPlan")
                         
                         # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
