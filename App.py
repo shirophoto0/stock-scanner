@@ -43,7 +43,7 @@ def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, de
         except APIError as e:
             if "429" in str(e) or "Quota exceeded" in str(e):
                 if attempt < retries - 1:
-                    time.sleep(delay * (attempt + 1)) # รอสักครู่แล้วลองใหม่แบบ Exponential Backoff
+                    time.sleep(delay * (attempt + 1))
                     continue
                 else:
                     st.error("❌ Google Sheets API เกินโควตาชั่วคราว (Rate Limit 429) กรุณารอสักครู่แล้วลองรีเฟรชหน้าจอใหม่อีกครั้งครับ")
