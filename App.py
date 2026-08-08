@@ -1466,7 +1466,7 @@ def main():
             st.markdown("### 🟡 จัดการพอร์ตการลงทุนทองคำ")
             st.markdown("กรอกจำนวนน้ำหนักทองคำที่คุณถือครอง ระบบจะดึงราคาทองอ้างอิง ณ สิ้นวันก่อนหน้าจากสมาคมค้าทองคำมาคำนวณมูลค่าบาทให้อัตโนมัติ")
             
-            # ดึงราคาทองอ้างอิงปัจจุบัน/สิ้นวันก่อนหน้า (ใช้ API สาธารณะ หรือกำหนดค่าสำรองกรณีเชื่อมต่อไม่ได้)
+            # ดึงราคาทองอ้างอิงปัจจุบัน/สิ้นวันก่อนหน้า
             import requests
             
             def get_thaigold_prices():
@@ -1477,17 +1477,15 @@ def main():
                         data = response.json()
                         if data.get("status") == "success":
                             p = data["response"]["price"]
-                            # อ้างอิงราคาขายออกสมาคม
                             gold_bar_sell = float(p["gold_bar"]["sell"].replace(",", ""))
                             gold_jewelry_sell = float(p["gold"]["sell"].replace(",", ""))
                             return gold_bar_sell, gold_jewelry_sell
                 except Exception:
                     pass
-                # ค่าสำรอง (Fallback) หากต่อ API ไม่สำเร็จ
                 return 67500.0, 68000.0
-        
+            
             ref_gold_bar, ref_gold_jewelry = get_thaigold_prices()
-        
+            
             # แสดงราคาอ้างอิง
             col_p1, col_p2 = st.columns(2)
             col_p1.metric("📌 ราคาทองคำแท่ง (ขายออกอ้างอิง)", f"{ref_gold_bar:,.2f} ฿ / บาททอง")
@@ -1495,29 +1493,27 @@ def main():
             
             st.markdown("---")
             st.markdown("#### 📝 บันทึกข้อมูลการถือครองทองคำ")
-
-            # ฟอร์มรับข้อมูล
+        
+            # 1. st.selectbox อยู่นอกฟอร์มเพื่อให้หน้าจออัปเดตหน่วยทันที
+            gold_type = st.selectbox(
+                "ประเภททองคำ", 
+                ["ทองคำแท่ง", "ทองรูปพรรณ", "เทรดทอง (Coming Soon)"],
+                key="form_gold_type_select"
+            )
+            
+            # 2. ฟอร์มรับข้อมูล
             with st.form("gold_investment_form"):
-                col_f1, col_f2, col_f3 = st.columns(3)
+                col_f1, col_f2 = st.columns(2)
                 
                 with col_f1:
-                    gold_type = st.selectbox(
-                        "ประเภททองคำ", 
-                        ["ทองคำแท่ง", "ทองรูปพรรณ", "เทรดทอง (Coming Soon)"],
-                        key="form_gold_type_select"
-                    )
-                    
-                with col_f2:
-                    # แยกเงื่อนไขการรับค่าให้ชัดเจนตามประเภทที่เลือก
                     if gold_type == "ทองคำแท่ง":
                         weight_input = st.number_input("น้ำหนัก (กรัม)", min_value=0.0, step=1.0, value=0.0, key="weight_gram")
                     elif gold_type == "ทองรูปพรรณ":
-                        # บังคับชัดเจนว่าเป็นหน่วย "บาททองคำ" (เช่น 1 บาท, 2 บาท, 0.5 บาท)
                         weight_input = st.number_input("น้ำหนัก (บาททองคำ)", min_value=0.0, step=0.25, value=1.0, key="weight_baht")
                     else:
                         weight_input = st.number_input("มูลค่า/สัญญา (เทรดทอง)", min_value=0.0, step=1000.0, value=0.0, disabled=True, key="weight_trade")
                         
-                with col_f3:
+                with col_f2:
                     note_input = st.text_input("หมายเหตุ / สาขา / รายละเอียด", placeholder="เช่น ฮั่วเซ่งเฮง, เยาวราช", key="gold_note")
                     
                 submitted = st.form_submit_button("➕ เพิ่มรายการทองคำเข้าพอร์ต")
@@ -1534,26 +1530,26 @@ def main():
                             "หมายเหตุ": note_input
                         })
                         st.success(f"บันทึกข้อมูล {gold_type} น้ำหนัก {weight_input} {'กรัม' if gold_type == 'ทองคำแท่ง' else 'บาททองคำ'} สำเร็จ!")
+                        st.rerun()
                     elif gold_type == "เทรดทอง (Coming Soon)":
                         st.warning("ระบบเทรดทองยังไม่เปิดใช้งานในเวอร์ชันนี้ครับ")
                     else:
                         st.error("กรุณากรอกน้ำหนักให้มากกว่า 0")
-        
+            
             # แสดงผลตารางสรุปพอร์ตทองคำและการคำนวณมูลค่าบาท
             if 'gold_portfolio' in st.session_state and len(st.session_state['gold_portfolio']) > 0:
                 st.markdown("#### 📊 สรุปมูลค่าพอร์ตการลงทุนทองคำ")
                 
                 import pandas as pd
+                from datetime import datetime
+                
                 df_gold = pd.DataFrame(st.session_state['gold_portfolio'])
                 
-                # คำนวณมูลค่าเป็นเงินบาท
-                # ทองคำแท่ง: 1 บาททองคำ = 15.244 กรัม -> แปลงน้ำหนักกรัมเป็นบาททองคำก่อนคูณราคา
                 calculated_values = []
                 unit_prices = []
                 
                 for idx, row in df_gold.iterrows():
                     if row["ประเภท"] == "ทองคำแท่ง":
-                        # แปลงกรัมเป็นบาททองคำ
                         weight_in_baht = row["น้ำหนัก"] / 15.244
                         price_per_unit = ref_gold_bar
                         val = weight_in_baht * price_per_unit
@@ -1571,7 +1567,6 @@ def main():
                 df_gold["ราคาอ้างอิงต่อบาท (฿)"] = unit_prices
                 df_gold["มูลค่ารวม (บาท)"] = calculated_values
                 
-                # แสดงตาราง
                 st.dataframe(
                     df_gold.style.format({
                         "น้ำหนัก": "{:,.2f}",
@@ -1582,16 +1577,39 @@ def main():
                 )
                 
                 total_gold_value = sum(calculated_values)
-                
-                # 🌟 บันทึกค่าลง session_state เพื่อส่งไปใช้ที่หน้า Overview ให้ตัวเลขตรงกัน 100%
                 st.session_state['total_gold_portfolio_value'] = total_gold_value
                 
                 st.metric("💰 มูลค่ารวมพอร์ตทองคำทั้งหมด", f"{total_gold_value:,.2f} ฿")
                 
-                if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
-                    st.session_state['gold_portfolio'] = []
-                    st.session_state['total_gold_portfolio_value'] = 0.0
-                    st.rerun()
+                # ปุ่มสำหรับบันทึกข้อมูลลง Google Sheets
+                col_b1, col_b2 = st.columns(2)
+                with col_b1:
+                    if st.button("💾 บันทึกข้อมูลลง Google Sheets"):
+                        try:
+                            sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                            if sheet_gold is not None:
+                                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                rows_to_append = []
+                                for item in st.session_state['gold_portfolio']:
+                                    rows_to_append.append([
+                                        item["ประเภท"],
+                                        item["น้ำหนัก"],
+                                        item["หน่วย"],
+                                        item["หมายเหตุ"],
+                                        current_date
+                                    ])
+                                sheet_gold.append_rows(rows_to_append)
+                                st.success("✅ บันทึกข้อมูลพอร์ตทองคำลง Google Sheets สำเร็จเรียบร้อยแล้วครับ!")
+                            else:
+                                st.error("❌ ไม่พบ Worksheet 'Gold_Portfolio' ในไฟล์ Google Sheets กรุณาสร้างชีตก่อนบันทึก")
+                        except Exception as e:
+                            st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
+                            
+                with col_b2:
+                    if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
+                        st.session_state['gold_portfolio'] = []
+                        st.session_state['total_gold_portfolio_value'] = 0.0
+                        st.rerun()
             else:
                 st.info("ยังไม่มีข้อมูลในพอร์ตทองคำ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")
                 
