@@ -4942,19 +4942,17 @@ def main():
             # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมประกันสังคม sso_value ด้วย)
             net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + sso_value + pension_insurance_value + bank_balance
             
-            # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (กึ่งกลางหน้าจอ, สีเขียว, ใหญ่พิเศษ) ---
-            c_left, c_center, c_right = st.columns([1, 2, 1])
-            with c_center:
-                st.markdown(
-                    f"""
-                    <div style="text-align: center; padding: 5px;">
-                        <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
-                        <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-            
+            # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (ชิดซ้าย, สีเขียว, ใหญ่พิเศษ) ---
+            st.markdown(
+                f"""
+                <div style="text-align: left; padding: 5px;">
+                    <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
+                    <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+                        
             st.divider()
 
             # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็น 4 คอลัมน์ x 2 แถว) ---
