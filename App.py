@@ -60,7 +60,6 @@ def check_and_auto_stamp_portfolio(client, current_total_value):
 # --- วิธีเรียกใช้งาน (นำไปวางในส่วนโหลดข้อมูลกราฟ) ---
 # client = get_gsheet_client()
 # check_and_auto_stamp_portfolio(client, total_stock_and_tfex)
-
 def extract_pvd_from_image(image_file, year_be):
     try:
         # ดึง API Key จาก st.secrets
@@ -78,26 +77,39 @@ def extract_pvd_from_image(image_file, year_be):
         
         prompt = f"""
         คุณเป็นผู้ช่วยทางการเงินอัจฉริยะ หน้าที่ของคุณคืออ่านรูปภาพรายงานยอดรวมกองทุนสำรองเลี้ยงชีพของปี พ.ศ. {year_be} (ค.ศ. {year_ce}) นี้ 
-        แล้วสกัดข้อมูลตัวเลขจริงจากในรูปภาพออกมา 
+        โดยในรูปจะมีตาราง "ยอดรวมทุกนโยบายการลงทุน (Total Portfolio Balance)" ซึ่งแยกรายการย่อยออกมาดังนี้:
+        1. ยอดยกมา (Balance as of)
+        2. เงินเข้าระหว่างปี (Transferred in during this year)
+        และมีตารางสรุปด้านบน/ด้านขวา รวมถึงข้อมูลเงินสะสมที่รับเข้ากองทุนระหว่างปี
         
-        กฎสำคัญในการแสดงผลตัวเลข:
-        - ทุกค่าที่เป็น "จำนวนเงิน" หรือ "จำนวนหน่วย" ต้องใส่เครื่องหมายจุลภาค (,) คั่นหลักพันให้ถูกต้อง (เช่น 1,204,406.92)
-        - โปรดจัดรูปแบบผลลัพธ์เป็น CSV ที่มีหัวตารางดังนี้:
-        Year_CE,Year_BE,Member_Saving,Member_Benefit,Member_Total,Employer_Matching,Employer_Benefit,Employer_Total,Grand_Total,Total_Units
+        โปรดสกัดข้อมูลตัวเลขทั้งหมดตามหัวตาราง CSV ด้านล่างนี้ให้ออกมาเป็นข้อมูลของปี {year_ce}:
         
-        ข้อมูลที่ต้องดึง:
+        หัวตาราง CSV:
+        Year_CE,Year_BE,Brought_Forward_Member_Saving,Brought_Forward_Member_Benefit,Brought_Forward_Employer_Matching,Brought_Forward_Employer_Benefit,Transferred_Member_Saving,Transferred_Member_Benefit,Transferred_Employer_Matching,Transferred_Employer_Benefit,Member_Saving,Member_Benefit,Member_Total,Employer_Matching,Employer_Benefit,Employer_Total,Grand_Total,Total_Units
+        
+        คำอธิบายฟิลด์ข้อมูล:
         - Year_CE: {year_ce}
         - Year_BE: {year_be}
-        - Member_Saving: ยอดเงินสะสม
-        - Member_Benefit: ผลประโยชน์เงินสะสม
-        - Member_Total: รวมส่วนของสมาชิก
-        - Employer_Matching: เงินสมทบ
-        - Employer_Benefit: ผลประโยชน์เงินสมทบ
-        - Employer_Total: รวมส่วนของนายจ้าง
+        - Brought_Forward_Member_Saving: ยอดสะสมยกมา (แถว "ยอดยกมา" ช่องเงินสะสมส่วนของสมาชิก)
+        - Brought_Forward_Member_Benefit: ผลประโยชน์ยกมา (แถว "ยอดยกมา" ช่องผลประโยชน์ส่วนของสมาชิก)
+        - Brought_Forward_Employer_Matching: เงินสมทบยกมา (แถว "ยอดยกมา" ช่องเงินสมทบส่วนของนายจ้าง)
+        - Brought_Forward_Employer_Benefit: ผลประโยชน์เงินสมทบยกมา (แถว "ยอดยกมา" ช่องผลประโยชน์ส่วนของนายจ้าง)
+        - Transferred_Member_Saving: เงินสะสมเข้าระหว่างปี (แถว "เงินเข้าระหว่างปี" ช่องเงินสะสมส่วนของสมาชิก)
+        - Transferred_Member_Benefit: ผลประโยชน์เงินสะสมเข้าระหว่างปี (แถว "เงินเข้าระหว่างปี" ช่องผลประโยชน์ส่วนของสมาชิก)
+        - Transferred_Employer_Matching: เงินสมทบเข้าระหว่างปี (แถว "เงินเข้าระหว่างปี" ช่องเงินสมทบส่วนของนายจ้าง)
+        - Transferred_Employer_Benefit: ผลประโยชน์เงินสมทบเข้าระหว่างปี (แถว "เงินเข้าระหว่างปี" ช่องผลประโยชน์ส่วนของนายจ้าง)
+        - Member_Saving: ยอดเงินสะสมรวม (รวม Total)
+        - Member_Benefit: ผลประโยชน์เงินสะสมรวม (รวม Total)
+        - Member_Total: รวมส่วนของสมาชิก (Total Amount)
+        - Employer_Matching: เงินสมทบรวม (รวม Total)
+        - Employer_Benefit: ผลประโยชน์เงินสมทบรวม (รวม Total)
+        - Employer_Total: รวมส่วนของนายจ้าง (Total Amount)
         - Grand_Total: ยอดรวมทั้งสิ้น
         - Total_Units: จำนวนหน่วยรวม
         
-        โปรดส่งกลับมาเฉพาะข้อมูล CSV ที่สะอาด (หัวตาราง 1 บรรทัด และข้อมูลตัวเลข 1 บรรทัด) ไม่มีคำอธิบายเพิ่มเติม ไม่ต้องใส่เครื่องหมาย ```csv ครอบ
+        กฎสำคัญในการแสดงผลตัวเลข:
+        - ทุกค่าที่เป็น "จำนวนเงิน" หรือ "จำนวนหน่วย" ต้องใส่เครื่องหมายจุลภาค (,) คั่นหลักพันให้ถูกต้อง (เช่น 1,204,406.92) ถ้าไม่มีให้ใส่ 0.00
+        - โปรดส่งกลับมาเฉพาะข้อมูล CSV ที่สะอาด (หัวตาราง 1 บรรทัด และข้อมูลตัวเลข 1 บรรทัด) ไม่มีคำอธิบายเพิ่มเติม ไม่ต้องใส่เครื่องหมาย ```csv ครอบ
         """
         
         img = Image.open(image_file)
@@ -111,7 +123,7 @@ def extract_pvd_from_image(image_file, year_be):
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลรูปภาพ: {e}")
         return None
-
+        
 def get_latest_pvd_value():
     try:
         client = get_gsheet_client()
@@ -5067,25 +5079,71 @@ def main():
                     if data:
                         df_pvd_all = pd.DataFrame(data)
                         
-                        cols_to_format = ['Member_Saving', 'Member_Benefit', 'Member_Total', 
-                                         'Employer_Matching', 'Employer_Benefit', 'Employer_Total', 'Grand_Total']
+                        # 1. กำหนดคอลัมน์ที่เป็นตัวเลขจำนวนเงินทั้งหมดที่ต้องใส่คอมม่า
+                        money_cols = [
+                            'Brought_Forward_Member_Saving', 'Brought_Forward_Member_Benefit',
+                            'Brought_Forward_Employer_Matching', 'Brought_Forward_Employer_Benefit',
+                            'Transferred_Member_Saving', 'Transferred_Member_Benefit',
+                            'Transferred_Employer_Matching', 'Transferred_Employer_Benefit',
+                            'Member_Saving', 'Member_Benefit', 'Member_Total', 
+                            'Employer_Matching', 'Employer_Benefit', 'Employer_Total', 'Grand_Total'
+                        ]
                         
-                        for col in cols_to_format:
-                            if col in df_pvd_all.columns:
-                                df_pvd_all[col] = df_pvd_all[col].apply(
-                                    lambda x: "{:,.0f}".format(float(str(x).replace(',', '')))
-                                )
+                        # แปลงข้อมูลเป็นตัวเลขเพื่อใช้คำนวณ Metrics ก่อนนำไปแปลงเป็น String เพื่อแสดงผล
+                        df_calc = df_pvd_all.copy()
+                        for col in money_cols:
+                            if col in df_calc.columns:
+                                df_calc[col] = pd.to_numeric(df_calc[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
                         
+                        # จัดเรียงข้อมูลตามปี (และเดือนถ้ามี)
                         if 'Year_CE' in df_pvd_all.columns:
-                            df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
+                            # ถ้ามีคอลัมน์ Month ให้ map เดือนเป็นตัวเลขเพื่อเรียงลำดับให้ถูกต้อง
+                            thai_months = {
+                                'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4,
+                                'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'สิงหาคม': 8,
+                                'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
+                            }
+                            if 'Month' in df_pvd_all.columns:
+                                df_pvd_all['Month_Num'] = df_pvd_all['Month'].map(thai_months).fillna(12)
+                                df_pvd_all = df_pvd_all.sort_values(by=['Year_CE', 'Month_Num'], ascending=[True, True])
+                                df_pvd_all = df_pvd_all.drop(columns=['Month_Num'])
+                                df_calc['Month_Num'] = df_calc['Month'].map(thai_months).fillna(12)
+                                df_calc = df_calc.sort_values(by=['Year_CE', 'Month_Num'], ascending=[True, True])
+                                df_calc = df_calc.drop(columns=['Month_Num'])
+                            else:
+                                df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
+                                df_calc = df_calc.sort_values(by='Year_CE', ascending=True)
+
+                        # ดึงข้อมูลแถวลาสุดมาทำ Summary Metrics ด้านบน
+                        latest_row_calc = df_calc.iloc[-1]
+                        latest_row_display = df_pvd_all.iloc[-1]
                         
-                        latest_row = df_pvd_all.iloc[-1]
+                        # คำนวณ Metric สรุป
+                        total_principal = latest_row_calc.get('Member_Saving', 0) + latest_row_calc.get('Employer_Matching', 0)
+                        total_benefit = latest_row_calc.get('Member_Benefit', 0) + latest_row_calc.get('Employer_Benefit', 0)
+                        grand_total = latest_row_calc.get('Grand_Total', 0)
                         
-                        cols_to_drop = ['Year_BE', 'Total_Units']
+                        benefit_pct = (total_benefit / total_principal * 100) if total_principal > 0 else 0
+
+                        # แสดงผล Metrics สรุปภาพรวมล่าสุด
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("💰 ยอดรวมพอร์ต PVD ล่าสุด", f"{grand_total:,.2f} บาท")
+                        m2.metric("🌱 ผลประโยชน์รวมทั้งหมด", f"{total_benefit:,.2f} บาท", f"{benefit_pct:.2f}% ของเงินต้น")
+                        m3.metric("📌 สัดส่วน (สมาชิก / นายจ้าง)", f"{latest_row_calc.get('Member_Total', 0):,.0f} / {latest_row_calc.get('Employer_Total', 0):,.0f}")
+
+                        st.write("---")
+
+                        # ฟอร์แมตตัวเลขในตารางให้สวยงาม (ใส่คอมม่า ทศนิยม 2 ตำแหน่ง หรือ 0 ตำแหน่งตามต้องการ)
+                        for col in money_cols:
+                            if col in df_pvd_all.columns:
+                                df_pvd_all[col] = df_calc[col].apply(lambda x: "{:,.2f}".format(x))
+
+                        # ซ่อนคอลัมน์ที่ไม่จำเป็นออกจากการแสดงผลหน้าตารางหลัก (เช่น Year_BE)
+                        cols_to_drop = ['Year_BE']
                         df_display = df_pvd_all.drop(columns=[col for col in cols_to_drop if col in df_pvd_all.columns])
                         
                         st.dataframe(df_display, use_container_width=True, hide_index=True)
-                        st.info(f"📌 **ยอดรวมสะสมล่าสุด**: **{latest_row.get('Grand_Total', '0')}** บาท")
+                        
                     else:
                         st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund")
                         
