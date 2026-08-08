@@ -5158,7 +5158,14 @@ def main():
                                 st.success(f"✅ บันทึกข้อมูลใหม่ของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
                             
                             del st.session_state['temp_pvd_df']
-                            st.rerun()
+                            
+                            # 👇 --- แทรกตรงนี้ครับ เพื่อรอให้ Google Sheets บันทึกข้อมูลเสร็จและเคลียร์แคชก่อนรีรัน ---
+                            import time
+                            time.sleep(1.5)
+                            st.cache_data.clear()
+                            # --------------------------------------------------------------------------------
+                            
+                            st.rerun(experimental=True) if hasattr(st, 'rerun') else st.experimental_rerun()
                             
                         except Exception as e:
                             if "429" in str(e) or "Quota exceeded" in str(e):
