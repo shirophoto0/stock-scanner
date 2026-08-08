@@ -355,7 +355,65 @@ def save_data_to_sheet(new_df, sheet_name):
         return False
 
 DATA_FILE = "dividend_database.csv"
+def save_dividend_to_gsheet_smart(df_new):
+    """บันทึกข้อมูลปันผลลง Google Sheets (แท็บ Dividend) แบบอัจฉริยะ ป้องกันข้อมูลซ้ำ"""
+    try:
+        client = get_gsheet_client()
+        sheet_name = 'Dividend'
+        
+        # 1. ลองเปิดชีท Dividend ถ้ายังไม่มีให้สร้างใหม่
+        try:
+            sheet = client.open('MyStockData').worksheet(sheet_name)
+        except:
+            spreadsheet = client.open('MyStockData')
+            sheet = spreadsheet.add_worksheet(title=sheet_name, rows="1000", cols="20")
+            # ใส่ Header เริ่มต้น
+            headers = ["วันที่ได้รับ", "Ticker", "จำนวนหุ้น", "ปันผลต่อหุ้น", "ยอดรวมก่อนภาษี", "ภาษีหัก ณ ที่จ่าย", "ยอดรับสุทธิ", "ต้นทุนหุ้น", "หมายเหตุ"]
+            sheet.append_row(headers)
 
+        # 2. ดึงข้อมูลที่มีอยู่เดิมใน Google Sheets ออกมาเช็ก
+        existing_data = sheet.get_all_records()
+        df_existing = pd.DataFrame(existing_data)
+        
+        if not df_existing.empty:
+            # รวมข้อมูลเก่าและข้อมูลใหม่เข้าด้วยกัน
+            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+            
+            # 3. กำหนดคอลัมน์ที่เป็นเอกลักษณ์เพื่อใช้กรองข้อมูลซ้ำ (เช่น วันที่ได้รับ, Ticker, ยอดรับสุทธิ)
+            subset_cols = [c for c in ["วันที่ได้รับ", "Ticker", "ยอดรับสุทธิ"] if c in df_combined.columns]
+            
+            if subset_cols:
+                # ลบรายการที่ซ้ำกันออก (Keep='last' หรือ 'first' ตามต้องการ)
+                df_cleaned = df_combined.drop_duplicates(subset=subset_cols, keep='first')
+            else:
+                df_cleaned = df_combined.drop_duplicates()
+        else:
+            df_cleaned = df_new
+            
+        # 4. เคลียร์ข้อมูลเก่าในชีทแล้วเขียนข้อมูลที่คัดกรองแล้วทับลงไปใหม่
+        sheet.clear()
+        data_to_write = [df_cleaned.columns.tolist()] + df_cleaned.astype(str).values.tolist()
+        sheet.update(data_to_write)
+        
+        # 5. อัปเดตลง session_state ทันทีเพื่อให้หน้าเว็บแสดงผลล่าสุด
+        st.session_state.dividend_data = df_cleaned.to_dict('records')
+        return True
+        
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึกปันผลลง Google Sheets: {e}")
+        return False
+
+def load_dividend_from_gsheet():
+    """โหลดข้อมูลปันผลจาก Google Sheets ตอนเปิดแอป"""
+    if 'dividend_data' not in st.session_state or not st.session_state.dividend_data:
+        try:
+            client = get_gsheet_client()
+            sheet = client.open('MyStockData').worksheet('Dividend')
+            records = sheet.get_all_records()
+            st.session_state.dividend_data = records if records else []
+        except:
+            st.session_state.dividend_data = []
+            
 def save_dividend_data_global():
     try:
         if "dividend_data" in st.session_state and st.session_state.dividend_data:
@@ -3387,25 +3445,20 @@ def main():
                             
                 #########################
                 with tab_dividend:
-                    DATA_FILE = "dividend_database.csv"
-                    
-                    # โหลดข้อมูลจากไฟล์ CSV เข้า session_state ทุกครั้งที่เปิดหรือรีเฟรชแอป
+                    # โหลดข้อมูลปันผลจาก Google Sheets เข้า session_state ทุกครั้งที่เปิดหรือรีเฟรชแป
                     if "dividend_data" not in st.session_state:
-                        if os.path.exists(DATA_FILE):
-                            try:
-                                df_saved = pd.read_csv(DATA_FILE)
-                                if not df_saved.empty:
-                                    st.session_state.dividend_data = df_saved.to_dict('records')
-                                else:
-                                    st.session_state.dividend_data = []
-                            except Exception:
-                                st.session_state.dividend_data = []
-                        else:
+                        try:
+                            client = get_gsheet_client()
+                            sheet = client.open('MyStockData').worksheet('Dividend')
+                            records = sheet.get_all_records()
+                            st.session_state.dividend_data = records if records else []
+                        except Exception:
+                            # ถ้ายังไม่มีแท็บ Dividend หรือดึงข้อมูลไม่ได้ ให้สร้างเป็น List ว่างไว้ก่อน
                             st.session_state.dividend_data = []
                             
                     st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
                     
-                    # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV ---
+                    # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV/Excel ---
                     with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD หรือไฟล์ Excel/CSV"):
                         uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
                         if uploaded_div_file:
@@ -3469,6 +3522,7 @@ def main():
                                             df_upload['ต้นทุนหุ้น'] = 0.0
                                         processed_rows = df_upload.to_dict('records')
                                     
+                                    # แปลงเป็น DataFrame เพื่อเตรียมผสานข้อมูล
                                     existing_df = pd.DataFrame(st.session_state.dividend_data)
                                     new_df = pd.DataFrame(processed_rows)
                                     
@@ -3482,17 +3536,30 @@ def main():
                                         combined_df = new_df.drop_duplicates(subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], keep='first')
                                         added_count = len(combined_df)
                                     
+                                    # อัปเดตลง session_state
                                     st.session_state.dividend_data = combined_df.to_dict('records')
-                                    save_dividend_data()
+                                    
+                                    # บันทึกขึ้น Google Sheets (แท็บ Dividend)
+                                    client = get_gsheet_client()
+                                    sheet_name = 'Dividend'
+                                    try:
+                                        sheet = client.open('MyStockData').worksheet(sheet_name)
+                                    except:
+                                        spreadsheet = client.open('MyStockData')
+                                        sheet = spreadsheet.add_worksheet(title=sheet_name, rows="1000", cols="20")
+                                    
+                                    sheet.clear()
+                                    data_to_write = [combined_df.columns.tolist()] + combined_df.astype(str).values.tolist()
+                                    sheet.update(data_to_write)
                                     
                                     if added_count > 0:
-                                        st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
+                                        st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ) และบันทึกลง Google Sheets แล้ว")
                                     else:
                                         st.info("ℹ️ ข้อมูลในไฟล์นี้มีอยู่แล้วในระบบทั้งหมด จึงไม่มีการเพิ่มรายการซ้ำ")
                                     st.rerun()
                                         
                                 except Exception as e:
-                                    st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
+                                    st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์หรือบันทึกข้อมูล: {e}")
                                     
                     # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
                     with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=True):
@@ -3531,13 +3598,35 @@ def main():
                                         "ต้นทุนหุ้น": total_cost,
                                         "หมายเหตุ": notes
                                     }
+                                    
+                                    # เพิ่มข้อมูลใหม่เข้าไปใน session_state
                                     st.session_state.dividend_data.append(new_entry)
-                                    save_dividend_data()
-                                    st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} เรียบร้อยแล้วครับ!")
-                                    st.rerun()
+                                    
+                                    # แปลงเป็น DataFrame เพื่อบันทึกทับลง Google Sheets แบบป้องกันข้อมูลซ้ำ
+                                    df_all = pd.DataFrame(st.session_state.dividend_data)
+                                    df_all = df_all.drop_duplicates(subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], keep='first')
+                                    st.session_state.dividend_data = df_all.to_dict('records')
+                                    
+                                    try:
+                                        client = get_gsheet_client()
+                                        sheet_name = 'Dividend'
+                                        try:
+                                            sheet = client.open('MyStockData').worksheet(sheet_name)
+                                        except:
+                                            spreadsheet = client.open('MyStockData')
+                                            sheet = spreadsheet.add_worksheet(title=sheet_name, rows="1000", cols="20")
+                                        
+                                        sheet.clear()
+                                        data_to_write = [df_all.columns.tolist()] + df_all.astype(str).values.tolist()
+                                        sheet.update(data_to_write)
+                                        
+                                        st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} ลง Google Sheets เรียบร้อยแล้วครับ!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ ไม่สามารถบันทึกลง Google Sheets ได้: {e}")
                                 else:
                                     st.warning("⚠️ กรุณากรอกชื่อหุ้น (Ticker)")
-                                    
+                                                    
                     # --- ส่วนที่ 3: สรุปภาพรวมและประวัติเงินปันผลรับ ---
                     st.markdown("---")
                     st.markdown("##### 📊 สรุปภาพรวมและประวัติเงินปันผลรับ")
