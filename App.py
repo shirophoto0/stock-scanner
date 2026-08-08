@@ -3568,9 +3568,33 @@ def main():
                                         processed_rows = df_upload.to_dict('records')
                                     
                                     # แปลงเป็น DataFrame เพื่อเตรียมผสานข้อมูล
-                                    existing_df = pd.DataFrame(st.session_state.dividend_data)
+                                    existing_df = pd.DataFrame(st.session_state.dividend_data) if 'dividend_data' in st.session_state and st.session_state.dividend_data else pd.DataFrame()
                                     new_df = pd.DataFrame(processed_rows)
                                     
+                                    # 🟢 ทำความสะอาดข้อมูลใน new_df ป้องกัน JSON Error (NaN, inf) 100%
+                                    import numpy as np
+                                    new_df = new_df.replace({np.nan: "", float('inf'): "", float('-inf'): ""})
+                                    new_df = new_df.fillna("")
+                                    
+                                    # รวมข้อมูลเดิมกับข้อมูลใหม่
+                                    if not existing_df.empty:
+                                        combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+                                    else:
+                                        combined_df = new_df
+                                        
+                                    # ทำความสะอาดซ้ำรอบสุดท้ายก่อนบันทึก
+                                    combined_df = combined_df.replace({np.nan: "", float('inf'): "", float('-inf'): ""})
+                                    
+                                    # เรียกใช้ฟังก์ชันบันทึกข้อมูล
+                                    if save_dividend_data(combined_df):
+                                        st.success("🎉 นำเข้าและบันทึกข้อมูลประวัติเงินปันผลสำเร็จ!")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ บันทึกข้อมูลไม่สำเร็จ กรุณาตรวจสอบ Log")
+                                        
+                                except Exception as e:
+                                    st.error(f"เกิดข้อผิดพลาดในการอ่านไฟล์หรือบันทึกข้อมูล: {e}")
+                                                        
                                     if not existing_df.empty:
                                         combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
                                             subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], 
