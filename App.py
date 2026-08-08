@@ -2182,7 +2182,7 @@ def main():
                         if not df_filtered.empty:
                             # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
                             # คำนวณ ROI% เองโดยตรงจาก df_filtered
-                            df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
+                            df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, pd.NA)) * 100
                             
                             total_trades = len(df_filtered)
                             win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
