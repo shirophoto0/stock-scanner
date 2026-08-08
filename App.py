@@ -30,6 +30,32 @@ from datetime import datetime, timedelta
 
 # Def wealth #
 # 1. ฟังก์ชันเรียก Gemini AI มาแปลงรูปภาพเป็นข้อมูลโครงสร้าง
+
+import time
+from gspread.exceptions import APIError
+
+def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, delay=2):
+    """ฟังก์ชันเปิด Google Sheet พร้อมระบบป้องกันและลองใหม่เมื่อติดปัญหา Quota Exceeded (429)"""
+    for attempt in range(retries):
+        try:
+            sheet = client.open(spreadsheet_name).worksheet(worksheet_name)
+            return sheet
+        except APIError as e:
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                if attempt < retries - 1:
+                    time.sleep(delay * (attempt + 1)) # รอสักครู่แล้วลองใหม่แบบ Exponential Backoff
+                    continue
+                else:
+                    st.error("❌ Google Sheets API เกินโควตาชั่วคราว (Rate Limit 429) กรุณารอสักครู่แล้วลองรีเฟรชหน้าจอใหม่อีกครั้งครับ")
+                    return None
+            else:
+                st.error(f"❌ เกิดข้อผิดพลาดเกี่ยวกับ Google Sheets API: {e}")
+                return None
+        except Exception as e:
+            st.error(f"❌ ไม่สามารถเปิด Google Sheets ได้: {e}")
+            return None
+    return None
+    
 def check_and_auto_stamp_portfolio(client, current_total_value):
     try:
         # เปลี่ยนชื่อชีทเป็น Stock_TFEX_History เพื่อไม่ให้ชนกับชื่อเดิม
@@ -4792,7 +4818,10 @@ def main():
             pension_insurance_value = 1337703.0
             
             # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
-            sheet_bank = client.open('MyStockData').worksheet('Bank_Account')
+            sheet_bank = get_worksheet_safely(client, 'MyStockData', 'Bank_Account')
+            if sheet_bank is not None:
+                data_bank = sheet_bank.get_all_records()
+                # ดำเนินการต่อด้วยข้อมูล data_bank...
             bank_data = sheet_bank.get_all_records()
             bank_balance = float(str(bank_data[-1]['Balance']).replace(',', '')) if bank_data else 0.0
             
