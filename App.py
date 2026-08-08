@@ -442,40 +442,44 @@ if "dividend_data" not in st.session_state:
     else:
         st.session_state.dividend_data = []
 
+
 def save_dividend_data(df_div):
-    """ฟังก์ชันรองรับการบันทึกข้อมูลปันผลจากการอัปโหลด Excel พร้อมจัดการค่า NaN"""
+    """ฟังก์ชันรองรับการบันทึกข้อมูลปันผลจากการอัปโหลด Excel (ทำความสะอาดค่า NaN ป้องกัน JSON Error 100%)"""
     try:
-        # แทนที่ค่า NaN, NaT, หรือ Inf ทั้งหมดใน DataFrame ให้เป็นค่าว่างหรือ None ที่รองรับ JSON ได้
-        df_div = df_div.replace({np.nan: None})
+        # 1. ทำความสะอาด DataFrame: แปลงค่า NaN, inf, NaT ให้เป็นค่าว่างหรือ 0 ทั้งหมด
+        df_div = df_div.replace({np.nan: "", float('inf'): "", float('-inf'): ""})
+        df_div = df_div.fillna("") # เคลียร์ค่าว่างซ้ำอีกรอบ
         
-        # 1. บันทึกลง session_state 
+        # 2. บันทึกลง session_state (แปลงข้อมูลให้ปลอดภัยจาก JSON Error)
         st.session_state.dividend_data = df_div.to_dict('records')
         
-        # 2. บันทึกลง CSV ตามระบบเดิม
+        # 3. บันทึกลง CSV ตามระบบเดิม
         df_div.to_csv(DATA_FILE, index=False, encoding='utf-8-sig')
         
-        # 3. บันทึกลง Google Sheets ชีท 'Dividend'
+        # 4. บันทึกลง Google Sheets ชีท 'Dividend'
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
             
             sheet.clear()
-            time.sleep(1) 
+            time.sleep(1) # หน่วงเวลาป้องกัน Rate Limit 429
             
-            # แปลงค่า None กลับเป็น string ว่าง หรือปล่อยไว้ก่อนส่งเข้า Sheets
-            df_cleaned = df_div.fillna("")
-            data_to_write = [df_cleaned.columns.tolist()] + df_cleaned.astype(str).values.tolist()
+            # แปลงทุกค่าเป็น String เพื่อความปลอดภัยในการส่งขึ้น Google Sheets
+            df_cleaned = df_div.astype(str)
+            df_cleaned = df_cleaned.replace("nan", "") # ป้องกันคำว่า "nan" หลุดขึ้นไปแสดงผล
+            
+            data_to_write = [df_cleaned.columns.tolist()] + df_cleaned.values.tolist()
             sheet.update(data_to_write)
             
-            st.success("✅ บันทึกข้อมูลลง Google Sheets ('Dividend') สำเร็จแล้วครับ!")
+            st.success("✅ บันทึกข้อมูลลง Google Sheets ('Dividend') และระบบสำเร็จแล้วครับ!")
         except Exception as gsheet_err:
             print(f"Google Sheets Error: {gsheet_err}")
-            st.warning(f"⚠️ ไม่สามารถบันทึกลง Google Sheets ได้: {gsheet_err}")
+            st.warning(f"⚠️ บันทึกลงระบบเครื่องแล้ว แต่ไม่สามารถอัปเดต Google Sheets ได้: {gsheet_err}")
             
         return True
     except Exception as e:
         print(f"Error saving dividend data: {e}")
-        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล: {e}")
+        st.error(f"❌ เกิดข้อผิดพลาดในการอ่านหรือบันทึกข้อมูล: {e}")
         return False
         
 def calculate_atr(df, period=14):
