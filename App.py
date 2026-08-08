@@ -5028,49 +5028,15 @@ def main():
                     st.write("📋 **ข้อมูลที่พร้อมบันทึก (ระบุเดือนแล้ว):**")
                     st.dataframe(st.session_state['temp_pvd_df'], use_container_width=True)
                     
-                    if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets", key="confirm_pvd_save"):
-                        try:
-                            client = get_gsheet_client()
-                            sheet = client.open('MyStockData').worksheet('Provident_Fund')
-                            
-                            existing_data = sheet.get_all_records()
-                            df_existing = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
-                            
-                            df_to_save = st.session_state['temp_pvd_df'].fillna(0)
-                            
-                            is_duplicate = False
-                            if not df_existing.empty and 'Month' in df_existing.columns and 'Year_BE' in df_existing.columns:
-                                match_idx = df_existing[
-                                    (df_existing['Year_BE'].astype(str) == str(input_year_be)) & 
-                                    (df_existing['Month'] == selected_month)
-                                ].index
-                                
-                                if len(match_idx) > 0:
-                                    is_duplicate = True
-                                    row_number_to_update = match_idx[0] + 2 
-                                    
-                                    values_to_write = list(df_to_save.iloc[0].values)
-                                    sheet.update(f"A{row_number_to_update}", [values_to_write])
-                                    st.success(f"✅ อัปเดตข้อมูลของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว")
-                            
-                            if not is_duplicate:
-                                for row in df_to_save.values.tolist():
-                                    sheet.append_row(row)
-                                st.success(f"✅ บันทึกข้อมูลใหม่ของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
-                            
-                            del st.session_state['temp_pvd_df']
-                            st.rerun()
-                            
-                        except Exception as e:
-                            st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
+                    if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sh
                 
                 # ตารางสรุปข้อมูล PVD (ซ้อนอยู่ข้างใน Expander ของ PVD อีกทีตามที่ต้องการ)
                 st.write("---") 
                 st.markdown("📊 **ดูตารางสรุปข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) ทั้งหมด**")
-                
+
                 if st.button("🔄 โหลดข้อมูล PVD ล่าสุด", key="reload_pvd_table"):
                     st.rerun()
-                    
+                
                 try:
                     client = get_gsheet_client()
                     sheet = client.open('MyStockData').worksheet('Provident_Fund')
@@ -5079,7 +5045,7 @@ def main():
                     if data:
                         df_pvd_all = pd.DataFrame(data)
                         
-                        # 1. กำหนดคอลัมน์ที่เป็นตัวเลขจำนวนเงินทั้งหมดที่ต้องใส่คอมม่า
+                        # กำหนดคอลัมน์ที่เป็นตัวเลขจำนวนเงินทั้งหมดที่ต้องใส่คอมม่า
                         money_cols = [
                             'Brought_Forward_Member_Saving', 'Brought_Forward_Member_Benefit',
                             'Brought_Forward_Employer_Matching', 'Brought_Forward_Employer_Benefit',
@@ -5097,7 +5063,6 @@ def main():
                         
                         # จัดเรียงข้อมูลตามปี (และเดือนถ้ามี)
                         if 'Year_CE' in df_pvd_all.columns:
-                            # ถ้ามีคอลัมน์ Month ให้ map เดือนเป็นตัวเลขเพื่อเรียงลำดับให้ถูกต้อง
                             thai_months = {
                                 'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4,
                                 'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'สิงหาคม': 8,
@@ -5107,16 +5072,16 @@ def main():
                                 df_pvd_all['Month_Num'] = df_pvd_all['Month'].map(thai_months).fillna(12)
                                 df_pvd_all = df_pvd_all.sort_values(by=['Year_CE', 'Month_Num'], ascending=[True, True])
                                 df_pvd_all = df_pvd_all.drop(columns=['Month_Num'])
+                                
                                 df_calc['Month_Num'] = df_calc['Month'].map(thai_months).fillna(12)
                                 df_calc = df_calc.sort_values(by=['Year_CE', 'Month_Num'], ascending=[True, True])
                                 df_calc = df_calc.drop(columns=['Month_Num'])
                             else:
                                 df_pvd_all = df_pvd_all.sort_values(by='Year_CE', ascending=True)
                                 df_calc = df_calc.sort_values(by='Year_CE', ascending=True)
-
+                
                         # ดึงข้อมูลแถวลาสุดมาทำ Summary Metrics ด้านบน
                         latest_row_calc = df_calc.iloc[-1]
-                        latest_row_display = df_pvd_all.iloc[-1]
                         
                         # คำนวณ Metric สรุป
                         total_principal = latest_row_calc.get('Member_Saving', 0) + latest_row_calc.get('Employer_Matching', 0)
@@ -5124,21 +5089,21 @@ def main():
                         grand_total = latest_row_calc.get('Grand_Total', 0)
                         
                         benefit_pct = (total_benefit / total_principal * 100) if total_principal > 0 else 0
-
+                
                         # แสดงผล Metrics สรุปภาพรวมล่าสุด
                         m1, m2, m3 = st.columns(3)
                         m1.metric("💰 ยอดรวมพอร์ต PVD ล่าสุด", f"{grand_total:,.2f} บาท")
                         m2.metric("🌱 ผลประโยชน์รวมทั้งหมด", f"{total_benefit:,.2f} บาท", f"{benefit_pct:.2f}% ของเงินต้น")
                         m3.metric("📌 สัดส่วน (สมาชิก / นายจ้าง)", f"{latest_row_calc.get('Member_Total', 0):,.0f} / {latest_row_calc.get('Employer_Total', 0):,.0f}")
-
+                
                         st.write("---")
-
-                        # ฟอร์แมตตัวเลขในตารางให้สวยงาม (ใส่คอมม่า ทศนิยม 2 ตำแหน่ง หรือ 0 ตำแหน่งตามต้องการ)
+                
+                        # ฟอร์แมตตัวเลขในตารางให้สวยงาม
                         for col in money_cols:
                             if col in df_pvd_all.columns:
                                 df_pvd_all[col] = df_calc[col].apply(lambda x: "{:,.2f}".format(x))
-
-                        # ซ่อนคอลัมน์ที่ไม่จำเป็นออกจากการแสดงผลหน้าตารางหลัก (เช่น Year_BE)
+                
+                        # ซ่อนคอลัมน์ที่ไม่จำเป็นออกจากการแสดงผลหน้าตารางหลัก
                         cols_to_drop = ['Year_BE']
                         df_display = df_pvd_all.drop(columns=[col for col in cols_to_drop if col in df_pvd_all.columns])
                         
@@ -5148,7 +5113,10 @@ def main():
                         st.warning("ยังไม่มีข้อมูลในชีท Provident_Fund")
                         
                 except Exception as e:
-                    st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
+                    if "429" in str(e) or "Quota exceeded" in str(e):
+                        st.error("❌ Google Sheets API เกินโควตาชั่วคราว (Rate Limit 429) กรุณารอสัก 30 วินาที แล้วกดปุ่ม 'โหลดข้อมูล PVD ล่าสุด' อีกครั้งครับ")
+                    else:
+                        st.error(f"❌ ไม่สามารถดึงข้อมูลจาก Google Sheets ได้: {e}")
 
             # --- 2. ส่วนประกันภัย Unit Linked ---
             with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
