@@ -60,7 +60,7 @@ def check_and_auto_stamp_portfolio(client, current_total_value):
 # --- วิธีเรียกใช้งาน (นำไปวางในส่วนโหลดข้อมูลกราฟ) ---
 # client = get_gsheet_client()
 # check_and_auto_stamp_portfolio(client, total_stock_and_tfex)
-def extract_pvd_from_image(image_file, year_be):
+def extract_pvd_from_image(image_file, year_be, month_name="ธันวาคม"):
     try:
         # ดึง API Key จาก st.secrets
         api_key = st.secrets.get("GOOGLE_API_KEY", "")
@@ -69,25 +69,25 @@ def extract_pvd_from_image(image_file, year_be):
             return None
             
         genai.configure(api_key=api_key)
-        # ใช้โมเดล gemini-1.5-flash ที่รองรับ Vision
-        model = genai.GenerativeModel('gemini-3.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
                 
-        # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2562 -> 2019)
+        # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2569 -> 2026)
         year_ce = int(year_be) - 543
         
         prompt = f"""
-        คุณเป็นผู้ช่วยทางการเงินอัจฉริยะ หน้าที่ของคุณคืออ่านรูปภาพรายงานยอดรวมกองทุนสำรองเลี้ยงชีพของปี พ.ศ. {year_be} (ค.ศ. {year_ce}) นี้ 
+        คุณเป็นผู้ช่วยทางการเงินอัจฉริยะ หน้าที่ของคุณคืออ่านรูปภาพรายงานยอดรวมกองทุนสำรองเลี้ยงชีพของเดือน {month_name} ปี พ.ศ. {year_be} (ค.ศ. {year_ce}) นี้ 
         โดยในรูปจะมีตาราง "ยอดรวมทุกนโยบายการลงทุน (Total Portfolio Balance)" ซึ่งแยกรายการย่อยออกมาดังนี้:
         1. ยอดยกมา (Balance as of)
         2. เงินเข้าระหว่างปี (Transferred in during this year)
         และมีตารางสรุปด้านบน/ด้านขวา รวมถึงข้อมูลเงินสะสมที่รับเข้ากองทุนระหว่างปี
         
-        โปรดสกัดข้อมูลตัวเลขทั้งหมดตามหัวตาราง CSV ด้านล่างนี้ให้ออกมาเป็นข้อมูลของปี {year_ce}:
+        โปรดสกัดข้อมูลตัวเลขทั้งหมดตามหัวตาราง CSV ด้านล่างนี้ให้ออกมาเป็นข้อมูลของเดือน {month_name} ปี {year_ce}:
         
         หัวตาราง CSV:
-        Year_CE,Year_BE,Brought_Forward_Member_Saving,Brought_Forward_Member_Benefit,Brought_Forward_Employer_Matching,Brought_Forward_Employer_Benefit,Transferred_Member_Saving,Transferred_Member_Benefit,Transferred_Employer_Matching,Transferred_Employer_Benefit,Member_Saving,Member_Benefit,Member_Total,Employer_Matching,Employer_Benefit,Employer_Total,Grand_Total,Total_Units
+        Month,Year_CE,Year_BE,Brought_Forward_Member_Saving,Brought_Forward_Member_Benefit,Brought_Forward_Employer_Matching,Brought_Forward_Employer_Benefit,Transferred_Member_Saving,Transferred_Member_Benefit,Transferred_Employer_Matching,Transferred_Employer_Benefit,Member_Saving,Member_Benefit,Member_Total,Employer_Matching,Employer_Benefit,Employer_Total,Grand_Total,Total_Units
         
         คำอธิบายฟิลด์ข้อมูล:
+        - Month: {month_name}
         - Year_CE: {year_ce}
         - Year_BE: {year_be}
         - Brought_Forward_Member_Saving: ยอดสะสมยกมา (แถว "ยอดยกมา" ช่องเงินสะสมส่วนของสมาชิก)
@@ -115,7 +115,6 @@ def extract_pvd_from_image(image_file, year_be):
         img = Image.open(image_file)
         response = model.generate_content([prompt, img])
         
-        # ทำความสะอาดข้อความ CSV ที่ได้จาก AI
         csv_text = response.text.replace("```csv", "").replace("```", "").strip()
         df_result = pd.read_csv(io.StringIO(csv_text))
         return df_result
