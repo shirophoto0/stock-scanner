@@ -1264,17 +1264,49 @@ if 'dividend_data' not in st.session_state:
 if 'cash_balance' not in st.session_state:
     st.session_state.cash_balance = 0.0  # หรือใส่จำนวนเงินสดเริ่มต้นของคุณ เช่น 100000.0
 
-st.title("📈 Application NJ-Wealth")
-st.write("📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)")
-
 # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
 if "selected_ticker" not in st.session_state:
     st.session_state.selected_ticker = "KBANK"
 
+####### Header และ ภาพพื้นหลัง UI ##################
+st.markdown(
+    """
+    <style>
+    .custom-header {
+        background-image: url('URL_รูปภาพ_หรือลิงก์รูปของคุณ.jpg'); /* ใส่ลิงก์รูปตรงนี้ (ถ้ายังไม่ใส่ จะเป็นพื้นหลังเปล่า) */
+        background-size: cover;
+        background-position: center;
+        padding: 30px 25px;
+        border-radius: 10px;
+        text-align: left; /* จัดชิดซ้าย */
+        margin-bottom: 20px;
+        background-color: #f8f9fa; /* สีพื้นหลังสำรองกรณีไม่มีรูป เป็นสีขาว/เทาอ่อนเพื่อให้เห็นตัวหนังสือ */
+    }
+    .custom-header h1 {
+        margin: 0;
+        font-size: 2.2em;
+        font-weight: bold;
+        color: #d1d5db; /* สีเทาอ่อน มองเห็นได้ทั้งบนพื้นมืดและสว่าง */
+    }
+    .custom-header p {
+        margin: 8px 0 0 0;
+        font-size: 1.05em;
+        color: #d1d5db; /* สีเทาอ่อน */
+    }
+    </style>
+    
+    <div class="custom-header">
+        <h1>📈 Application NJ-Wealth</h1>
+        <p>📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+##############################################
+
 # =============================================================
 # 3. ฟังก์ชันคำนวณทางเทคนิคและสแกนหุ้น
 # =============================================================
-
 
 # สารตั้งต้นข้อมูลหุ้นกลุ่ม SET100
 SET100_TICKERS = [
