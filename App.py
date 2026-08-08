@@ -3184,7 +3184,7 @@ def main():
                     # 3. ตารางแสดงพอร์ต (เชื่อมต่อ Google Sheets)
                     st.divider()
                     st.subheader("📊 สรุปพอร์ตการลงทุน")
-                    
+
                     if "my_portfolio" not in st.session_state:
                         load_portfolio()
                     
@@ -3204,7 +3204,7 @@ def main():
                             ticker = row.get('หุ้น', '')
                             shares = float(row.get('shares', 0))
                             avg_price = float(row.get('avg_price', 0.0))
-                            sector_val = row.get('Sector', 'General / Unspecified') # ดึง Sector เผื่อไว้ใช้ต่อ
+                            sector_val = row.get('Sector', 'General / Unspecified')
                             
                             try:
                                 m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
@@ -3218,7 +3218,7 @@ def main():
                             
                             portfolio_list.append({
                                 "หุ้น": ticker,
-                                "Sector": sector_val, # เก็บ Sector ไว้ใน DataFrame ด้วย
+                                "Sector": sector_val,
                                 "จำนวน": shares,
                                 "ต้นทุนเฉลี่ย": avg_price,
                                 "มูลค่าต้นทุน": cost_value,
@@ -3232,7 +3232,7 @@ def main():
                         
                         # สรุปยอดรวม
                         col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                        col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.cash_balance:,.0f} ฿")
+                        col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.get('cash_balance', 0):,.0f} ฿")
                         col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
                         col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
                         diff = total_value - total_invest
@@ -3256,6 +3256,8 @@ def main():
                         
                         if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                             st.session_state.edit_mode = True
+                    else:
+                        st.info("ยังไม่มีข้อมูลในพอร์ตการลงทุนครับ")
                     
                         # --- ส่วนแสดงกราฟสรุปพอร์ต ---
                         st.divider()
