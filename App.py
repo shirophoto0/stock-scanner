@@ -2290,25 +2290,24 @@ def main():
                 with tab_dashboard:
                     st.markdown("### 📊 Trading Performance Dashboard")
                     
-                    # 1. ตรวจสอบและดึงข้อมูลจาก Google Sheets ถ้า st.session_state.journal_data ยังไม่มี
+                    # 1. ตรวจสอบและดึงข้อมูลจาก Google Sheets ชีต 'JournalData' ถ้า session_state ยังไม่มี
                     if 'journal_data' not in st.session_state or not st.session_state['journal_data']:
                         try:
                             client = get_gsheet_client()
-                            # หมายเหตุ: เปลี่ยนชื่อชีต 'Trade_Journal' เป็นชื่อชีตที่คุณใช้จริงใน Google Sheets หากต่างจากนี้
-                            sheet_journal = client.open('MyStockData').worksheet('Journaldata') 
+                            sheet_journal = client.open('MyStockData').worksheet('JournalData') 
                             raw_journal_data = sheet_journal.get_all_records()
                             if raw_journal_data:
                                 st.session_state['journal_data'] = raw_journal_data
                         except Exception as e:
                             st.error(f"❌ ไม่สามารถดึงข้อมูลประวัติการเทรดจาก Google Sheets ได้: {e}")
                 
-                    # 2. เริ่มตรวจสอบข้อมูลใน session_state
+                    # 2. ตรวจสอบข้อมูลใน session_state เพื่อนำมาแสดงผล
                     if not st.session_state.get('journal_data'):
                         st.info("ยังไม่มีข้อมูลรายการเทรดครับ กรุณาตรวจสอบการเชื่อมต่อ Google Sheets หรือเพิ่มข้อมูลรายการเทรดก่อน")
                     else:
-                        df_journal = pd.DataFrame(st.session_state.journal_data)
+                        df_journal = pd.DataFrame(st.session_state['journal_data'])
                         
-                        # ป้องกันกรณีที่ชื่อคอลัมน์ใน Google Sheets อาจมีช่องว่างหรือสะกดต่างกันเล็กน้อย
+                        # ป้องกันกรณีชื่อคอลัมน์มีช่องว่างติดมา
                         df_journal.columns = [str(c).strip() for c in df_journal.columns]
                         
                         if 'วันที่' in df_journal.columns:
@@ -2322,7 +2321,7 @@ def main():
                         if df_closed.empty:
                             st.info("ยังไม่มีข้อมูลรายการที่ปิดสถานะ (Closed) เพื่อสรุปผลงานครับ")
                         else:
-                            # ทำความสะอาดข้อมูล
+                            # ทำความสะอาดข้อมูลตัวเลข
                             df_closed['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df_closed['กำไร/ขาดทุน (บาท)'].astype(str).str.replace(',', ''), errors='coerce')
                             df_closed['ต้นทุน (บาท)'] = pd.to_numeric(df_closed['ต้นทุน (บาท)'].astype(str).str.replace(',', ''), errors='coerce')
                             
@@ -2330,7 +2329,7 @@ def main():
                             df_clean = df_clean[df_clean['ต้นทุน (บาท)'] > 100]
                             df_clean['% ROI'] = (df_clean['กำไร/ขาดทุน (บาท)'] / df_clean['ต้นทุน (บาท)']) * 100
                 
-                            # Filter
+                            # ตัวกรองข้อมูล (Filter)
                             col_f1, col_f2 = st.columns([1, 3])
                             filter_type = col_f1.selectbox("แสดงผลตาม:", ["ทั้งหมด", "รายปี", "รายเดือน"], key="dash_filter_type")
                             
@@ -2346,7 +2345,7 @@ def main():
                                 month = col_m.selectbox("เลือกเดือน:", range(1, 13), key="dash_month")
                                 df_filtered = df_clean[(df_clean['วันที่'].dt.year == year) & (df_clean['วันที่'].dt.month == month)]
                 
-                            # คำนวณ Metric
+                            # คำนวณตัวชี้วัด (Metrics)
                             wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
                             losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] < 0]
                             avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if not wins.empty else 0
@@ -2354,6 +2353,7 @@ def main():
                             rr_ratio_actual = avg_win / avg_loss
                             
                             col1, col2, col3, col4, col5 = st.columns(5)
+                            
                             # กำหนดยอดกำไรในอดีตที่ต้องการบวกเพิ่ม
                             historical_profit = 77420.5
                             total_net_profit = df_filtered['กำไร/ขาดทุน (บาท)'].sum() + historical_profit
