@@ -5178,49 +5178,27 @@ def main():
                     pass
    
                 # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติ ---
+                # --- ส่วนแสดงกราฟแท่งแบบปลอดภัย ป้องกันหน้าขาว ---
                 st.markdown("---")
                 st.subheader("📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุน")
                 
                 if not df_pvd_history.empty:
-                    # 1. ลองคำนวณ % Benefit อัตโนมัติจากข้อมูลที่มีอยู่ในตาราง
-                    # สูตรตัวอย่าง: ((Grand_Total - (ยอดสะสมรวมทั้งหมด)) / (ยอดสะสมรวมทั้งหมด)) * 100
-                    # หรือถ้าต้องการใช้คอลัมน์ Grand_Total เทียบกับต้นทุนเบื้องต้น ให้คำนวณจากคอลัมน์ที่มี
-                    try:
-                        # แปลงข้อมูลคอลัมน์ตัวเลขหลักๆ ให้เป็นตัวเลขก่อน
-                        grand_total = pd.to_numeric(df_pvd_history['Grand_Total'].astype(str).str.replace(',', ''), errors='coerce')
+                    # ตรวจสอบว่ามีคอลัมน์ '% Benefit' หรือไม่ ถ้าไม่มีให้สร้างคอลัมน์สำรองเป็น 0 ไปก่อนเพื่อกันแอปล่ม
+                    if '% Benefit' not in df_pvd_history.columns:
+                        df_pvd_history['% Benefit'] = 0
                         
-                        # รวมเงินสะสมเริ่มต้นและเงินสมทบทั้งหมดที่เป็นต้นทุน (Member_Saving + Employer_Matching + ฯลฯ ถ้ามี)
-                        # หรือใช้ผลรวมของเงินสะสม
-                        member_saving = pd.to_numeric(df_pvd_history.get('Member_Saving', 0).astype(str).str.replace(',', ''), errors='coerce')
-                        employer_matching = pd.to_numeric(df_pvd_history.get('Employer_Matching', 0).astype(str).str.replace(',', ''), errors='coerce')
-                        
-                        # สมมติฐานต้นทุนเบื้องต้น (เงินสะสมพนักงาน + เงินสมทบจากนายจ้าง) หากต้องการปรับสูตรสามารถแจ้งได้ครับ
-                        total_cost = member_saving + employer_matching
-                        
-                        # ถ้ามีข้อมูลต้นทุน ให้คำนวณ % กำไร/ผลตอบแทน
-                        if not grand_total.isna().all() and not total_cost.isna().all() and (total_cost > 0).any():
-                            df_pvd_history['Calculated_%_Benefit'] = ((grand_total - total_cost) / total_cost) * 100
-                            benefit_col = 'Calculated_%_Benefit'
-                        else:
-                            # ถ้าคำนวณไม่ได้ ให้ลองใช้คอลัมน์ '% Benefit' เดิม (เผื่ออนาคตมีข้อมูล)
-                            benefit_col = '% Benefit'
-                    except Exception:
-                        benefit_col = '% Benefit'
-            
-                    # 2. นำข้อมูลมาวาดกราฟ
-                    if benefit_col in df_pvd_history.columns:
-                        if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
-                            df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
-                            chart_data = df_pvd_history.set_index('Period')[benefit_col]
-                        else:
-                            chart_data = df_pvd_history[benefit_col]
-                        
-                        chart_data = chart_data.astype(str).str.replace('%', '', regex=False)
-                        chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0)
-                        
-                        st.bar_chart(chart_data)
+                    # สร้าง Period สำหรับแกน X
+                    if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
+                        df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
+                        chart_data = df_pvd_history.set_index('Period')['% Benefit']
                     else:
-                        st.info("💡 ยังไม่พบข้อมูลเพียงพอสำหรับการคำนวณกราฟผลตอบแทน")
+                        chart_data = df_pvd_history['% Benefit']
+                    
+                    # แปลงข้อมูลเป็นตัวเลขอย่างปลอดภัย
+                    chart_data = chart_data.astype(str).str.replace('%', '', regex=False)
+                    chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0)
+                    
+                    st.bar_chart(chart_data)
                 else:
                     st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลเดือนแรกก่อนครับ")
             
