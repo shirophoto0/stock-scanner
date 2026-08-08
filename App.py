@@ -4291,7 +4291,10 @@ def main():
             days_ago = period_options[selected_period]
             if days_ago != 9999:
                 cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
-                perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
+                if 'Date_Close' in perf_df.columns:
+                    perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
+                elif 'Date' in perf_df.columns:
+                    perf_df = perf_df[perf_df['Date'] >= cutoff_date]
         
             # 3. คำนวณ Metrics ทั้งหมดจาก perf_df ที่กรองแล้ว
             total_trades = len(perf_df)
