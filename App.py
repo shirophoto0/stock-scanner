@@ -5302,20 +5302,29 @@ def main():
                             st.warning("กรุณากรอกมูลค่ารับซื้อคืนหน่วยลงทุนให้มากกว่า 0")
 
             # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. ---
+            # --- ฟังก์ชันตัวช่วยเชื่อมต่อ Google Sheets แบบปลอดภัย ---
+            def get_coop_sheet():
+                client = get_gsheet_client()
+                return client.open('MyStockData').worksheet('Coop')
+        
+            def get_sso_sheet():
+                client = get_gsheet_client()
+                return client.open('MyStockData').worksheet('SSO')
+        
+            def get_bank_sheet():
+                client = get_gsheet_client()
+                return client.open('MyStockData').worksheet('Bank_Account')
+        
+            # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. ---
             with st.expander("📤 เพิ่ม/อัปเดตข้อมูลสหกรณ์ก๊าซ ปตท.", expanded=False):
                 with st.form("coop_upload_form"):
                     col_d, col_v = st.columns(2)
-                    
                     with col_d:
                         coop_date = st.date_input("เลือกวันที่อัปเดตข้อมูลสหกรณ์", value=date.today(), key="coop_date_input")
-                        
                     with col_v:
                         coop_value = st.number_input(
                             "ยอดเงินสหกรณ์ / มูลค่าหุ้นสหกรณ์ (บาท)", 
-                            min_value=0.0, 
-                            format="%.2f", 
-                            value=0.0,
-                            key="coop_value_input",
+                            min_value=0.0, format="%.2f", value=0.0, key="coop_value_input",
                             help="กรอกยอดเงินสะสมหรือยอดรวมในสหกรณ์ก๊าซ ปตท. ณ วันที่อัปเดต"
                         )
                     
@@ -5324,54 +5333,37 @@ def main():
                     if submitted_coop:
                         if coop_value > 0:
                             try:
-                                client = get_gsheet_client()
-                                sheet_coop = client.open('MyStockData').worksheet('Coop')
-                                
-                                existing_data = sheet_coop.get_all_records()
-                                df_existing_coop = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
-                                
+                                sheet_coop = get_coop_sheet()
                                 date_str = coop_date.strftime("%Y-%m-%d")
                                 year_ce = coop_date.year
                                 
-                                is_duplicate = False
+                                # ใช้การค้นหาค่าในคอลัมน์ Date โดยตรง (เร็วกว่าและกินโควตาน้อยกว่าดึงทุก record)
+                                date_column = sheet_coop.col_values(1) # สมมติคอลัมน์ A คือ Date
                                 
-                                if not df_existing_coop.empty and 'Date' in df_existing_coop.columns:
-                                    match_idx = df_existing_coop[df_existing_coop['Date'].astype(str) == date_str].index
-                                    
-                                    if len(match_idx) > 0:
-                                        is_duplicate = True
-                                        row_num = match_idx[0] + 2 
-                                        
-                                        updated_values = [date_str, year_ce, coop_value]
-                                        sheet_coop.update(f"A{row_num}:C{row_num}", [updated_values])
-                                        st.success(f"✅ อัปเดตข้อมูลสหกรณ์ของวันที่ **{date_str}** เป็น **{coop_value:,.2f} บาท** เรียบร้อยแล้ว!")
-                                
-                                if not is_duplicate:
-                                    new_row = [date_str, year_ce, coop_value]
-                                    sheet_coop.append_row(new_row)
+                                if date_str in date_column:
+                                    row_num = date_column.index(date_str) + 1
+                                    sheet_coop.update(f"A{row_num}:C{row_num}", [[date_str, year_ce, coop_value]])
+                                    st.success(f"✅ อัปเดตข้อมูลสหกรณ์ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                                else:
+                                    sheet_coop.append_row([date_str, year_ce, coop_value])
                                     st.success(f"✅ บันทึกข้อมูลใหม่สหกรณ์ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
-                                    
-                                st.rerun()
                                 
+                                st.rerun()
                             except Exception as e:
-                                st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลสหกรณ์: {e}")
+                                st.error(f"❌ เกิดข้อผิดพลาด (อาจติด Limit API กรุณารอสักครู่): {e}")
                         else:
                             st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
                             
+            # --- ส่วนประกันสังคม ---
             with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันสังคม", expanded=False):
                 with st.form("sso_upload_form"):
                     col_d, col_v = st.columns(2)
-                    
                     with col_d:
                         sso_date = st.date_input("เลือกวันที่อัปเดตข้อมูลประกันสังคม", value=date.today(), key="sso_date_input")
-                        
                     with col_v:
                         sso_value = st.number_input(
                             "ยอดสะสมประกันสังคม / เงินสมทบ (บาท)", 
-                            min_value=0.0, 
-                            format="%.2f", 
-                            value=0.0,
-                            key="sso_value_input",
+                            min_value=0.0, format="%.2f", value=0.0, key="sso_value_input",
                             help="กรอกยอดเงินสะสมหรือเงินสมทบประกันสังคม ณ วันที่อัปเดต"
                         )
                     
@@ -5380,73 +5372,65 @@ def main():
                     if submitted_sso:
                         if sso_value > 0:
                             try:
-                                client = get_gsheet_client()
-                                # ตรวจสอบให้แน่ใจว่าใน Google Sheets ของคุณมี Worksheet ชื่อ 'Insurance' หรือ 'SSO' 
-                                # (ในที่นี้ตั้งชื่อชีทไว้ว่า 'Insurance' ตามแท็บในรูปตัวอย่างของคุณครับ)
-                                sheet_sso = client.open('MyStockData').worksheet('SSO')
-                                
-                                existing_data = sheet_sso.get_all_records()
-                                df_existing_sso = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
-                                
+                                sheet_sso = get_sso_sheet()
                                 date_str = sso_date.strftime("%Y-%m-%d")
                                 year_ce = sso_date.year
                                 
-                                is_duplicate = False
+                                date_column = sheet_sso.col_values(1)
                                 
-                                if not df_existing_sso.empty and 'Date' in df_existing_sso.columns:
-                                    match_idx = df_existing_sso[df_existing_sso['Date'].astype(str) == date_str].index
-                                    
-                                    if len(match_idx) > 0:
-                                        is_duplicate = True
-                                        row_num = match_idx[0] + 2 
-                                        
-                                        updated_values = [date_str, year_ce, sso_value]
-                                        sheet_sso.update(f"A{row_num}:C{row_num}", [updated_values])
-                                        st.success(f"✅ อัปเดตข้อมูลประกันสังคมของวันที่ **{date_str}** เป็น **{sso_value:,.2f} บาท** เรียบร้อยแล้ว!")
-                                
-                                if not is_duplicate:
-                                    new_row = [date_str, year_ce, sso_value]
-                                    sheet_sso.append_row(new_row)
+                                if date_str in date_column:
+                                    row_num = date_column.index(date_str) + 1
+                                    sheet_sso.update(f"A{row_num}:C{row_num}", [[date_str, year_ce, sso_value]])
+                                    st.success(f"✅ อัปเดตข้อมูลประกันสังคมของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                                else:
+                                    sheet_sso.append_row([date_str, year_ce, sso_value])
                                     st.success(f"✅ บันทึกข้อมูลใหม่ประกันสังคมของวันที่ **{date_str}** เรียบร้อยแล้ว!")
-                                    
-                                st.rerun()
                                 
+                                st.rerun()
                             except Exception as e:
-                                st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูลประกันสังคม: {e}")
+                                st.error(f"❌ เกิดข้อผิดพลาด (อาจติด Limit API กรุณารอสักครู่): {e}")
                         else:
                             st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
                             
-            # 1. Expander สำหรับบัญชีธนาคาร (กระแสเงินสด)
+            # --- ส่วนบัญชีธนาคาร (กระแสเงินสด) ---
             with st.expander("💰 บันทึก/อัปเดต บัญชีเงินฝากกระแสเงินสด", expanded=False):
                 with st.form("bank_account_form"):
                     col1, col2 = st.columns(2)
                     with col1:
-                        bank_date = st.date_input("วันที่", value=datetime.now())
-                        bank_type = st.selectbox("ประเภท", ["ฝากเงิน (Deposit)", "ถอนเงิน (Withdraw)"])
+                        bank_date = st.date_input("วันที่", value=datetime.now(), key="bank_date_input")
+                        bank_type = st.selectbox("ประเภท", ["ฝากเงิน (Deposit)", "ถอนเงิน (Withdraw)"], key="bank_type_input")
                     with col2:
-                        bank_amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=100.0)
-                        bank_desc = st.text_input("หมายเหตุ")
+                        bank_amount = st.number_input("จำนวนเงิน (บาท)", min_value=0.0, step=100.0, key="bank_amount_input")
+                        bank_desc = st.text_input("หมายเหตุ", key="bank_desc_input")
                     
                     submitted_bank = st.form_submit_button("บันทึกรายการบัญชี")
                     
                     if submitted_bank:
-                        # คำนวณฝาก/ถอน
-                        in_val = bank_amount if "ฝาก" in bank_type else 0
-                        out_val = bank_amount if "ถอน" in bank_type else 0
-                        
-                        # ดึงข้อมูลเดิมเพื่อคำนวณ Balance แถวสุดท้าย
-                        sheet_bank = client.open('MyStockData').worksheet('Bank_Account')
-                        all_bank_data = sheet_bank.get_all_records()
-                        last_balance = 0
-                        if all_bank_data:
-                            last_balance = float(str(all_bank_data[-1]['Balance']).replace(',', ''))
-                        
-                        new_balance = last_balance + in_val - out_val
-                        
-                        # Append ข้อมูล
-                        sheet_bank.append_row([str(bank_date), bank_type, bank_desc, in_val, out_val, new_balance])
-                        st.success("บันทึกรายการบัญชีเรียบร้อย!")
-                        st.rerun()
+                        try:
+                            in_val = bank_amount if "ฝาก" in bank_type else 0
+                            out_val = bank_amount if "ถอน" in bank_type else 0
+                            
+                            sheet_bank = get_bank_sheet()
+                            
+                            # ดึงเฉพาะคอลัมน์ Balance หรือดึงข้อมูลแถวสุดท้ายมาคำนวณเพื่อลดการโหลดข้อมูลทั้งหมด
+                            all_values = sheet_bank.get_all_values()
+                            last_balance = 0.0
+                            
+                            if len(all_values) > 1: # มี Header แล้ว
+                                last_row = all_values[-1]
+                                # สมมติว่าคอลัมน์ Balance อยู่ที่สุดท้าย (index -1)
+                                try:
+                                    last_balance = float(str(last_row[-1]).replace(',', ''))
+                                except:
+                                    last_balance = 0.0
+                            
+                            new_balance = last_balance + in_val - out_val
+                            
+                            sheet_bank.append_row([str(bank_date), bank_type, bank_desc, in_val, out_val, new_balance])
+                            st.success("บันทึกรายการบัญชีเรียบร้อย!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกบัญชี: {e}")
                         
 # ------------------------------
 if __name__ == "__main__":
