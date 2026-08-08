@@ -95,7 +95,7 @@ def extract_pvd_from_image(image_file, year_be, month_name="ธันวาค�
             return None
             
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-3.5-flash')
                 
         # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2569 -> 2026)
         year_ce = int(year_be) - 543
