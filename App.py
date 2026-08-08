@@ -3902,13 +3902,23 @@ def main():
                                         'จำนวนหุ้น': 'last',
                                         'ต้นทุนหุ้น': 'last'
                                     }).reset_index()
-                                    df_latest['Total_Cost'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
+                                    
+                                    # แปลงข้อมูลเป็นตัวเลขอย่างปลอดภัยก่อนนำมาคูณกัน
+                                    df_latest['ต้นทุนหุ้น'] = pd.to_numeric(df_latest['ต้นทุนหุ้น'], errors='coerce').fillna(0)
+                                    df_latest['จำนวนหุ้น'] = pd.to_numeric(df_latest['จำนวนหุ้น'], errors='coerce').fillna(0)
+                                    
+                                    # คำนวณต้นทุนรวมทั้งหมดของแต่ละ Ticker ใช้ชื่อคอลัมน์ว่า 'ต้นทุนหุ้น'
+                                    df_latest['ต้นทุนหุ้น'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
                                     
                                     df_grouped_yearly = df_stack_filtered.groupby(['Ticker', 'Year_Str'])['ยอดรับสุทธิ'].sum().reset_index()
-                                    df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'Total_Cost']], on='Ticker')
+                                    df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'ต้นทุนหุ้น']], on='Ticker')
+                                    
+                                    # แปลงค่าให้เป็นตัวเลขเพื่อความปลอดภัยในการคำนวณ
+                                    df_merged_yearly['ยอดรับสุทธิ'] = pd.to_numeric(df_merged_yearly['ยอดรับสุทธิ'], errors='coerce').fillna(0)
+                                    df_merged_yearly['ต้นทุนหุ้น'] = pd.to_numeric(df_merged_yearly['ต้นทุนหุ้น'], errors='coerce').fillna(0)
                                     
                                     df_merged_yearly['Yield_on_Cost_Annual'] = df_merged_yearly.apply(
-                                        lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
+                                        lambda row: (row['ยอดรับสุทธิ'] / row['ต้นทุนหุ้น'] * 100) if row['ต้นทุนหุ้น'] > 0 else 0.0,
                                         axis=1
                                     )
                                     
@@ -3919,7 +3929,7 @@ def main():
                                         df_merged_yearly['Text_Label'] = df_merged_yearly['Yield_on_Cost_Annual'].apply(
                                             lambda x: f"{x:.2f}%" if x > 0.5 else ""
                                         )
-                
+    
                                         fig_stacked = px.bar(
                                             df_merged_yearly,
                                             x='Yield_on_Cost_Annual',
@@ -3949,8 +3959,8 @@ def main():
                                         st.info("ไม่มีข้อมูลเพียงพอสำหรับกราฟ Stacked Bar รายปีนี้")
                                 else:
                                     st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือกสำหรับกราฟนี้")
-                    else:
-                        st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
+                            else:
+                                st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
                                             
                                                 
                 #########################
