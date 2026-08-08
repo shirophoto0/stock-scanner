@@ -5176,47 +5176,51 @@ def main():
                         df_pvd_history = pd.DataFrame(pvd_records)
                 except Exception as e:
                     pass
-            
-                # --- 2. ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit / ROI) ---
+   
+                # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติ ---
                 st.markdown("---")
                 st.subheader("📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุน")
                 
                 if not df_pvd_history.empty:
-                    # 1. พยายามหาคอลัมน์ที่มีอยู่แล้วก่อน (ถ้ามี)
-                    benefit_col = next((c for c in ['ROI_Percent', 'Benefit_Pct', '% Benefit', 'Return_Pct', 'Benefit'] if c in df_pvd_history.columns), None)
-                    
-                    # 2. ถ้ายังไม่มีคอลัมน์เปอร์เซ็นต์ ให้คำนวณอัตโนมัติจากคอลัมน์ที่มีอยู่
-                    if not benefit_col:
-                        # ค้นหาชื่อคอลัมน์ที่เป็นไปได้สำหรับ "มูลค่ารวม" และ "ต้นทุน/เงินสะสม"
-                        total_amt_col = next((c for c in ['Total_Amount', 'Total_Value', 'Current_Value', 'มูลค่ารวม'] if c in df_pvd_history.columns), None)
-                        cost_col = next((c for c in ['Accumulated_Cost', 'Total_Cost', 'Principal', 'เงินสะสม', 'ต้นทุน'] if c in df_pvd_history.columns), None)
+                    # 1. ลองคำนวณ % Benefit อัตโนมัติจากข้อมูลที่มีอยู่ในตาราง
+                    # สูตรตัวอย่าง: ((Grand_Total - (ยอดสะสมรวมทั้งหมด)) / (ยอดสะสมรวมทั้งหมด)) * 100
+                    # หรือถ้าต้องการใช้คอลัมน์ Grand_Total เทียบกับต้นทุนเบื้องต้น ให้คำนวณจากคอลัมน์ที่มี
+                    try:
+                        # แปลงข้อมูลคอลัมน์ตัวเลขหลักๆ ให้เป็นตัวเลขก่อน
+                        grand_total = pd.to_numeric(df_pvd_history['Grand_Total'].astype(str).str.replace(',', ''), errors='coerce')
                         
-                        if total_amt_col and cost_col:
-                            try:
-                                # แปลงข้อมูลเป็นตัวเลข (แทนที่ลูกน้ำและช่องว่างเพื่อความปลอดภัย)
-                                val_total = pd.to_numeric(df_pvd_history[total_amt_col].astype(str).str.replace(',', ''), errors='coerce')
-                                val_cost = pd.to_numeric(df_pvd_history[cost_col].astype(str).str.replace(',', ''), errors='coerce')
-                                
-                                # คำนวณ % ผลตอบแทน: ((มูลค่ารวม - ต้นทุน) / ต้นทุน) * 100
-                                df_pvd_history['Calculated_Benefit_Pct'] = ((val_total - val_cost) / val_cost) * 100
-                                benefit_col = 'Calculated_Benefit_Pct'
-                            except Exception as ex:
-                                st.warning(f"⚠️ ไม่สามารถคำนวณอัตโนมัติได้: {ex}")
+                        # รวมเงินสะสมเริ่มต้นและเงินสมทบทั้งหมดที่เป็นต้นทุน (Member_Saving + Employer_Matching + ฯลฯ ถ้ามี)
+                        # หรือใช้ผลรวมของเงินสะสม
+                        member_saving = pd.to_numeric(df_pvd_history.get('Member_Saving', 0).astype(str).str.replace(',', ''), errors='coerce')
+                        employer_matching = pd.to_numeric(df_pvd_history.get('Employer_Matching', 0).astype(str).str.replace(',', ''), errors='coerce')
+                        
+                        # สมมติฐานต้นทุนเบื้องต้น (เงินสะสมพนักงาน + เงินสมทบจากนายจ้าง) หากต้องการปรับสูตรสามารถแจ้งได้ครับ
+                        total_cost = member_saving + employer_matching
+                        
+                        # ถ้ามีข้อมูลต้นทุน ให้คำนวณ % กำไร/ผลตอบแทน
+                        if not grand_total.isna().all() and not total_cost.isna().all() and (total_cost > 0).any():
+                            df_pvd_history['Calculated_%_Benefit'] = ((grand_total - total_cost) / total_cost) * 100
+                            benefit_col = 'Calculated_%_Benefit'
                         else:
-                            st.info("💡 ไม่พบคอลัมน์ 'มูลค่ารวม' หรือ 'ต้นทุนสะสม' ใน Google Sheets สำหรับใช้คำนวณอัตโนมัติ")
+                            # ถ้าคำนวณไม่ได้ ให้ลองใช้คอลัมน์ '% Benefit' เดิม (เผื่ออนาคตมีข้อมูล)
+                            benefit_col = '% Benefit'
+                    except Exception:
+                        benefit_col = '% Benefit'
             
-                    # 3. ถ่าหาหรือคำนวณคอลัมน์ผลตอบแทนได้แล้ว นำมาวาดกราฟ
-                    if benefit_col and benefit_col in df_pvd_history.columns:
+                    # 2. นำข้อมูลมาวาดกราฟ
+                    if benefit_col in df_pvd_history.columns:
                         if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
                             df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
                             chart_data = df_pvd_history.set_index('Period')[benefit_col]
                         else:
                             chart_data = df_pvd_history[benefit_col]
                         
-                        chart_data = pd.to_numeric(chart_data, errors='coerce')
+                        chart_data = chart_data.astype(str).str.replace('%', '', regex=False)
+                        chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0)
+                        
                         st.bar_chart(chart_data)
                     else:
-                        st.info("💡 กรุณาตรวจสอบว่ามีข้อมูลตัวเลขในชีตเพียงพอสำหรับการคำนวณ % ผลตอบแทน")
+                        st.info("💡 ยังไม่พบข้อมูลเพียงพอสำหรับการคำนวณกราฟผลตอบแทน")
                 else:
                     st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลเดือนแรกก่อนครับ")
             
