@@ -5109,7 +5109,6 @@ def main():
                                 df_extracted = extract_pvd_from_image(uploaded_pvd_file, input_year_be, selected_month)
                                 
                                 if df_extracted is not None and not df_extracted.empty:
-                                    # ตรวจสอบและแทรกคอลัมน์ Month ถ้ายังไม่มี
                                     if 'Month' not in df_extracted.columns:
                                         df_extracted.insert(0, 'Month', selected_month)
                                     
@@ -5121,7 +5120,7 @@ def main():
                                     st.warning("ไม่สามารถดึงข้อมูลจากรูปภาพได้ กรุณาลองใหม่อีกครั้ง")
                         else:
                             st.warning("กรุณาอัปโหลดรูปภาพก่อนกดปุ่มประมวลผล")
-            
+                
                 # ส่วนยืนยันบันทึกข้อมูล (อยู่นอกฟอร์มหลัก แต่ยังอยู่ใน Expander)
                 if 'temp_pvd_df' in st.session_state and st.session_state['temp_pvd_df'] is not None:
                     st.write("---")
@@ -5166,6 +5165,40 @@ def main():
                                 st.error("❌ Google Sheets API เกินโควตาชั่วคราว (Rate Limit 429) กรุณารอสัก 30 วินาที แล้วลองกดบันทึกใหม่อีกครั้งครับ")
                             else:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
+            
+                # --- ส่วนแสดงตารางสรุปผลตอบแทนและการเติบโต (Performance & Growth Summary) ---
+                st.markdown("---")
+                st.subheader("📈 ตารางสรุปการเติบโตและผลตอบแทนกองทุน PVD")
+                try:
+                    client = get_gsheet_client()
+                    sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
+                    pvd_records = sheet_pvd.get_all_records()
+                    
+                    if pvd_records:
+                        df_pvd_history = pd.DataFrame(pvd_records)
+                        
+                        # ตรวจสอบและเลือกเฉพาะคอลัมน์ที่จำเป็นสำหรับการวิเคราะห์การเติบโตและผลตอบแทน
+                        # (ปรับชื่อคอลัมน์ให้ยืดหยุ่นตามโครงสร้างจริงใน Google Sheets ของคุณ)
+                        possible_cols = ['Year_BE', 'Month', 'Total_Amount', 'Net_Profit', 'ROI_Percent', 'Accumulated_Cost']
+                        existing_cols = [c for c in possible_cols if c in df_pvd_history.columns]
+                        
+                        if len(existing_cols) >= 2:
+                            # เรียงลำดับข้อมูลตามปีและเดือน (ถ้ามี)
+                            if 'Year_BE' in df_pvd_history.columns:
+                                df_pvd_history['Year_BE'] = pd.to_numeric(df_pvd_history['Year_BE'], errors='coerce')
+                            
+                            st.dataframe(
+                                df_pvd_history,
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                        else:
+                            # ถ้าโครงสร้างคอลัมน์ไม่ตรง ให้แสดงตารางดิบที่มีทั้งหมดแทนเพื่อให้ผู้ใช้เห็นข้อมูล
+                            st.dataframe(df_pvd_history, use_container_width=True)
+                    else:
+                        st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund กรุณาอัปโหลดข้อมูลเดือนแรกก่อนครับ")
+                except Exception as e:
+                    st.info("💡 ยังไม่พบชีต Provident_Fund หรือข้อมูลยังว่างอยู่ สามารถเริ่มอัปโหลดข้อมูลได้เลยครับ")
 
             # --- 2. ส่วนประกันภัย Unit Linked ---
             with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
