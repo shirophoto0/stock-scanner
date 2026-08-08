@@ -377,11 +377,18 @@ def save_dividend_data(df_div=None):
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
+            
+            # ล้างข้อมูลเก่าทั้งหมดก่อน (ถ้าต้องการรีเฟรชใหม่ทั้งหมดทุกครั้งที่กดบันทึก)
             sheet.clear()
+            
+            # เตรียมข้อมูลหัวตาราง + ข้อมูลทั้งหมด
             data_to_write = [df_div.columns.tolist()] + df_div.astype(str).values.tolist()
-            sheet.update(data_to_write)
+            
+            # ใช้คำสั่งอัปเดตแบบระบุจุดเริ่มต้น A1 เพื่อความเสถียร
+            sheet.update(range_name='A1', values=data_to_write)
+            
         except Exception as e:
-            print(f"Google Sheets sync error: {e}") # ปริ้นท์เตือนเฉยๆ แต่ไม่ให้แอปพัง
+            print(f"Google Sheets sync error: {e}")
              
         return True
     except Exception as e:
