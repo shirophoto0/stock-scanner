@@ -1,6 +1,5 @@
 # Import และ Setup
 import streamlit as st
-import pandas as pd
 import yfinance as yf
 import altair as alt
 import numpy as np
@@ -1195,10 +1194,6 @@ def load_from_gsheet():
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
         return None
-
-# ฟังก์ชันสำหรับค้นหา Sector จาก Mapping ที่เราทำไว้
-import streamlit as st
-import pandas as pd
 
 # 🌟 1. วางฟังก์ชันนี้ไว้บนสุดของโค้ด (นอก main)
 def get_sector_from_mapping(ticker, df_mapping=None):
@@ -3474,9 +3469,6 @@ def main():
                 with tab_dividend:
                     # 1. เช็คแค่ว่ามีข้อมูลอยู่ใน session_state หรือยัง (ไม่ต้องวิ่งไปเรียก Google Sheets ทุกครั้งที่คลิกเปลี่ยนแท็บ)
                     if "dividend_data" not in st.session_state:
-                        # พยายามโหลดจากไฟล์ CSV ในเครื่องก่อนเป็นอันดับแรก (ปลอดภัย ไม่ติดโควตา Google)
-                        import os
-                        import pandas as pd
                         
                         if os.path.exists("dividend_data.csv"): # (ปรับชื่อไฟล์ CSV ตามที่คุณใช้งานจริง)
                             try:
