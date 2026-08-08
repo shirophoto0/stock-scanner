@@ -369,8 +369,9 @@ def load_dividend_data():
 
 # --- 2. ฟังก์ชันบันทึกข้อมูล (แก้ไขให้สอดคล้องและเขียนชีทได้ชัวร์) ---
 def save_dividend_data(df_div=None):
+    """ฟังก์ชันบันทึกข้อมูลปันผล ป้องกัน Error JSON และป้องกันชีทพัง"""
     try:
-        # ถ้าไม่ได้ส่ง df_div มา ให้แปลงจาก session_state ปัจจุบัน
+        # ถ้าไม่ได้ส่ง df_div มา ให้ดึงจาก session_state
         if df_div is None:
             if "dividend_data" in st.session_state and st.session_state.dividend_data:
                 df_div = pd.DataFrame(st.session_state.dividend_data)
@@ -383,30 +384,30 @@ def save_dividend_data(df_div=None):
         # 1. บันทึกลง session_state
         st.session_state.dividend_data = df_div.to_dict('records')
          
-        # 2. บันทึกลง CSV (ใช้ตัวแปร DIVIDEND_FILE ให้ตรงกัน)
+        # 2. บันทึกลง CSV ท้องถิ่น
         df_div.to_csv(DIVIDEND_FILE, index=False, encoding='utf-8-sig')
          
-        # 3. บันทึกลง Google Sheets ชีท 'Dividend' (ปรับวิธีส่งค่าให้ถูกต้องตามมาตรฐาน gspread)
+        # 3. บันทึกลง Google Sheets แบบปลอดภัย (ไม่ใช้ sheet.clear() ป้องกันชีทหาย)
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
             
-            # เคลียร์ข้อมูลเก่าทั้งหมด
-            sheet.clear()
+            # แปลงค่า NaN หรือ NaT ให้เป็นค่าว่าง ("") เพื่อป้องกัน JSON Error
+            df_clean = df_div.fillna("")
             
-            # เตรียมข้อมูลหัวตารางและข้อมูลทั้งหมดเป็น List ของ List
-            data_to_write = [df_div.columns.tolist()] + df_div.astype(str).values.tolist()
+            # เตรียมข้อมูลหัวตาราง + ข้อมูลทั้งหมด
+            data_to_write = [df_clean.columns.tolist()] + df_clean.astype(str).values.tolist()
             
-            # อัปเดตข้อมูลโดยระบุ Range 'A1' เพื่อให้ Google Sheets รับค่าได้อย่างถูกต้อง
-            sheet.update(range_name='A1', values=data_to_write)
-            
-        except Exception as e:
-            # ใช้ st.error เพื่อให้แสดงผลบนหน้าจอหากเชื่อมต่อ Google Sheets ไม่ผ่าน
-            st.error(f"Google Sheets sync error: {e}")
+            # อัปเดตข้อมูลทับลงไปตั้งแต่เซลล์ A1 เป็นต้นไป (ปลอดภัยกว่าการ clear โต๊ะ)
+            if len(data_to_write) > 0:
+                sheet.update(range_name=f"A1:I{len(data_to_write)}", values=data_to_write)
+                
+        except Exception as gsheet_err:
+            st.warning(f"⚠️ บันทึกลงเครื่องสำเร็จ แต่ซิงค์ Google Sheets ไม่สำเร็จ: {gsheet_err}")
              
         return True
     except Exception as e:
-        st.error(f"Error saving dividend data: {e}")
+        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล: {e}")
         return False
         
 def calculate_atr(df, period=14):
