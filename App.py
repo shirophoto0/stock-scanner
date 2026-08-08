@@ -4775,9 +4775,12 @@ def main():
             pension_insurance_value = 1337703.0
             
             # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
-            sheet_bank = client.open('MyStockData').worksheet('Bank_Account')
-            bank_data = sheet_bank.get_all_records()
-            bank_balance = float(str(bank_data[-1]['Balance']).replace(',', '')) if bank_data else 0.0
+            try:
+                sheet_bank = client.open('MyStockData').worksheet('Bank_Account')
+                bank_data = sheet_bank.get_all_records()
+                bank_balance = float(str(bank_data[-1]['Balance']).replace(',', '')) if bank_data else 0.0
+            except:
+                bank_balance = 0.0
             
             # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
             base_stock_value = total_value if 'total_value' in locals() else 0.0
@@ -4788,7 +4791,7 @@ def main():
             # 3. คำนวณ Net Worth รวมทุกกระเป๋า
             net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + pension_insurance_value + bank_balance
             
-            # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (กึ่งกลางหน้าจอ, สีเขียว, ใหญ่พิเศษ) ---
+            # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (กึ่งกลางหน้าจอ) ---
             c_left, c_center, c_right = st.columns([1, 2, 1])
             with c_center:
                 st.markdown(
@@ -4803,21 +4806,22 @@ def main():
             
             st.divider()
 
-            # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็น 3 คอลัมน์ x 2 แถว) ---
-            # แถวที่ 1
-            row1_col1, row1_col2, row1_col3 = st.columns(3)
-            row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
-            row1_col2.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
-            row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
+            # --- 5. แสดงผลใน Metrics แบบสมมาตร (3 คอลัมน์ x 2 แถว ควบคุมด้วยโครงสร้างเดียวกัน) ---
+            # ใช้ st.container แบ่งเป็น 3 คอลัมน์หลัก แล้วใส่ข้อมูลทั้ง 2 แถวลงในคอลัมน์เดิม
+            col1, col2, col3 = st.columns(3)
 
-            # แถวที่ 2
-            row2_col1, row2_col2, row2_col3 = st.columns(3)
-            row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
-            row2_col2.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
-            with row2_col3:
+            with col1:
+                st.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
+                st.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
+
+            with col2:
+                st.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
+                st.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
+
+            with col3:
+                st.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
                 st.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
                 st.caption("เวนคืนประกันอายุ 60 ปี")
-            
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
 
