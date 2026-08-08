@@ -3185,10 +3185,25 @@ def main():
                     st.divider()
                     st.subheader("📊 สรุปพอร์ตการลงทุน")
 
-                    if "my_portfolio" not in st.session_state:
-                        load_portfolio()
+                    # 1. ตรวจสอบและโหลดข้อมูลพอร์ตจาก Google Sheets (ชีต PortfolioData) ถ้ายังไม่มีใน session_state
+                    if "my_portfolio" not in st.session_state or not st.session_state["my_portfolio"]:
+                        try:
+                            client = get_gsheet_client()
+                            sheet_portfolio = client.open('MyStockData').worksheet('PortfolioData')
+                            raw_portfolio_data = sheet_portfolio.get_all_records()
+                            
+                            if raw_portfolio_data:
+                                # แปลงชื่อคอลัมน์ให้สะอาด ป้องกันปัญหาช่องว่าง
+                                cleaned_portfolio = []
+                                for row in raw_portfolio_data:
+                                    cleaned_row = {str(k).strip(): v for k, v in row.items()}
+                                    cleaned_portfolio.append(cleaned_row)
+                                st.session_state["my_portfolio"] = cleaned_portfolio
+                        except Exception as e:
+                            st.error(f"❌ ไม่สามารถดึงข้อมูลพอร์ตจาก Google Sheets (PortfolioData) ได้: {e}")
                     
-                    if st.session_state.my_portfolio:
+                    # 2. ตรวจสอบว่ามีข้อมูลในพอร์ตหรือไม่
+                    if "my_portfolio" in st.session_state and st.session_state["my_portfolio"]:
                         portfolio_list = []
                         total_invest = 0
                         total_value = 0
@@ -3200,64 +3215,82 @@ def main():
                                 return f'color: {color}'
                             return None
                     
-                        for row in st.session_state.my_portfolio:
-                            ticker = row.get('หุ้น', '')
-                            shares = float(row.get('shares', 0))
-                            avg_price = float(row.get('avg_price', 0.0))
-                            sector_val = row.get('Sector', 'General / Unspecified')
+                        for row in st.session_state["my_portfolio"]:
+                            # รองรับชื่อคอลัมน์ได้ทั้งภาษาไทยและอังกฤษ (กันเหนียว)
+                            ticker = str(row.get('หุ้น', row.get('Ticker', ''))).strip()
                             
                             try:
-                                m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+                                shares = float(str(row.get('จำนวน', row.get('shares', 0))).replace(',', ''))
                             except:
-                                m_price = avg_price
+                                shares = 0.0
+                                
+                            try:
+                                avg_price = float(str(row.get('ต้นทุนเฉลี่ย', row.get('avg_price', 0.0))).replace(',', ''))
+                            except:
+                                avg_price = 0.0
+                                
+                            sector_val = row.get('Sector', 'General / Unspecified')
                             
-                            cost_value = shares * avg_price
-                            market_value = shares * m_price
-                            profit = market_value - cost_value
-                            profit_pct = (profit / cost_value * 100) if cost_value > 0 else 0
-                            
-                            portfolio_list.append({
-                                "หุ้น": ticker,
-                                "Sector": sector_val,
-                                "จำนวน": shares,
-                                "ต้นทุนเฉลี่ย": avg_price,
-                                "มูลค่าต้นทุน": cost_value,
-                                "ราคาตลาด": m_price,
-                                "มูลค่าตลาด": market_value,
-                                "กำไร/ขาดทุน": profit,
-                                "% กำไร/ขาดทุน": profit_pct
-                            })
-                            total_invest += cost_value
-                            total_value += market_value
+                            if ticker:
+                                try:
+                                    # ดึงราคาตลาดล่าสุดผ่าน yfinance
+                                    m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+                                except:
+                                    m_price = avg_price
+                                
+                                cost_value = shares * avg_price
+                                market_value = shares * m_price
+                                profit = market_value - cost_value
+                                profit_pct = (profit / cost_value * 100) if cost_value > 0 else 0
+                                
+                                portfolio_list.append({
+                                    "หุ้น": ticker,
+                                    "Sector": sector_val,
+                                    "จำนวน": shares,
+                                    "ต้นทุนเฉลี่ย": avg_price,
+                                    "มูลค่าต้นทุน": cost_value,
+                                    "ราคาตลาด": m_price,
+                                    "มูลค่าตลาด": market_value,
+                                    "กำไร/ขาดทุน": profit,
+                                    "% กำไร/ขาดทุน": profit_pct
+                                })
+                                total_invest += cost_value
+                                total_value += market_value
                         
-                        # สรุปยอดรวม
-                        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                        col_s1.metric("เงินสดคงเหลือ", f"{st.session_state.get('cash_balance', 0):,.0f} ฿")
-                        col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
-                        col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
-                        diff = total_value - total_invest
-                        col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
+                        if portfolio_list:
+                            # ดึงยอดเงินสดคงเหลือจาก session_state (ถ้ามี ถ้าไม่มีให้เป็น 0)
+                            cash_bal = st.session_state.get('cash_balance', 0.0)
+                            
+                            # สรุปยอดรวม Metrics ด้านบน
+                            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                            col_s1.metric("เงินสดคงเหลือ", f"{cash_bal:,.0f} ฿")
+                            col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
+                            col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
+                            diff = total_value - total_invest
+                            col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
                     
-                        # แสดงตารางพอร์ตหลัก
-                        df_p = pd.DataFrame(portfolio_list)
-                        df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
-                        
-                        st.dataframe(
-                            df_display_p.style.format({
-                                "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
-                                "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
-                                "% กำไร/ขาดทุน": "{:.2f}%"
-                            })
-                            .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
-                            .set_properties(**{'text-align': 'right'})
-                            .set_table_styles([{'selector': 'th', 'props': [('text-align', 'right')]}])
-                            , use_container_width=True
-                        )
-                        
-                        if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
-                            st.session_state.edit_mode = True
+                            # แสดงตารางพอร์ตหลัก
+                            df_p = pd.DataFrame(portfolio_list)
+                            df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
+                            
+                            st.dataframe(
+                                df_display_p.style.format({
+                                    "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
+                                    "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
+                                    "% กำไร/ขาดทุน": "{:.2f}%"
+                                })
+                                .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
+                                .set_properties(**{'text-align': 'right'})
+                                .set_table_styles([{'selector': 'th', 'props': [('text-align', 'right')]}])
+                                , use_container_width=True
+                            )
+                            
+                            if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
+                                st.session_state.edit_mode = True
+                        else:
+                            st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตการลงทุนครับ")
                     else:
-                        st.info("ยังไม่มีข้อมูลในพอร์ตการลงทุนครับ")
+                        st.info("ยังไม่มีข้อมูลในชีต PortfolioData กรุณาตรวจสอบ Google Sheets อีกครั้งครับ")
                     
                         # --- ส่วนแสดงกราฟสรุปพอร์ต ---
                         st.divider()
