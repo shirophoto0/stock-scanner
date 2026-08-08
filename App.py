@@ -5055,13 +5055,14 @@ def main():
             coop_value = get_latest_coop_value()
             
             # --- คำนวณมูลค่าทองคำรวมจาก Tab ทองคำ (ถ้ามี) ---
+            # --- ดึงมูลค่าทองคำรวมจาก tab ทองคำให้ตรงกันเป๊ะ ---
             total_gold_value = 0.0
             if 'gold_portfolio' in st.session_state and len(st.session_state['gold_portfolio']) > 0:
                 try:
-                    # ใช้ราคาอ้างอิงเดียวกันกับ Tab ทองคำเพื่อคำนวณมูลค่าปัจจุบัน
-                    def get_thaigold_prices_for_overview():
+                    # ดึงราคาอ้างอิงปัจจุบัน (ใช้ Logic เดียวกันกับ tab_gold)
+                    import requests
+                    def get_current_gold_prices():
                         try:
-                            import requests
                             url = "https://api.chnwt.dev/thai-gold-api/"
                             response = requests.get(url, timeout=3)
                             if response.status_code == 200:
@@ -5071,13 +5072,16 @@ def main():
                                     return float(p["gold_bar"]["sell"].replace(",", "")), float(p["gold"]["sell"].replace(",", ""))
                         except Exception:
                             pass
-                        return 41000.0, 41500.0
+                        return 41000.0, 41500.0 # ค่าสำรองกรณีเรียก API ไม่ผ่าน
                     
-                    ref_bar, ref_jewel = get_thaigold_prices_for_overview()
+                    ref_bar, ref_jewel = get_current_gold_prices()
+                    
                     for g_item in st.session_state['gold_portfolio']:
                         if g_item["ประเภท"] == "ทองคำแท่ง":
+                            # ทองคำแท่ง: แปลงหน่วยกรัมเป็นบาททองคำก่อน (1 บาท = 15.244 กรัม) แล้วคูณราคาทองคำแท่ง
                             total_gold_value += (g_item["น้ำหนัก"] / 15.244) * ref_bar
                         elif g_item["ประเภท"] == "ทองรูปพรรณ":
+                            # ทองรูปพรรณ: น้ำหนักเป็นบาททองคำอยู่แล้ว คูณราคาทองรูปพรรณ
                             total_gold_value += g_item["น้ำหนัก"] * ref_jewel
                 except Exception:
                     total_gold_value = 0.0
