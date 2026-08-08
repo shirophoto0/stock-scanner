@@ -5178,26 +5178,42 @@ def main():
                     pass
    
                 # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
-                # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (พร้อม Debug ค่าตัวเลข) ---
                 st.markdown("---")
                 st.subheader("📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุน")
                 
                 if not df_pvd_history.empty:
                     try:
-                        # 1. แปลงข้อมูลตัวเลขหลักๆ ให้พร้อมคำนวณอย่างปลอดภัย
-                        grand_total = pd.to_numeric(df_pvd_history['Grand_Total'].astype(str).str.replace(',', ''), errors='coerce')
-                        member_total = pd.to_numeric(df_pvd_history.get('Member_Total', 0).astype(str).str.replace(',', ''), errors='coerce')
-                        employer_total = pd.to_numeric(df_pvd_history.get('Employer_Total', 0).astype(str).str.replace(',', ''), errors='coerce')
+                        # ฟังก์ชันช่วยทำความสะอาดข้อความให้เป็นตัวเลขที่แท้จริง
+                        def clean_num(series):
+                            if series is None:
+                                return pd.Series(0, index=df_pvd_history.index)
+                            return pd.to_numeric(
+                                series.astype(str)
+                                .str.replace(',', '', regex=False)
+                                .str.replace(' ', '', regex=False)
+                                .str.replace('%', '', regex=False),
+                                errors='coerce'
+                            ).fillna(0)
+            
+                        # 1. ทำความสะอาดข้อมูลแต่ละคอลัมน์
+                        grand_total = clean_num(df_pvd_history.get('Grand_Total'))
+                        member_total = clean_num(df_pvd_history.get('Member_Total'))
+                        employer_total = clean_num(df_pvd_history.get('Employer_Total'))
+                        
+                        # รวมเงินสะสมทั้งหมดเป็นต้นทุน
                         total_cost = member_total + employer_total
                         
-                        # 2. คำนวณ % ผลตอบแทนอัตโนมัติ
-                        if not grand_total.isna().all() and not total_cost.isna().all() and (total_cost > 0).any():
+                        # 2. คำนวณ % ผลตอบแทนอัตโนมัติ: ((Grand_Total - ต้นทุน) / ต้นทุน) * 100
+                        if (total_cost > 0).any():
                             df_pvd_history['Auto_Benefit_Pct'] = ((grand_total - total_cost) / total_cost) * 100
                             chart_col = 'Auto_Benefit_Pct'
                         else:
-                            chart_col = '% Benefit'
+                            # ถ้าต้นทุนรวมเป็น 0 ให้ลองใช้คอลัมน์ '% Benefit' เดิมที่ทำความสะอาดแล้ว
+                            df_pvd_history['Clean_%_Benefit'] = clean_num(df_pvd_history.get('% Benefit'))
+                            chart_col = 'Clean_%_Benefit'
                             
-                    except Exception:
+                    except Exception as e:
+                        st.warning(f"⚠️ เกิดข้อผิดพลาดในการคำนวณ: {e}")
                         chart_col = '% Benefit'
             
                     # 3. เตรียมข้อมูลแกน X (Period)
@@ -5207,12 +5223,11 @@ def main():
                     else:
                         chart_data = df_pvd_history[chart_col]
                     
-                    # แปลงข้อมูลเป็นตัวเลข
-                    chart_data = chart_data.astype(str).str.replace('%', '', regex=False)
+                    # แปลงข้อมูลเป็นตัวเลขรอบสุดท้าย
                     chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0)
                     
-                    # 🔍 พิมพ์ค่าตัวเลขที่จะเอาไปวาดกราฟออกมาดูบนหน้าจอชั่วคราว เพื่อตรวจสอบ
-                    st.write("🔍 **ค่าตัวเลขที่จะนำไปวาดกราฟ:**", chart_data)
+                    # 🔍 พิมพ์ค่าตัวเลขที่จะเอาไปวาดกราฟออกมาดู
+                    st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้:**", chart_data)
                     
                     # แสดงกราฟแท่ง
                     st.bar_chart(chart_data)
