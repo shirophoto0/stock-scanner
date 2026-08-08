@@ -5165,64 +5165,48 @@ def main():
                                 st.error("❌ Google Sheets API เกินโควตาชั่วคราว (Rate Limit 429) กรุณารอสัก 30 วินาที แล้วลองกดบันทึกใหม่อีกครั้งครับ")
                             else:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
-                                
-                # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit / ROI) ---
-                if 'df_pvd_history' in locals() and not df_pvd_history.empty:
-                    st.write("#### 📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุนแต่ละช่วงเวลา")
-                    
-                    # ค้นหาคอลัมน์ที่เก็บ % ผลตอบแทน และคอลัมน์ป้ายกำกับเวลา (เช่น Month, Year_BE)
-                    # รองรับชื่อคอลัมน์ที่เป็นไปได้ เช่น ROI_Percent, Benefit_Pct, %_Benefit ฯลฯ
+            
+                # --- 1. ดึงข้อมูลจาก Google Sheets มาเตรียมไว้ก่อน ---
+                df_pvd_history = pd.DataFrame()
+                try:
+                    client = get_gsheet_client()
+                    sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
+                    pvd_records = sheet_pvd.get_all_records()
+                    if pvd_records:
+                        df_pvd_history = pd.DataFrame(pvd_records)
+                except Exception as e:
+                    pass
+            
+                # --- 2. ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit / ROI) ---
+                st.markdown("---")
+                st.subheader("📊 กราฟแสดง % ผลตอบแทน (% Benefit) ของกองทุน")
+                if not df_pvd_history.empty:
+                    # ค้นหาคอลัมน์เก็บ % ผลตอบแทน
                     benefit_col = next((c for c in ['ROI_Percent', 'Benefit_Pct', '% Benefit', 'Return_Pct', 'Benefit'] if c in df_pvd_history.columns), None)
                     
                     if benefit_col:
-                        # สร้างคอลัมน์ป้ายกำกับสำหรับแกน X (เช่น "มกราคม 2569")
                         if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
                             df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
                             chart_data = df_pvd_history.set_index('Period')[benefit_col]
                         else:
                             chart_data = df_pvd_history[benefit_col]
                         
-                        # แปลงข้อมูลให้เป็นตัวเลขเพื่อความปลอดภัยในการวาดกราฟ
                         chart_data = pd.to_numeric(chart_data, errors='coerce')
-                        
-                        # แสดงกราฟแท่ง
                         st.bar_chart(chart_data)
                     else:
-                        st.info("💡 ไม่พบคอลัมน์สำหรับ % ผลตอบแทน (เช่น 'ROI_Percent' หรือ 'Benefit_Pct') ใน Google Sheets กรุณาตรวจสอบชื่อคอลัมน์ให้ตรงกันเพื่อให้ระบบแสดงกราฟได้ครับ")
-                        
-                # --- ส่วนแสดงตารางสรุปผลตอบแทนและการเติบโต (Performance & Growth Summary) ---
+                        st.info("💡 ไม่พบคอลัมน์สำหรับ % ผลตอบแทน (เช่น 'ROI_Percent') ใน Google Sheets กรุณาตรวจสอบชื่อคอลัมน์")
+                else:
+                    st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลเดือนแรกก่อนครับ")
+            
+                # --- 3. ส่วนแสดงตารางสรุปการเติบโต ---
                 st.markdown("---")
                 st.subheader("📈 ตารางสรุปการเติบโตและผลตอบแทนกองทุน PVD")
-                try:
-                    client = get_gsheet_client()
-                    sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
-                    pvd_records = sheet_pvd.get_all_records()
-                    
-                    if pvd_records:
-                        df_pvd_history = pd.DataFrame(pvd_records)
-                        
-                        # ตรวจสอบและเลือกเฉพาะคอลัมน์ที่จำเป็นสำหรับการวิเคราะห์การเติบโตและผลตอบแทน
-                        # (ปรับชื่อคอลัมน์ให้ยืดหยุ่นตามโครงสร้างจริงใน Google Sheets ของคุณ)
-                        possible_cols = ['Year_BE', 'Month', 'Total_Amount', 'Net_Profit', 'ROI_Percent', 'Accumulated_Cost']
-                        existing_cols = [c for c in possible_cols if c in df_pvd_history.columns]
-                        
-                        if len(existing_cols) >= 2:
-                            # เรียงลำดับข้อมูลตามปีและเดือน (ถ้ามี)
-                            if 'Year_BE' in df_pvd_history.columns:
-                                df_pvd_history['Year_BE'] = pd.to_numeric(df_pvd_history['Year_BE'], errors='coerce')
-                            
-                            st.dataframe(
-                                df_pvd_history,
-                                use_container_width=True,
-                                hide_index=True
-                            )
-                        else:
-                            # ถ้าโครงสร้างคอลัมน์ไม่ตรง ให้แสดงตารางดิบที่มีทั้งหมดแทนเพื่อให้ผู้ใช้เห็นข้อมูล
-                            st.dataframe(df_pvd_history, use_container_width=True)
-                    else:
-                        st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund กรุณาอัปโหลดข้อมูลเดือนแรกก่อนครับ")
-                except Exception as e:
-                    st.info("💡 ยังไม่พบชีต Provident_Fund หรือข้อมูลยังว่างอยู่ สามารถเริ่มอัปโหลดข้อมูลได้เลยครับ")
+                if not df_pvd_history.empty:
+                    if 'Year_BE' in df_pvd_history.columns:
+                        df_pvd_history['Year_BE'] = pd.to_numeric(df_pvd_history['Year_BE'], errors='coerce')
+                    st.dataframe(df_pvd_history, use_container_width=True, hide_index=True)
+                else:
+                    st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund")
 
             # --- 2. ส่วนประกันภัย Unit Linked ---
             with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
