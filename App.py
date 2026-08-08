@@ -3831,98 +3831,96 @@ def main():
                                     if st.button("❌ ยกเลิก", key="btn_cancel_clear_div"):
                                         st.session_state.confirm_clear_div = False
                                         st.rerun()
-                    else:
-                        st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
-                                                
-                            # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost รายปี (ที่เคยขาดหายไป) ---
-                            st.markdown("---")
-                            st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
+                        
+                        # --- ส่วนที่ 5: กราฟแท่งซ้อน %Yield / Cost รายปี ---
+                        st.markdown("---")
+                        st.markdown("##### 🚀 วิเคราะห์การเติบโต Dividend Yield on Cost รายปี (Stacked Bar Chart)")
+                        
+                        if 'dividend_data' in st.session_state and st.session_state.dividend_data:
+                            df_div_local = pd.DataFrame(st.session_state.dividend_data)
+                        else:
+                            df_div_local = pd.DataFrame()
+                        
+                        if not df_div_local.empty and 'Ticker' in df_div_local.columns and 'ยอดรับสุทธิ' in df_div_local.columns and 'ต้นทุนหุ้น' in df_div_local.columns and 'จำนวนหุ้น' in df_div_local.columns:
+                            df_stack_calc = df_div_local.copy()
                             
-                            if 'dividend_data' in st.session_state and st.session_state.dividend_data:
-                                df_div_local = pd.DataFrame(st.session_state.dividend_data)
+                            if 'วันที่ได้รับ' in df_stack_calc.columns:
+                                df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], errors='coerce')
+                                df_stack_calc['Year'] = df_stack_calc['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
                             else:
-                                df_div_local = pd.DataFrame()
+                                df_stack_calc['Year'] = 0
+                                
+                            available_stack_years = sorted([y for y in df_stack_calc['Year'].unique() if y > 0], reverse=True)
+                            stack_year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_stack_years]
                             
-                            if not df_div_local.empty and 'Ticker' in df_div_local.columns and 'ยอดรับสุทธิ' in df_div_local.columns and 'ต้นทุนหุ้น' in df_div_local.columns and 'จำนวนหุ้น' in df_div_local.columns:
-                                df_stack_calc = df_div_local.copy()
+                            selected_stack_period = st.selectbox(
+                                "📅 กรองช่วงเวลากราฟ Stacked Bar:", 
+                                stack_year_options, 
+                                key="stack_bar_year_filter"
+                            )
+                            
+                            if selected_stack_period != "All Time (ทั้งหมด)":
+                                df_stack_filtered = df_stack_calc[df_stack_calc['Year'] == int(selected_stack_period)].copy()
+                            else:
+                                df_stack_filtered = df_stack_calc.copy()
                                 
-                                if 'วันที่ได้รับ' in df_stack_calc.columns:
-                                    df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], errors='coerce')
-                                    df_stack_calc['Year'] = df_stack_calc['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
-                                else:
-                                    df_stack_calc['Year'] = 0
-                                    
-                                available_stack_years = sorted([y for y in df_stack_calc['Year'].unique() if y > 0], reverse=True)
-                                stack_year_options = ["All Time (ทั้งหมด)"] + [str(y) for y in available_stack_years]
+                            if not df_stack_filtered.empty:
+                                df_stack_filtered['Year_Str'] = df_stack_filtered['Year'].astype(str)
                                 
-                                selected_stack_period = st.selectbox(
-                                    "📅 กรองช่วงเวลากราฟ Stacked Bar:", 
-                                    stack_year_options, 
-                                    key="stack_bar_year_filter"
+                                df_latest = df_stack_calc.groupby('Ticker').agg({
+                                    'จำนวนหุ้น': 'last',
+                                    'ต้นทุนหุ้น': 'last'
+                                }).reset_index()
+                                df_latest['Total_Cost'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
+                                
+                                df_grouped_yearly = df_stack_filtered.groupby(['Ticker', 'Year_Str'])['ยอดรับสุทธิ'].sum().reset_index()
+                                df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'Total_Cost']], on='Ticker')
+                                
+                                df_merged_yearly['Yield_on_Cost_Annual'] = df_merged_yearly.apply(
+                                    lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
+                                    axis=1
                                 )
                                 
-                                if selected_stack_period != "All Time (ทั้งหมด)":
-                                    df_stack_filtered = df_stack_calc[df_stack_calc['Year'] == int(selected_stack_period)].copy()
-                                else:
-                                    df_stack_filtered = df_stack_calc.copy()
+                                if not df_merged_yearly.empty:
+                                    df_total_yield = df_merged_yearly.groupby('Ticker')['Yield_on_Cost_Annual'].sum().reset_index()
+                                    sorted_tickers_yield = df_total_yield.sort_values(by='Yield_on_Cost_Annual', ascending=True)['Ticker'].tolist()
                                     
-                                if not df_stack_filtered.empty:
-                                    df_stack_filtered['Year_Str'] = df_stack_filtered['Year'].astype(str)
-                                    
-                                    df_latest = df_stack_calc.groupby('Ticker').agg({
-                                        'จำนวนหุ้น': 'last',
-                                        'ต้นทุนหุ้น': 'last'
-                                    }).reset_index()
-                                    df_latest['Total_Cost'] = df_latest['ต้นทุนหุ้น'] * df_latest['จำนวนหุ้น']
-                                    
-                                    df_grouped_yearly = df_stack_filtered.groupby(['Ticker', 'Year_Str'])['ยอดรับสุทธิ'].sum().reset_index()
-                                    df_merged_yearly = pd.merge(df_grouped_yearly, df_latest[['Ticker', 'Total_Cost']], on='Ticker')
-                                    
-                                    df_merged_yearly['Yield_on_Cost_Annual'] = df_merged_yearly.apply(
-                                        lambda row: (row['ยอดรับสุทธิ'] / row['Total_Cost'] * 100) if row['Total_Cost'] > 0 else 0.0,
-                                        axis=1
+                                    df_merged_yearly['Text_Label'] = df_merged_yearly['Yield_on_Cost_Annual'].apply(
+                                        lambda x: f"{x:.2f}%" if x > 0.5 else ""
+                                    )
+                        
+                                    fig_stacked = px.bar(
+                                        df_merged_yearly,
+                                        x='Yield_on_Cost_Annual',
+                                        y='Ticker',
+                                        color='Year_Str',
+                                        orientation='h',
+                                        barmode='stack',
+                                        category_orders={'Ticker': sorted_tickers_yield},
+                                        text='Text_Label',
+                                        color_discrete_sequence=px.colors.qualitative.Prism
                                     )
                                     
-                                    if not df_merged_yearly.empty:
-                                        df_total_yield = df_merged_yearly.groupby('Ticker')['Yield_on_Cost_Annual'].sum().reset_index()
-                                        sorted_tickers_yield = df_total_yield.sort_values(by='Yield_on_Cost_Annual', ascending=True)['Ticker'].tolist()
-                                        
-                                        df_merged_yearly['Text_Label'] = df_merged_yearly['Yield_on_Cost_Annual'].apply(
-                                            lambda x: f"{x:.2f}%" if x > 0.5 else ""
-                                        )
-                
-                                        fig_stacked = px.bar(
-                                            df_merged_yearly,
-                                            x='Yield_on_Cost_Annual',
-                                            y='Ticker',
-                                            color='Year_Str',
-                                            orientation='h',
-                                            barmode='stack',
-                                            category_orders={'Ticker': sorted_tickers_yield},
-                                            text='Text_Label',
-                                            color_discrete_sequence=px.colors.qualitative.Prism
-                                        )
-                                        
-                                        fig_stacked.update_traces(
-                                            textposition='inside', 
-                                            insidetextanchor='middle'
-                                        )
-                                        
-                                        fig_stacked.update_layout(
-                                            xaxis_title=f"Annual Dividend Yield on Cost (%) [{selected_stack_period}]",
-                                            yaxis_title="ชื่อหุ้น (Ticker)",
-                                            height=max(350, len(sorted_tickers_yield) * 45),
-                                            margin=dict(l=10, r=20, t=20, b=20),
-                                            legend_title="ปีที่ได้รับ (Year)"
-                                        )
-                                        st.plotly_chart(fig_stacked, use_container_width=True)
-                                    else:
-                                        st.info("ไม่มีข้อมูลเพียงพอสำหรับกราฟ Stacked Bar รายปีนี้")
+                                    fig_stacked.update_traces(
+                                        textposition='inside', 
+                                        insidetextanchor='middle'
+                                    )
+                                    
+                                    fig_stacked.update_layout(
+                                        xaxis_title=f"Annual Dividend Yield on Cost (%) [{selected_stack_period}]",
+                                        yaxis_title="ชื่อหุ้น (Ticker)",
+                                        height=max(350, len(sorted_tickers_yield) * 45),
+                                        margin=dict(l=10, r=20, t=20, b=20),
+                                        legend_title="ปีที่ได้รับ (Year)"
+                                    )
+                                    st.plotly_chart(fig_stacked, use_container_width=True)
                                 else:
-                                    st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือกสำหรับกราฟนี้")
-                    else:
-                        st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
-                                            
+                                    st.info("ไม่มีข้อมูลเพียงพอสำหรับกราฟ Stacked Bar รายปีนี้")
+                            else:
+                                st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือกสำหรับกราฟนี้")
+                        else:
+                            st.info("💡 ยังไม่มีข้อมูลเงินปันผลในระบบ สามารถเพิ่มข้อมูลผ่านฟอร์มด้านบนหรืออัปโหลดไฟล์รายงาน TSD ได้เลยครับ")
+                                                                    
                                                 
                 #########################
                 with tab_journal:
