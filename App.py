@@ -95,22 +95,22 @@ def extract_pvd_from_image(image_file, year_be, month_name="ธันวาค�
             return None
             
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-3.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
                 
         # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2569 -> 2026)
         year_ce = int(year_be) - 543
         
         prompt = f"""
         คุณเป็นผู้ช่วยทางการเงินอัจฉริยะ หน้าที่ของคุณคืออ่านรูปภาพรายงานยอดรวมกองทุนสำรองเลี้ยงชีพของเดือน {month_name} ปี พ.ศ. {year_be} (ค.ศ. {year_ce}) นี้ 
-        โดยในรูปจะมีตาราง "ยอดรวมทุกนโยบายการลงทุน (Total Portfolio Balance)" ซึ่งแยกรายการย่อยออกมาดังนี้:
+        โดยให้สังเกตที่มุมขวาบนของเอกสารจะมีหัวข้อ "อัตราผลตอบแทนรายบุคคล % (Individual YTD Net Return %)" อยู่ (เช่น 7.01 %)
+        และในรูปจะมีตาราง "ยอดรวมทุกนโยบายการลงทุน (Total Portfolio Balance)" ซึ่งแยกรายการย่อยออกมาดังนี้:
         1. ยอดยกมา (Balance as of)
         2. เงินเข้าระหว่างปี (Transferred in during this year)
-        และมีตารางสรุปด้านบน/ด้านขวา รวมถึงข้อมูลเงินสะสมที่รับเข้ากองทุนระหว่างปี
         
         โปรดสกัดข้อมูลตัวเลขทั้งหมดตามหัวตาราง CSV ด้านล่างนี้ให้ออกมาเป็นข้อมูลของเดือน {month_name} ปี {year_ce}:
         
         หัวตาราง CSV:
-        Month,Year_CE,Year_BE,Brought_Forward_Member_Saving,Brought_Forward_Member_Benefit,Brought_Forward_Employer_Matching,Brought_Forward_Employer_Benefit,Transferred_Member_Saving,Transferred_Member_Benefit,Transferred_Employer_Matching,Transferred_Employer_Benefit,Member_Saving,Member_Benefit,Member_Total,Employer_Matching,Employer_Benefit,Employer_Total,Grand_Total,Total_Units
+        Month,Year_CE,Year_BE,Brought_Forward_Member_Saving,Brought_Forward_Member_Benefit,Brought_Forward_Employer_Matching,Brought_Forward_Employer_Benefit,Transferred_Member_Saving,Transferred_Member_Benefit,Transferred_Employer_Matching,Transferred_Employer_Benefit,Member_Saving,Member_Benefit,Member_Total,Employer_Matching,Employer_Benefit,Employer_Total,Grand_Total,Total_Units,YTD_Net_Return_Pct
         
         คำอธิบายฟิลด์ข้อมูล:
         - Month: {month_name}
@@ -132,9 +132,11 @@ def extract_pvd_from_image(image_file, year_be, month_name="ธันวาค�
         - Employer_Total: รวมส่วนของนายจ้าง (Total Amount)
         - Grand_Total: ยอดรวมทั้งสิ้น
         - Total_Units: จำนวนหน่วยรวม
+        - YTD_Net_Return_Pct: อัตราผลตอบแทนรายบุคคล % ที่อยู่มุมขวาบนของเอกสาร (ใส่เฉพาะตัวเลข เช่น 7.01 ถ้าไม่มีให้ใส่ 0.00)
         
         กฎสำคัญในการแสดงผลตัวเลข:
         - ทุกค่าที่เป็น "จำนวนเงิน" หรือ "จำนวนหน่วย" ต้องใส่เครื่องหมายจุลภาค (,) คั่นหลักพันให้ถูกต้อง (เช่น 1,204,406.92) ถ้าไม่มีให้ใส่ 0.00
+        - ช่อง YTD_Net_Return_Pct ใส่เฉพาะตัวเลขทศนิยม (เช่น 7.01) ไม่ต้องใส่เครื่องหมาย %
         - โปรดส่งกลับมาเฉพาะข้อมูล CSV ที่สะอาด (หัวตาราง 1 บรรทัด และข้อมูลตัวเลข 1 บรรทัด) ไม่มีคำอธิบายเพิ่มเติม ไม่ต้องใส่เครื่องหมาย ```csv ครอบ
         """
         
