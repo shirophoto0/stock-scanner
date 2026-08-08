@@ -5190,7 +5190,6 @@ def main():
                 
                 if not df_pvd_history.empty:
                     try:
-                        # ฟังก์ชันช่วยทำความสะอาดข้อความให้เป็นตัวเลขที่แท้จริง
                         def clean_num(series):
                             if series is None:
                                 return pd.Series(0.0, index=df_pvd_history.index)
@@ -5202,26 +5201,24 @@ def main():
                                 errors='coerce'
                             ).fillna(0.0)
             
-                        # 1. ดึงข้อมูลตัวเลขจากทุกคอลัมน์ที่เกี่ยวข้องกับต้นทุนและมูลค่ารวม
-                        grand_total = clean_num(df_pvd_history.get('Grand_Total'))
+                        # ดึงยอดผลประโยชน์รวม (Member_Benefit + Employer_Benefit) และยอดเงินต้นรวม
+                        member_benefit = clean_num(df_pvd_history.get('Member_Benefit'))
+                        employer_benefit = clean_num(df_pvd_history.get('Employer_Benefit'))
+                        total_benefit = member_benefit + employer_benefit
                         
-                        # รวมเงินต้นทุกส่วน (ยอดสะสม + ยอดสมทบ + ยอดยกมา + ยอดโอนย้าย)
-                        total_cost = (
-                            clean_num(df_pvd_history.get('Brought_Forward_Member_Saving')) +
-                            clean_num(df_pvd_history.get('Brought_Forward_Employer_Matching')) +
-                            clean_num(df_pvd_history.get('Transferred_Member_Saving')) +
-                            clean_num(df_pvd_history.get('Transferred_Employer_Matching')) +
-                            clean_num(df_pvd_history.get('Member_Saving')) +
-                            clean_num(df_pvd_history.get('Employer_Matching'))
-                        )
+                        member_saving = clean_num(df_pvd_history.get('Member_Saving'))
+                        employer_matching = clean_num(df_pvd_history.get('Employer_Matching'))
                         
-                        # 2. คำนวณ % ผลตอบแทนอัตโนมัติ: ((Grand_Total - ต้นทุนทั้งหมด) / ต้นทุนทั้งหมด) * 100
+                        # ต้นทุนหลักในงวดนั้นๆ
+                        total_principal = member_saving + employer_matching
+                        
+                        # คำนวณ % ผลตอบแทนจาก (ผลประโยชน์รวม / เงินต้นรวม) * 100 
+                        # หรือถ้าต้องการใช้ Grand_Total ตั้ง ให้ใช้: ((Grand_Total - (Grand_Total - ผลประโยชน์)) / ต้นทุน)
                         calculated_benefit = pd.Series(0.0, index=df_pvd_history.index)
-                        valid_mask = total_cost > 0
+                        valid_mask = total_principal > 0
                         
-                        calculated_benefit[valid_mask] = (
-                            (grand_total[valid_mask] - total_cost[valid_mask]) / total_cost[valid_mask]
-                        ) * 100
+                        # คำนวณจากผลประโยชน์สุทธิเทียบกับเงินต้น
+                        calculated_benefit[valid_mask] = (total_benefit[valid_mask] / total_principal[valid_mask]) * 100
                         
                         df_pvd_history['Auto_Benefit_Pct'] = calculated_benefit
                         chart_col = 'Auto_Benefit_Pct'
@@ -5230,7 +5227,6 @@ def main():
                         st.warning(f"⚠️ เกิดข้อผิดพลาดในการคำนวณ: {e}")
                         chart_col = None
             
-                    # 3. เตรียมข้อมูลแกน X (Period)
                     if chart_col and chart_col in df_pvd_history.columns:
                         if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
                             df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
@@ -5238,13 +5234,9 @@ def main():
                         else:
                             chart_data = df_pvd_history[chart_col]
                         
-                        # แปลงข้อมูลเป็นตัวเลขรอบสุดท้าย
                         chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
                         
-                        # 🔍 พิมพ์ค่าตัวเลขที่จะเอาไปวาดกราฟออกมาดูเพื่อเช็กความถูกต้อง
-                        st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้:**", chart_data)
-                        
-                        # แสดงกราฟแท่ง
+                        st.write("🔍 **ตรวจสอบค่า % ผลตอบแทนที่คำนวณได้ (ใหม่):**", chart_data)
                         st.bar_chart(chart_data)
                     else:
                         st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
