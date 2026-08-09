@@ -5844,8 +5844,9 @@ def main():
             
             import pandas as pd
             from datetime import datetime
+            import time
             
-            # 🔄 โหลดข้อมูลจาก Google Sheets เฉพาะครั้งแรกที่ยังไม่มีข้อมูลใน session_state (ลดการติด API Limit)
+            # 🔄 โหลดข้อมูลจาก Google Sheets เฉพาะครั้งแรกที่ยังไม่มีข้อมูลใน session_state
             if 'real_estate_portfolio' not in st.session_state:
                 st.session_state['real_estate_portfolio'] = []
                 try:
@@ -5872,7 +5873,6 @@ def main():
             st.markdown("---")
             st.markdown("#### 📝 เพิ่ม / แก้ไขข้อมูลอสังหาริมทรัพย์")
             
-            # สร้างตัวเลือกสำหรับโหมด: เพิ่มใหม่ หรือ แก้ไขรายการเดิม
             existing_names = [item["ชื่อทรัพย์สิน"] for item in st.session_state.get('real_estate_portfolio', [])]
             action_mode = st.radio("เลือกการทำงาน", ["➕ เพิ่มรายการใหม่", "✏️ แก้ไขข้อมูลเดิม"], horizontal=True, key="re_action_mode")
             
@@ -5883,7 +5883,6 @@ def main():
             
             if action_mode == "✏️ แก้ไขข้อมูลเดิม" and existing_names:
                 selected_name = st.selectbox("เลือกทรัพย์สินที่ต้องการแก้ไข", existing_names, key="re_edit_select")
-                # ดึงค่าเดิมมาแสดงเป็น Default ในฟอร์ม
                 for item in st.session_state['real_estate_portfolio']:
                     if item["ชื่อทรัพย์สิน"] == selected_name:
                         default_market = item["มูลค่าตลาด"]
@@ -5891,7 +5890,6 @@ def main():
                         default_note = item["หมายเหตุ"]
                         break
             
-            # ฟอร์มรับข้อมูล (รองรับทั้งเพิ่มและแก้ไข)
             with st.form("real_estate_form"):
                 col_re1, col_re2 = st.columns(2)
                 
@@ -5913,7 +5911,6 @@ def main():
                 if re_submitted:
                     if re_name and re_market_value > 0:
                         if action_mode == "➕ เพิ่มรายการใหม่":
-                            # เช็คว่าชื่อซ้ำไหม
                             if any(item["ชื่อทรัพย์สิน"] == re_name for item in st.session_state['real_estate_portfolio']):
                                 st.error(f"มีทรัพย์สินชื่อ '{re_name}' อยู่แล้วในระบบ กรุณาเลือกโหมด 'แก้ไขข้อมูลเดิม' แทน")
                                 st.stop()
@@ -5925,7 +5922,6 @@ def main():
                                     "หมายเหตุ": re_note
                                 })
                         else:
-                            # อัปเดตข้อมูลเดิมใน session_state
                             for item in st.session_state['real_estate_portfolio']:
                                 if item["ชื่อทรัพย์สิน"] == selected_name:
                                     item["มูลค่าตลาด"] = re_market_value
@@ -5933,31 +5929,38 @@ def main():
                                     item["หมายเหตุ"] = re_note
                                     break
                         
-                        # บันทึกทับลง Google Sheets ทั้งหมด
-                        try:
-                            sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                            if sheet_re is not None:
-                                sheet_re.clear()
-                                sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-                                
-                                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                rows_to_append = []
-                                for item in st.session_state['real_estate_portfolio']:
-                                    net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
-                                    rows_to_append.append([
-                                        item["ชื่อทรัพย์สิน"],
-                                        item["มูลค่าตลาด"],
-                                        item["ยอดหนี้คงเหลือ"],
-                                        net_val,
-                                        item["หมายเหตุ"],
-                                        current_date
-                                    ])
-                                sheet_re.append_rows(rows_to_append)
-                        except Exception as e:
-                            st.error(f"⚠️ บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
+                        # บันทึกลง Google Sheets แบบรอบเดียวจบ พร้อมระบบหน่วงป้องกัน API Limit (429 Too Many Requests)
+                        saved_success = False
+                        for attempt in range(3):
+                            try:
+                                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                                if sheet_re is not None:
+                                    sheet_re.clear()
+                                    sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
+                                    
+                                    current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    rows_to_append = []
+                                    for item in st.session_state['real_estate_portfolio']:
+                                        net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
+                                        rows_to_append.append([
+                                            item["ชื่อทรัพย์สิน"],
+                                            item["มูลค่าตลาด"],
+                                            item["ยอดหนี้คงเหลือ"],
+                                            net_val,
+                                            item["หมายเหตุ"],
+                                            current_date
+                                        ])
+                                    sheet_re.append_rows(rows_to_append)
+                                    saved_success = True
+                                    break
+                            except Exception as e:
+                                time.sleep(1.5) # พัก 1.5 วินาทีก่อนลองใหม่ถ้าชน Limit
                         
-                        st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
-                        st.rerun()
+                        if saved_success:
+                            st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
+                            st.rerun()
+                        else:
+                            st.error("⚠️ บันทึกลง Google Sheets ไม่สำเร็จเนื่องจากติดขีดจำกัด API กรุณาลองใหม่อีกครั้งในอีกสักครู่")
                     else:
                         st.error("กรุณากรอกชื่อทรัพย์สินและมูลค่าประเมินตลาดให้ถูกต้อง")
             
@@ -5978,15 +5981,12 @@ def main():
                 )
                 
                 total_re_value = df_re["มูลค่าสุทธิ (บาท)"].sum()
-                
-                # 🌟 บันทึกค่ารวมส่งต่อไปใช้ที่หน้า Overview
                 st.session_state['total_real_estate_value'] = total_re_value
                 
                 col_m1, col_m2 = st.columns([2, 1])
                 col_m1.metric("🏡 มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{total_re_value:,.2f} ฿")
                 
                 with col_m2:
-                    # เพิ่มปุ่มลบรายรายการเฉพาะตัวที่เลือกได้ด้วยเพื่อความสะดวก
                     if existing_names:
                         del_target = st.selectbox("เลือกรายการที่จะลบ", existing_names, key="re_del_select")
                         if st.button("🗑️ ลบรายการที่เลือก"):
@@ -6020,7 +6020,8 @@ def main():
                         pass
                     st.rerun()
             else:
-                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                 
+                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")
+                
 # ------------------------------
 if __name__ == "__main__":
     main()
