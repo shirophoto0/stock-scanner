@@ -350,25 +350,42 @@ def load_total_cash_balance():
         return 0.0
         
         
+# =============================================================
+# 5. ฟังก์ชันการจัดการ Cash Balance และข้อมูลพอร์ตการลงทุน (Portfolio & Cash)
+# =============================================================
+
 # --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
 if "cash_balance" not in st.session_state:
     st.session_state.cash_balance = load_total_cash_balance()
 
-# --- ปรับปรุงฟังก์ชัน save_cash_balance ให้สอดคล้องกับระบบ Google Sheets ---
+
 def save_cash_balance(balance):
     try:
         # อัปเดตค่าใน session_state ทันที
         st.session_state.cash_balance = float(balance)
-        
-        # หากต้องการบันทึกรายการเปลี่ยนแปลงลง Google Sheets (CashFlow)
-        # ให้เรียกใช้ log_cash_transaction ที่คุณมีอยู่แล้วในโค้ดได้เลยครับ
-        # ตัวอย่างเช่น:
-        # log_cash_transaction(str(datetime.now().date()), 'ปรับปรุงยอดเงินสด', balance, 'Update via App')
-        
         st.toast(f"บันทึกยอดเงินสดคงเหลือสำเร็จ: {balance:,.2f} บาท", icon="✅")
     except Exception as e:
         st.error(f"Error saving cash balance: {e}")
+
+
+def save_cash_to_gsheet(df):
+    """
+    ฟังก์ชันเฉพาะสำหรับบันทึกรายการเงินเข้าหน้า Cash_Flow เท่านั้น
+    """
+    if df.empty:
+        st.warning("ไม่มีข้อมูลที่จะบันทึก")
+        return False
         
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet("Cash_Flow")
+        sheet.append_rows(df.values.tolist())
+        return True
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการบันทึก Cash_Flow: {e}")
+        return False 
+
+
 def save_data_to_sheet(new_df, sheet_name):
     try:
         client = get_gsheet_client()
@@ -379,22 +396,23 @@ def save_data_to_sheet(new_df, sheet_name):
                 "Close_Price", "Realized", "Comm", "Net_Profit", "Win_Lose", "Reason"]
         
         new_df = new_df.reindex(columns=cols)
-        
         sheet.append_rows(new_df.values.tolist())
         
-        # --- เพิ่มส่วนนี้เพื่อให้หน้าจออัปเดตทันทีเมื่อ Open สถานะ ---
-        st.cache_data.clear() # ล้างข้อมูลเก่า
+        st.cache_data.clear() 
         st.success("เปิดสถานะสำเร็จ!")
-        st.rerun()            # โหลดหน้าจอใหม่ทันที
+        st.rerun()            
         
         return True
     except Exception as e:
         st.error(f"บันทึกข้อมูลไม่สำเร็จ: {e}")
         return False
 
+
+# =============================================================
+# 6. ฟังก์ชันการจัดการข้อมูลเงินปันผล (Dividend Management)
+# =============================================================
 DIVIDEND_FILE = "dividend_data.csv"
 
-# --- 1. ฟังก์ชันโหลดข้อมูล ---
 def load_dividend_data():
     if os.path.exists(DIVIDEND_FILE):
         try:
@@ -405,11 +423,10 @@ def load_dividend_data():
             return []
     return []
 
-# --- 2. ฟังก์ชันบันทึกข้อมูล (แก้ไขให้สอดคล้องและเขียนชีทได้ชัวร์) ---
+
 def save_dividend_data(df_div=None):
     """ฟังก์ชันบันทึกข้อมูลปันผล ป้องกัน Error JSON และป้องกันชีทพัง"""
     try:
-        # ถ้าไม่ได้ส่ง df_div มา ให้ดึงจาก session_state
         if df_div is None:
             if "dividend_data" in st.session_state and st.session_state.dividend_data:
                 df_div = pd.DataFrame(st.session_state.dividend_data)
@@ -425,18 +442,14 @@ def save_dividend_data(df_div=None):
         # 2. บันทึกลง CSV ท้องถิ่น
         df_div.to_csv(DIVIDEND_FILE, index=False, encoding='utf-8-sig')
          
-        # 3. บันทึกลง Google Sheets แบบปลอดภัย (ไม่ใช้ sheet.clear() ป้องกันชีทหาย)
+        # 3. บันทึกลง Google Sheets แบบปลอดภัย
         try:
             client = get_gsheet_client()
             sheet = client.open('MyStockData').worksheet('Dividend')
             
-            # แปลงค่า NaN หรือ NaT ให้เป็นค่าว่าง ("") เพื่อป้องกัน JSON Error
             df_clean = df_div.fillna("")
-            
-            # เตรียมข้อมูลหัวตาราง + ข้อมูลทั้งหมด
             data_to_write = [df_clean.columns.tolist()] + df_clean.astype(str).values.tolist()
             
-            # อัปเดตข้อมูลทับลงไปตั้งแต่เซลล์ A1 เป็นต้นไป (ปลอดภัยกว่าการ clear โต๊ะ)
             if len(data_to_write) > 0:
                 sheet.update(range_name=f"A1:I{len(data_to_write)}", values=data_to_write)
                 
@@ -447,13 +460,16 @@ def save_dividend_data(df_div=None):
     except Exception as e:
         st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกข้อมูล: {e}")
         return False
-        
+
+
+# =============================================================
+# 7. ฟังก์ชันการคำนวณทางเทคนิคและดึงข้อมูลตลาด (Technical & Market Data)
+# =============================================================
 def calculate_atr(df, period=14):
     """คำนวณค่า Average True Range (ATR) จากข้อมูลราคา"""
     if df.empty or len(df) < period:
-        return 10.0 # ค่าสำรองเริ่มต้น (จุด) หากข้อมูลยังไม่พอ
+        return 10.0 
     
-    # สมมติ df มีคอลัมน์ High, Low, Close
     high = df['High']
     low = df['Low']
     close = df['Close']
@@ -467,120 +483,80 @@ def calculate_atr(df, period=14):
     atr = tr.rolling(window=period).mean().iloc[-1]
     
     return float(atr) if not pd.isna(atr) else 10.0
-    
-def save_cash_to_gsheet(df):
-    """
-    ฟังก์ชันเฉพาะสำหรับบันทึกรายการเงินเข้าหน้า Cash_Flow เท่านั้น
-    """
-    if df.empty:
-        st.warning("ไม่มีข้อมูลที่จะบันทึก")
-        return False
-        
-    try:
-        # 1. เชื่อมต่อ (ใช้ client เดิมของคุณ)
-        client = get_gsheet_client()
-        
-        # 2. เปิดไฟล์ MyStockData และระบุชื่อ Sheet ตรงนี้เลย
-        # การใส่ชื่อนี้โดยตรงในโค้ดจะช่วยป้องกันความผิดพลาดเรื่องการพิมพ์ชื่อ Sheet
-        sheet = client.open('MyStockData').worksheet("Cash_Flow")
-        
-        # 3. เตรียมและบันทึกข้อมูลต่อท้าย
-        sheet.append_rows(df.values.tolist())
-        
-        return True
-        
-    except Exception as e:
-        st.error(f"เกิดข้อผิดพลาดในการบันทึก Cash_Flow: {e}")
-        return False        
-####################
-        
+
+
 @st.cache_data(ttl=60)
 def load_data(sheet_name):
     try:
         client = get_gsheet_client()
-        # เปลี่ยนจาก 'TradingPlan' เป็นตัวแปร sheet_name ที่รับเข้ามา
         sheet = client.open('MyStockData').worksheet(sheet_name) 
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
         st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {e}")
         return pd.DataFrame()
-        
-@st.cache_data(ttl=3600)  # แคชข้อมูลไว้ 1 ชั่วโมงเพื่อลดการเรียกซ้ำ
+
+
+@st.cache_data(ttl=3600)  
 def get_cached_stock_info(ticker):
     try:
         stock = yf.Ticker(ticker)
-        # ลองดึงข้อมูล info พร้อมป้องกัน Error Rate Limit
         info = stock.info
         if not info or len(info) <= 1:
             return {}
         return info
     except Exception as e:
-        # หากติด Rate Limit หรือ Error ให้คืนค่าว่างแทนที่จะทำให้แอปพัง (Crash)
         print(f"Warning: Could not fetch info for {ticker} due to: {e}")
         return {}
-    
+
+
+# =============================================================
+# 8. ฟังก์ชันการจัดการบันทึกและซิงค์ข้อมูลลง Google Sheets (Sync & Sheets Operations)
+# =============================================================
 def clear_and_save_data(df, sheet_name):
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('TradingPlan')
         
-        # ล้างข้อมูลเดิม
         sheet.clear()
         
-        # เลือกเฉพาะคอลัมน์หลักที่เราใช้ในตาราง เพื่อความชัวร์
         cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Alert_Date', 'Timestamp', 'Image_URL']
-        # กรองเอาเฉพาะคอลัมน์ที่มีอยู่จริง
         save_df = df[[c for c in cols if c in df.columns]]
         
-        # เตรียมข้อมูล Header + Data
         data_to_save = [save_df.columns.tolist()] + save_df.fillna("").values.tolist()
-        
-        # บันทึก
         sheet.update('A1', data_to_save)
         return True
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาด: {e}")
         return False
 
+
 def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
     spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
     sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
     
-    # --- จุดแก้ไขสำคัญ: ล้างข้อมูลก่อนส่ง ---
-    # 1. แทนที่ค่าที่เป็น NaN หรือ None ให้เป็นค่าว่าง ""
-    # 2. แทนที่ค่า Infinity (inf) ให้เป็น 0
     df = df.replace([np.inf, -np.inf], 0).fillna("")
-    
-    # รวม Header และ ข้อมูล
     data_to_write = [df.columns.tolist()] + df.values.tolist()
     
-    # ใช้ชื่อพารามิเตอร์เพื่อให้เป็นไปตามกฎใหม่ของ gspread
     sheet.update(range_name='A1', values=data_to_write)
     print(f"บันทึกข้อมูลลง {sheet_name} สำเร็จ!")
-    
 
-# =============================================================
-# 2. ฟังก์ชัน Load/Save ข้อมูล
-# =============================================================
-# ปรับฟังก์ชัน SAVE (บันทึกลง Google Sheets)
+
 def save_journal():
     df_temp = pd.DataFrame(st.session_state.journal_data)
     
-    # แปลงวันที่เป็น String ก่อนบันทึก
     date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
     for col in date_cols:
         if col in df_temp.columns:
             df_temp[col] = pd.to_datetime(df_temp[col], errors='coerce').dt.strftime('%Y-%m-%d')
             
-    # บันทึกลง Google Sheet
     client = get_gsheet_client()
     sheet = client.open('MyStockData').worksheet('JournalData')
     
-    # ล้างข้อมูลเดิมและเขียนใหม่ (Header + Data)
     sheet.clear()
     sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
+
 
 def load_journal():
     try:
@@ -591,7 +567,8 @@ def load_journal():
     except Exception as e:
         st.error(f"ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้: {e}")
         st.session_state.journal_data = []
-        
+
+
 def save_portfolio():
     try:
         if st.session_state.my_portfolio is None:
@@ -600,49 +577,44 @@ def save_portfolio():
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('PortfolioData')
         
-        sheet.clear() # ล้างข้อมูลเก่า
+        sheet.clear() 
         if st.session_state.my_portfolio:
             df = pd.DataFrame(st.session_state.my_portfolio)
-            # เขียน Header + ข้อมูล
             sheet.update([df.columns.values.tolist()] + df.fillna('').values.tolist())
-            st.toast("บันทึกข้อมูลพอร์ตเรียบร้อย!", icon="✅") # เพิ่มตัวช่วยแจ้งเตือน
+            st.toast("บันทึกข้อมูลพอร์ตเรียบร้อย!", icon="✅") 
         else:
             st.toast("ข้อมูลพอร์ตว่างเปล่า", icon="⚠️")
             
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึกพอร์ต: {e}")
 
-# --- ฟังก์ชันโหลดพอร์ต (วางไว้คู่กัน) ---
+
 def load_portfolio():
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('PortfolioData')
         data = sheet.get_all_records()
         
-        # ใส่บรรทัดนี้ไว้เช็ค (รันแล้วลองดูว่ามันแสดงข้อมูลอะไรออกมาที่หน้าเว็บไหม)
-        # st.write("ข้อมูลที่ดึงมา:", data) 
-        
         st.session_state.my_portfolio = data if data else []
     except Exception as e:
         st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
         st.session_state.my_portfolio = []
-        
+
+
 def log_portfolio_snapshot():
     """บันทึกยอดพอร์ตรายวันลงตาราง Portfolio_History"""
     client = get_gsheet_client()
     sheet = client.open('MyStockData').worksheet('Portfolio_History')
     
-    # ดึงค่าปัจจุบัน
     current_date = datetime.now().strftime('%Y-%m-%d')
-    market_val = get_total_market_value() # พี่อ้ำมีฟังก์ชันนี้อยู่แล้ว
-    total_cash_invested = load_total_cash_balance() # พี่อ้ำมีฟังก์ชันนี้อยู่แล้ว
+    market_val = calculate_total_portfolio_value() 
+    total_cash_invested = load_total_cash_balance() 
     
-    # บันทึกแถวใหม่
-    sheet.append_row([current_date, market_val, total_cash_invested])    
+    sheet.append_row([current_date, market_val, total_cash_invested]) 
+
 
 def calculate_total_portfolio_value():
     """คำนวณมูลค่าหุ้นในพอร์ตปัจจุบัน (Market Value ของหุ้นทั้งหมด)"""
-    # ตรวจสอบว่ามีข้อมูลใน session_state หรือไม่ และไม่เป็นค่าว่าง
     if 'journal_data' not in st.session_state or not st.session_state.journal_data:
         return 0.0
         
@@ -651,7 +623,6 @@ def calculate_total_portfolio_value():
         if df.empty:
             return 0.0
             
-        # ค้นหาชื่อคอลัมน์ที่เป็นตัวแทนของหุ้น/Ticker ป้องกัน KeyError
         stock_col = None
         for col in ['หุ้น', 'Ticker', 'Symbol', 'Stock']:
             if col in df.columns:
@@ -670,14 +641,12 @@ def calculate_total_portfolio_value():
                 shares_col = col
                 break
                 
-        # ถ้าหาคอลัมน์สำคัญไม่ครบ ให้คืนค่า 0 เพื่อป้องกันแอปพัง
         if not stock_col or not type_col or not shares_col:
             return 0.0
 
         all_tickers = df[stock_col].unique()
         total_stock_value = 0
         
-        # วนลูปคำนวณมูลค่าหุ้นแต่ละตัว
         for ticker in all_tickers:
             if not ticker or pd.isna(ticker):
                 continue
@@ -692,12 +661,10 @@ def calculate_total_portfolio_value():
             
             if shares > 0:
                 try:
-                    # ดึงราคาตลาดปัจจุบันจาก Yahoo Finance
                     ticker_obj = yf.Ticker(f"{ticker}.BK")
                     market_price = ticker_obj.fast_info.get('last_price', 0)
                     
                     if not market_price or pd.isna(market_price):
-                        # ลองใช้วิธีดึงผ่าน history แทนถ้า fast_info ไม่มา
                         hist = ticker_obj.history(period="1d")
                         if not hist.empty:
                             market_price = hist['Close'].iloc[-1]
@@ -706,13 +673,11 @@ def calculate_total_portfolio_value():
                             
                     total_stock_value += (shares * float(market_price))
                 except:
-                    # ถ้าดึงราคาไม่ได้ ข้ามไปก่อนเพื่อไม่ให้ติด Error
                     pass
                     
         return total_stock_value
         
     except Exception as e:
-        # ดักจับข้อผิดพลาดทั้งหมดเพื่อให้แอปยังรันต่อไปได้
         return 0.0
         
 def total_invested_capital():
