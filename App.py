@@ -5710,20 +5710,21 @@ def main():
             import pandas as pd
             from datetime import datetime
         
-            # 🔄 [ปรับปรุงใหม่ให้เสถียร] ดึงข้อมูลจาก Google Sheets เสมอเพื่อป้องกันข้อมูลหายจาก UI
+            # 🔄 โหลดข้อมูลอัตโนมัติจาก Google Sheets (แมตช์ชื่อ Header ให้ตรงกันเป๊ะ)
             st.session_state['real_estate_portfolio'] = []
             try:
                 sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
                 if sheet_re is not None:
                     records = sheet_re.get_all_records()
                     for row in records:
-                        # ตรวจสอบว่ามีคอลัมน์ชื่อทรัพย์สินและไม่เป็นค่าว่าง
+                        # เช็คจาก Header จริงใน Excel ของคุณ
                         if "ชื่อทรัพย์สิน" in row and str(row["ชื่อทรัพย์สิน"]).strip() != "":
-                            # ป้องกัน Error กรณีช่องตัวเลขในชีตเป็นค่าว่าง
-                            m_val = row.get("มูลค่าตลาด", 0)
+                            
+                            # ดึงค่าจากคอลัมน์ที่มีคำว่า "(บาท)" ต่อท้าย
+                            m_val = row.get("มูลค่าตลาด (บาท)", row.get("มูลค่าตลาด", 0))
                             m_val = float(str(m_val).replace(',', '')) if str(m_val).strip() != "" else 0.0
                             
-                            d_val = row.get("ยอดหนี้คงเหลือ", 0)
+                            d_val = row.get("ยอดหนี้คงเหลือ (บาท)", row.get("ยอดหนี้คงเหลือ", 0))
                             d_val = float(str(d_val).replace(',', '')) if str(d_val).strip() != "" else 0.0
         
                             st.session_state['real_estate_portfolio'].append({
@@ -5754,7 +5755,7 @@ def main():
                 
                 if re_submitted:
                     if re_name and re_market_value > 0:
-                        # 1. เพิ่มรายการใหม่ต่อท้ายใน session_state
+                        # 1. เพิ่มรายการใหม่ลงใน session_state
                         st.session_state['real_estate_portfolio'].append({
                             "ชื่อทรัพย์สิน": re_name,
                             "มูลค่าตลาด": re_market_value,
@@ -5762,7 +5763,7 @@ def main():
                             "หมายเหตุ": re_note
                         })
                         
-                        # 2. บันทึกทับลง Google Sheets ทันที
+                        # 2. บันทึกทับลง Google Sheets โดยใช้ Header ที่มีคำว่า (บาท) ให้ตรงกัน
                         try:
                             sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
                             if sheet_re is not None:
