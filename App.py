@@ -5132,16 +5132,27 @@ def main():
                     bank_balance = 0.0
 
             # ==========================================
-            # 🌟 [เพิ่มใหม่] ดึงมูลค่าอสังหาริมทรัพย์
+            # 🌟 ดึงข้อมูลอสังหาริมทรัพย์จาก Session State / Google Sheets
             # ==========================================
-            # (ตรงนี้คุณสามารถปรับให้ดึงจาก Google Sheets หรือ session_state ที่บันทึกไว้จาก Tab อสังหาฯ ได้ครับ)
-            # ตัวอย่างการกำหนดค่าเริ่มต้น หรือดึงจาก session_state
-            house1_value = st.session_state.get('house1_value', 0.0) # บ้านปัจจุบัน
-            house2_value = st.session_state.get('house2_value', 0.0) # บ้านพ่อแม่
-            condo_value = st.session_state.get('condo_value', 0.0)   # คอนโด
+            house1_value = 0.0  # บ้าน (ปัจจุบัน)
+            house2_value = 0.0  # บ้าน (พ่อแม่อยู่)
+            condo_value = 0.0   # คอนโด
             
-            # หากมีหนี้บ้าน (Mortgage) ให้นำมารวมที่นี่เพื่อไปหักลบ
-            # total_mortgage_debt = st.session_state.get('total_mortgage_debt', 0.0) 
+            # เช็คข้อมูลจาก session_state ที่โหลดมาจากชีต Real_Estate
+            if 'real_estate_portfolio' in st.session_state and len(st.session_state['real_estate_portfolio']) > 0:
+                for item in st.session_state['real_estate_portfolio']:
+                    name = str(item.get("ชื่อทรัพย์สิน", "")).lower()
+                    note = str(item.get("หมายเหตุ", "")).lower()
+                    net_val = float(item.get("มูลค่าตลาด", 0)) - float(item.get("ยอดหนี้คงเหลือ", 0))
+                    
+                    # แยกประเภทตามชื่อหรือหมายเหตุที่คุณบันทึกไว้
+                    if "condo" in name or "คอนโด" in name or "ดีคอนโด" in name:
+                        condo_value += net_val
+                    elif "พ่อแม่" in note or "พ่อแม่" in name:
+                        house2_value += net_val
+                    else:
+                        # ถ้าเป็นบ้านหลัก / อยู่อาศัยปัจจุบัน
+                        house1_value += net_val
             
             total_real_estate = house1_value + house2_value + condo_value
             # ==========================================
@@ -5152,8 +5163,7 @@ def main():
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำ และ อสังหาริมทรัพย์)
-            # หมายเหตุ: หากมีหนี้สิน อย่าลืมนำยอดหนี้มาลบออก ( - total_mortgage_debt)
+            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำ และ อสังหาริมทรัพย์แล้ว)
             net_worth_total = (total_stock_and_tfex + pvd_value + insurance_value + 
                                coop_value + sso_value + pension_insurance_value + 
                                bank_balance + total_gold_value + total_real_estate)
@@ -5171,25 +5181,23 @@ def main():
                         
             st.divider()
         
-            # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็นสัดส่วนชัดเจน) ---
+            # --- 5. แสดงผลใน Metrics ย่อย ---
             st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
-            # แถวที่ 1 (4 คอลัมน์)
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
             row1_col2.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
             row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
             row1_col4.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
         
-            # แถวที่ 2 (4 คอลัมน์)
             row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
             row2_col1.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
             row2_col2.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
             row2_col3.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
             row2_col4.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
             
-            st.markdown("<br>", unsafe_allow_html=True) # เว้นบรรทัด
+            st.markdown("<br>", unsafe_allow_html=True)
             
-            # แถวที่ 3 (4 คอลัมน์) สำหรับอสังหาริมทรัพย์โดยเฉพาะ
+            # --- 6. แสดงผลอสังหาริมทรัพย์ ---
             st.markdown("#### 🏡 อสังหาริมทรัพย์")
             row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
             row3_col1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
