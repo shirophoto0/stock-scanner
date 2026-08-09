@@ -5132,27 +5132,43 @@ def main():
                     bank_balance = 0.0
 
             # ==========================================
-            # 🌟 ดึงข้อมูลอสังหาริมทรัพย์จาก Session State / Google Sheets
+            # 🌟 [ปรับปรุงใหม่] ดึงข้อมูลอสังหาริมทรัพย์ให้ตรงกับโครงสร้างปัจจุบัน
             # ==========================================
             house1_value = 0.0  # บ้าน (ปัจจุบัน)
             house2_value = 0.0  # บ้าน (พ่อแม่อยู่)
             condo_value = 0.0   # คอนโด
             
-            # เช็คข้อมูลจาก session_state ที่โหลดมาจากชีต Real_Estate
-            if 'real_estate_portfolio' in st.session_state and len(st.session_state['real_estate_portfolio']) > 0:
-                for item in st.session_state['real_estate_portfolio']:
-                    name = str(item.get("ชื่อทรัพย์สิน", "")).lower()
-                    note = str(item.get("หมายเหตุ", "")).lower()
-                    net_val = float(item.get("มูลค่าตลาด", 0)) - float(item.get("ยอดหนี้คงเหลือ", 0))
-                    
-                    # แยกประเภทตามชื่อหรือหมายเหตุที่คุณบันทึกไว้
-                    if "condo" in name or "คอนโด" in name or "ดีคอนโด" in name:
-                        condo_value += net_val
-                    elif "พ่อแม่" in note or "พ่อแม่" in name:
-                        house2_value += net_val
-                    else:
-                        # ถ้าเป็นบ้านหลัก / อยู่อาศัยปัจจุบัน
-                        house1_value += net_val
+            # รองรับการดึงข้อมูลทั้งจาก st.session_state หรือโหลดตรงจากชีต Real_Estate เผื่อกรณีสลับแท็บแล้วค่าว่าง
+            real_estate_items = st.session_state.get('real_estate_portfolio', [])
+            if not real_estate_items:
+                try:
+                    sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                    if sheet_re is not None:
+                        real_estate_items = sheet_re.get_all_records()
+                except:
+                    pass
+
+            for item in real_estate_items:
+                name = str(item.get("ชื่อทรัพย์สิน", "")).lower()
+                note = str(item.get("หมายเหตุ", "")).lower()
+                
+                # รองรับคีย์ได้ทั้งแบบมีและไม่มีคำว่า "(บาท)" ป้องกันค่าเป็น 0
+                m_val = item.get("มูลค่าตลาด (บาท)", item.get("มูลค่าตลาด", 0))
+                market_val = float(str(m_val).replace(',', '')) if str(m_val).strip() != "" else 0.0
+                
+                d_val = item.get("ยอดหนี้คงเหลือ (บาท)", item.get("ยอดหนี้คงเหลือ", 0))
+                debt_val = float(str(d_val).replace(',', '')) if str(d_val).strip() != "" else 0.0
+                
+                net_val = market_val - debt_val
+                
+                # แยกประเภทตามชื่อหรือหมายเหตุที่คุณบันทึกไว้
+                if "condo" in name or "คอนโด" in name or "ดีคอนโด" in name:
+                    condo_value += net_val
+                elif "พ่อแม่" in note or "พ่อแม่" in name:
+                    house2_value += net_val
+                else:
+                    # ถ้าเป็นบ้านหลัก / อยู่อาศัยปัจจุบัน
+                    house1_value += net_val
             
             total_real_estate = house1_value + house2_value + condo_value
             # ==========================================
