@@ -5132,13 +5132,12 @@ def main():
                     bank_balance = 0.0
 
             # ==========================================
-            # 🌟 [ปรับปรุงใหม่] ดึงข้อมูลอสังหาริมทรัพย์ให้ตรงกับโครงสร้างปัจจุบัน
+            # 🌟 ดึงข้อมูลอสังหาริมทรัพย์
             # ==========================================
             house1_value = 0.0  # บ้าน (ปัจจุบัน)
             house2_value = 0.0  # บ้าน (พ่อแม่อยู่)
             condo_value = 0.0   # คอนโด
             
-            # รองรับการดึงข้อมูลทั้งจาก st.session_state หรือโหลดตรงจากชีต Real_Estate เผื่อกรณีสลับแท็บแล้วค่าว่าง
             real_estate_items = st.session_state.get('real_estate_portfolio', [])
             if not real_estate_items:
                 try:
@@ -5152,7 +5151,6 @@ def main():
                 name = str(item.get("ชื่อทรัพย์สิน", "")).lower()
                 note = str(item.get("หมายเหตุ", "")).lower()
                 
-                # รองรับคีย์ได้ทั้งแบบมีและไม่มีคำว่า "(บาท)" ป้องกันค่าเป็น 0
                 m_val = item.get("มูลค่าตลาด (บาท)", item.get("มูลค่าตลาด", 0))
                 market_val = float(str(m_val).replace(',', '')) if str(m_val).strip() != "" else 0.0
                 
@@ -5161,13 +5159,11 @@ def main():
                 
                 net_val = market_val - debt_val
                 
-                # แยกประเภทตามชื่อหรือหมายเหตุที่คุณบันทึกไว้
                 if "condo" in name or "คอนโด" in name or "ดีคอนโด" in name:
                     condo_value += net_val
                 elif "พ่อแม่" in note or "พ่อแม่" in name:
                     house2_value += net_val
                 else:
-                    # ถ้าเป็นบ้านหลัก / อยู่อาศัยปัจจุบัน
                     house1_value += net_val
             
             total_real_estate = house1_value + house2_value + condo_value
@@ -5179,25 +5175,42 @@ def main():
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำ และ อสังหาริมทรัพย์แล้ว)
-            net_worth_total = (total_stock_and_tfex + pvd_value + insurance_value + 
-                               coop_value + sso_value + pension_insurance_value + 
-                               bank_balance + total_gold_value + total_real_estate)
+            # 3. คำนวณ Net Worth แบบไม่รวมอสังหาฯ (สินทรัพย์สภาพคล่องและการลงทุนล้วนๆ)
+            net_worth_excl_re = (total_stock_and_tfex + pvd_value + insurance_value + 
+                                  coop_value + sso_value + pension_insurance_value + 
+                                  bank_balance + total_gold_value)
             
-            # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด ---
-            st.markdown(
-                f"""
-                <div style="text-align: left; padding: 5px;">
-                    <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
-                    <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
-                </div>
-                """, 
-                unsafe_allow_html=True
-            )
+            # 4. คำนวณ Net Worth รวมทั้งหมด (รวมอสังหาฯ แล้ว)
+            net_worth_total = net_worth_excl_re + total_real_estate
+            
+            # --- 5. แสดงผล Net Worth ทั้งสองแบบด้านบนสุด (แบ่งเป็น 2 คอลัมน์สวยงาม) ---
+            col_nw1, col_nw2 = st.columns(2)
+            
+            with col_nw1:
+                st.markdown(
+                    f"""
+                    <div style="text-align: left; padding: 5px;">
+                        <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth (ไม่รวมอสังหาฯ)</h4>
+                        <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_excl_re:,.0f} ฿</h1>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+                
+            with col_nw2:
+                st.markdown(
+                    f"""
+                    <div style="text-align: left; padding: 5px;">
+                        <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
+                        <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
                         
             st.divider()
         
-            # --- 5. แสดงผลใน Metrics ย่อย ---
+            # --- 6. แสดงผลใน Metrics ย่อย ---
             st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
@@ -5213,7 +5226,7 @@ def main():
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # --- 6. แสดงผลอสังหาริมทรัพย์ ---
+            # --- 7. แสดงผลอสังหาริมทรัพย์ ---
             st.markdown("#### 🏡 อสังหาริมทรัพย์")
             row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
             row3_col1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
