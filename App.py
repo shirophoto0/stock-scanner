@@ -3424,8 +3424,8 @@ def main():
                                 
                                 transaction_date_str = str(p_sell_date) if p_status == "Closed (ขายแล้ว)" else str(p_buy_date)
                                 
-                                # 1. จัดการข้อมูล Portfolio
-                                found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item['หุ้น'] == ticker_upper), -1)
+                                # 1. จัดการข้อมูล Portfolio (ใช้ .get ป้องกัน KeyError 100%)
+                                found_idx = next((i for i, item in enumerate(st.session_state.my_portfolio) if item.get('หุ้น', item.get('Ticker', '')) == ticker_upper), -1)
                                 
                                 if "ซื้อ" in p_type and p_status != "Closed (ขายแล้ว)":
                                     log_cash_transaction(date=transaction_date_str, trans_type="ซื้อหุ้น " + ticker_upper, amount=-(total_val + p_comm), note=f"ซื้อ {p_qty} หุ้น ที่ราคา {p_price}")
@@ -3433,19 +3433,42 @@ def main():
                                     
                                     if found_idx != -1:
                                         old = st.session_state.my_portfolio[found_idx]
-                                        new_shares = old['shares'] + p_qty
-                                        new_cost = ((old['shares'] * old['avg_price']) + total_val) / new_shares
-                                        st.session_state.my_portfolio[found_idx] = {'หุ้น': ticker_upper, 'shares': new_shares, 'avg_price': new_cost, 'Sector': p_sector}
+                                        old_shares = float(old.get('shares', old.get('จำนวน', 0)))
+                                        old_avg_price = float(old.get('avg_price', old.get('ต้นทุนเฉลี่ย', 0)))
+                                        
+                                        new_shares = old_shares + p_qty
+                                        # คำนวณต้นทุนเฉลี่ยใหม่ (Average Cost) อย่างถูกต้องแม่นยำ
+                                        new_cost = ((old_shares * old_avg_price) + total_val) / new_shares if new_shares > 0 else p_price
+                                        
+                                        st.session_state.my_portfolio[found_idx] = {
+                                            'หุ้น': ticker_upper, 
+                                            'shares': new_shares, 
+                                            'avg_price': new_cost, 
+                                            'Sector': p_sector
+                                        }
                                     else:
-                                        st.session_state.my_portfolio.append({'หุ้น': ticker_upper, 'shares': p_qty, 'avg_price': p_price, 'Sector': p_sector})
+                                        st.session_state.my_portfolio.append({
+                                            'หุ้น': ticker_upper, 
+                                            'shares': p_qty, 
+                                            'avg_price': p_price, 
+                                            'Sector': p_sector
+                                        })
                                 
-                                else: # กรณีขาย
+                                else: # กรณีขาย (รองรับทั้งขายหมดและทยอยขาย)
                                     log_cash_transaction(date=transaction_date_str, trans_type="ขายหุ้น " + ticker_upper, amount=(total_val - p_comm), note=f"ขาย {p_qty} หุ้น ที่ราคา {p_price}")
                                     st.session_state.cash_balance += (total_val - p_comm)
                                     
                                     if found_idx != -1:
-                                        st.session_state.my_portfolio[found_idx]['shares'] -= p_qty
-                                        if st.session_state.my_portfolio[found_idx]['shares'] <= 0:
+                                        old = st.session_state.my_portfolio[found_idx]
+                                        old_shares = float(old.get('shares', old.get('จำนวน', 0)))
+                                        
+                                        new_shares = old_shares - p_qty
+                                        
+                                        if new_shares > 0:
+                                            # อัปเดตจำนวนหุ้นที่เหลือ (ต้นทุนเฉลี่ยตัวเดิมไม่ต้องเปลี่ยน)
+                                            st.session_state.my_portfolio[found_idx]['shares'] = new_shares
+                                        else:
+                                            # ถ้าขายหมดพอร์ต ลบรายการออก
                                             st.session_state.my_portfolio.pop(found_idx)
                                 
                                 # 2. เพิ่มข้อมูลเข้า Journal (รวม Sector)
@@ -3468,7 +3491,7 @@ def main():
                                 }
                                 st.session_state.journal_data.append(new_entry)
                                 
-                                # 3. บันทึกข้อมูล
+                                # 3. บันทึกข้อมูลลง Google Sheets
                                 save_portfolio()
                                 save_journal()
                                 save_cash_balance(st.session_state.cash_balance)
