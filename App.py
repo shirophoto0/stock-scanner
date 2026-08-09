@@ -2175,7 +2175,9 @@ def main():
                     st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
     
                     # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
-                    cash_balance = load_total_cash_balance()
+                    if "cash_balance" not in st.session_state:
+                        st.session_state.cash_balance = load_total_cash_balance()
+                    cash_balance = st.session_state.cash_balance
                     market_value = get_total_market_value()
                     total_equity = cash_balance + market_value
                     
