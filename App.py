@@ -298,18 +298,7 @@ def calculate_tfex_result(entry, close, size, comm, Status):
         "Win_Lose": win_lose,
         "Points": round(points, 2)
     }
-
-def log_to_sheet(sheet_name, row_data):
-    """ฟังก์ชันสำหรับบันทึกข้อมูลแถวใหม่ลง Google Sheets"""
-    try:
-        # ใช้ตัวแปร sheet_name เพื่อให้รองรับหลายชีทตามที่เราเรียกใช้งาน
-        sheet = client.open('MyStockData').worksheet(sheet_name)
-        sheet.append_row(row_data)
-        return True
-    except Exception as e:
-        print(f"Error logging to {sheet_name}: {e}")
-        return False
-        
+    
 def get_gsheet_client():
     scope = [
         "https://spreadsheets.google.com/feeds",
@@ -334,6 +323,18 @@ def get_gsheet_client():
         # ถ้าพัง ให้ print ออกมาดูใน Log ของ GitHub
         print(f"Error ในการเชื่อมต่อ Google Sheets: {e}")
         raise e
+        
+def log_to_sheet(sheet_name, row_data):
+    """ฟังก์ชันสำหรับบันทึกข้อมูลแถวใหม่ลง Google Sheets"""
+    try:
+        # ใช้ตัวแปร sheet_name เพื่อให้รองรับหลายชีทตามที่เราเรียกใช้งาน
+        sheet = client.open('MyStockData').worksheet(sheet_name)
+        sheet.append_row(row_data)
+        return True
+    except Exception as e:
+        print(f"Error logging to {sheet_name}: {e}")
+        return False
+        
         
 def load_total_cash_balance():
     """คำนวณเงินสดคงเหลืออัตโนมัติจาก Cash_Flow และ PortfolioData"""
