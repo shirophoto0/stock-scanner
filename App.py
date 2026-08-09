@@ -5859,7 +5859,7 @@ def main():
                                 
                                 d_val = row.get("ยอดหนี้คงเหลือ (บาท)", row.get("ยอดหนี้คงเหลือ", 0))
                                 d_val = float(str(d_val).replace(',', '')) if str(d_val).strip() != "" else 0.0
-                
+                                
                                 st.session_state['real_estate_portfolio'].append({
                                     "ชื่อทรัพย์สิน": str(row["ชื่อทรัพย์สิน"]),
                                     "มูลค่าตลาด": m_val,
@@ -5868,35 +5868,72 @@ def main():
                                 })
                 except Exception as e:
                     st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้: {e}")
-            
+                    
             st.markdown("---")
-            st.markdown("#### 📝 บันทึกข้อมูลอสังหาริมทรัพย์")
+            st.markdown("#### 📝 เพิ่ม / แก้ไขข้อมูลอสังหาริมทรัพย์")
             
-            # ฟอร์มรับข้อมูล
+            # สร้างตัวเลือกสำหรับโหมด: เพิ่มใหม่ หรือ แก้ไขรายการเดิม
+            existing_names = [item["ชื่อทรัพย์สิน"] for item in st.session_state.get('real_estate_portfolio', [])]
+            action_mode = st.radio("เลือกการทำงาน", ["➕ เพิ่มรายการใหม่", "✏️ แก้ไขข้อมูลเดิม"], horizontal=True, key="re_action_mode")
+            
+            selected_name = ""
+            default_market = 0.0
+            default_debt = 0.0
+            default_note = ""
+            
+            if action_mode == "✏️ แก้ไขข้อมูลเดิม" and existing_names:
+                selected_name = st.selectbox("เลือกทรัพย์สินที่ต้องการแก้ไข", existing_names, key="re_edit_select")
+                # ดึงค่าเดิมมาแสดงเป็น Default ในฟอร์ม
+                for item in st.session_state['real_estate_portfolio']:
+                    if item["ชื่อทรัพย์สิน"] == selected_name:
+                        default_market = item["มูลค่าตลาด"]
+                        default_debt = item["ยอดหนี้คงเหลือ"]
+                        default_note = item["หมายเหตุ"]
+                        break
+            
+            # ฟอร์มรับข้อมูล (รองรับทั้งเพิ่มและแก้ไข)
             with st.form("real_estate_form"):
                 col_re1, col_re2 = st.columns(2)
                 
                 with col_re1:
-                    re_name = st.text_input("ชื่อทรัพย์สิน", placeholder="เช่น คอนโดสุขุมวิท, บ้านเดี่ยวบางนา", key="form_re_name")
-                    re_market_value = st.number_input("มูลค่าประเมินตลาดปัจจุบัน (บาท)", min_value=0.0, step=50000.0, value=0.0, key="form_re_market")
+                    if action_mode == "➕ เพิ่มรายการใหม่":
+                        re_name = st.text_input("ชื่อทรัพย์สิน", placeholder="เช่น คอนโดสุขุมวิท, บ้านเดี่ยวบางนา", key="form_re_name")
+                    else:
+                        st.text(f"กำลังแก้ไขทรัพย์สิน: {selected_name}")
+                        re_name = selected_name
+                        
+                    re_market_value = st.number_input("มูลค่าประเมินตลาดปัจจุบัน (บาท)", min_value=0.0, step=50000.0, value=float(default_market), key="form_re_market")
                     
                 with col_re2:
-                    re_debt = st.number_input("ยอดหนี้คงเหลือกับธนาคาร (บาท)", min_value=0.0, step=10000.0, value=0.0, key="form_re_debt")
-                    re_note = st.text_input("หมายเหตุ / ทำเล", placeholder="เช่น ปล่อยเช่าอยู่, อยู่เอง, พ่อแม่อาศัยอยู่", key="form_re_note")
+                    re_debt = st.number_input("ยอดหนี้คงเหลือกับธนาคาร (บาท)", min_value=0.0, step=10000.0, value=float(default_debt), key="form_re_debt")
+                    re_note = st.text_input("หมายเหตุ / ทำเล", value=str(default_note), placeholder="เช่น ปล่อยเช่าอยู่, อยู่เอง", key="form_re_note")
                     
-                re_submitted = st.form_submit_button("➕ เพิ่มอสังหาริมทรัพย์เข้าพอร์ต")
+                re_submitted = st.form_submit_button("💾 บันทึกข้อมูลเข้าพอร์ต")
                 
                 if re_submitted:
                     if re_name and re_market_value > 0:
-                        # 1. เพิ่มรายการใหม่ลงใน session_state
-                        st.session_state['real_estate_portfolio'].append({
-                            "ชื่อทรัพย์สิน": re_name,
-                            "มูลค่าตลาด": re_market_value,
-                            "ยอดหนี้คงเหลือ": re_debt,
-                            "หมายเหตุ": re_note
-                        })
+                        if action_mode == "➕ เพิ่มรายการใหม่":
+                            # เช็คว่าชื่อซ้ำไหม
+                            if any(item["ชื่อทรัพย์สิน"] == re_name for item in st.session_state['real_estate_portfolio']):
+                                st.error(f"มีทรัพย์สินชื่อ '{re_name}' อยู่แล้วในระบบ กรุณาเลือกโหมด 'แก้ไขข้อมูลเดิม' แทน")
+                                st.stop()
+                            else:
+                                st.session_state['real_estate_portfolio'].append({
+                                    "ชื่อทรัพย์สิน": re_name,
+                                    "มูลค่าตลาด": re_market_value,
+                                    "ยอดหนี้คงเหลือ": re_debt,
+                                    "หมายเหตุ": re_note
+                                })
+                        else:
+                            # อัปเดตข้อมูลเดิมใน session_state
+                            for item in st.session_state['real_estate_portfolio']:
+                                if item["ชื่อทรัพย์สิน"] == selected_name:
+                                    item["มูลค่าตลาด"] = re_market_value
+                                    item["ยอดหนี้คงเหลือ"] = re_debt
+                                    item["หมายเหตุ"] = re_note
+                                    break
                         
-                        # 2. บันทึกทับลง Google Sheets ครั้งเดียวจบ
+                        # บันทึกทับลง Google Sheets ทั้งหมด
                         try:
                             sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
                             if sheet_re is not None:
@@ -5917,7 +5954,7 @@ def main():
                                     ])
                                 sheet_re.append_rows(rows_to_append)
                         except Exception as e:
-                            st.error(f"⚠️ เพิ่มรายการสำเร็จ แต่บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
+                            st.error(f"⚠️ บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
                         
                         st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
                         st.rerun()
@@ -5945,7 +5982,31 @@ def main():
                 # 🌟 บันทึกค่ารวมส่งต่อไปใช้ที่หน้า Overview
                 st.session_state['total_real_estate_value'] = total_re_value
                 
-                st.metric("🏡 มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{total_re_value:,.2f} ฿")
+                col_m1, col_m2 = st.columns([2, 1])
+                col_m1.metric("🏡 มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{total_re_value:,.2f} ฿")
+                
+                with col_m2:
+                    # เพิ่มปุ่มลบรายรายการเฉพาะตัวที่เลือกได้ด้วยเพื่อความสะดวก
+                    if existing_names:
+                        del_target = st.selectbox("เลือกรายการที่จะลบ", existing_names, key="re_del_select")
+                        if st.button("🗑️ ลบรายการที่เลือก"):
+                            st.session_state['real_estate_portfolio'] = [item for item in st.session_state['real_estate_portfolio'] if item["ชื่อทรัพย์สิน"] != del_target]
+                            try:
+                                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                                if sheet_re is not None:
+                                    sheet_re.clear()
+                                    sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
+                                    current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    rows_to_append = []
+                                    for item in st.session_state['real_estate_portfolio']:
+                                        net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
+                                        rows_to_append.append([item["ชื่อทรัพย์สิน"], item["มูลค่าตลาด"], item["ยอดหนี้คงเหลือ"], net_val, item["หมายเหตุ"], current_date])
+                                    if rows_to_append:
+                                        sheet_re.append_rows(rows_to_append)
+                            except:
+                                pass
+                            st.success(f"ลบ {del_target} สำเร็จ")
+                            st.rerun()
                 
                 if st.button("🗑️ ล้างข้อมูลอสังหาริมทรัพย์ทั้งหมด"):
                     st.session_state['real_estate_portfolio'] = []
@@ -5959,7 +6020,7 @@ def main():
                         pass
                     st.rerun()
             else:
-                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                  
+                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                 
 # ------------------------------
 if __name__ == "__main__":
     main()
