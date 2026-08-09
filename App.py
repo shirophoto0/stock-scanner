@@ -304,51 +304,29 @@ def log_to_sheet(sheet_name, row_data):
         return False
         
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลืออัตโนมัติจาก Cash_Flow และ PortfolioData"""
+    """คำนวณเงินสดคงเหลือสุทธิจากผลรวม Amount ทั้งหมดในชีต Cash_Flow โดยตรง"""
     try:
         client = get_gsheet_client()
         spreadsheet_name = 'MyStockData'
         
-        # 1. ดึงยอดรวมจากชีต Cash_Flow
-        sheet_cash = client.open(spreadsheet_name).worksheet('Cash_Flow')
+        # ดึงข้อมูลจากชีต Cash_Flow
+        sheet_cash = client.open(spreadsheet_name).worksheet('CashFlow')
         records_cash = sheet_cash.get_all_records()
         
-        total_cash_flow = 0.0
+        total_cash_balance = 0.0
         if records_cash:
             df_cash = pd.DataFrame(records_cash)
             if 'Amount' in df_cash.columns:
+                # แปลงค่า Amount ให้เป็นตัวเลขทั้งหมด และจัดการค่าว่าง
                 df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
-                total_cash_flow = float(df_cash['Amount'].sum())
+                # ผลรวมของ Amount ทั้งหมดคือเงินสดคงเหลือปัจจุบันในพอร์ต
+                total_cash_balance = float(df_cash['Amount'].sum())
                 
-        # 2. ดึงข้อมูลต้นทุนหุ้นจากชีต PortfolioData 
-        sheet_portfolio = client.open(spreadsheet_name).worksheet('PortfolioData')
-        records_portfolio = sheet_portfolio.get_all_records()
-        
-        total_stock_cost = 0.0
-        if records_portfolio:
-            for row in records_portfolio:
-                cleaned_row = {str(k).strip(): v for k, v in row.items()}
-                try:
-                    shares = float(str(cleaned_row.get('shares', cleaned_row.get('จำนวน', 0))).replace(',', ''))
-                except:
-                    shares = 0.0
-                    
-                try:
-                    avg_price = float(str(cleaned_row.get('avg_price', cleaned_row.get('ต้นทุนเฉลี่ย', 0.0))).replace(',', ''))
-                except:
-                    avg_price = 0.0
-                    
-                total_stock_cost += (shares * avg_price)
-                
-        # 3. คำนวณเงินสดคงเหลือสุทธิ
-        calculated_balance = total_cash_flow - total_stock_cost
-        
-        return float(calculated_balance)
+        return total_cash_balance
         
     except Exception as e:
         st.error(f"❌ เกิดข้อผิดพลาดในการคำนวณเงินสด: {e}")
         return 0.0
-        
         
 # =============================================================
 # 5. ฟังก์ชันการจัดการ Cash Balance และข้อมูลพอร์ตการลงทุน (Portfolio & Cash)
