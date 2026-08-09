@@ -3348,10 +3348,11 @@ def main():
                             
                             # 🌟 สร้างฟังก์ชัน Callback สำหรับอัปเดต Sector อัตโนมัติเมื่อเปลี่ยนตัวเลือกหุ้น
                             def update_sector_on_select():
-                                selected = st.session_state.journal_select_ticker
+                                # ใช้ .get() เพื่อป้องกัน AttributeError ถ้าคีย์ยังไม่ถูกสร้างใน session_state
+                                selected = st.session_state.get("journal_select_ticker", "  ")
                                 if selected != "  ":
                                     # 1. เช็คจากพอร์ตก่อน
-                                    matched_item = next((item for item in st.session_state.my_portfolio if item.get('หุ้น') == selected), None)
+                                    matched_item = next((item for item in st.session_state.get('my_portfolio', []) if item.get('หุ้น', item.get('Ticker', '')) == selected), None)
                                     if matched_item and matched_item.get('Sector') and matched_item.get('Sector') != "General / Unspecified":
                                         st.session_state.journal_p_sector = matched_item['Sector']
                                     else:
