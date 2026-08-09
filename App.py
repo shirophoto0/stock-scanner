@@ -5841,11 +5841,7 @@ def main():
         with wealth_tab_real_estate:
             st.markdown("### 🏠 จัดการพอร์ตอสังหาริมทรัพย์ (บ้าน / คอนโด)")
             st.markdown("บันทึกมูลค่าประเมินปัจจุบันและหักลบด้วยยอดหนี้คงเหลือ เพื่อคำนวณมูลค่าสุทธิ (Equity) เข้าพอร์ตความมั่งคั่ง")
-            
-            import pandas as pd
-            from datetime import datetime
-            import time
-            
+ 
             # 🔄 โหลดข้อมูลจาก Google Sheets เฉพาะครั้งแรกที่ยังไม่มีข้อมูลใน session_state
             if 'real_estate_portfolio' not in st.session_state:
                 st.session_state['real_estate_portfolio'] = []
