@@ -34,6 +34,31 @@ from datetime import datetime, timedelta
 import time
 from gspread.exceptions import APIError
 
+def get_gsheet_client():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        'https://www.googleapis.com/auth/spreadsheets',
+        "https://www.googleapis.com/auth/drive"
+    ]
+    
+    try:
+        # 1. เช็คจาก GitHub Actions (Environment Variable)
+        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+            creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
+        # 2. เช็คจาก Streamlit Cloud (Secrets)
+        else:
+            # ใช้ dict() เพื่อแปลง st.secrets เป็น dictionary ธรรมดา
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            
+        # สร้าง Credentials ด้วยวิธีมาตรฐานที่รองรับทั้งคู่
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        return gspread.authorize(creds)
+        
+    except Exception as e:
+        # ถ้าพัง ให้ print ออกมาดูใน Log ของ GitHub
+        print(f"Error ในการเชื่อมต่อ Google Sheets: {e}")
+        raise e
+        
 def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, delay=2):
     """ฟังก์ชันเปิด Google Sheet พร้อมระบบป้องกันและลองใหม่เมื่อติดปัญหา Quota Exceeded (429)"""
     for attempt in range(retries):
@@ -567,30 +592,7 @@ def save_to_gsheet(df, sheet_name='StockData'):
     sheet.update(range_name='A1', values=data_to_write)
     print(f"บันทึกข้อมูลลง {sheet_name} สำเร็จ!")
     
-def get_gsheet_client():
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        'https://www.googleapis.com/auth/spreadsheets',
-        "https://www.googleapis.com/auth/drive"
-    ]
-    
-    try:
-        # 1. เช็คจาก GitHub Actions (Environment Variable)
-        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-            creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
-        # 2. เช็คจาก Streamlit Cloud (Secrets)
-        else:
-            # ใช้ dict() เพื่อแปลง st.secrets เป็น dictionary ธรรมดา
-            creds_dict = dict(st.secrets["gcp_service_account"])
-            
-        # สร้าง Credentials ด้วยวิธีมาตรฐานที่รองรับทั้งคู่
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        return gspread.authorize(creds)
-        
-    except Exception as e:
-        # ถ้าพัง ให้ print ออกมาดูใน Log ของ GitHub
-        print(f"Error ในการเชื่อมต่อ Google Sheets: {e}")
-        raise e
+
 # =============================================================
 # 2. ฟังก์ชัน Load/Save ข้อมูล
 # =============================================================
