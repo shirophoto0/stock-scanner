@@ -5703,28 +5703,37 @@ def main():
                             st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกบัญชี: {e}")
                             
         ######## REAL ESTATE ########################                    
-        with wealth_tab_real_estate: 
-            
+        with wealth_tab_real_estate:
             st.markdown("### 🏠 จัดการพอร์ตอสังหาริมทรัพย์ (บ้าน / คอนโด)")
             st.markdown("บันทึกมูลค่าประเมินปัจจุบันและหักลบด้วยยอดหนี้คงเหลือ เพื่อคำนวณมูลค่าสุทธิ (Equity) เข้าพอร์ตความมั่งคั่ง")
             
-            # 🔄 โหลดข้อมูลอัตโนมัติจาก Google Sheets (ป้องกันข้อมูลหายเวลาแก้โค้ด)
-            if 'real_estate_portfolio' not in st.session_state:
-                st.session_state['real_estate_portfolio'] = []
-                try:
-                    sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                    if sheet_re is not None:
-                        records = sheet_re.get_all_records()
-                        for row in records:
-                            if "ชื่อทรัพย์สิน" in row:
-                                st.session_state['real_estate_portfolio'].append({
-                                    "ชื่อทรัพย์สิน": str(row["ชื่อทรัพย์สิน"]),
-                                    "มูลค่าตลาด": float(str(row["มูลค่าตลาด"]).replace(',', '')),
-                                    "ยอดหนี้คงเหลือ": float(str(row["ยอดหนี้คงเหลือ"]).replace(',', '')),
-                                    "หมายเหตุ": str(row.get("หมายเหตุ", ""))
-                                })
-                except Exception:
-                    pass
+            import pandas as pd
+            from datetime import datetime
+        
+            # 🔄 [ปรับปรุงใหม่ให้เสถียร] ดึงข้อมูลจาก Google Sheets เสมอเพื่อป้องกันข้อมูลหายจาก UI
+            st.session_state['real_estate_portfolio'] = []
+            try:
+                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                if sheet_re is not None:
+                    records = sheet_re.get_all_records()
+                    for row in records:
+                        # ตรวจสอบว่ามีคอลัมน์ชื่อทรัพย์สินและไม่เป็นค่าว่าง
+                        if "ชื่อทรัพย์สิน" in row and str(row["ชื่อทรัพย์สิน"]).strip() != "":
+                            # ป้องกัน Error กรณีช่องตัวเลขในชีตเป็นค่าว่าง
+                            m_val = row.get("มูลค่าตลาด", 0)
+                            m_val = float(str(m_val).replace(',', '')) if str(m_val).strip() != "" else 0.0
+                            
+                            d_val = row.get("ยอดหนี้คงเหลือ", 0)
+                            d_val = float(str(d_val).replace(',', '')) if str(d_val).strip() != "" else 0.0
+        
+                            st.session_state['real_estate_portfolio'].append({
+                                "ชื่อทรัพย์สิน": str(row["ชื่อทรัพย์สิน"]),
+                                "มูลค่าตลาด": m_val,
+                                "ยอดหนี้คงเหลือ": d_val,
+                                "หมายเหตุ": str(row.get("หมายเหตุ", ""))
+                            })
+            except Exception as e:
+                st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้: {e}")
         
             st.markdown("---")
             st.markdown("#### 📝 บันทึกข้อมูลอสังหาริมทรัพย์")
@@ -5739,16 +5748,13 @@ def main():
                     
                 with col_re2:
                     re_debt = st.number_input("ยอดหนี้คงเหลือกับธนาคาร (บาท)", min_value=0.0, step=10000.0, value=0.0, key="form_re_debt")
-                    re_note = st.text_input("หมายเหตุ / ทำเล", placeholder="เช่น ปล่อยเช่าอยู่, อยู่เอง", key="form_re_note")
+                    re_note = st.text_input("หมายเหตุ / ทำเล", placeholder="เช่น ปล่อยเช่าอยู่, อยู่เอง, พ่อแม่อาศัยอยู่", key="form_re_note")
                     
                 re_submitted = st.form_submit_button("➕ เพิ่มอสังหาริมทรัพย์เข้าพอร์ต")
                 
                 if re_submitted:
-                    if 'real_estate_portfolio' not in st.session_state:
-                        st.session_state['real_estate_portfolio'] = []
-                    
                     if re_name and re_market_value > 0:
-                        # 1. เพิ่มรายการใหม่ลงใน Session State
+                        # 1. เพิ่มรายการใหม่ต่อท้ายใน session_state
                         st.session_state['real_estate_portfolio'].append({
                             "ชื่อทรัพย์สิน": re_name,
                             "มูลค่าตลาด": re_market_value,
@@ -5756,7 +5762,7 @@ def main():
                             "หมายเหตุ": re_note
                         })
                         
-                        # 2. ซิงค์ข้อมูลลง Google Sheets แบบทับข้อมูลเดิม (ป้องกันข้อมูลเบิ้ลซ้ำ)
+                        # 2. บันทึกทับลง Google Sheets ทันที
                         try:
                             sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
                             if sheet_re is not None:
@@ -5785,12 +5791,10 @@ def main():
                         st.error("กรุณากรอกชื่อทรัพย์สินและมูลค่าประเมินตลาดให้ถูกต้อง")
             
             # แสดงผลตารางสรุป
-            if 'real_estate_portfolio' in st.session_state and len(st.session_state['real_estate_portfolio']) > 0:
+            if len(st.session_state['real_estate_portfolio']) > 0:
                 st.markdown("#### 📊 สรุปมูลค่าสุทธิอสังหาริมทรัพย์")
                 
                 df_re = pd.DataFrame(st.session_state['real_estate_portfolio'])
-                
-                # คำนวณมูลค่าสุทธิ (Equity) ของแต่ละรายการ
                 df_re["มูลค่าสุทธิ (บาท)"] = df_re["มูลค่าตลาด"] - df_re["ยอดหนี้คงเหลือ"]
                 
                 st.dataframe(
@@ -5821,7 +5825,7 @@ def main():
                         pass
                     st.rerun()
             else:
-                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                        
+                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                      
 # ------------------------------
 if __name__ == "__main__":
     main()
