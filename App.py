@@ -310,14 +310,15 @@ def log_to_sheet(sheet_name, row_data):
         return False
 
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลืออัตโนมัติจาก CashFlow และ PortfolioData"""
+    """คำนวณเงินสดคงเหลืออัตโนมัติจาก Cash_Flow และ PortfolioData"""
     try:
-        # ใช้รูปแบบการเชื่อมต่อเดียวกับฟังก์ชันตัวอย่างของคุณเป๊ะๆ
+        # เรียกใช้ฟังก์ชันเชื่อมต่อ Google Sheets 
+        # (หมายเหตุ: หากในไฟล์ของคุณฟังก์ชันสร้าง client ชื่ออื่น ให้เปลี่ยนบรรทัดนี้ตามชื่อจริงครับ)
         client = get_gsheet_client()
         spreadsheet_name = 'MyStockData'
         
-        # 1. ดึงยอดรวมจากชีต CashFlow
-        sheet_cash = client.open(spreadsheet_name).worksheet('CashFlow')
+        # 1. ดึงยอดรวมจากชีต Cash_Flow (แก้ชื่อชีตให้ตรงกับฟังก์ชัน save_cash_to_gsheet ของคุณคือ 'Cash_Flow')
+        sheet_cash = client.open(spreadsheet_name).worksheet('Cash_Flow')
         records_cash = sheet_cash.get_all_records()
         
         total_cash_flow = 0.0
@@ -327,7 +328,7 @@ def load_total_cash_balance():
                 df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
                 total_cash_flow = float(df_cash['Amount'].sum())
                 
-        # 2. ดึงข้อมูลต้นทุนหุ้นจากชีต PortfolioData (ตาม Header ที่คุณคอนเฟิร์ม)
+        # 2. ดึงข้อมูลต้นทุนหุ้นจากชีต PortfolioData 
         sheet_portfolio = client.open(spreadsheet_name).worksheet('PortfolioData')
         records_portfolio = sheet_portfolio.get_all_records()
         
@@ -347,7 +348,7 @@ def load_total_cash_balance():
                     
                 total_stock_cost += (shares * avg_price)
                 
-        # 3. คำนวณเงินสดคงเหลือสุทธิ = (กระแสเงินสดรวมทั้งหมด) - (ต้นทุนหุ้นในพอร์ตปัจจุบัน)
+        # 3. คำนวณเงินสดคงเหลือสุทธิ = (กระแสเงินสดรวมทั้งหมด รวมกำไร/ขาดทุนจากการขาย) - (ต้นทุนหุ้นในพอร์ตปัจจุบัน)
         calculated_balance = total_cash_flow - total_stock_cost
         
         return float(calculated_balance)
@@ -1169,6 +1170,15 @@ def load_from_gsheet():
         st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
         return None
 
+def log_to_sheet(sheet_name, row_data):
+    """ฟังก์ชันอเนกประสงค์สำหรับ append แถวข้อมูลใหม่ลงใน Google Sheets"""
+    try:
+        client = get_gsheet_client()
+        sheet = client.open('MyStockData').worksheet(sheet_name)
+        sheet.append_row(row_data)
+    except Exception as e:
+        print(f"DEBUG: Error ใน log_to_sheet ({sheet_name}): {e}")
+        
 # ฟังก์ชันสำหรับค้นหา Sector จาก Mapping ที่เราทำไว้
 import streamlit as st
 import pandas as pd
