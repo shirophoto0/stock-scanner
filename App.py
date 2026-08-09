@@ -310,9 +310,8 @@ def log_to_sheet(sheet_name, row_data):
         return False
 
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือจากตาราง CashFlow (ใช้รูปแบบเชื่อมต่อเดียวกับฟังก์ชันที่ปกติ)"""
+    """คำนวณเงินสดคงเหลือ: (ยอดรวม CashFlow ทั้งหมด) - (ต้นทุนหุ้นทั้งหมดที่ถืออยู่ในพอร์ตปัจจุบัน)"""
     try:
-        # ใช้รูปแบบเรียก Client และเปิดด้วย Sheet ID แบบเดียวกับฟังก์ชัน save ของคุณ
         client = get_gsheet_client()
         spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
         sheet = client.open_by_key(spreadsheet_id).worksheet('CashFlow')
@@ -323,16 +322,28 @@ def load_total_cash_balance():
             
         df = pd.DataFrame(records)
         
-        # ตรวจสอบว่ามีคอลัมน์ Amount หรือไม่
+        total_cash_flow = 0.0
         if 'Amount' in df.columns:
-            # แปลงค่าใน Amount เป็นตัวเลขทั้งหมด (ข้อมูลที่เป็นตัวอักษรหรือช่องว่างจะถูกปัดเป็น 0)
             df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-            
-            # รวมยอดเงินทั้งหมดใน CashFlow ตรงๆ (เพราะซื้อหุ้นติดลบ ขายหุ้น/ฝากเงินเป็นบวก อยู่แล้ว)
-            total_cash_balance = float(df['Amount'].sum())
-            return total_cash_balance
-        else:
-            return 0.0
+            # 1. รวมยอดเงินทั้งหมดในประวัติ CashFlow (เงินตั้งต้น + เติม + ขาย - ซื้อ ที่บันทึกไว้ในชีต)
+            total_cash_flow = float(df['Amount'].sum())
+        
+        # 2. หักลบด้วยต้นทุนหุ้นทั้งหมดที่ถืออยู่ในพอร์ตปัจจุบัน (ใช้ .get ป้องกัน KeyError)
+        total_stock_cost = 0.0
+        if "my_portfolio" in st.session_state and st.session_state.my_portfolio:
+            for item in st.session_state.my_portfolio:
+                shares = float(item.get('shares', item.get('จำนวน', 0)))
+                avg_price = float(item.get('avg_price', item.get('ต้นทุนเฉลี่ย', 0.0)))
+                total_stock_cost += (shares * avg_price)
+                
+        # 3. เงินสดคงเหลือสุทธิ = ยอดกระแสเงินสดทั้งหมด - มูลค่าต้นทุนหุ้นที่ถืออยู่
+        calculated_balance = total_cash_flow - total_stock_cost
+        
+        return float(calculated_balance)
+        
+    except Exception as e:
+        print(f"DEBUG: Error ในการคำนวณเงินสด Auto: {e}")
+        return 0.0
             
     except Exception as e:
         print(f"DEBUG: Error ในการคำนวณเงินสด Auto: {e}")
