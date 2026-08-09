@@ -5841,8 +5841,21 @@ def main():
         with wealth_tab_real_estate:
             st.markdown("### 🏠 จัดการพอร์ตอสังหาริมทรัพย์ (บ้าน / คอนโด)")
             st.markdown("บันทึกมูลค่าประเมินปัจจุบันและหักลบด้วยยอดหนี้คงเหลือ เพื่อคำนวณมูลค่าสุทธิ (Equity) เข้าพอร์ตความมั่งคั่ง")
- 
-            # 🔄 โหลดข้อมูลจาก Google Sheets เฉพาะครั้งแรกที่ยังไม่มีข้อมูลใน session_state
+            
+            import pandas as pd
+            from datetime import datetime
+            import time
+            
+            # 🔄 ปุ่มกดบังคับรีเซ็ตและโหลดข้อมูลจาก Google Sheets ใหม่ (แก้ปัญหาข้อมูลไม่อัปเดตบน UI)
+            col_r1, col_r2 = st.columns([3, 1])
+            with col_r2:
+                if st.button("🔄 โหลดข้อมูลใหม่จาก Sheet"):
+                    if 'real_estate_portfolio' in st.session_state:
+                        del st.session_state['real_estate_portfolio']
+                    st.success("รีเซ็ตข้อมูลสำเร็จ กำลังโหลดใหม่...")
+                    st.rerun()
+        
+            # โหลดข้อมูลจาก Google Sheets เข้า session_state
             if 'real_estate_portfolio' not in st.session_state:
                 st.session_state['real_estate_portfolio'] = []
                 try:
@@ -5850,18 +5863,25 @@ def main():
                     if sheet_re is not None:
                         records = sheet_re.get_all_records()
                         for row in records:
-                            if "ชื่อทรัพย์สิน" in row and str(row["ชื่อทรัพย์สิน"]).strip() != "":
-                                m_val = row.get("มูลค่าตลาด (บาท)", row.get("มูลค่าตลาด", 0))
-                                m_val = float(str(m_val).replace(',', '')) if str(m_val).strip() != "" else 0.0
+                            # ตรวจสอบคอลัมน์ "ชื่อทรัพย์สิน" ตรงๆ
+                            asset_name = str(row.get("ชื่อทรัพย์สิน", "")).strip()
+                            if asset_name != "":
+                                # แปลงค่าตัวเลขมูลค่าตลาด
+                                m_raw = row.get("มูลค่าตลาด (บาท)", 0)
+                                m_val = float(str(m_raw).replace(',', '')) if str(m_raw).strip() != "" else 0.0
                                 
-                                d_val = row.get("ยอดหนี้คงเหลือ (บาท)", row.get("ยอดหนี้คงเหลือ", 0))
-                                d_val = float(str(d_val).replace(',', '')) if str(d_val).strip() != "" else 0.0
+                                # แปลงค่าตัวเลขยอดหนี้คงเหลือ
+                                d_raw = row.get("ยอดหนี้คงเหลือ (บาท)", 0)
+                                d_val = float(str(d_raw).replace(',', '')) if str(d_raw).strip() != "" else 0.0
+                                
+                                # หมายเหตุ
+                                n_val = str(row.get("หมายเหตุ", ""))
                                 
                                 st.session_state['real_estate_portfolio'].append({
-                                    "ชื่อทรัพย์สิน": str(row["ชื่อทรัพย์สิน"]),
+                                    "ชื่อทรัพย์สิน": asset_name,
                                     "มูลค่าตลาด": m_val,
                                     "ยอดหนี้คงเหลือ": d_val,
-                                    "หมายเหตุ": str(row.get("หมายเหตุ", ""))
+                                    "หมายเหตุ": n_val
                                 })
                 except Exception as e:
                     st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้: {e}")
@@ -5950,7 +5970,7 @@ def main():
                                     saved_success = True
                                     break
                             except Exception as e:
-                                time.sleep(1.5) # พัก 1.5 วินาทีก่อนลองใหม่ถ้าชน Limit
+                                time.sleep(1.5)
                         
                         if saved_success:
                             st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
@@ -6016,7 +6036,7 @@ def main():
                         pass
                     st.rerun()
             else:
-                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")
+                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ในหน่วยความจำ กรุณากดปุ่ม '🔄 โหลดข้อมูลใหม่จาก Sheet' ด้านบนเพื่อดึงข้อมูลจาก Google Sheets ทันที")
                 
 # ------------------------------
 if __name__ == "__main__":
