@@ -5084,104 +5084,13 @@ def main():
         st.subheader("📊 ระบบจัดการสินทรัพย์ระยะยาวและความมั่งคั่งรวม (Net Worth)")
         
         # 1. ประกาศสร้าง 3 Tabs หลัก
-wealth_tab_overview, wealth_tab_form_general, wealth_tab_real_estate = st.tabs([
-    "📈 ภาพรวม Net Worth & สัดส่วนสินทรัพย์",         
-    "📝 บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน / ธนาคาร)",
-    "🏡 บันทึกอสังหาริมทรัพย์ (บ้าน / คอนโด)"
-])
-
-# ==========================================
-# TAB 1: ภาพรวม Net Worth
-# ==========================================
-with wealth_tab_overview:
-    # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน
-    pvd_value = get_latest_pvd_value()
-    insurance_value = get_latest_insurance_value()
-    coop_value = get_latest_coop_value()
-    
-    # --- ดึงมูลค่าทองคำรวมจาก session_state ที่คำนวณจาก Tab ทองคำ ---
-    total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
-
-    # --- ดึงมูลค่าสุทธิอสังหาริมทรัพย์ (Real Estate) ---
-    total_re_value = st.session_state.get('total_real_estate_value', 0.0)
-    
-    # --- ดึงมูลค่าประกันสังคมล่าสุด ---
-    try:
-        sheet_sso = client.open('MyStockData').worksheet('SSO')
-        sso_data = sheet_sso.get_all_records()
-        sso_value = float(str(sso_data[-1]['Value']).replace(',', '')) if sso_data else 0.0
-    except Exception:
-        sso_value = 0.0
-    
-    # --- มูลค่าประกันบำนาญแบบ Fix Value ---
-    pension_insurance_value = 1337703.0
-    
-    # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
-    sheet_bank = get_worksheet_safely(client, 'MyStockData', 'Bank_Account')
-    
-    bank_data = []
-    if sheet_bank is not None:
-        try:
-            bank_data = sheet_bank.get_all_records()
-        except Exception as e:
-            st.error(f"❌ ไม่สามารถดึงข้อมูลจากชีต Bank_Account ได้: {e}")
-    
-    bank_balance = 0.0
-    if bank_data:
-        try:
-            bank_balance = float(str(bank_data[-1].get('Balance', 0)).replace(',', ''))
-        except:
-            bank_balance = 0.0
-    
-    # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
-    base_stock_value = total_value if 'total_value' in locals() else 0.0
-    tfex_portfolio_value = net_worth if 'net_worth' in locals() and 'tab_tfex' in globals() else 0.0
-    
-    total_stock_and_tfex = base_stock_value + tfex_portfolio_value
-    
-    # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำและอสังหาริมทรัพย์ด้วย)
-    net_worth_total = (
-        total_stock_and_tfex + 
-        pvd_value + 
-        insurance_value + 
-        coop_value + 
-        sso_value + 
-        pension_insurance_value + 
-        bank_balance + 
-        total_gold_value + 
-        total_re_value
-    )
-    
-    # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (ชิดซ้าย, สีเขียว, ใหญ่พิเศษ) ---
-    st.markdown(
-        f"""
-        <div style="text-align: left; padding: 5px;">
-            <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
-            <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
-        </div>
-        """, 
-        unsafe_allow_html=True
-    )
-                
-    st.divider()
-    
-    # (คุณสามารถใส่กราฟแสดงสัดส่วนสินทรัพย์ Asset Allocation เพิ่มเติมตรงนี้ได้ตามต้องการ)
-
-
-# ==========================================
-# TAB 2: บันทึกข้อมูลทั่วไป (PVD / สหกรณ์ / ประกัน / ธนาคาร)
-# ==========================================
-with main_tab_wealth:
-        st.subheader("📊 ระบบจัดการสินทรัพย์ระยะยาวและความมั่งคั่งรวม (Net Worth)")
-        
         wealth_tab_overview, wealth_tab_form_general, wealth_tab_real_estate = st.tabs([
             "📈 ภาพรวม Net Worth & สัดส่วนสินทรัพย์",         
             "📝 บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน / ธนาคาร)",
             "🏡 บันทึกอสังหาริมทรัพย์ (บ้าน / คอนโด)"
         ])
 
-
-        
+  
         # ==========================================
         # TAB ย่อยที่ 1: ภาพรวม Net Worth & สัดส่วนสินทรัพย์
         # ==========================================
