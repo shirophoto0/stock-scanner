@@ -4582,6 +4582,8 @@ def main():
             # 4. คำนวณพอร์ต (ใช้ Realized PnL)
             net_worth = net_capital + total_pnl
             growth_pct = (total_pnl / net_capital * 100) if net_capital > 0 else 0
+            # ⭐️ เพิ่มบรรทัดนี้ เพื่อแชร์ค่าพอร์ต TFEX ไปให้หน้าหลักใช้งาน
+            st.session_state['tfex_net_worth'] = net_worth
             
             # แสดง Dashboard
             c1, c2, c3 = st.columns(3)
@@ -5273,7 +5275,9 @@ def main():
             
             # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
             base_stock_value = total_value if 'total_value' in locals() else 0.0
-            tfex_portfolio_value = net_worth if 'net_worth' in locals() and 'tab_tfex' in globals() else 0.0
+            
+            # ⭐️ ดึงค่าพอร์ต TFEX จาก session_state ที่เราฝากไว้
+            tfex_portfolio_value = st.session_state.get('tfex_net_worth', 0.0)
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
