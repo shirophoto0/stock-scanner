@@ -5096,12 +5096,12 @@ def main():
         # ==========================================
         with wealth_tab_overview:
             
-            # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน
+            # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน (ส่วนเดิมของคุณ)
             pvd_value = get_latest_pvd_value()
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
-            # --- ดึงมูลค่าทองคำรวมจาก session_state ที่คำนวณและอัปเดตจาก Tab ทองคำโดยตรง ---
+            # --- ดึงมูลค่าทองคำรวมจาก session_state ---
             total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
             
             # --- ดึงมูลค่าประกันสังคมล่าสุด ---
@@ -5117,7 +5117,6 @@ def main():
             
             # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
             sheet_bank = get_worksheet_safely(client, 'MyStockData', 'Bank_Account')
-            
             bank_data = []
             if sheet_bank is not None:
                 try:
@@ -5131,6 +5130,21 @@ def main():
                     bank_balance = float(str(bank_data[-1].get('Balance', 0)).replace(',', ''))
                 except:
                     bank_balance = 0.0
+
+            # ==========================================
+            # 🌟 [เพิ่มใหม่] ดึงมูลค่าอสังหาริมทรัพย์
+            # ==========================================
+            # (ตรงนี้คุณสามารถปรับให้ดึงจาก Google Sheets หรือ session_state ที่บันทึกไว้จาก Tab อสังหาฯ ได้ครับ)
+            # ตัวอย่างการกำหนดค่าเริ่มต้น หรือดึงจาก session_state
+            house1_value = st.session_state.get('house1_value', 0.0) # บ้านปัจจุบัน
+            house2_value = st.session_state.get('house2_value', 0.0) # บ้านพ่อแม่
+            condo_value = st.session_state.get('condo_value', 0.0)   # คอนโด
+            
+            # หากมีหนี้บ้าน (Mortgage) ให้นำมารวมที่นี่เพื่อไปหักลบ
+            # total_mortgage_debt = st.session_state.get('total_mortgage_debt', 0.0) 
+            
+            total_real_estate = house1_value + house2_value + condo_value
+            # ==========================================
             
             # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
             base_stock_value = total_value if 'total_value' in locals() else 0.0
@@ -5138,10 +5152,13 @@ def main():
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำด้วย)
-            net_worth_total = total_stock_and_tfex + pvd_value + insurance_value + coop_value + sso_value + pension_insurance_value + bank_balance + total_gold_value
+            # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำ และ อสังหาริมทรัพย์)
+            # หมายเหตุ: หากมีหนี้สิน อย่าลืมนำยอดหนี้มาลบออก ( - total_mortgage_debt)
+            net_worth_total = (total_stock_and_tfex + pvd_value + insurance_value + 
+                               coop_value + sso_value + pension_insurance_value + 
+                               bank_balance + total_gold_value + total_real_estate)
             
-            # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (ชิดซ้าย, สีเขียว, ใหญ่พิเศษ) ---
+            # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด ---
             st.markdown(
                 f"""
                 <div style="text-align: left; padding: 5px;">
@@ -5154,7 +5171,8 @@ def main():
                         
             st.divider()
         
-            # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็น 4 คอลัมน์ x 2 แถว) ---
+            # --- 5. แสดงผลใน Metrics ย่อย (แบ่งเป็นสัดส่วนชัดเจน) ---
+            st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
             # แถวที่ 1 (4 คอลัมน์)
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
@@ -5167,8 +5185,17 @@ def main():
             row2_col1.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
             row2_col2.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
             row2_col3.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
-            # นำทองคำมาใส่ช่องที่ 4 แถวที่ 2 แทนที่ช่องว่าง
             row2_col4.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
+            
+            st.markdown("<br>", unsafe_allow_html=True) # เว้นบรรทัด
+            
+            # แถวที่ 3 (4 คอลัมน์) สำหรับอสังหาริมทรัพย์โดยเฉพาะ
+            st.markdown("#### 🏡 อสังหาริมทรัพย์")
+            row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
+            row3_col1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
+            row3_col2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
+            row3_col3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
+            row3_col4.metric("คอนโด", f"{condo_value:,.0f} ฿")
             
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนและความมั่งคั่งสุทธิ (Net Worth)")
