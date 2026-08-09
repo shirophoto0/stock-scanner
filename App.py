@@ -5083,10 +5083,104 @@ def main():
     with main_tab_wealth:
         st.subheader("📊 ระบบจัดการสินทรัพย์ระยะยาวและความมั่งคั่งรวม (Net Worth)")
         
-        wealth_tab_overview, wealth_tab_form = st.tabs([
-            "📈 ภาพรวม Net Worth & สัดส่วนสินทรัพย์", 
-            "📝 บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน / บัญชีธนาคาร)"
-        ])
+        # 1. ประกาศสร้าง 3 Tabs หลัก
+wealth_tab_overview, wealth_tab_form_general, wealth_tab_real_estate = st.tabs([
+    "📈 ภาพรวม Net Worth & สัดส่วนสินทรัพย์",         
+    "📝 บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน / ธนาคาร)",
+    "🏡 บันทึกอสังหาริมทรัพย์ (บ้าน / คอนโด)"
+])
+
+# ==========================================
+# TAB 1: ภาพรวม Net Worth
+# ==========================================
+with wealth_tab_overview:
+    # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน
+    pvd_value = get_latest_pvd_value()
+    insurance_value = get_latest_insurance_value()
+    coop_value = get_latest_coop_value()
+    
+    # --- ดึงมูลค่าทองคำรวมจาก session_state ที่คำนวณจาก Tab ทองคำ ---
+    total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
+
+    # --- ดึงมูลค่าสุทธิอสังหาริมทรัพย์ (Real Estate) ---
+    total_re_value = st.session_state.get('total_real_estate_value', 0.0)
+    
+    # --- ดึงมูลค่าประกันสังคมล่าสุด ---
+    try:
+        sheet_sso = client.open('MyStockData').worksheet('SSO')
+        sso_data = sheet_sso.get_all_records()
+        sso_value = float(str(sso_data[-1]['Value']).replace(',', '')) if sso_data else 0.0
+    except Exception:
+        sso_value = 0.0
+    
+    # --- มูลค่าประกันบำนาญแบบ Fix Value ---
+    pension_insurance_value = 1337703.0
+    
+    # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
+    sheet_bank = get_worksheet_safely(client, 'MyStockData', 'Bank_Account')
+    
+    bank_data = []
+    if sheet_bank is not None:
+        try:
+            bank_data = sheet_bank.get_all_records()
+        except Exception as e:
+            st.error(f"❌ ไม่สามารถดึงข้อมูลจากชีต Bank_Account ได้: {e}")
+    
+    bank_balance = 0.0
+    if bank_data:
+        try:
+            bank_balance = float(str(bank_data[-1].get('Balance', 0)).replace(',', ''))
+        except:
+            bank_balance = 0.0
+    
+    # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
+    base_stock_value = total_value if 'total_value' in locals() else 0.0
+    tfex_portfolio_value = net_worth if 'net_worth' in locals() and 'tab_tfex' in globals() else 0.0
+    
+    total_stock_and_tfex = base_stock_value + tfex_portfolio_value
+    
+    # 3. คำนวณ Net Worth รวมทุกกระเป๋า (รวมทองคำและอสังหาริมทรัพย์ด้วย)
+    net_worth_total = (
+        total_stock_and_tfex + 
+        pvd_value + 
+        insurance_value + 
+        coop_value + 
+        sso_value + 
+        pension_insurance_value + 
+        bank_balance + 
+        total_gold_value + 
+        total_re_value
+    )
+    
+    # --- 4. แสดง Total Net Worth ไว้ด้านบนสุด (ชิดซ้าย, สีเขียว, ใหญ่พิเศษ) ---
+    st.markdown(
+        f"""
+        <div style="text-align: left; padding: 5px;">
+            <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
+            <h1 style="color: #28a745; font-size: 2.8em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+                
+    st.divider()
+    
+    # (คุณสามารถใส่กราฟแสดงสัดส่วนสินทรัพย์ Asset Allocation เพิ่มเติมตรงนี้ได้ตามต้องการ)
+
+
+# ==========================================
+# TAB 2: บันทึกข้อมูลทั่วไป (PVD / สหกรณ์ / ประกัน / ธนาคาร)
+# ==========================================
+with wealth_tab_form_general:
+    st.markdown("### 📝 บันทึกข้อมูลสินทรัพย์ทั่วไป")
+    st.info("ส่วนสำหรับจัดการข้อมูล PVD, สหกรณ์, ประกัน และบัญชีธนาคารของคุณ (วางฟอร์มเดิมของคุณไว้ในส่วนนี้ได้เลยครับ)")
+        wealth_tab_overview, wealth_tab_form_general, wealth_tab_real_estate = st.tabs([
+        "📈 ภาพรวม Net Worth & สัดส่วนสินทรัพย์",         
+        "📝 บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน / ธนาคาร)",
+        "🏡 บันทึกอสังหาริมทรัพย์ (บ้าน / คอนโด)"
+    ])
+
+
         
         # ==========================================
         # TAB ย่อยที่ 1: ภาพรวม Net Worth & สัดส่วนสินทรัพย์
@@ -5663,7 +5757,127 @@ def main():
                             st.rerun()
                         except Exception as e:
                             st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกบัญชี: {e}")
+                            
+        ######## REAL ESTATE ########################                    
+        with tab_real_estate: # หรือปรับชื่อตัวแปร tab ตามที่คุณตั้งไว้
+            
+            st.markdown("### 🏠 จัดการพอร์ตอสังหาริมทรัพย์ (บ้าน / คอนโด)")
+            st.markdown("บันทึกมูลค่าประเมินปัจจุบันและหักลบด้วยยอดหนี้คงเหลือ เพื่อคำนวณมูลค่าสุทธิ (Equity) เข้าพอร์ตความมั่งคั่ง")
+            
+            # 🔄 โหลดข้อมูลอัตโนมัติจาก Google Sheets (ป้องกันข้อมูลหายเวลาแก้โค้ด)
+            if 'real_estate_portfolio' not in st.session_state:
+                st.session_state['real_estate_portfolio'] = []
+                try:
+                    sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                    if sheet_re is not None:
+                        records = sheet_re.get_all_records()
+                        for row in records:
+                            if "ชื่อทรัพย์สิน" in row:
+                                st.session_state['real_estate_portfolio'].append({
+                                    "ชื่อทรัพย์สิน": str(row["ชื่อทรัพย์สิน"]),
+                                    "มูลค่าตลาด": float(str(row["มูลค่าตลาด"]).replace(',', '')),
+                                    "ยอดหนี้คงเหลือ": float(str(row["ยอดหนี้คงเหลือ"]).replace(',', '')),
+                                    "หมายเหตุ": str(row.get("หมายเหตุ", ""))
+                                })
+                except Exception:
+                    pass
+        
+            st.markdown("---")
+            st.markdown("#### 📝 บันทึกข้อมูลอสังหาริมทรัพย์")
+        
+            # ฟอร์มรับข้อมูล
+            with st.form("real_estate_form"):
+                col_re1, col_re2 = st.columns(2)
+                
+                with col_re1:
+                    re_name = st.text_input("ชื่อทรัพย์สิน", placeholder="เช่น คอนโดสุขุมวิท, บ้านเดี่ยวบางนา", key="form_re_name")
+                    re_market_value = st.number_input("มูลค่าประเมินตลาดปัจจุบัน (บาท)", min_value=0.0, step=50000.0, value=0.0, key="form_re_market")
+                    
+                with col_re2:
+                    re_debt = st.number_input("ยอดหนี้คงเหลือกับธนาคาร (บาท)", min_value=0.0, step=10000.0, value=0.0, key="form_re_debt")
+                    re_note = st.text_input("หมายเหตุ / ทำเล", placeholder="เช่น ปล่อยเช่าอยู่, อยู่เอง", key="form_re_note")
+                    
+                re_submitted = st.form_submit_button("➕ เพิ่มอสังหาริมทรัพย์เข้าพอร์ต")
+                
+                if re_submitted:
+                    if 'real_estate_portfolio' not in st.session_state:
+                        st.session_state['real_estate_portfolio'] = []
+                    
+                    if re_name and re_market_value > 0:
+                        # 1. เพิ่มรายการใหม่ลงใน Session State
+                        st.session_state['real_estate_portfolio'].append({
+                            "ชื่อทรัพย์สิน": re_name,
+                            "มูลค่าตลาด": re_market_value,
+                            "ยอดหนี้คงเหลือ": re_debt,
+                            "หมายเหตุ": re_note
+                        })
                         
+                        # 2. ซิงค์ข้อมูลลง Google Sheets แบบทับข้อมูลเดิม (ป้องกันข้อมูลเบิ้ลซ้ำ)
+                        try:
+                            sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                            if sheet_re is not None:
+                                sheet_re.clear()
+                                sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
+                                
+                                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                rows_to_append = []
+                                for item in st.session_state['real_estate_portfolio']:
+                                    net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
+                                    rows_to_append.append([
+                                        item["ชื่อทรัพย์สิน"],
+                                        item["มูลค่าตลาด"],
+                                        item["ยอดหนี้คงเหลือ"],
+                                        net_val,
+                                        item["หมายเหตุ"],
+                                        current_date
+                                    ])
+                                sheet_re.append_rows(rows_to_append)
+                        except Exception as e:
+                            st.error(f"⚠️ เพิ่มรายการสำเร็จ แต่บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
+        
+                        st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
+                        st.rerun()
+                    else:
+                        st.error("กรุณากรอกชื่อทรัพย์สินและมูลค่าประเมินตลาดให้ถูกต้อง")
+            
+            # แสดงผลตารางสรุป
+            if 'real_estate_portfolio' in st.session_state and len(st.session_state['real_estate_portfolio']) > 0:
+                st.markdown("#### 📊 สรุปมูลค่าสุทธิอสังหาริมทรัพย์")
+                
+                df_re = pd.DataFrame(st.session_state['real_estate_portfolio'])
+                
+                # คำนวณมูลค่าสุทธิ (Equity) ของแต่ละรายการ
+                df_re["มูลค่าสุทธิ (บาท)"] = df_re["มูลค่าตลาด"] - df_re["ยอดหนี้คงเหลือ"]
+                
+                st.dataframe(
+                    df_re.style.format({
+                        "มูลค่าตลาด": "{:,.2f}",
+                        "ยอดหนี้คงเหลือ": "{:,.2f}",
+                        "มูลค่าสุทธิ (บาท)": "{:,.2f}"
+                    }),
+                    use_container_width=True
+                )
+                
+                total_re_value = df_re["มูลค่าสุทธิ (บาท)"].sum()
+                
+                # 🌟 บันทึกค่ารวมส่งต่อไปใช้ที่หน้า Overview
+                st.session_state['total_real_estate_value'] = total_re_value
+                
+                st.metric("🏡 มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{total_re_value:,.2f} ฿")
+                
+                if st.button("🗑️ ล้างข้อมูลอสังหาริมทรัพย์ทั้งหมด"):
+                    st.session_state['real_estate_portfolio'] = []
+                    st.session_state['total_real_estate_value'] = 0.0
+                    try:
+                        sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                        if sheet_re is not None:
+                            sheet_re.clear()
+                            sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
+                    except:
+                        pass
+                    st.rerun()
+            else:
+                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                        
 # ------------------------------
 if __name__ == "__main__":
     main()
