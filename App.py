@@ -1466,8 +1466,9 @@ def main():
             st.markdown("### 🟡 จัดการพอร์ตการลงทุนทองคำ")
             st.markdown("กรอกจำนวนน้ำหนักทองคำที่คุณถือครอง ระบบจะดึงราคาทองอ้างอิง ณ สิ้นวันก่อนหน้าจากสมาคมค้าทองคำมาคำนวณมูลค่าบาทให้อัตโนมัติ")
             
-            # ดึงราคาทองอ้างอิงปัจจุบัน/สิ้นวันก่อนหน้า
             import requests
+            import pandas as pd
+            from datetime import datetime
             
             def get_thaigold_prices():
                 try:
@@ -1486,6 +1487,25 @@ def main():
             
             ref_gold_bar, ref_gold_jewelry = get_thaigold_prices()
             
+            # 🔄 โหลดข้อมูลอัตโนมัติจาก Google Sheets หากยังไม่มีใน session_state (ป้องกันข้อมูลหายเวลาแก้โค้ด)
+            if 'gold_portfolio' not in st.session_state:
+                st.session_state['gold_portfolio'] = []
+                try:
+                    sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                    if sheet_gold is not None:
+                        records = sheet_gold.get_all_records()
+                        for row in records:
+                            # ตรวจสอบโครงสร้างข้อมูลป้องกัน Error
+                            if "ประเภท" in row and "น้ำหนัก" in row:
+                                st.session_state['gold_portfolio'].append({
+                                    "ประเภท": str(row["ประเภท"]),
+                                    "น้ำหนัก": float(str(row["น้ำหนัก"]).replace(',', '')),
+                                    "หน่วย": str(row.get("หน่วย", "")),
+                                    "หมายเหตุ": str(row.get("หมายเหตุ", ""))
+                                })
+                except Exception:
+                    pass
+        
             # แสดงราคาอ้างอิง
             col_p1, col_p2 = st.columns(2)
             col_p1.metric("📌 ราคาทองคำแท่ง (ขายออกอ้างอิง)", f"{ref_gold_bar:,.2f} ฿ / บาททอง")
@@ -1494,14 +1514,14 @@ def main():
             st.markdown("---")
             st.markdown("#### 📝 บันทึกข้อมูลการถือครองทองคำ")
         
-            # 1. st.selectbox อยู่นอกฟอร์มเพื่อให้หน้าจออัปเดตหน่วยทันที
+            # st.selectbox อยู่นอกฟอร์มเพื่อให้หน้าจออัปเดตหน่วยทันที
             gold_type = st.selectbox(
                 "ประเภททองคำ", 
                 ["ทองคำแท่ง", "ทองรูปพรรณ", "เทรดทอง (Coming Soon)"],
                 key="form_gold_type_select"
             )
             
-            # 2. ฟอร์มรับข้อมูล
+            # ฟอร์มรับข้อมูล
             with st.form("gold_investment_form"):
                 col_f1, col_f2 = st.columns(2)
                 
@@ -1523,12 +1543,35 @@ def main():
                         st.session_state['gold_portfolio'] = []
                     
                     if gold_type != "เทรดทอง (Coming Soon)" and weight_input > 0:
+                        # 1. เพิ่มรายการใหม่ลงใน Memory (Session State)
                         st.session_state['gold_portfolio'].append({
                             "ประเภท": gold_type,
                             "น้ำหนัก": weight_input,
                             "หน่วย": "กรัม" if gold_type == "ทองคำแท่ง" else "บาททองคำ",
                             "หมายเหตุ": note_input
                         })
+                        
+                        # 2. บันทึกซิงค์ข้อมูลทั้งหมดลง Google Sheets อัตโนมัติทันทีแบบทับข้อมูลเดิม (ป้องกันข้อมูลเบิ้ลซ้ำ)
+                        try:
+                            sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                            if sheet_gold is not None:
+                                sheet_gold.clear() # ล้างข้อมูลเก่าทั้งหมดในชีต
+                                sheet_gold.append_row(["ประเภท", "น้ำหนัก", "หน่วย", "หมายเหตุ", "วันที่บันทึก"]) # ใส่ Header ใหม่
+                                
+                                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                rows_to_append = []
+                                for item in st.session_state['gold_portfolio']:
+                                    rows_to_append.append([
+                                        item["ประเภท"],
+                                        item["น้ำหนัก"],
+                                        item["หน่วย"],
+                                        item["หมายเหตุ"],
+                                        current_date
+                                    ])
+                                sheet_gold.append_rows(rows_to_append)
+                        except Exception as e:
+                            st.error(f"⚠️ เพิ่มรายการสำเร็จ แต่บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
+        
                         st.success(f"บันทึกข้อมูล {gold_type} น้ำหนัก {weight_input} {'กรัม' if gold_type == 'ทองคำแท่ง' else 'บาททองคำ'} สำเร็จ!")
                         st.rerun()
                     elif gold_type == "เทรดทอง (Coming Soon)":
@@ -1539,9 +1582,6 @@ def main():
             # แสดงผลตารางสรุปพอร์ตทองคำและการคำนวณมูลค่าบาท
             if 'gold_portfolio' in st.session_state and len(st.session_state['gold_portfolio']) > 0:
                 st.markdown("#### 📊 สรุปมูลค่าพอร์ตการลงทุนทองคำ")
-                
-                import pandas as pd
-                from datetime import datetime
                 
                 df_gold = pd.DataFrame(st.session_state['gold_portfolio'])
                 
@@ -1581,44 +1621,25 @@ def main():
                 
                 st.metric("💰 มูลค่ารวมพอร์ตทองคำทั้งหมด", f"{total_gold_value:,.2f} ฿")
                 
-                # ปุ่มสำหรับบันทึกข้อมูลลง Google Sheets
-                col_b1, col_b2 = st.columns(2)
-                with col_b1:
-                    if st.button("💾 บันทึกข้อมูลลง Google Sheets"):
-                        try:
-                            sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
-                            if sheet_gold is not None:
-                                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                rows_to_append = []
-                                for item in st.session_state['gold_portfolio']:
-                                    rows_to_append.append([
-                                        item["ประเภท"],
-                                        item["น้ำหนัก"],
-                                        item["หน่วย"],
-                                        item["หมายเหตุ"],
-                                        current_date
-                                    ])
-                                sheet_gold.append_rows(rows_to_append)
-                                st.success("✅ บันทึกข้อมูลพอร์ตทองคำลง Google Sheets สำเร็จเรียบร้อยแล้วครับ!")
-                            else:
-                                st.error("❌ ไม่พบ Worksheet 'Gold_Portfolio' ในไฟล์ Google Sheets กรุณาสร้างชีตก่อนบันทึก")
-                        except Exception as e:
-                            st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
-                            
-                with col_b2:
-                    if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
-                        st.session_state['gold_portfolio'] = []
-                        st.session_state['total_gold_portfolio_value'] = 0.0
-                        st.rerun()
+                if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
+                    st.session_state['gold_portfolio'] = []
+                    st.session_state['total_gold_portfolio_value'] = 0.0
+                    # ล้างข้อมูลใน Google Sheets ด้วย
+                    try:
+                        sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                        if sheet_gold is not None:
+                            sheet_gold.clear()
+                            sheet_gold.append_row(["ประเภท", "น้ำหนัก", "หน่วย", "หมายเหตุ", "วันที่บันทึก"])
+                    except:
+                        pass
+                    st.rerun()
             else:
                 st.info("ยังไม่มีข้อมูลในพอร์ตทองคำ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")
                 
-        # ส่วนวิเคราะห์แสกนกราฟหุ้น#
+        ######################## ส่วนวิเคราะห์แสกนกราฟหุ้น####################
         with tab_tech:
-    
-            ################################
+        ################################
             # 1. Slidebar (ตัวกรอง)
-            ################################
             with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
                 max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0)
                 min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0)
