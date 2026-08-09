@@ -310,44 +310,47 @@ def log_to_sheet(sheet_name, row_data):
         return False
 
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือ: (ยอดรวม CashFlow ทั้งหมด) - (ต้นทุนหุ้นทั้งหมดที่ถืออยู่ในพอร์ตปัจจุบัน)"""
+    """คำนวณเงินสดคงเหลือ: (ยอดรวม CashFlow ทั้งหมด) - (ต้นทุนหุ้นรวมจากชีต PortfolioData โดยตรง)"""
     try:
         client = get_gsheet_client()
         spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-        sheet = client.open_by_key(spreadsheet_id).worksheet('CashFlow')
         
-        records = sheet.get_all_records()
-        if not records:
-            return 0.0
-            
-        df = pd.DataFrame(records)
-        
+        # 1. ดึงยอดรวมกระแสเงินสดจากชีต CashFlow
+        sheet_cash = client.open_by_key(spreadsheet_id).worksheet('CashFlow')
+        records_cash = sheet_cash.get_all_records()
         total_cash_flow = 0.0
-        if 'Amount' in df.columns:
-            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-            # 1. รวมยอดเงินทั้งหมดในประวัติ CashFlow (เงินตั้งต้น + เติม + ขาย - ซื้อ ที่บันทึกไว้ในชีต)
-            total_cash_flow = float(df['Amount'].sum())
-        
-        # 2. หักลบด้วยต้นทุนหุ้นทั้งหมดที่ถืออยู่ในพอร์ตปัจจุบัน (ใช้ .get ป้องกัน KeyError)
+        if records_cash:
+            df_cash = pd.DataFrame(records_cash)
+            if 'Amount' in df_cash.columns:
+                df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
+                total_cash_flow = float(df_cash['Amount'].sum())
+                
+        # 2. ดึงข้อมูลต้นทุนหุ้นรวมจากชีต PortfolioData โดยตรง (ไม่รอ session_state)
+        sheet_portfolio = client.open_by_key(spreadsheet_id).worksheet('PortfolioData')
+        records_portfolio = sheet_portfolio.get_all_records()
         total_stock_cost = 0.0
-        if "my_portfolio" in st.session_state and st.session_state.my_portfolio:
-            for item in st.session_state.my_portfolio:
-                shares = float(item.get('shares', item.get('จำนวน', 0)))
-                avg_price = float(item.get('avg_price', item.get('ต้นทุนเฉลี่ย', 0.0)))
+        if records_portfolio:
+            for row in records_portfolio:
+                cleaned_row = {str(k).strip(): v for k, v in row.items()}
+                try:
+                    shares = float(str(cleaned_row.get('จำนวน', cleaned_row.get('shares', 0))).replace(',', ''))
+                except:
+                    shares = 0.0
+                    
+                try:
+                    avg_price = float(str(cleaned_row.get('ต้นทุนเฉลี่ย', cleaned_row.get('avg_price', 0.0))).replace(',', ''))
+                except:
+                    avg_price = 0.0
+                    
                 total_stock_cost += (shares * avg_price)
                 
-        # 3. เงินสดคงเหลือสุทธิ = ยอดกระแสเงินสดทั้งหมด - มูลค่าต้นทุนหุ้นที่ถืออยู่
+        # 3. นำยอดรวม CashFlow ทั้งหมด หักลบด้วยต้นทุนหุ้นรวมในพอร์ต
         calculated_balance = total_cash_flow - total_stock_cost
-        
         return float(calculated_balance)
         
     except Exception as e:
         print(f"DEBUG: Error ในการคำนวณเงินสด Auto: {e}")
         return 0.0
-            
-    except Exception as e:
-        print(f"DEBUG: Error ในการคำนวณเงินสด Auto: {e}")
-        return 0.0  # เปลี่ยนจาก 2922 เป็น 0.0 เพื่อให้รู้ว่าถ้าพังจะคืนค่า 0
         
 # --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
 if "cash_balance" not in st.session_state:
