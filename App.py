@@ -310,16 +310,27 @@ def log_to_sheet(sheet_name, row_data):
         return False
 
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือ: (เงินลงทุนรวมจากพอร์ต) - (ยอดรวม CashFlow ทั้งหมด)"""
+    """คำนวณเงินสดคงเหลือ: (ยอดรวม CashFlow ทุกธุรกรรมรวมกำไรจากการขาย) - (ต้นทุนหุ้นที่ถืออยู่ในพอร์ตปัจจุบัน)"""
     try:
         client = get_gsheet_client()
         spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
         
-        # 1. ดึงข้อมูลพอร์ตเพื่อคำนวณ "เงินลงทุนรวม" ให้ได้ 2,816,891 เป๊ะๆ
+        # 1. รวมยอดทุกอย่างใน CashFlow (เงินตั้งต้น, เติม, ถอน, ปันผล, และเงินที่ได้จากการขายหุ้นรวมกำไร จะถูกบวกเข้ามาที่นี่ทั้งหมด)
+        sheet_cash = client.open_by_key(spreadsheet_id).worksheet('CashFlow')
+        records_cash = sheet_cash.get_all_records()
+        
+        total_cash_flow = 0.0
+        if records_cash:
+            df_cash = pd.DataFrame(records_cash)
+            if 'Amount' in df_cash.columns:
+                df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
+                total_cash_flow = float(df_cash['Amount'].sum())
+                
+        # 2. คำนวณ "ต้นทุนหุ้นทั้งหมดที่ยังถืออยู่ในพอร์ตปัจจุบัน" (จากชีต PortfolioData)
         sheet_portfolio = client.open_by_key(spreadsheet_id).worksheet('PortfolioData')
         records_portfolio = sheet_portfolio.get_all_records()
         
-        total_invest = 0.0
+        total_stock_cost = 0.0
         if records_portfolio:
             for row in records_portfolio:
                 cleaned_row = {str(k).strip(): v for k, v in row.items()}
@@ -333,21 +344,10 @@ def load_total_cash_balance():
                 except:
                     avg_price = 0.0
                     
-                total_invest += (shares * avg_price)
+                total_stock_cost += (shares * avg_price)
                 
-        # 2. ดึงยอดรวม CashFlow ทั้งหมด
-        sheet_cash = client.open_by_key(spreadsheet_id).worksheet('CashFlow')
-        records_cash = sheet_cash.get_all_records()
-        
-        total_cash_flow = 0.0
-        if records_cash:
-            df_cash = pd.DataFrame(records_cash)
-            if 'Amount' in df_cash.columns:
-                df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
-                total_cash_flow = float(df_cash['Amount'].sum())
-                
-        # 3. คำนวณเงินสดคงเหลือ = เงินลงทุนรวม - ยอดรวม CashFlow
-        calculated_balance = total_invest - total_cash_flow
+        # 3. เงินสดคงเหลือสุทธิ = (กระแสเงินสดรวมทั้งหมด รวมถึงกำไรจากการขายหุ้น) - (ต้นทุนหุ้นที่ยังเหลืออยู่ในพอร์ต)
+        calculated_balance = total_cash_flow - total_stock_cost
         
         return float(calculated_balance)
         
