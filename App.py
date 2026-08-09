@@ -905,8 +905,7 @@ def update_stock_data(df):
     
     print("DEBUG: อัปเดตข้อมูลหุ้นเรียบร้อย!")
     
-# 2. ฟังก์ชันอเนกประสงค์ (เอามาแทรกตรงนี้)
-@st.cache_data(ttl=600)          
+# 2. ฟังก์ชันอเนกประสงค์ (เอามาแทรกตรงนี้)    
 def log_cash_transaction(date, trans_type, amount, note):
     try:
         client = get_gsheet_client()
