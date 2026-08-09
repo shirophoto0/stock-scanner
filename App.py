@@ -310,14 +310,16 @@ def log_to_sheet(sheet_name, row_data):
         return False
 
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือ พร้อมแสดงค่าพารามิเตอร์เพื่อตรวจสอบ"""
+    """คำนวณเงินสดคงเหลืออัตโนมัติจาก CashFlow และ PortfolioData"""
     try:
+        # ใช้รูปแบบการเชื่อมต่อเดียวกับฟังก์ชันตัวอย่างของคุณเป๊ะๆ
         client = get_gsheet_client()
-        spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+        spreadsheet_name = 'MyStockData'
         
-        # 1. ดึง CashFlow
-        sheet_cash = client.open_by_key(spreadsheet_id).worksheet('CashFlow')
+        # 1. ดึงยอดรวมจากชีต CashFlow
+        sheet_cash = client.open(spreadsheet_name).worksheet('CashFlow')
         records_cash = sheet_cash.get_all_records()
+        
         total_cash_flow = 0.0
         if records_cash:
             df_cash = pd.DataFrame(records_cash)
@@ -325,9 +327,10 @@ def load_total_cash_balance():
                 df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
                 total_cash_flow = float(df_cash['Amount'].sum())
                 
-        # 2. ดึง PortfolioData
-        sheet_portfolio = client.open_by_key(spreadsheet_id).worksheet('PortfolioData')
+        # 2. ดึงข้อมูลต้นทุนหุ้นจากชีต PortfolioData (ตาม Header ที่คุณคอนเฟิร์ม)
+        sheet_portfolio = client.open(spreadsheet_name).worksheet('PortfolioData')
         records_portfolio = sheet_portfolio.get_all_records()
+        
         total_stock_cost = 0.0
         if records_portfolio:
             for row in records_portfolio:
@@ -344,15 +347,13 @@ def load_total_cash_balance():
                     
                 total_stock_cost += (shares * avg_price)
                 
+        # 3. คำนวณเงินสดคงเหลือสุทธิ = (กระแสเงินสดรวมทั้งหมด) - (ต้นทุนหุ้นในพอร์ตปัจจุบัน)
         calculated_balance = total_cash_flow - total_stock_cost
-        
-        # 🔍 สั่งเตือนบนหน้าเว็บเพื่อดูว่าตัวเลขไหนเป็น 0
-        st.warning(f"DEBUG CHECK -> CashFlow รวม: {total_cash_flow:,.2f} | ต้นทุนหุ้นรวม: {total_stock_cost:,.2f} | ผลลัพธ์: {calculated_balance:,.2f}")
         
         return float(calculated_balance)
         
     except Exception as e:
-        st.error(f"DEBUG Error: {e}")
+        st.error(f"❌ เกิดข้อผิดพลาดในการคำนวณเงินสด: {e}")
         return 0.0
         
 # --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
