@@ -304,25 +304,51 @@ def log_to_sheet(sheet_name, row_data):
         return False
         
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือสุทธิจากผลรวม Amount ทั้งหมดในชีต Cash_Flow โดยตรง"""
+    """คำนวณเงินสดคงเหลือที่แท้จริง: (ยอดรวม Cash Flow ทั้งหมด) - (ต้นทุนหุ้นรวมในพอร์ตปัจจุบัน)"""
     try:
         client = get_gsheet_client()
         spreadsheet_name = 'MyStockData'
         
-        # ดึงข้อมูลจากชีต Cash_Flow
+        # 1. ดึงยอดรวมจากชีต Cash_Flow ทั้งหมด
         sheet_cash = client.open(spreadsheet_name).worksheet('CashFlow')
         records_cash = sheet_cash.get_all_records()
         
-        total_cash_balance = 0.0
+        total_cash_flow = 0.0
         if records_cash:
             df_cash = pd.DataFrame(records_cash)
             if 'Amount' in df_cash.columns:
-                # แปลงค่า Amount ให้เป็นตัวเลขทั้งหมด และจัดการค่าว่าง
                 df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
-                # ผลรวมของ Amount ทั้งหมดคือเงินสดคงเหลือปัจจุบันในพอร์ต
-                total_cash_balance = float(df_cash['Amount'].sum())
+                total_cash_flow = float(df_cash['Amount'].sum())
                 
-        return total_cash_balance
+        # 2. ดึงข้อมูลต้นทุนหุ้นทั้งหมดจากชีต PortfolioData (จากคอลัมน์ cost_value หรือคำนวณจาก shares * avg_price)
+        sheet_portfolio = client.open(spreadsheet_name).worksheet('PortfolioData')
+        records_portfolio = sheet_portfolio.get_all_records()
+        
+        total_stock_cost = 0.0
+        if records_portfolio:
+            df_port = pd.DataFrame(records_portfolio)
+            # เช็คว่ามีคอลัมน์ cost_value หรือไม่ ถ้ามีใช้รวมกันได้เลย หรือคำนวณจาก shares * avg_price
+            if 'cost_value' in df_port.columns:
+                df_port['cost_value'] = pd.to_numeric(df_port['cost_value'].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+                total_stock_cost = float(df_port['cost_value'].sum())
+            else:
+                # Fallback คำนวณจาก shares * avg_price เผื่อไว้
+                for row in records_portfolio:
+                    cleaned_row = {str(k).strip(): v for k, v in row.items()}
+                    try:
+                        shares = float(str(cleaned_row.get('shares', cleaned_row.get('จำนวน', 0))).replace(',', ''))
+                    except:
+                        shares = 0.0
+                    try:
+                        avg_price = float(str(cleaned_row.get('avg_price', cleaned_row.get('ต้นทุนเฉลี่ย', 0.0))).replace(',', ''))
+                    except:
+                        avg_price = 0.0
+                    total_stock_cost += (shares * avg_price)
+                    
+        # 3. เงินสดคงเหลือที่แท้จริง = ยอดเงินรวมทั้งหมดในประวัติ - เงินที่จมอยู่ในหุ้นปัจจุบัน
+        actual_cash_balance = total_cash_flow - total_stock_cost
+        
+        return float(actual_cash_balance)
         
     except Exception as e:
         st.error(f"❌ เกิดข้อผิดพลาดในการคำนวณเงินสด: {e}")
