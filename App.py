@@ -310,7 +310,7 @@ def log_to_sheet(sheet_name, row_data):
         return False
 
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือจากตาราง CashFlow โดยรวมยอดคอลัมน์ Amount ทั้งหมดตรงๆ"""
+    """คำนวณเงินสดคงเหลือจากตาราง CashFlow"""
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('CashFlow')
@@ -321,20 +321,18 @@ def load_total_cash_balance():
             
         df = pd.DataFrame(records)
         
-        # ตรวจสอบว่ามีคอลัมน์ Amount หรือไม่
         if 'Amount' in df.columns:
-            # แปลงค่าใน Amount เป็นตัวเลขทั้งหมด (ข้อมูลที่เป็นตัวอักษรหรือช่องว่างจะถูกปัดเป็น 0)
             df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-            
-            # รวมยอดเงินทั้งหมดใน CashFlow ตรงๆ (เพราะซื้อหุ้นติดลบ ขายหุ้น/ฝากเงินเป็นบวก อยู่แล้ว)
             total_cash_balance = float(df['Amount'].sum())
             return total_cash_balance
         else:
+            st.error("DEBUG: ไม่พบคอลัมน์ 'Amount' ในชีต CashFlow")
             return 0.0
             
     except Exception as e:
-        print(f"DEBUG: Error ในการคำนวณเงินสด Auto: {e}")
-        return 2922.34  # ค่าสำรองกรณีเกิด Error จริงๆ
+        # บังคับแสดง Error บนหน้าเว็บตรงๆ จะได้รู้ว่าติดบรรทัดไหน
+        st.error(f"DEBUG Error ใน load_total_cash_balance: {e}")
+        return 0.0
         
 # --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
 if "cash_balance" not in st.session_state:
