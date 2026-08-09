@@ -5841,7 +5841,10 @@ def main():
         with wealth_tab_real_estate:
             st.markdown("### 🏠 จัดการพอร์ตอสังหาริมทรัพย์ (บ้าน / คอนโด)")
             st.markdown("บันทึกมูลค่าประเมินปัจจุบันและหักลบด้วยยอดหนี้คงเหลือ เพื่อคำนวณมูลค่าสุทธิ (Equity) เข้าพอร์ตความมั่งคั่ง")
-
+            
+            import pandas as pd
+            from datetime import datetime
+            import time
             
             # ปุ่มโหลดข้อมูลใหม่
             col_r1, col_r2 = st.columns([3, 1])
@@ -5849,8 +5852,8 @@ def main():
                 if st.button("🔄 โหลดข้อมูลใหม่จาก Sheet"):
                     if 'real_estate_portfolio' in st.session_state:
                         del st.session_state['real_estate_portfolio']
-                    if 're_selected_row' in st.session_state:
-                        del st.session_state['re_selected_row']
+                    if 're_table_selection' in st.session_state:
+                        del st.session_state['re_table_selection']
                     st.success("รีเซ็ตข้อมูลสำเร็จ กำลังโหลดใหม่...")
                     st.rerun()
         
@@ -5905,7 +5908,7 @@ def main():
                     default_note = target_item["หมายเหตุ"]
                     action_mode = "✏️ แก้ไขข้อมูลเดิม"
                     is_editing = True
-                    st.success(กำลังเลือกแก้ไขทรัพย์สิน: **{default_name}**)
+                    st.success(f"กำลังเลือกแก้ไขทรัพย์สิน: **{default_name}**")
         
             # ฟอร์มรับข้อมูล
             with st.form("real_estate_form"):
