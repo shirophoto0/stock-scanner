@@ -310,47 +310,31 @@ def log_to_sheet(sheet_name, row_data):
         return False
 
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือ: (ยอดรวม CashFlow เช่น ฝาก/ถอน) - (ต้นทุนหุ้นทั้งหมดในพอร์ตปัจจุบัน)"""
+    """คำนวณเงินสดคงเหลือจากตาราง CashFlow โดยรวมยอดคอลัมน์ Amount ทั้งหมดตรงๆ"""
     try:
         client = get_gsheet_client()
         sheet = client.open('MyStockData').worksheet('CashFlow')
         
-        # 1. ดึงประวัติกระแสเงินสดทั้งหมดมาคำนวณเฉพาะรายการฝาก/ถอน/เริ่มต้น
         records = sheet.get_all_records()
-        total_cash_flow = 0.0
+        if not records:
+            return 0.0
+            
+        df = pd.DataFrame(records)
         
-        if records:
-            df = pd.DataFrame(records)
-            if 'Amount' in df.columns and 'Type' in df.columns:
-                df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
-                
-                for _, row in df.iterrows():
-                    t_type = str(row['Type']).strip()
-                    amt = float(row['Amount'])
-                    
-                    # นับเฉพาะรายการเติมเงิน, ถอนเงิน, เงินเริ่มต้น, หรือเงินปันผล/รายได้อื่นๆ (ไม่นับรายการซื้อขายหุ้นถ้ามีบันทึกปะปน)
-                    if t_type in ['เติมเงินสด', 'เงินปันผล', 'เงินรายได้อื่นๆ', 'เงินคงเหลือเริ่มต้น']:
-                        total_cash_flow += amt
-                    elif t_type in ['ถอนเงินสด']:
-                        total_cash_flow += amt # amt ติดลบอยู่แล้ว เอามาบวกได้เลย
-                    # หมายเหตุ: หากใน CashFlow มีรายการซื้อหุ้นบันทึกอยู่แล้ว ให้เพิ่มเงื่อนไขดักตรงนี้ แต่มองจากที่คุณคำนวณมือ CashFlow น่าจะเก็บแค่เงินฝาก/ถอน
-        
-        # 2. หักลบด้วยต้นทุนหุ้นทั้งหมดที่ถืออยู่ในพอร์ตปัจจุบัน (ใช้ .get ป้องกัน KeyError)
-        total_stock_cost = 0.0
-        if "my_portfolio" in st.session_state and st.session_state.my_portfolio:
-            for item in st.session_state.my_portfolio:
-                shares = float(item.get('shares', item.get('จำนวน', 0)))
-                avg_price = float(item.get('avg_price', item.get('ต้นทุนเฉลี่ย', 0.0)))
-                total_stock_cost += (shares * avg_price)
-                
-        # 3. คำนวณเงินสดคงเหลือสุทธิ
-        calculated_balance = total_cash_flow - total_stock_cost
-        
-        return float(calculated_balance)
-        
+        # ตรวจสอบว่ามีคอลัมน์ Amount หรือไม่
+        if 'Amount' in df.columns:
+            # แปลงค่าใน Amount เป็นตัวเลขทั้งหมด (ข้อมูลที่เป็นตัวอักษรหรือช่องว่างจะถูกปัดเป็น 0)
+            df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce').fillna(0)
+            
+            # รวมยอดเงินทั้งหมดใน CashFlow ตรงๆ (เพราะซื้อหุ้นติดลบ ขายหุ้น/ฝากเงินเป็นบวก อยู่แล้ว)
+            total_cash_balance = float(df['Amount'].sum())
+            return total_cash_balance
+        else:
+            return 0.0
+            
     except Exception as e:
         print(f"DEBUG: Error ในการคำนวณเงินสด Auto: {e}")
-        return 2922.34  # ค่าสำรองกรณีเกิด Error
+        return 2922.34  # ค่าสำรองกรณีเกิด Error จริงๆ
         
 # --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
 if "cash_balance" not in st.session_state:
