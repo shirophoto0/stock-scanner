@@ -1496,7 +1496,6 @@ def main():
                         records = sheet_gold.get_all_records()
                         for row in records:
                             if "ประเภท" in row:
-                                # รองรับชื่อคอลัมน์ทั้งแบบเก่า ("น้ำหนัก") และแบบใหม่ ("น้ำหนัก/มูลค่าซื้อ")
                                 val_weight = row.get("น้ำหนัก/มูลค่าซื้อ", row.get("น้ำหนัก", 0))
                                 val_weight = float(str(val_weight).replace(',', '')) if val_weight else 0.0
                                 
@@ -1505,7 +1504,6 @@ def main():
                                 
                                 g_type = str(row["ประเภท"])
                                 
-                                # ถ้ารายการเก่าไม่มีมูลค่าตลาด ให้คำนวณสำรองไว้ก่อน
                                 if val_market == 0.0 and val_weight > 0:
                                     if g_type == "ทองคำแท่ง":
                                         val_market = (val_weight / 15.244) * ref_gold_bar
@@ -1720,13 +1718,14 @@ def main():
                 total_market_value = sum(calculated_market)
                 total_cost_value = sum(calculated_cost)
                 total_pl = sum(profit_losses)
+                total_pl_pct = (total_pl / total_cost_value * 100) if total_cost_value > 0 else 0.0
                 
                 st.session_state['total_gold_portfolio_value'] = total_market_value
                 
                 col_m1, col_m2, col_m3 = st.columns(3)
                 col_m1.metric("💰 มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿")
                 col_m2.metric("📦 มูลค่าตั้งต้นรวม", f"{total_cost_value:,.2f} ฿")
-                col_m3.metric("📈 กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿")
+                col_m3.metric("📈 กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿", f"{total_pl_pct:,.2f}%")
                 
                 if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
                     st.session_state['gold_portfolio'] = []
@@ -5844,36 +5843,34 @@ def main():
             
             import pandas as pd
             from datetime import datetime
-        
-            # 🔄 โหลดข้อมูลอัตโนมัติจาก Google Sheets (แมตช์ชื่อ Header ให้ตรงกันเป๊ะ)
-            st.session_state['real_estate_portfolio'] = []
-            try:
-                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                if sheet_re is not None:
-                    records = sheet_re.get_all_records()
-                    for row in records:
-                        # เช็คจาก Header จริงใน Excel ของคุณ
-                        if "ชื่อทรัพย์สิน" in row and str(row["ชื่อทรัพย์สิน"]).strip() != "":
-                            
-                            # ดึงค่าจากคอลัมน์ที่มีคำว่า "(บาท)" ต่อท้าย
-                            m_val = row.get("มูลค่าตลาด (บาท)", row.get("มูลค่าตลาด", 0))
-                            m_val = float(str(m_val).replace(',', '')) if str(m_val).strip() != "" else 0.0
-                            
-                            d_val = row.get("ยอดหนี้คงเหลือ (บาท)", row.get("ยอดหนี้คงเหลือ", 0))
-                            d_val = float(str(d_val).replace(',', '')) if str(d_val).strip() != "" else 0.0
-        
-                            st.session_state['real_estate_portfolio'].append({
-                                "ชื่อทรัพย์สิน": str(row["ชื่อทรัพย์สิน"]),
-                                "มูลค่าตลาด": m_val,
-                                "ยอดหนี้คงเหลือ": d_val,
-                                "หมายเหตุ": str(row.get("หมายเหตุ", ""))
-                            })
-            except Exception as e:
-                st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้: {e}")
-        
+            
+            # 🔄 โหลดข้อมูลจาก Google Sheets เฉพาะครั้งแรกที่ยังไม่มีข้อมูลใน session_state (ลดการติด API Limit)
+            if 'real_estate_portfolio' not in st.session_state:
+                st.session_state['real_estate_portfolio'] = []
+                try:
+                    sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                    if sheet_re is not None:
+                        records = sheet_re.get_all_records()
+                        for row in records:
+                            if "ชื่อทรัพย์สิน" in row and str(row["ชื่อทรัพย์สิน"]).strip() != "":
+                                m_val = row.get("มูลค่าตลาด (บาท)", row.get("มูลค่าตลาด", 0))
+                                m_val = float(str(m_val).replace(',', '')) if str(m_val).strip() != "" else 0.0
+                                
+                                d_val = row.get("ยอดหนี้คงเหลือ (บาท)", row.get("ยอดหนี้คงเหลือ", 0))
+                                d_val = float(str(d_val).replace(',', '')) if str(d_val).strip() != "" else 0.0
+                
+                                st.session_state['real_estate_portfolio'].append({
+                                    "ชื่อทรัพย์สิน": str(row["ชื่อทรัพย์สิน"]),
+                                    "มูลค่าตลาด": m_val,
+                                    "ยอดหนี้คงเหลือ": d_val,
+                                    "หมายเหตุ": str(row.get("หมายเหตุ", ""))
+                                })
+                except Exception as e:
+                    st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้: {e}")
+            
             st.markdown("---")
             st.markdown("#### 📝 บันทึกข้อมูลอสังหาริมทรัพย์")
-        
+            
             # ฟอร์มรับข้อมูล
             with st.form("real_estate_form"):
                 col_re1, col_re2 = st.columns(2)
@@ -5898,7 +5895,7 @@ def main():
                             "หมายเหตุ": re_note
                         })
                         
-                        # 2. บันทึกทับลง Google Sheets โดยใช้ Header ที่มีคำว่า (บาท) ให้ตรงกัน
+                        # 2. บันทึกทับลง Google Sheets ครั้งเดียวจบ
                         try:
                             sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
                             if sheet_re is not None:
@@ -5920,14 +5917,14 @@ def main():
                                 sheet_re.append_rows(rows_to_append)
                         except Exception as e:
                             st.error(f"⚠️ เพิ่มรายการสำเร็จ แต่บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
-        
+                        
                         st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
                         st.rerun()
                     else:
                         st.error("กรุณากรอกชื่อทรัพย์สินและมูลค่าประเมินตลาดให้ถูกต้อง")
             
             # แสดงผลตารางสรุป
-            if len(st.session_state['real_estate_portfolio']) > 0:
+            if 'real_estate_portfolio' in st.session_state and len(st.session_state['real_estate_portfolio']) > 0:
                 st.markdown("#### 📊 สรุปมูลค่าสุทธิอสังหาริมทรัพย์")
                 
                 df_re = pd.DataFrame(st.session_state['real_estate_portfolio'])
@@ -5961,7 +5958,7 @@ def main():
                         pass
                     st.rerun()
             else:
-                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                      
+                st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")                  
 # ------------------------------
 if __name__ == "__main__":
     main()
