@@ -1,10 +1,11 @@
-# Import และ Setup
+# =============================================================
+# # Import และ Setup
+# =============================================================
 import streamlit as st
 import pandas as pd
 import yfinance as yf
 import altair as alt
 import numpy as np
-import pandas as pd  
 import plotly.graph_objects as go
 import os
 import google.generativeai as genai
@@ -17,24 +18,44 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 import datetime
 import plotly
-from datetime import date
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from oauth2client.service_account import ServiceAccountCredentials
 from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
 from PIL import Image
-from datetime import datetime, timedelta
-# =============================================================
-# 1. ฟังก์ชันจัดการ Google Sheets (Utility)
-# =============================================================
-
-# Def wealth #
-# 1. ฟังก์ชันเรียก Gemini AI มาแปลงรูปภาพเป็นข้อมูลโครงสร้าง
-
 import time
 from gspread.exceptions import APIError
 
 
+# =============================================================
+# 1. ฟังก์ชันเชื่อมต่อ Google Sheets (Utility พื้นฐานที่ต้องใช้อันแรก)
+# =============================================================
+def get_gsheet_client():
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        'https://www.googleapis.com/auth/spreadsheets',
+        "https://www.googleapis.com/auth/drive"
+    ]
+    
+    try:
+        # 1. เช็คจาก GitHub Actions (Environment Variable)
+        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+            creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
+        # 2. เช็คจาก Streamlit Cloud (Secrets)
+        else:
+            creds_dict = dict(st.secrets["gcp_service_account"])
+            
+        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+        return gspread.authorize(creds)
+        
+    except Exception as e:
+        print(f"Error ในการเชื่อมต่อ Google Sheets: {e}")
+        raise e
+
+
+# =============================================================
+# 2. ฟังก์ชันจัดการ Google Sheets & ข้อมูลทรัพย์สิน (Wealth & Google Sheets)
+# =============================================================
 def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, delay=2):
     """ฟังก์ชันเปิด Google Sheet พร้อมระบบป้องกันและลองใหม่เมื่อติดปัญหา Quota Exceeded (429)"""
     for attempt in range(retries):
@@ -59,24 +80,20 @@ def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, de
     
 def check_and_auto_stamp_portfolio(client, current_total_value):
     try:
-        # เปลี่ยนชื่อชีทเป็น Stock_TFEX_History เพื่อไม่ให้ชนกับชื่อเดิม
         sheet_history = client.open('MyStockData').worksheet('Stock_TFEX_History')
         data = sheet_history.get_all_records()
         
-        # หาวันที่สุดท้ายที่มีการบันทึกใน Google Sheets
         last_recorded_month = ""
         if data:
             last_date_str = str(data[-1].get('Date', ''))
             if last_date_str:
                 last_recorded_month = last_date_str[:7] # ตัดเอาแค่ 'YYYY-MM'
         
-        # กำหนดให้เดือนที่ควรบันทึกคือ "เดือนก่อนหน้า"
         today = datetime.today()
         prev_month_date = today.replace(day=1) - timedelta(days=5)
         target_month_str = prev_month_date.strftime('%Y-%m')
         target_date_str = prev_month_date.strftime('%Y-%m-%d')
         
-        # ถ้าเดือนเป้าหมายยังไม่เคยถูกบันทึก ให้ทำการบันทึกอัตโนมัติทันที!
         if last_recorded_month != target_month_str:
             sheet_history.append_row([target_date_str, current_total_value])
             st.toast(f"📊 ระบบบันทึกยอดพอร์ตหุ้น+TFEX สิ้นเดือนอัตโนมัติเรียบร้อย: {target_month_str}", icon="✅")
@@ -84,12 +101,8 @@ def check_and_auto_stamp_portfolio(client, current_total_value):
     except Exception as e:
         pass
 
-# --- วิธีเรียกใช้งาน (นำไปวางในส่วนโหลดข้อมูลกราฟ) ---
-# client = get_gsheet_client()
-# check_and_auto_stamp_portfolio(client, total_stock_and_tfex)
 def extract_pvd_from_image(image_file, year_be, month_name="ธันวาคม"):
     try:
-        # ดึง API Key จาก st.secrets
         api_key = st.secrets.get("GOOGLE_API_KEY", "")
         if not api_key:
             st.error("ไม่พบ GOOGLE_API_KEY ใน st.secrets กรุณาตรวจสอบการตั้งค่า")
@@ -98,7 +111,6 @@ def extract_pvd_from_image(image_file, year_be, month_name="ธันวาค�
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-3.5-flash')
                 
-        # แปลงปี พ.ศ. เป็น ค.ศ. (เช่น 2569 -> 2026)
         year_ce = int(year_be) - 543
         
         prompt = f"""
@@ -159,14 +171,12 @@ def get_latest_pvd_value():
         data = sheet.get_all_records()
         if data:
             df = pd.DataFrame(data)
-            # ดึงค่าแถวสุดท้าย (ล่าสุด) ของคอลัมน์ Grand_Total
             latest_val = str(df.iloc[-1]['Grand_Total']).replace(',', '')
             return float(latest_val)
     except:
         return 0.0
     return 0.0
 
-# ฟังก์ชันดึงมูลค่าประกันล่าสุด
 def get_latest_insurance_value():
     try:
         client = get_gsheet_client()
@@ -180,11 +190,10 @@ def get_latest_insurance_value():
         pass
     return 0.0
 
-# ฟังก์ชันดึงมูลค่าสหกรณ์ล่าสุด
 def get_latest_coop_value():
     try:
         client = get_gsheet_client()
-        sheet_coop = client.open('MyStockData').worksheet('MyStockData' if False else 'Coop') # worksheet ชื่อ Coop
+        sheet_coop = client.open('MyStockData').worksheet('Coop')
         data = sheet_coop.get_all_records()
         if data:
             df_coop = pd.DataFrame(data)
@@ -194,14 +203,12 @@ def get_latest_coop_value():
         pass
     return 0.0
 
-###################
-# Def TEFEX #
-###################
-# --- CONFIGURATION ---
-# ค่า IM ของ SET50 Index Futures ต่อ 1 สัญญา (อัปเดต 1 กรกฎาคม 2026)
-# พี่อ้ำสามารถปรับเปลี่ยนค่านี้ได้ตามประกาศจาก TFO/TCH
+
+# =============================================================
+# 3. ฟังก์ชันการจัดการ TFEX และคำนวณทางเทคนิค
+# =============================================================
 IM_PER_CONTRACT = 13300 
-# ---------------------
+
 def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     client = get_gsheet_client()
     spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
@@ -210,24 +217,20 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     records = sheet.get_all_records()
     df = pd.DataFrame(records)
     
-    # หาตำแหน่ง Row
     idx_list = df.index[df['Trade_ID'] == trade_id].tolist()
     if not idx_list:
         st.error("ไม่พบ Trade ID นี้ในระบบ")
         return False
     row_index = idx_list[0] + 2 
     
-    # ดึงค่าเดิมมาคำนวณ
     trade_row = df.loc[idx_list[0]]
     open_price = float(trade_row['Open_Price'])
     size = int(trade_row['Size'])
     status = trade_row['Status']
     
-    # คำนวณผลลัพธ์ผ่านฟังก์ชันเดิม
     comm = size * 50 
     calc = calculate_tfex_result(open_price, close_price, size, comm, status)
     
-    # อัปเดตข้อมูล
     sheet.update_cell(row_index, 3, date_close)       # Date_Close
     sheet.update_cell(row_index, 8, close_price)      # Close_Price
     sheet.update_cell(row_index, 9, calc['Realized']) # Realized
@@ -235,29 +238,25 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     sheet.update_cell(row_index, 11, calc['Net_Profit']) # Net_Profit
     sheet.update_cell(row_index, 12, calc['Win_Lose'])   # Win_Lose
     
-    # --- ส่วนที่เพิ่มเข้ามาเพื่อแก้ปัญหาดีเลย์ ---
-    st.cache_data.clear()   # 1. ล้าง Cache ข้อมูลเก่าทิ้งทันที
+    st.cache_data.clear()   
     st.toast("บันทึกสำเร็จ! กำลังอัปเดตหน้าจอ...", icon="✅")
-    st.rerun()              # 2. บังคับโหลดหน้าจอใหม่เพื่อให้ข้อมูลปัจจุบันที่สุดแสดงทันที
+    st.rerun()              
     
     return True
 
-# 1. ฟังก์ชันคำนวณค่า ATR แบบมี Cache (ปลอดภัย ไม่โดน Block บ่อย)
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_auto_atr_cached(symbol="^SET50"):
     """ดึงข้อมูลราคาและคำนวณ ATR ย้อนหลัง 14 วัน"""
     try:
-        # ดึงข้อมูลจาก Yahoo Finance (SET50 Index)
         data = yf.download(symbol, period="1m", interval="1d", progress=False)
         
         if data.empty or len(data) < 15:
-            return 6.5  # ค่าสำรองเริ่มต้น
+            return 6.5  
         
         high = data['High']
         low = data['Low']
         close = data['Close']
         
-        # จัดการโครงสร้างข้อมูล DataFrame กรณีเป็น MultiIndex
         if isinstance(high, pd.DataFrame):
             high = high.iloc[:, 0]
             low = low.iloc[:, 0]
@@ -273,23 +272,13 @@ def get_auto_atr_cached(symbol="^SET50"):
         
         return round(float(atr_value), 2)
     except Exception as e:
-        # กรณีเกิด Error หรือโดน Rate Limit ให้คืนค่าเริ่มต้นเพื่อความเสถียร
         return 6.5
 
 def calculate_tfex_result(entry, close, size, comm, Status):
-    # Multiplier ของ S50 ปกติคือ 200
     multiplier = 200
-    
-    # คำนวณจุดที่ได้ (Points)
     points = (close - entry) if Status == "Long" else (entry - close)
-    
-    # คำนวณกำไร/ขาดทุนก่อนหักคอม
     realized = points * size * multiplier
-    
-    # กำไรสุทธิ
     net_profit = realized - comm
-    
-    # สถานะ Win/Lose
     win_lose = "Win" if net_profit > 0 else "Lose"
     
     return {
@@ -298,36 +287,15 @@ def calculate_tfex_result(entry, close, size, comm, Status):
         "Win_Lose": win_lose,
         "Points": round(points, 2)
     }
-    
-def get_gsheet_client():
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        'https://www.googleapis.com/auth/spreadsheets',
-        "https://www.googleapis.com/auth/drive"
-    ]
-    
-    try:
-        # 1. เช็คจาก GitHub Actions (Environment Variable)
-        if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-            creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
-        # 2. เช็คจาก Streamlit Cloud (Secrets)
-        else:
-            # ใช้ dict() เพื่อแปลง st.secrets เป็น dictionary ธรรมดา
-            creds_dict = dict(st.secrets["gcp_service_account"])
-            
-        # สร้าง Credentials ด้วยวิธีมาตรฐานที่รองรับทั้งคู่
-        creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-        return gspread.authorize(creds)
-        
-    except Exception as e:
-        # ถ้าพัง ให้ print ออกมาดูใน Log ของ GitHub
-        print(f"Error ในการเชื่อมต่อ Google Sheets: {e}")
-        raise e
-        
+
+
+# =============================================================
+# 4. ฟังก์ชันการจัดการบันทึกข้อมูลและเงินสด (Logging & Cash Balance)
+# =============================================================
 def log_to_sheet(sheet_name, row_data):
     """ฟังก์ชันสำหรับบันทึกข้อมูลแถวใหม่ลง Google Sheets"""
     try:
-        # ใช้ตัวแปร sheet_name เพื่อให้รองรับหลายชีทตามที่เราเรียกใช้งาน
+        client = get_gsheet_client() # เรียกใช้ client ที่อยู่ด้านบน
         sheet = client.open('MyStockData').worksheet(sheet_name)
         sheet.append_row(row_data)
         return True
@@ -335,16 +303,13 @@ def log_to_sheet(sheet_name, row_data):
         print(f"Error logging to {sheet_name}: {e}")
         return False
         
-        
 def load_total_cash_balance():
     """คำนวณเงินสดคงเหลืออัตโนมัติจาก Cash_Flow และ PortfolioData"""
     try:
-        # เรียกใช้ฟังก์ชันเชื่อมต่อ Google Sheets 
-        # (หมายเหตุ: หากในไฟล์ของคุณฟังก์ชันสร้าง client ชื่ออื่น ให้เปลี่ยนบรรทัดนี้ตามชื่อจริงครับ)
         client = get_gsheet_client()
         spreadsheet_name = 'MyStockData'
         
-        # 1. ดึงยอดรวมจากชีต Cash_Flow (แก้ชื่อชีตให้ตรงกับฟังก์ชัน save_cash_to_gsheet ของคุณคือ 'Cash_Flow')
+        # 1. ดึงยอดรวมจากชีต Cash_Flow
         sheet_cash = client.open(spreadsheet_name).worksheet('Cash_Flow')
         records_cash = sheet_cash.get_all_records()
         
@@ -375,7 +340,7 @@ def load_total_cash_balance():
                     
                 total_stock_cost += (shares * avg_price)
                 
-        # 3. คำนวณเงินสดคงเหลือสุทธิ = (กระแสเงินสดรวมทั้งหมด รวมกำไร/ขาดทุนจากการขาย) - (ต้นทุนหุ้นในพอร์ตปัจจุบัน)
+        # 3. คำนวณเงินสดคงเหลือสุทธิ
         calculated_balance = total_cash_flow - total_stock_cost
         
         return float(calculated_balance)
@@ -383,6 +348,7 @@ def load_total_cash_balance():
     except Exception as e:
         st.error(f"❌ เกิดข้อผิดพลาดในการคำนวณเงินสด: {e}")
         return 0.0
+        
         
 # --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
 if "cash_balance" not in st.session_state:
