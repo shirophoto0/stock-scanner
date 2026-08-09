@@ -2168,29 +2168,38 @@ def main():
                     r_col1, r_col2 = st.columns([1, 1])
     
                     with r_col1:
+                        # --- ป้องกัน Error: ตรวจสอบและบังคับค่าเริ่มต้นไม่ให้ต่ำกว่า min_value (1000) ---
+                        try:
+                            safe_equity = int(total_equity)
+                        except (ValueError, TypeError):
+                            safe_equity = 1000
+                        
+                        if safe_equity < 1000:
+                            safe_equity = 1000
+                    
                         total_cap = st.number_input(
                             "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
                             min_value=1000, 
-                            value=int(total_equity), # นี่คือค่าเริ่มต้นที่ดึงมาจากพอร์ตจริง
+                            value=safe_equity, # ใช้ค่าที่ผ่านการตรวจสอบความปลอดภัยแล้ว
                             step=1000,
                             help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
                         )
                         risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
-                    
+                     
                     with r_col2:
                         # กำหนดค่าเริ่มต้นให้ปลอดภัยก่อน ถ้าตัวแปรไม่มีค่าให้เป็น 0.0
                         try:
                             latest_p = float(latest_price_single) if 'latest_price_single' in locals() and latest_price_single is not None else 0.0
                         except (ValueError, TypeError):
                             latest_p = 0.0
-                        
+                     
                         sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
                             ema10_str,
                             ema20_str,
                             "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
                             "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
                         ])
-                        
+                     
                         # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
                         if "EMA 10" in sl_type and ema10_val > 0:
                             sl_price = ema10_val
@@ -2203,7 +2212,6 @@ def main():
                             if "EMA" in sl_type and ema10_val == 0:
                                 st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
                             sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
-                    
                     # 3. คำนวณผลลัพธ์
                     max_risk_money = total_cap * (risk_pct / 100)
                     risk_per_share = latest_p - sl_price
