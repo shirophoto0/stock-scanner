@@ -750,14 +750,22 @@ def total_invested_capital():
 
 def save_portfolio_snapshot():
     """บันทึกมูลค่าพอร์ตปัจจุบันลงไฟล์/Sheet ประวัติ"""
-    # คำนวณมูลค่าหุ้นทั้งหมดจากพอร์ตใน session_state
-    total_stock_value = sum([item['shares'] * item.get('current_price', item['avg_price']) for item in st.session_state.my_portfolio]) if "my_portfolio" in st.session_state else 0
-    current_cash = st.session_state.cash_balance
-    total_equity = total_stock_value + current_cash
-    
-    # บันทึกข้อมูลลงในตาราง Portfolio_History
-    # รูปแบบ: [วันที่, มูลค่าพอร์ตรวม, เงินต้นสะสม]
-    log_to_sheet("Portfolio_History", [str(datetime.now().date()), total_equity, total_invested_capital()])
+    try:
+        # ใช้ .get() เพื่อป้องกัน KeyError รองรับทั้ง 'shares' และ 'จำนวน', รวมถึง 'current_price' และ 'avg_price'
+        total_stock_value = sum([
+            float(item.get('shares', item.get('จำนวน', 0))) * float(item.get('current_price', item.get('avg_price', 0))) 
+            for item in st.session_state.my_portfolio
+        ]) if "my_portfolio" in st.session_state else 0
+        
+        current_cash = st.session_state.get('cash_balance', 0)
+        total_equity = total_stock_value + current_cash
+        
+        # บันทึกข้อมูลลงในตาราง Portfolio_History
+        # รูปแบบ: [วันที่, มูลค่าพอร์ตรวม, เงินต้นสะสม]
+        log_to_sheet("Portfolio_History", [str(datetime.now().date()), total_equity, total_invested_capital()])
+        
+    except Exception as e:
+        print(f"DEBUG: Error ใน save_portfolio_snapshot: {e}")
     
 def display_performance_dashboard():
     # 1. โหลดข้อมูล
