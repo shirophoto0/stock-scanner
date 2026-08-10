@@ -5720,31 +5720,88 @@ def main():
                         else:
                             st.warning("กรุณากรอกมูลค่ารับซื้อคืนหน่วยลงทุนให้มากกว่า 0")
 
-            # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. ---
-            # --- ฟังก์ชันตัวช่วยเชื่อมต่อ Google Sheets แบบปลอดภัย ---
+            # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. (พร้อมระบบ Auto เพิ่มเงินทุกสิ้นเดือน) ---
             def get_coop_sheet():
                 client = get_gsheet_client()
                 return client.open('MyStockData').worksheet('Coop')
-        
+            
             def get_sso_sheet():
                 client = get_gsheet_client()
                 return client.open('MyStockData').worksheet('SSO')
-        
+            
             def get_bank_sheet():
                 client = get_gsheet_client()
                 return client.open('MyStockData').worksheet('Bank_Account')
-        
-            # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. ---
+            
+            # --- ฟังก์ชันคำนวณยอดอัติโนมัติสะสมตามเดือนที่ผ่านไป ---
+            def calculate_auto_coop_value(last_date_str, last_val, monthly_add, is_auto_active):
+                if not is_auto_active or monthly_add <= 0:
+                    return last_val, last_date_str
+                
+                try:
+                    last_dt = datetime.strptime(last_date_str, "%Y-%m-%d").date()
+                    today_dt = date.today()
+                    
+                    # ตรวจสอบว่าข้ามเดือนมาแล้วหรือไม่ (เทียบสิ้นเดือน)
+                    # คำนวณจำนวนเดือนที่ห่างกัน
+                    diff_months = (today_dt.year - last_dt.year) * 12 + (today_dt.month - last_dt.month)
+                    
+                    # หากผ่านไปอย่างน้อย 1 เดือนเต็ม และวันนี้เลยวันที่บันทึกล่าสุดมาแล้ว
+                    if diff_months > 0:
+                        # คำนวณยอดเงินที่ควรเพิ่มขึ้นตามจำนวนเดือนที่ผ่านไป
+                        updated_val = last_val + (diff_months * monthly_add)
+                        updated_date_str = today_dt.strftime("%Y-%m-%d")
+                        return updated_val, updated_date_str
+                except Exception:
+                    pass
+                    
+                return last_val, last_date_str
+    
             with st.expander("📤 เพิ่ม/อัปเดตข้อมูลสหกรณ์ก๊าซ ปตท.", expanded=False):
+                # ดึงข้อมูลล่าสุดจาก Sheet เพื่อมาแสดงค่าตั้งต้น
+                latest_coop_val = 0.0
+                latest_coop_date = date.today().strftime("%Y-%m-%d")
+                try:
+                    sheet_coop = get_coop_sheet()
+                    coop_records = sheet_coop.get_all_records()
+                    if coop_records:
+                        last_row = coop_records[-1]
+                        latest_coop_date = str(last_row.get('Date', date.today().strftime("%Y-%m-%d")))
+                        latest_coop_val = float(str(last_row.get('Value', 0)).replace(',', ''))
+                except Exception:
+                    pass
+    
+                # ตั้งค่าสถานะ Auto ใน session_state (ค่าเริ่มต้น: เปิดใช้งาน, เติมเดือนละ 10,000)
+                if 'coop_auto_active' not in st.session_state:
+                    st.session_state['coop_auto_active'] = True
+                if 'coop_monthly_amount' not in st.session_state:
+                    st.session_state['coop_monthly_amount'] = 10000.0
+    
+                # ตรวจสอบและบวกยอดอัตโนมัติหากผ่านพ้นสิ้นเดือน
+                calculated_val, calculated_date = calculate_auto_coop_value(
+                    latest_coop_date, 
+                    latest_coop_val, 
+                    st.session_state['coop_monthly_amount'], 
+                    st.session_state['coop_auto_active']
+                )
+    
                 with st.form("coop_upload_form"):
+                    st.markdown("##### ⚙️ ตั้งค่าระบบเติมเงินอัตโนมัติ (Auto Save)")
+                    col_cfg1, col_cfg2 = st.columns(2)
+                    with col_cfg1:
+                        auto_active_input = st.checkbox("เปิดใช้งาน Auto เติมเงินทุกสิ้นเดือน", value=st.session_state['coop_auto_active'], key="form_coop_auto_chk")
+                    with col_cfg2:
+                        monthly_amount_input = st.number_input("ยอดเติมอัตโนมัติ (บาท/เดือน)", min_value=0.0, step=1000.0, value=float(st.session_state['coop_monthly_amount']), key="form_coop_monthly_val")
+                    
+                    st.markdown("---")
                     col_d, col_v = st.columns(2)
                     with col_d:
-                        coop_date = st.date_input("เลือกวันที่อัปเดตข้อมูลสหกรณ์", value=date.today(), key="coop_date_input")
+                        coop_date = st.date_input("เลือกวันที่อัปเดตข้อมูลสหกรณ์", value=datetime.strptime(calculated_date, "%Y-%m-%d").date() if calculated_date else date.today(), key="coop_date_input")
                     with col_v:
                         coop_value = st.number_input(
                             "ยอดเงินสหกรณ์ / มูลค่าหุ้นสหกรณ์ (บาท)", 
-                            min_value=0.0, format="%.2f", value=0.0, key="coop_value_input",
-                            help="กรอกยอดเงินสะสมหรือยอดรวมในสหกรณ์ก๊าซ ปตท. ณ วันที่อัปเดต"
+                            min_value=0.0, format="%.2f", value=float(calculated_val), key="coop_value_input",
+                            help="ระบบจะคำนวณบวกยอด Auto ให้ หรือคุณสามารถพิมพ์แก้ไขยอดสุทธิใหม่ได้เองตามต้องการ"
                         )
                     
                     submitted_coop = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลสหกรณ์")
@@ -5752,27 +5809,29 @@ def main():
                     if submitted_coop:
                         if coop_value > 0:
                             try:
+                                # บันทึกสถานะ Auto ลง session_state
+                                st.session_state['coop_auto_active'] = auto_active_input
+                                st.session_state['coop_monthly_amount'] = monthly_amount_input
+                                
                                 sheet_coop = get_coop_sheet()
                                 date_str = coop_date.strftime("%Y-%m-%d")
                                 year_ce = coop_date.year
                                 
-                                # ใช้การค้นหาค่าในคอลัมน์ Date โดยตรง (เร็วกว่าและกินโควตาน้อยกว่าดึงทุก record)
                                 date_column = sheet_coop.col_values(1) # สมมติคอลัมน์ A คือ Date
                                 
                                 if date_str in date_column:
                                     row_num = date_column.index(date_str) + 1
                                     sheet_coop.update(f"A{row_num}:C{row_num}", [[date_str, year_ce, coop_value]])
-                                    st.success(f"✅ อัปเดตข้อมูลสหกรณ์ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                                    st.success(f"✅ อัปเดตข้อมูลสหกรณ์ของวันที่ **{date_str}** เป็นยอด **{coop_value:,.2f} บาท** เรียบร้อยแล้ว!")
                                 else:
                                     sheet_coop.append_row([date_str, year_ce, coop_value])
-                                    st.success(f"✅ บันทึกข้อมูลใหม่สหกรณ์ของวันที่ **{date_str}** เรียบร้อยแล้ว!")
+                                    st.success(f"✅ บันทึกข้อมูลใหม่สหกรณ์ของวันที่ **{date_str}** ยอด **{coop_value:,.2f} บาท** เรียบร้อยแล้ว!")
                                 
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาด (อาจติด Limit API กรุณารอสักครู่): {e}")
                         else:
                             st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
-                            
             # --- ส่วนประกันสังคม ---
             with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันสังคม", expanded=False):
                 with st.form("sso_upload_form"):
