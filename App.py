@@ -210,39 +210,36 @@ def get_latest_coop_value():
 IM_PER_CONTRACT = 13300 
 
 def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
-    client = get_gsheet_client()
-    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
-    sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
-    
-    records = sheet.get_all_records()
-    df = pd.DataFrame(records)
-    
-    idx_list = df.index[df['Trade_ID'] == trade_id].tolist()
-    if not idx_list:
-        st.error("ไม่พบ Trade ID นี้ในระบบ")
+    try:
+        client = get_gsheet_client()
+        # ใช้ ID ที่ส่งมาจาก UI โดยตรง
+        sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
+        
+        # ดึงข้อมูลทั้งหมดมาเช็ค
+        records = sheet.get_all_records()
+        df = pd.DataFrame(records)
+        
+        idx_list = df.index[df['Trade_ID'] == trade_id].tolist()
+        if not idx_list:
+            return False
+            
+        row_index = idx_list[0] + 2 
+        
+        # คำนวณค่าก่อน Update
+        trade_row = df.loc[idx_list[0]]
+        calc = calculate_tfex_result(float(trade_row['Open_Price']), close_price, int(trade_row['Size']), int(trade_row['Size']) * 50, trade_row['Status'])
+        
+        # ปรับปรุง: ใช้การ update แบบทีเดียวทั้งแถว (Batch) เพื่อลดการเรียก API หลายครั้ง
+        # สมมติลำดับคอลัมน์คือ: C=Date, H=Close, I=Realized, J=Comm, K=Net, L=Win/Lose
+        data_to_update = [date_close, close_price, calc['Realized'], int(trade_row['Size']) * 50, calc['Net_Profit'], calc['Win_Lose']]
+        
+        # update ช่วงคอลัมน์ C ถึง L
+        sheet.update(range_name=f'C{row_index}:L{row_index}', values=[data_to_update])
+        
+        return True
+    except Exception as e:
+        print(f"Error Details: {e}") # ดู error จริงใน Log ของ Streamlit Cloud
         return False
-    row_index = idx_list[0] + 2 
-    
-    trade_row = df.loc[idx_list[0]]
-    open_price = float(trade_row['Open_Price'])
-    size = int(trade_row['Size'])
-    status = trade_row['Status']
-    
-    comm = size * 50 
-    calc = calculate_tfex_result(open_price, close_price, size, comm, status)
-    
-    sheet.update_cell(row_index, 3, date_close)       # Date_Close
-    sheet.update_cell(row_index, 8, close_price)      # Close_Price
-    sheet.update_cell(row_index, 9, calc['Realized']) # Realized
-    sheet.update_cell(row_index, 10, comm)            # Comm
-    sheet.update_cell(row_index, 11, calc['Net_Profit']) # Net_Profit
-    sheet.update_cell(row_index, 12, calc['Win_Lose'])   # Win_Lose
-    
-    st.cache_data.clear()   
-    st.toast("บันทึกสำเร็จ! กำลังอัปเดตหน้าจอ...", icon="✅")
-    st.rerun()              
-    
-    return True
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_auto_atr_cached(symbol="^SET50"):
