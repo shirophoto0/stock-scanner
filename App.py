@@ -6343,9 +6343,14 @@ def main():
                     if submitted_pension:
                         if pension_value >= 0:
                             try:
-                                sheet_pension = get_pension_sheet() 
+                                # ปรับวิธีเรียกใช้งานให้รองรับฟังก์ชันกลางและป้องกัน Error
+                                client = get_gsheet_client()
+                                sheet_pension = get_worksheet_safely(client, 'MyStockData', 'Pension')
                                 
-                                # แปลงอายุเป็น string เพื่อใช้ตรวจสอบในคอลัมน์ A (สมมติคอลัมน์ A เก็บอายุ)
+                                if sheet_pension is None:
+                                    raise Exception("ไม่สามารถเชื่อมต่อกับชีต 'Pension' ได้ กรุณาตรวจสอบชื่อชีตอีกครั้ง")
+                                
+                                # แปลงอายุเป็น string เพื่อใช้ตรวจสอบในคอลัมน์ A (อายุ)
                                 age_str = str(int(pension_age))
                                 
                                 # ดึงข้อมูลในคอลัมน์ A ทั้งหมดมาเช็คว่ามีอายุนี้หรือยัง
@@ -6361,7 +6366,9 @@ def main():
                                     sheet_pension.append_row([age_str, pension_value])
                                     st.success(f"✅ บันทึกข้อมูลใหม่ประกันบำนาญสำหรับ **อายุ {age_str} ปี** เรียบร้อยแล้ว!")
                                 
+                                time.sleep(0.5)
                                 st.rerun()
+                                
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
                         else:
