@@ -1673,138 +1673,138 @@ def main():
                             st.error("กรุณากรอกข้อมูลให้มากกว่า 0")
             
             if 'gold_portfolio' in st.session_state and len(st.session_state['gold_portfolio']) > 0:
-            st.markdown("#### 📊 สรุปมูลค่าพอร์ตการลงทุนทองคำทั้งหมด")
-            
-            df_gold = pd.DataFrame(st.session_state['gold_portfolio'])
-            
-            calculated_cost = []
-            calculated_market = []
-            profit_losses = []
-            profit_loss_pcts = []
-            
-            for idx, row in df_gold.iterrows():
-                # ปรับชื่อคอลัมน์ให้ตรงกับ Excel: ใช้ "น้ำหนัก" แทน "น้ำหนัก/มูลค่าซื้อ"
-                g_type = row.get("ประเภท", "")
-                weight_val = row.get("น้ำหนัก", 0.0)
+                st.markdown("#### 📊 สรุปมูลค่าพอร์ตการลงทุนทองคำทั้งหมด")
                 
-                # แปลงค่าตัวเลขอย่างปลอดภัย
-                try:
-                    weight_val = float(str(weight_val).replace(',', '').strip())
-                except:
-                    weight_val = 0.0
+                df_gold = pd.DataFrame(st.session_state['gold_portfolio'])
+                
+                calculated_cost = []
+                calculated_market = []
+                profit_losses = []
+                profit_loss_pcts = []
+                
+                for idx, row in df_gold.iterrows():
+                    # ปรับชื่อคอลัมน์ให้ตรงกับ Excel: ใช้ "น้ำหนัก" แทน "น้ำหนัก/มูลค่าซื้อ"
+                    g_type = row.get("ประเภท", "")
+                    weight_val = row.get("น้ำหนัก", 0.0)
                     
-                m_val = row.get("มูลค่าตลาด", 0.0)
-                try:
-                    m_val = float(str(m_val).replace(',', '').strip())
-                except:
-                    m_val = 0.0
-        
-                # คำนวณมูลค่าตามประเภททองคำ
-                if g_type == "ทองคำแท่ง":
-                    # น้ำหนักใน Excel ของคุณเป็นกรัมแล้ว (เช่น 29.12 กรัม)
-                    market_val = (weight_val / 15.244) * ref_gold_bar
-                    cost_val = market_val  # หรือปรับตามต้องการหากมีต้นทุนจริง
-                elif g_type == "ทองรูปพรรณ":
-                    # น้ำหนักใน Excel ของคุณเป็นบาททอง (เช่น 2 บาท)
-                    market_val = weight_val * ref_gold_jewelry
-                    cost_val = market_val
-                else:
-                    cost_val = weight_val
-                    market_val = m_val if m_val > 0 else cost_val
-                
-                p_l = market_val - cost_val
-                p_l_pct = (p_l / cost_val * 100) if cost_val > 0 else 0.0
-                
-                calculated_cost.append(cost_val)
-                calculated_market.append(market_val)
-                profit_losses.append(p_l)
-                profit_loss_pcts.append(p_l_pct)
+                    # แปลงค่าตัวเลขอย่างปลอดภัย
+                    try:
+                        weight_val = float(str(weight_val).replace(',', '').strip())
+                    except:
+                        weight_val = 0.0
+                        
+                    m_val = row.get("มูลค่าตลาด", 0.0)
+                    try:
+                        m_val = float(str(m_val).replace(',', '').strip())
+                    except:
+                        m_val = 0.0
             
-            df_gold["มูลค่าตั้งต้น"] = calculated_cost
-            df_gold["มูลค่าตลาด"] = calculated_market
-            df_gold["กำไร/ขาดทุน (บาท)"] = profit_losses
-            df_gold["% กำไร/ขาดทุน"] = profit_loss_pcts
-            
-            # เพิ่มคอลัมน์ "ลบ" เป็น Checkbox ไว้หน้าสุด
-            df_gold.insert(0, "ลบ", False)
-            
-            display_columns = ["ลบ", "ประเภท", "น้ำหนัก", "หน่วย", "มูลค่าตั้งต้น", "มูลค่าตลาด", "กำไร/ขาดทุน (บาท)", "% กำไร/ขาดทุน", "หมายเหตุ"]
-            df_display = df_gold[[col for col in display_columns if col in df_gold.columns]]
-            
-            edited_df = st.data_editor(
-                df_display,
-                column_config={
-                    "ลบ": st.column_config.CheckboxColumn("🗑️ ลบ", help="ติ๊กเพื่อเลือกรายการที่ต้องการลบ", default=False),
-                    "น้ำหนัก": st.column_config.NumberColumn(format="%.2f"),
-                    "มูลค่าตั้งต้น": st.column_config.NumberColumn(format="%.2f"),
-                    "มูลค่าตลาด": st.column_config.NumberColumn(format="%.2f"),
-                    "กำไร/ขาดทุน (บาท)": st.column_config.NumberColumn(format="%.2f"),
-                    "% กำไร/ขาดทุน": st.column_config.NumberColumn(format="%.2f%%"),
-                },
-                disabled=[col for col in df_display.columns if col != "ลบ"],
-                hide_index=True,
-                use_container_width=True
-            )
-            
-            selected_indices = edited_df[edited_df["ลบ"] == True].index.tolist()
-            
-            if selected_indices:
-                if st.button("🗑️ ยืนยันลบรายการที่เลือก", type="primary"):
-                    st.session_state['gold_portfolio'] = [
-                        item for idx, item in enumerate(st.session_state['gold_portfolio']) if idx not in selected_indices
-                    ]
+                    # คำนวณมูลค่าตามประเภททองคำ
+                    if g_type == "ทองคำแท่ง":
+                        # น้ำหนักใน Excel ของคุณเป็นกรัมแล้ว (เช่น 29.12 กรัม)
+                        market_val = (weight_val / 15.244) * ref_gold_bar
+                        cost_val = market_val  # หรือปรับตามต้องการหากมีต้นทุนจริง
+                    elif g_type == "ทองรูปพรรณ":
+                        # น้ำหนักใน Excel ของคุณเป็นบาททอง (เช่น 2 บาท)
+                        market_val = weight_val * ref_gold_jewelry
+                        cost_val = market_val
+                    else:
+                        cost_val = weight_val
+                        market_val = m_val if m_val > 0 else cost_val
                     
+                    p_l = market_val - cost_val
+                    p_l_pct = (p_l / cost_val * 100) if cost_val > 0 else 0.0
+                    
+                    calculated_cost.append(cost_val)
+                    calculated_market.append(market_val)
+                    profit_losses.append(p_l)
+                    profit_loss_pcts.append(p_l_pct)
+                
+                df_gold["มูลค่าตั้งต้น"] = calculated_cost
+                df_gold["มูลค่าตลาด"] = calculated_market
+                df_gold["กำไร/ขาดทุน (บาท)"] = profit_losses
+                df_gold["% กำไร/ขาดทุน"] = profit_loss_pcts
+                
+                # เพิ่มคอลัมน์ "ลบ" เป็น Checkbox ไว้หน้าสุด
+                df_gold.insert(0, "ลบ", False)
+                
+                display_columns = ["ลบ", "ประเภท", "น้ำหนัก", "หน่วย", "มูลค่าตั้งต้น", "มูลค่าตลาด", "กำไร/ขาดทุน (บาท)", "% กำไร/ขาดทุน", "หมายเหตุ"]
+                df_display = df_gold[[col for col in display_columns if col in df_gold.columns]]
+                
+                edited_df = st.data_editor(
+                    df_display,
+                    column_config={
+                        "ลบ": st.column_config.CheckboxColumn("🗑️ ลบ", help="ติ๊กเพื่อเลือกรายการที่ต้องการลบ", default=False),
+                        "น้ำหนัก": st.column_config.NumberColumn(format="%.2f"),
+                        "มูลค่าตั้งต้น": st.column_config.NumberColumn(format="%.2f"),
+                        "มูลค่าตลาด": st.column_config.NumberColumn(format="%.2f"),
+                        "กำไร/ขาดทุน (บาท)": st.column_config.NumberColumn(format="%.2f"),
+                        "% กำไร/ขาดทุน": st.column_config.NumberColumn(format="%.2f%%"),
+                    },
+                    disabled=[col for col in df_display.columns if col != "ลบ"],
+                    hide_index=True,
+                    use_container_width=True
+                )
+                
+                selected_indices = edited_df[edited_df["ลบ"] == True].index.tolist()
+                
+                if selected_indices:
+                    if st.button("🗑️ ยืนยันลบรายการที่เลือก", type="primary"):
+                        st.session_state['gold_portfolio'] = [
+                            item for idx, item in enumerate(st.session_state['gold_portfolio']) if idx not in selected_indices
+                        ]
+                        
+                        try:
+                            sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                            if sheet_gold is not None:
+                                sheet_gold.clear()
+                                # อัปเดต Header ให้ตรงกับ Excel ของคุณ
+                                sheet_gold.append_row(["ประเภท", "น้ำหนัก", "หน่วย", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
+                                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                rows_to_append = []
+                                for item in st.session_state['gold_portfolio']:
+                                    rows_to_append.append([
+                                        item.get("ประเภท", ""),
+                                        item.get("น้ำหนัก", 0),
+                                        item.get("หน่วย", ""),
+                                        item.get("มูลค่าตลาด", 0),
+                                        item.get("หมายเหตุ", ""),
+                                        current_date
+                                    ])
+                                if rows_to_append:
+                                    sheet_gold.append_rows(rows_to_append)
+                        except Exception as e:
+                            st.error(f"⚠️ อัปเดตข้อมูล Google Sheets ไม่สำเร็จ: {e}")
+                        
+                        st.success("ลบรายการที่เลือกเรียบร้อยแล้ว!")
+                        st.rerun()
+                
+                st.markdown("---")
+                total_market_value = sum(calculated_market)
+                total_cost_value = sum(calculated_cost)
+                total_pl = sum(profit_losses)
+                total_pl_pct = (total_pl / total_cost_value * 100) if total_cost_value > 0 else 0.0
+                
+                st.session_state['total_gold_portfolio_value'] = total_market_value
+                
+                col_m1, col_m2, col_m3 = st.columns(3)
+                col_m1.metric("💰 มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿")
+                col_m2.metric("📦 มูลค่าตั้งต้นรวม", f"{total_cost_value:,.2f} ฿")
+                col_m3.metric("📈 กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿", f"{total_pl_pct:,.2f}%")
+                
+                if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
+                    st.session_state['gold_portfolio'] = []
+                    st.session_state['total_gold_portfolio_value'] = 0.0
                     try:
                         sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
                         if sheet_gold is not None:
                             sheet_gold.clear()
-                            # อัปเดต Header ให้ตรงกับ Excel ของคุณ
                             sheet_gold.append_row(["ประเภท", "น้ำหนัก", "หน่วย", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
-                            current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            rows_to_append = []
-                            for item in st.session_state['gold_portfolio']:
-                                rows_to_append.append([
-                                    item.get("ประเภท", ""),
-                                    item.get("น้ำหนัก", 0),
-                                    item.get("หน่วย", ""),
-                                    item.get("มูลค่าตลาด", 0),
-                                    item.get("หมายเหตุ", ""),
-                                    current_date
-                                ])
-                            if rows_to_append:
-                                sheet_gold.append_rows(rows_to_append)
-                    except Exception as e:
-                        st.error(f"⚠️ อัปเดตข้อมูล Google Sheets ไม่สำเร็จ: {e}")
-                    
-                    st.success("ลบรายการที่เลือกเรียบร้อยแล้ว!")
+                    except:
+                        pass
                     st.rerun()
-            
-            st.markdown("---")
-            total_market_value = sum(calculated_market)
-            total_cost_value = sum(calculated_cost)
-            total_pl = sum(profit_losses)
-            total_pl_pct = (total_pl / total_cost_value * 100) if total_cost_value > 0 else 0.0
-            
-            st.session_state['total_gold_portfolio_value'] = total_market_value
-            
-            col_m1, col_m2, col_m3 = st.columns(3)
-            col_m1.metric("💰 มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿")
-            col_m2.metric("📦 มูลค่าตั้งต้นรวม", f"{total_cost_value:,.2f} ฿")
-            col_m3.metric("📈 กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿", f"{total_pl_pct:,.2f}%")
-            
-            if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
-                st.session_state['gold_portfolio'] = []
-                st.session_state['total_gold_portfolio_value'] = 0.0
-                try:
-                    sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
-                    if sheet_gold is not None:
-                        sheet_gold.clear()
-                        sheet_gold.append_row(["ประเภท", "น้ำหนัก", "หน่วย", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
-                except:
-                    pass
-                st.rerun()
-        else:
-            st.info("ยังไม่มีข้อมูลในพอร์ตทองคำ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")
+            else:
+                st.info("ยังไม่มีข้อมูลในพอร์ตทองคำ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")
                 
         ######################## ส่วนวิเคราะห์แสกนกราฟหุ้น####################
         with tab_tech:
