@@ -6362,17 +6362,63 @@ def main():
                 
         ######## REAL ESTATE ########################                    
         with wealth_tab_real_estate:
+        
             st.markdown("### 🏠 จัดการพอร์ตอสังหาริมทรัพย์ (บ้าน / คอนโด)")
             st.markdown("บันทึกมูลค่าประเมินปัจจุบันและหักลบด้วยยอดหนี้คงเหลือ เพื่อคำนวณมูลค่าสุทธิ (Equity) เข้าพอร์ตความมั่งคั่ง")
-            
-            import pandas as pd
-            from datetime import datetime
-            import time
-            
-            # ปุ่มโหลดข้อมูลใหม่
+        
+            # ฟังก์ชันดึงข้อมูลชีต Real_Estate พร้อมระบบ Cache และ Retry อัตโนมัติ ป้องกันการติด Limit API
+            @st.cache_data(ttl=600, show_spinner=False)
+            def fetch_real_estate_data_cached():
+                client = get_gsheet_client()
+                for attempt in range(3):
+                    try:
+                        sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                        if sheet_re is not None:
+                            return sheet_re.get_all_records()
+                        return []
+                    except Exception:
+                        if attempt == 2:
+                            return []
+                        time.sleep(1 + attempt)
+                return []
+        
+            # ฟังก์ชันช่วยบันทึกข้อมูลลง Google Sheets พร้อม Retry ป้องกัน API พัง
+            def save_real_estate_to_sheet_safe(portfolio_items):
+                client = get_gsheet_client()
+                for attempt in range(3):
+                    try:
+                        sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                        if sheet_re is not None:
+                            sheet_re.clear()
+                            sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
+                            
+                            current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                            rows_to_append = []
+                            for item in portfolio_items:
+                                net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
+                                rows_to_append.append([
+                                    item["ชื่อทรัพย์สิน"],
+                                    item["มูลค่าตลาด"],
+                                    item["ยอดหนี้คงเหลือ"],
+                                    net_val,
+                                    item["หมายเหตุ"],
+                                    current_date
+                                ])
+                            if rows_to_append:
+                                sheet_re.append_rows(rows_to_append)
+                            
+                            # เคลียร์ Cache ทันทีที่มีการเปลี่ยนแปลงข้อมูล เพื่อให้ดึงข้อมูลล่าสุดรอบหน้า
+                            fetch_real_estate_data_cached.clear()
+                            return True
+                    except Exception:
+                        time.sleep(1.5 + attempt)
+                return False
+        
+            # ปุ่มโหลดข้อมูลใหม่ (เคลียร์ Cache และ Session)
             col_r1, col_r2 = st.columns([3, 1])
             with col_r2:
-                if st.button("🔄 โหลดข้อมูลใหม่จาก Sheet"):
+                if st.button("🔄 โหลดข้อมูลใหม่จาก Sheet", key="btn_reload_re"):
+                    fetch_real_estate_data_cached.clear()
                     if 'real_estate_portfolio' in st.session_state:
                         del st.session_state['real_estate_portfolio']
                     if 're_table_selection' in st.session_state:
@@ -6380,30 +6426,28 @@ def main():
                     st.success("รีเซ็ตข้อมูลสำเร็จ กำลังโหลดใหม่...")
                     st.rerun()
         
-            # โหลดข้อมูลจาก Google Sheets เข้า session_state
+            # โหลดข้อมูลจาก Google Sheets / Cache เข้า session_state
             if 'real_estate_portfolio' not in st.session_state:
                 st.session_state['real_estate_portfolio'] = []
                 try:
-                    sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                    if sheet_re is not None:
-                        records = sheet_re.get_all_records()
-                        for row in records:
-                            asset_name = str(row.get("ชื่อทรัพย์สิน", "")).strip()
-                            if asset_name != "":
-                                m_raw = row.get("มูลค่าตลาด (บาท)", 0)
-                                m_val = float(str(m_raw).replace(',', '')) if str(m_raw).strip() != "" else 0.0
-                                
-                                d_raw = row.get("ยอดหนี้คงเหลือ (บาท)", 0)
-                                d_val = float(str(d_raw).replace(',', '')) if str(d_raw).strip() != "" else 0.0
-                                
-                                n_val = str(row.get("หมายเหตุ", ""))
-                                
-                                st.session_state['real_estate_portfolio'].append({
-                                    "ชื่อทรัพย์สิน": asset_name,
-                                    "มูลค่าตลาด": m_val,
-                                    "ยอดหนี้คงเหลือ": d_val,
-                                    "หมายเหตุ": n_val
-                                })
+                    records = fetch_real_estate_data_cached()
+                    for row in records:
+                        asset_name = str(row.get("ชื่อทรัพย์สิน", "")).strip()
+                        if asset_name != "":
+                            m_raw = row.get("มูลค่าตลาด (บาท)", row.get("มูลค่าตลาด", 0))
+                            m_val = float(str(m_raw).replace(',', '')) if str(m_raw).strip() != "" else 0.0
+                            
+                            d_raw = row.get("ยอดหนี้คงเหลือ (บาท)", row.get("ยอดหนี้คงเหลือ", 0))
+                            d_val = float(str(d_raw).replace(',', '')) if str(d_raw).strip() != "" else 0.0
+                            
+                            n_val = str(row.get("หมายเหตุ", ""))
+                            
+                            st.session_state['real_estate_portfolio'].append({
+                                "ชื่อทรัพย์สิน": asset_name,
+                                "มูลค่าตลาด": m_val,
+                                "ยอดหนี้คงเหลือ": d_val,
+                                "หมายเหตุ": n_val
+                            })
                 except Exception as e:
                     st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้: {e}")
                     
@@ -6414,7 +6458,6 @@ def main():
             # ตรวจสอบว่ามีการคลิกเลือกแถวจากตารางด้านล่างหรือไม่
             selected_indices = st.session_state.get("re_table_selection", {}).get("selection", {}).get("rows", [])
             
-            action_mode = "➕ เพิ่มรายการใหม่"
             default_name = ""
             default_market = 0.0
             default_debt = 0.0
@@ -6429,7 +6472,6 @@ def main():
                     default_market = target_item["มูลค่าตลาด"]
                     default_debt = target_item["ยอดหนี้คงเหลือ"]
                     default_note = target_item["หมายเหตุ"]
-                    action_mode = "✏️ แก้ไขข้อมูลเดิม"
                     is_editing = True
                     st.success(f"กำลังเลือกแก้ไขทรัพย์สิน: **{default_name}**")
         
@@ -6474,41 +6516,17 @@ def main():
                                     item["หมายเหตุ"] = re_note
                                     break
                         
-                        # บันทึกลง Google Sheets
-                        saved_success = False
-                        for attempt in range(3):
-                            try:
-                                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                                if sheet_re is not None:
-                                    sheet_re.clear()
-                                    sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-                                    
-                                    current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    rows_to_append = []
-                                    for item in st.session_state['real_estate_portfolio']:
-                                        net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
-                                        rows_to_append.append([
-                                            item["ชื่อทรัพย์สิน"],
-                                            item["มูลค่าตลาด"],
-                                            item["ยอดหนี้คงเหลือ"],
-                                            net_val,
-                                            item["หมายเหตุ"],
-                                            current_date
-                                        ])
-                                    sheet_re.append_rows(rows_to_append)
-                                    saved_success = True
-                                    break
-                            except Exception as e:
-                                time.sleep(1.5)
+                        # บันทึกลง Google Sheets ผ่านระบบปลอดภัยที่เตรียมไว้
+                        saved_success = save_real_estate_to_sheet_safe(st.session_state['real_estate_portfolio'])
                         
                         if saved_success:
                             st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
                             st.rerun()
                         else:
-                            st.error("⚠️ บันทึกลง Google Sheets ไม่สำเร็จเนื่องจากติดขีดจำกัด API กรุณาลองใหม่อีกครั้ง")
+                            st.error("⚠️ บันทึกลง Google Sheets ไม่สำเร็จเนื่องจากติดขีดจำกัด API หรือเชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง")
                     else:
                         st.error("กรุณากรอกชื่อทรัพย์สินและมูลค่าประเมินตลาดให้ถูกต้อง")
-            
+        
             # แสดงผลตารางสรุป พร้อมเปิดใช้งานการคลิกเลือกแถว (Selection)
             if 'real_estate_portfolio' in st.session_state and len(st.session_state['real_estate_portfolio']) > 0:
                 st.markdown("#### 📊 สรุปมูลค่าสุทธิอสังหาริมทรัพย์ (คลิกแถวเพื่อแก้ไข)")
@@ -6516,7 +6534,6 @@ def main():
                 df_re = pd.DataFrame(st.session_state['real_estate_portfolio'])
                 df_re["มูลค่าสุทธิ (บาท)"] = df_re["มูลค่าตลาด"] - df_re["ยอดหนี้คงเหลือ"]
                 
-                # แสดงตารางแบบรองรับการคลิกเลือกแถวเดียว
                 event_selection = st.dataframe(
                     df_re.style.format({
                         "มูลค่าตลาด": "{:,.2f}",
@@ -6539,36 +6556,17 @@ def main():
                 with col_m2:
                     if existing_names:
                         del_target = st.selectbox("เลือกรายการที่จะลบ", existing_names, key="re_del_select")
-                        if st.button("🗑️ ลบรายการที่เลือก"):
+                        if st.button("🗑️ ลบรายการที่เลือก", key="btn_del_single_re"):
                             st.session_state['real_estate_portfolio'] = [item for item in st.session_state['real_estate_portfolio'] if item["ชื่อทรัพย์สิน"] != del_target]
-                            try:
-                                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                                if sheet_re is not None:
-                                    sheet_re.clear()
-                                    sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-                                    current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    rows_to_append = []
-                                    for item in st.session_state['real_estate_portfolio']:
-                                        net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
-                                        rows_to_append.append([item["ชื่อทรัพย์สิน"], item["มูลค่าตลาด"], item["ยอดหนี้คงเหลือ"], net_val, item["หมายเหตุ"], current_date])
-                                    if rows_to_append:
-                                        sheet_re.append_rows(rows_to_append)
-                            except:
-                                pass
+                            save_real_estate_to_sheet_safe(st.session_state['real_estate_portfolio'])
                             st.success(f"ลบ {del_target} สำเร็จ")
                             st.rerun()
-                
-                if st.button("🗑️ ล้างข้อมูลอสังหาริมทรัพย์ทั้งหมด"):
-                    st.session_state['real_estate_portfolio'] = []
-                    st.session_state['total_real_estate_value'] = 0.0
-                    try:
-                        sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                        if sheet_re is not None:
-                            sheet_re.clear()
-                            sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-                    except:
-                        pass
-                    st.rerun()
+                        
+                        if st.button("🗑️ ล้างข้อมูลอสังหาริมทรัพย์ทั้งหมด", key="btn_clear_all_re"):
+                            st.session_state['real_estate_portfolio'] = []
+                            st.session_state['total_real_estate_value'] = 0.0
+                            save_real_estate_to_sheet_safe([])
+                            st.rerun()
             else:
                 st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากดปุ่ม '🔄 โหลดข้อมูลใหม่จาก Sheet' ด้านบน")
                 
