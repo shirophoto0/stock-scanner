@@ -1360,6 +1360,7 @@ def main():
     import pandas as pd
     import os
 
+    fig_donut = None
     # 0. ประกาศตัวแปรป้องกัน UnboundLocalError เบื้องต้นทั้งหมด
     df_sector_map = pd.DataFrame()
     filtered_df = None
@@ -5553,6 +5554,7 @@ def main():
             df_assets = df_assets[df_assets["Value"] > 0]
         
             col_chart1, col_chart2 = st.columns(2)
+            
             with col_chart1:
                 st.markdown("### 🍩 สัดส่วนสินทรัพย์ปัจจุบัน")
                 if not df_assets.empty:
@@ -5563,7 +5565,10 @@ def main():
                     )
                     fig_donut.update_traces(textposition='inside', textinfo='percent+label')
                     fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
-                    st.plotly_chart(fig_donut, use_container_width=True)
+                    # ใส่ key="donut_main_chart" เพื่อแยกจากตัวอื่น
+                    st.plotly_chart(fig_donut, use_container_width=True, key="donut_main_chart")
+                else:
+                    st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟโดนัท")
         
             with col_chart2:
                 st.markdown("### 📊 มูลค่าแยกตามประเภทสินทรัพย์")
@@ -5574,7 +5579,8 @@ def main():
                     )
                     fig_bar.update_traces(texttemplate='%{text:,.0f} ฿', textposition='outside')
                     fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, xaxis_title="", yaxis_title="บาท")
-                    st.plotly_chart(fig_bar, use_container_width=True, key="bar_asset_chart")
+                    # ใส่ key="bar_main_chart" เพื่อแยกจากตัวอื่น
+                    st.plotly_chart(fig_bar, use_container_width=True, key="bar_main_chart")
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
           
@@ -5649,7 +5655,7 @@ def main():
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
             
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key="net_worth_trend_chart")
                 else:
                     st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
             
