@@ -177,6 +177,13 @@ def get_latest_pvd_value():
         return 0.0
     return 0.0
 
+def get_pension_sheet(client):
+    try:
+        sheet_pen = client.open('MyStockData').worksheet('Pension')
+        return sheet_pen
+    except Exception:
+        return None
+        
 def get_latest_insurance_value():
     try:
         client = get_gsheet_client()
