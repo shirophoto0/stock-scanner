@@ -5507,27 +5507,27 @@ def main():
             row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
             row2_col2.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
             row2_col3.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
-            # --- ปรับปรุงการแสดงผลประกันบำนาญ ---
             row2_col4.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
-            
-            # เพิ่ม Note แสดงรายละเอียดแต่ละอายุ
+        
+            # ย้าย Note มาไว้ใน col4 ของแถวนี้ เพื่อให้อยู่ใต้ประกันบำนาญพอดี
             if all_data["pension"]:
-                st.markdown('<div style="margin-top: -15px; margin-bottom: 15px;">', unsafe_allow_html=True)
+                pension_notes_html = '<div style="margin-top: -10px; margin-bottom: 5px;">'
                 for row in all_data["pension"]:
                     age_val = row.get('Age', '-')
                     money_val = row.get('Value', 0)
                     
-                    # แปลงค่าเพื่อทำความสะอาด
                     clean_money = float(str(money_val).replace(',', '').replace('฿', '').strip() or 0)
                     
                     if clean_money > 0:
-                        st.markdown(
-                            f'<p style="color: #888888; font-size: 0.8em; margin: 0px;">'
-                            f'• ยอดเงินถอนออก ณ อายุ {age_val} ปี: {clean_money:,.0f} ฿'
-                            f'</p>', 
-                            unsafe_allow_html=True
+                        pension_notes_html += (
+                            f'<p style="color: #888888; font-size: 0.75em; margin: 0px;">'
+                            f'• ถอนออก ณ อายุ {age_val} ปี: {clean_money:,.0f} ฿'
+                            f'</p>'
                         )
-                st.markdown('</div>', unsafe_allow_html=True)
+                pension_notes_html += '</div>'
+                
+                # แสดงผลข้อความไว้ใต้ช่องประกันบำนาญโดยตรง
+                row2_col4.markdown(pension_notes_html, unsafe_allow_html=True)
         
             row3_col1, _, _, _ = st.columns(4)
             row3_col1.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
