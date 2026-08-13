@@ -3818,7 +3818,10 @@ def main():
                                 margin=dict(l=10, r=10, t=40, b=40),
                                 showlegend=False
                             )
-                            st.plotly_chart(fig_donut, use_container_width=True, key="donut_asset_chart")
+                            if 'fig_donut_cost' in locals() and fig_donut_cost is not None:
+                                st.plotly_chart(fig_donut_cost, use_container_width=True, key="donut_cost_chart")
+                            else:
+                                st.warning("ไม่มีข้อมูลสำหรับกราฟ Cost Weight")
                 
                         with col_sec2:
                             st.markdown("###### 🥧 สัดส่วนตามมูลค่าตลาด (Market Weight)")
@@ -3838,7 +3841,10 @@ def main():
                                 margin=dict(l=10, r=10, t=40, b=40),
                                 showlegend=True
                             )
-                            st.plotly_chart(fig_donut, use_container_width=True, key="donut_asset_chart")
+                            if 'fig_donut_market' in locals() and fig_donut_market is not None:
+                                st.plotly_chart(fig_donut_market, use_container_width=True, key="donut_market_chart")
+                            else:
+                                st.warning("ไม่มีข้อมูลสำหรับกราฟ Market Weight")
                 
                         # 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่ม
                         st.markdown("##### 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่มในพอร์ต")
