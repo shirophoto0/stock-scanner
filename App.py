@@ -1441,7 +1441,16 @@ def main():
             import pandas as pd
             from datetime import datetime
             
-            def get_thaigold_prices():
+            # 🔄 ฟังก์ชันดึงราคาทอง (อัปเดตวันละ 1 ครั้ง หรือเมื่อเปลี่ยนวัน)
+            def get_thaigold_prices_daily():
+                today_str = str(date.today())
+                
+                # ตรวจสอบว่าเคยดึงของวันนี้หรือยัง ถ้ามีแล้วและเป็นวันเดียวกัน ให้ใช้ค่าเดิมใน session ได้เลย
+                if 'cached_gold_date' in st.session_state and st.session_state['cached_gold_date'] == today_str:
+                    if 'cached_gold_bar' in st.session_state and 'cached_gold_jewelry' in st.session_state:
+                        return st.session_state['cached_gold_bar'], st.session_state['cached_gold_jewelry']
+                
+                # ถ้ายังไม่เคยดึง หรือขึ้นวันใหม่แล้ว ให้ยิง API สดๆ วันละครั้ง
                 try:
                     url = "https://api.chnwt.dev/thai-gold-api/"
                     response = requests.get(url, timeout=3)
@@ -1451,12 +1460,23 @@ def main():
                             p = data["response"]["price"]
                             gold_bar_sell = float(p["gold_bar"]["sell"].replace(",", ""))
                             gold_jewelry_sell = float(p["gold"]["sell"].replace(",", ""))
+                            
+                            # บันทึกลง Session State พร้อมจำวันที่ปัจจุบันไว้
+                            st.session_state['cached_gold_date'] = today_str
+                            st.session_state['cached_gold_bar'] = gold_bar_sell
+                            st.session_state['cached_gold_jewelry'] = gold_jewelry_sell
+                            
                             return gold_bar_sell, gold_jewelry_sell
                 except Exception:
                     pass
-                return 67500.0, 68000.0
+                    
+                # กรณีดึง API ไม่สำเร็จ ให้ใช้ค่าสำรองหรือค่าล่าสุดที่มีในระบบ
+                fallback_bar = st.session_state.get('cached_gold_bar', 67500.0)
+                fallback_jewelry = st.session_state.get('cached_gold_jewelry', 68000.0)
+                return fallback_bar, fallback_jewelry
             
-            ref_gold_bar, ref_gold_jewelry = get_thaigold_prices()
+            # เรียกใช้งานฟังก์ชัน
+            ref_gold_bar, ref_gold_jewelry = get_thaigold_prices_daily()
             
             # 🔄 โหลดข้อมูลจาก Google Sheets และป้องกันค่าว่าง/ค่า 0
             if 'gold_portfolio' not in st.session_state:
