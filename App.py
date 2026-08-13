@@ -3817,7 +3817,7 @@ def main():
                                 margin=dict(l=10, r=10, t=40, b=40),
                                 showlegend=False
                             )
-                            st.plotly_chart(fig_donut_cost, use_container_width=True)
+                            st.plotly_chart(fig_donut, use_container_width=True, key="donut_asset_chart")
                 
                         with col_sec2:
                             st.markdown("###### 🥧 สัดส่วนตามมูลค่าตลาด (Market Weight)")
@@ -3837,7 +3837,7 @@ def main():
                                 margin=dict(l=10, r=10, t=40, b=40),
                                 showlegend=True
                             )
-                            st.plotly_chart(fig_donut_market, use_container_width=True)
+                            st.plotly_chart(fig_donut, use_container_width=True, key="donut_asset_chart")
                 
                         # 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่ม
                         st.markdown("##### 📋 ตารางสรุปน้ำหนักการลงทุนแต่ละกลุ่มในพอร์ต")
@@ -5574,7 +5574,7 @@ def main():
                     )
                     fig_bar.update_traces(texttemplate='%{text:,.0f} ฿', textposition='outside')
                     fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, xaxis_title="", yaxis_title="บาท")
-                    st.plotly_chart(fig_bar, use_container_width=True)
+                    st.plotly_chart(fig_bar, use_container_width=True, key="bar_asset_chart")
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
           
@@ -5756,7 +5756,7 @@ def main():
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
             
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key="net_worth_trend_chart")
                 else:
                     st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
             
