@@ -5408,9 +5408,22 @@ def main():
             pension_insurance_value = 0.0
             if all_data["pension"]:
                 for row in all_data["pension"]:
-                    val_raw = row.get('Value', 0) 
-                    val_clean = float(str(val_raw).replace(',', '')) if str(val_raw).strip() != "" else 0.0
-                    pension_insurance_value += val_clean
+                    val_raw = row.get('Value', 0)
+                    
+                    # แปลงค่าให้เป็นตัวเลขที่สะอาดขึ้น
+                    if val_raw:
+                        # 1. แปลงเป็นสตริง, 2. ลบเครื่องหมายจุลภาค, 3. ลบสัญลักษณ์เงิน, 4. ลบการเว้นวรรค
+                        val_str = str(val_raw).replace(',', '').replace('฿', '').replace('THB', '').strip()
+                        
+                        # ตรวจสอบว่าเป็นตัวเลขหรือไม่ก่อนแปลง
+                        try:
+                            val_clean = float(val_str)
+                            pension_insurance_value += val_clean
+                        except ValueError:
+                            # ถ้าแปลงไม่ได้ (เช่นเป็นคำว่า "ไม่มี" หรือว่างเปล่า) ให้ข้ามไป
+                            continue
+                    
+            pension_insurance_value = float(pension_insurance_value)
             
             # บัญชีธนาคาร
             bank_balance = 0.0
