@@ -5326,84 +5326,99 @@ def main():
         # TAB ย่อยที่ 1: ภาพรวม Net Worth & สัดส่วนสินทรัพย์
         # ==========================================
         with wealth_tab_overview:
-        
-            # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน (ส่วนเดิมของคุณ + กองทุนรวม)
-            pvd_value = get_latest_pvd_value()
-            insurance_value = get_latest_insurance_value()
-            coop_value = get_latest_coop_value()
-            
-            # --- ดึงมูลค่ากองทุนรวมล่าสุดจากชีต Fund_History ---
-            mutual_fund_value = 0.0
-            try:
-                sheet_mf = get_worksheet_safely(client, 'MyStockData', 'Fund_History')
-                mf_data = []
-                if sheet_mf is not None:
-                    mf_data = sheet_mf.get_all_records()
-                if mf_data:
-                    # รองรับทั้งคอลัมน์ 'Value', 'Market_Value' หรือ 'มูลค่าตลาด'
-                    last_row = mf_data[-1]
-                    raw_mf = last_row.get('Value', last_row.get('Market_Value', last_row.get('มูลค่าตลาด', 0)))
-                    mutual_fund_value = float(str(raw_mf).replace(',', '')) if str(raw_mf).strip() != "" else 0.0
-            except Exception as e:
-                mutual_fund_value = 0.0
 
-            # --- ดึงมูลค่าทองคำรวมจาก session_state ---
+            # 1. ใช้ @st.cache_data เพื่อดึงข้อมูลทุกชีตรวมกันครั้งเดียวและเก็บไว้ 10 นาที (ลดจำนวน Request มหาศาล)
+            @st.cache_data(ttl=600, show_spinner=False)
+            def fetch_all_wealth_overview_data():
+                client = get_gsheet_client()
+                
+                def get_ws_records_safe(ws_name, max_retries=3):
+                    for i in range(max_retries):
+                        try:
+                            sheet = client.open('MyStockData').worksheet(ws_name)
+                            return sheet.get_all_records()
+                        except Exception:
+                            if i == max_retries - 1:
+                                return []
+                            time.sleep(1 + i)  # หน่วงเวลาก่อนลองใหม่ (Exponential Backoff)
+                    return []
+        
+                return {
+                    "pvd": get_ws_records_safe('Provident_Fund'),
+                    "insurance": get_ws_records_safe('Insurance'),
+                    "coop": get_ws_records_safe('Coop'),
+                    "bank": get_ws_records_safe('Bank_Account'),
+                    "sso": get_ws_records_safe('SSO'),
+                    "pension": get_ws_records_safe('Pension'),
+                    "mutual_fund": get_ws_records_safe('Fund_History'),
+                    "real_estate": get_ws_records_safe('Real_Estate'),
+                    "portfolio_hist": get_ws_records_safe('Stock_TFEX_History')
+                }
+        
+            # เรียกใช้งานข้อมูลทั้งหมดรอบเดียวจบ
+            all_data = fetch_all_wealth_overview_data()
+        
+            # --- 2. ดึงและคำนวณมูลค่าสินทรัพย์แต่ละส่วนจาก Cache ---
+            
+            # PVD (สมมติดึงแถวสุดท้ายของ Provident_Fund)
+            pvd_value = 0.0
+            if all_data["pvd"]:
+                last_pvd = all_data["pvd"][-1]
+                raw_pvd = last_pvd.get('Grand_Total', last_pvd.get('Value', 0))
+                pvd_value = float(str(raw_pvd).replace(',', '')) if str(raw_pvd).strip() != "" else 0.0
+        
+            # ประกัน Unit Linked
+            insurance_value = 0.0
+            if all_data["insurance"]:
+                last_ins = all_data["insurance"][-1]
+                raw_ins = last_ins.get('Redemption_Value', last_ins.get('Value', 0))
+                insurance_value = float(str(raw_ins).replace(',', '')) if str(raw_ins).strip() != "" else 0.0
+        
+            # สหกรณ์
+            coop_value = 0.0
+            if all_data["coop"]:
+                last_coop = all_data["coop"][-1]
+                raw_coop = last_coop.get('Coop_Value', last_coop.get('Value', 0))
+                coop_value = float(str(raw_coop).replace(',', '')) if str(raw_coop).strip() != "" else 0.0
+        
+            # กองทุนรวม (Fund_History)
+            mutual_fund_value = 0.0
+            if all_data["mutual_fund"]:
+                last_mf = all_data["mutual_fund"][-1]
+                raw_mf = last_mf.get('Value', last_mf.get('Market_Value', last_mf.get('มูลค่าตลาด', 0)))
+                mutual_fund_value = float(str(raw_mf).replace(',', '')) if str(raw_mf).strip() != "" else 0.0
+        
+            # ทองคำ (จาก session_state)
             total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
             
-            # --- ดึงมูลค่าประกันสังคมล่าสุด ---
-            try:
-                sheet_sso = client.open('MyStockData').worksheet('SSO')
-                sso_data = sheet_sso.get_all_records()
-                sso_value = float(str(sso_data[-1]['Value']).replace(',', '')) if sso_data else 0.0
-            except Exception:
-                sso_value = 0.0
+            # ประกันสังคม
+            sso_value = 0.0
+            if all_data["sso"]:
+                raw_sso = all_data["sso"][-1].get('Value', 0)
+                sso_value = float(str(raw_sso).replace(',', '')) if str(raw_sso).strip() != "" else 0.0
             
-            # --- ดึงมูลค่าประกันบำนาญจากชีต Pension (ตามอายุ) ---
+            # ประกันบำนาญ (รวมทุกอายุ)
             pension_insurance_value = 0.0
-            try:
-                sheet_pen = client.open('MyStockData').worksheet('Pension')
-                pen_records = sheet_pen.get_all_records()
-                
-                if pen_records:
-                    for row in pen_records:
-                        val_raw = row.get('Value', 0) 
-                        val_clean = float(str(val_raw).replace(',', '')) if str(val_raw).strip() != "" else 0.0
-                        pension_insurance_value += val_clean
-            except Exception as e:
-                st.warning(f"ยังไม่มีข้อมูลประกันบำนาญในระบบ: {e}")
-                pension_insurance_value = 0.0
+            if all_data["pension"]:
+                for row in all_data["pension"]:
+                    val_raw = row.get('Value', 0) 
+                    val_clean = float(str(val_raw).replace(',', '')) if str(val_raw).strip() != "" else 0.0
+                    pension_insurance_value += val_clean
             
-            # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
-            sheet_bank = get_worksheet_safely(client, 'MyStockData', 'Bank_Account')
-            bank_data = []
-            if sheet_bank is not None:
-                try:
-                    bank_data = sheet_bank.get_all_records()
-                except Exception as e:
-                    st.error(f"❌ ไม่สามารถดึงข้อมูลจากชีต Bank_Account ได้: {e}")
-            
+            # บัญชีธนาคาร
             bank_balance = 0.0
-            if bank_data:
-                try:
-                    bank_balance = float(str(bank_data[-1].get('Balance', 0)).replace(',', ''))
-                except:
-                    bank_balance = 0.0
+            if all_data["bank"]:
+                raw_bank = all_data["bank"][-1].get('Balance', 0)
+                bank_balance = float(str(raw_bank).replace(',', '')) if str(raw_bank).strip() != "" else 0.0
         
-            # ==========================================
-            # 🌟 ดึงข้อมูลอสังหาริมทรัพย์
-            # ==========================================
-            house1_value = 0.0  # บ้าน (ปัจจุบัน)
-            house2_value = 0.0  # บ้าน (พ่อแม่อยู่)
-            condo_value = 0.0   # คอนโด
+            # อสังหาริมทรัพย์
+            house1_value = 0.0  
+            house2_value = 0.0  
+            condo_value = 0.0   
             
             real_estate_items = st.session_state.get('real_estate_portfolio', [])
             if not real_estate_items:
-                try:
-                    sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
-                    if sheet_re is not None:
-                        real_estate_items = sheet_re.get_all_records()
-                except:
-                    pass
+                real_estate_items = all_data["real_estate"]
         
             for item in real_estate_items:
                 name = str(item.get("ชื่อทรัพย์สิน", "")).lower()
@@ -5426,25 +5441,19 @@ def main():
             
             total_real_estate = house1_value + house2_value + condo_value
             
-            # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
+            # พอร์ตหุ้นรวม + พอร์ต TFEX
             base_stock_value = total_value if 'total_value' in locals() else 0.0
-            
-            # ⭐️ ดึงค่าพอร์ต TFEX จาก session_state
             tfex_portfolio_value = st.session_state.get('tfex_net_worth', 0.0)
-            
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth แบบไม่รวมอสังหาฯ (เพิ่มกองทุนรวมเข้าไป)
+            # คำนวณ Net Worth
             net_worth_excl_re = (total_stock_and_tfex + pvd_value + insurance_value + 
                                  coop_value + sso_value + pension_insurance_value + 
                                  bank_balance + total_gold_value + mutual_fund_value)
-            
-            # 4. คำนวณ Net Worth รวมทั้งหมด
             net_worth_total = net_worth_excl_re + total_real_estate
             
-            # --- 5. แสดงผล Net Worth ทั้งสองแบบ ---
+            # --- 3. แสดงผล Net Worth ทั้งสองแบบ ---
             col_nw1, col_nw2 = st.columns(2)
-            
             with col_nw1:
                 st.markdown(
                     f"""
@@ -5452,10 +5461,8 @@ def main():
                         <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth (ไม่รวมอสังหาฯ)</h4>
                         <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_excl_re:,.0f} ฿</h1>
                     </div>
-                    """, 
-                    unsafe_allow_html=True
+                    """, unsafe_allow_html=True
                 )
-                
             with col_nw2:
                 st.markdown(
                     f"""
@@ -5463,13 +5470,12 @@ def main():
                         <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
                         <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
                     </div>
-                    """, 
-                    unsafe_allow_html=True
+                    """, unsafe_allow_html=True
                 )
                         
             st.divider()
         
-            # --- 6. แสดงผลใน Metrics ย่อย ---
+            # --- 4. แสดงผลใน Metrics ย่อย ---
             st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
@@ -5482,13 +5488,13 @@ def main():
             row2_col2.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
             row2_col3.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
             row2_col4.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
-
+        
             row3_col1, _, _, _ = st.columns(4)
             row3_col1.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # --- 7. แสดงผลอสังหาริมทรัพย์ ---
+            # --- 5. แสดงผลอสังหาริมทรัพย์ ---
             st.markdown("#### 🏡 อสังหาริมทรัพย์")
             row_re1, row_re2, row_re3, row_re4 = st.columns(4)
             row_re1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
@@ -5499,7 +5505,6 @@ def main():
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
         
-            # สร้างข้อมูลสำหรับกราฟ
             asset_data = {
                 "Asset_Type": ["พอร์ตหุ้น + TFEX", "กองทุนรวม", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "ประกันสังคม", "บัญชีธนาคาร", "ประกันบำนาญ", "ทองคำ"],
                 "Value": [total_stock_and_tfex, mutual_fund_value, pvd_value, insurance_value, coop_value, sso_value, bank_balance, pension_insurance_value, total_gold_value]
@@ -5508,7 +5513,6 @@ def main():
             df_assets = df_assets[df_assets["Value"] > 0]
         
             col_chart1, col_chart2 = st.columns(2)
-        
             with col_chart1:
                 st.markdown("### 🍩 สัดส่วนสินทรัพย์ปัจจุบัน")
                 if not df_assets.empty:
@@ -5533,6 +5537,84 @@ def main():
                     st.plotly_chart(fig_bar, use_container_width=True)
                 else:
                     st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
+          
+            # ==========================================
+            # กราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา (ดึงจาก Cache ตัวเดียวกัน)
+            # ==========================================
+            st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
+        
+            try:
+                def prepare_series(records, date_col, val_col, name):
+                    df = pd.DataFrame(records)
+                    if df.empty:
+                        return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
+                    
+                    df = df.copy()
+                    if date_col == 'Month':
+                        thai_months = {
+                            'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
+                            'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08',
+                            'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'
+                        }
+                        df['Month_Num'] = df[date_col].map(thai_months).fillna('12')
+                        df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df['Month_Num'] + '-01', errors='coerce')
+                    else:
+                        df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
+                    
+                    df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
+                    return df.dropna(subset=['Date']).set_index('Date')[[name]]
+            
+                s_pvd = prepare_series(all_data["pvd"], 'Month', 'Grand_Total', 'PVD')
+                s_ins = prepare_series(all_data["insurance"], 'Date', 'Redemption_Value', 'Insurance')
+                s_sso = prepare_series(all_data["sso"], 'Date', 'Value', 'SSO')
+                s_coop = prepare_series(all_data["coop"], 'Date', 'Coop_Value', 'Coop')
+                s_bank = prepare_series(all_data["bank"], 'Date', 'Balance', 'Bank')
+                s_mf = prepare_series(all_data["mutual_fund"], 'Date', 'Value', 'Mutual_Fund')
+                s_port = prepare_series(all_data["portfolio_hist"], 'Date', 'Total_Value', 'Stock+TFEX')
+            
+                if not s_ins.empty and not s_sso.empty:
+                    s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
+                    s_ins['Insurance'] = s_ins['Insurance'] + s_ins['SSO']
+                    s_ins = s_ins[['Insurance']]
+                elif s_ins.empty and not s_sso.empty:
+                    s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
+            
+                series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port] if not s.empty]
+                
+                if series_list:
+                    df_merged = series_list[0]
+                    for s in series_list[1:]:
+                        df_merged = df_merged.join(s, how='outer')
+                    
+                    df_merged = df_merged.sort_index().ffill().fillna(0)
+                    df_merged['Total'] = df_merged.sum(axis=1)
+            
+                    import plotly.graph_objects as go
+                    fig = go.Figure()
+                    
+                    for col in df_merged.columns:
+                        fig.add_trace(go.Scatter(
+                            x=df_merged.index, 
+                            y=df_merged[col], 
+                            name=col,
+                            mode='lines+markers',
+                            line=dict(width=3 if col == 'Total' else 2)
+                        ))
+            
+                    max_total = df_merged['Total'].max()
+                    upper_limit = (max_total * 1.2) if max_total > 0 else 12000000
+                    
+                    fig.update_layout(
+                        yaxis=dict(range=[0, upper_limit], tickformat=",.0f"),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                    )
+            
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
+            
+            except Exception as e:
+                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
           
             # ==========================================
             # ส่วนสำหรับกราฟเส้นประวัติการเติบโต Net Worth ตามกาลเวลา
