@@ -5332,10 +5332,10 @@ def main():
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
-            # --- ดึงมูลค่ากองทุนรวมล่าสุด ---
+            # --- ดึงมูลค่ากองทุนรวมล่าสุดจากชีต Fund_History ---
             mutual_fund_value = 0.0
             try:
-                sheet_mf = get_worksheet_safely(client, 'MyStockData', 'Mutual_Fund')
+                sheet_mf = get_worksheet_safely(client, 'MyStockData', 'Fund_History')
                 mf_data = []
                 if sheet_mf is not None:
                     mf_data = sheet_mf.get_all_records()
@@ -5469,7 +5469,7 @@ def main():
                         
             st.divider()
         
-            # --- 6. แสดงผลใน Metrics ย่อย (เพิ่มกองทุนรวมเข้ามาในตารางแสดงผล) ---
+            # --- 6. แสดงผลใน Metrics ย่อย ---
             st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
@@ -5483,7 +5483,7 @@ def main():
             row2_col3.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
             row2_col4.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
 
-            row3_col1, row3_col2, _, _ = st.columns(4)
+            row3_col1, _, _, _ = st.columns(4)
             row3_col1.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
             
             st.markdown("<br>", unsafe_allow_html=True)
@@ -5499,7 +5499,7 @@ def main():
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
         
-            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม 'กองทุนรวม' เข้าไปในสัดส่วน)
+            # สร้างข้อมูลสำหรับกราฟ
             asset_data = {
                 "Asset_Type": ["พอร์ตหุ้น + TFEX", "กองทุนรวม", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "ประกันสังคม", "บัญชีธนาคาร", "ประกันบำนาญ", "ทองคำ"],
                 "Value": [total_stock_and_tfex, mutual_fund_value, pvd_value, insurance_value, coop_value, sso_value, bank_balance, pension_insurance_value, total_gold_value]
@@ -5561,7 +5561,7 @@ def main():
                     df_coop = get_ws_with_retry('Coop')
                     df_bank = get_ws_with_retry('Bank_Account')
                     df_sso = get_ws_with_retry('SSO')
-                    df_mf = get_ws_with_retry('Mutual_Fund') # ดึงประวัติกองทุนรวมเพิ่ม
+                    df_mf = get_ws_with_retry('Fund_History') # ดึงประวัติจาก Fund_History สำหรับกราฟแนวโน้ม
                     df_portfolio_hist = get_ws_with_retry('Stock_TFEX_History')
                     
                     return df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist
@@ -5592,7 +5592,7 @@ def main():
                 s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
                 s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
-                s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund') # เตรียมข้อมูลซีรีส์กองทุนรวม
+                s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund') # ปรับชื่อคอลัมน์ค่ากองทุนตามโครงสร้างชีตของคุณ (ถ้าใช้ชื่ออื่นเช่น 'Market_Value' สามารถแก้ตรงนี้ได้ครับ)
                 s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
             
                 # รวม Insurance และ SSO เข้าด้วยกัน
