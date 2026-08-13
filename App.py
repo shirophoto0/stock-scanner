@@ -5605,149 +5605,149 @@ def main():
         
         # 1. Tab ซื้อกองทุนใหม่
         with wealth_tab_funds:
-    st.subheader("💰 ระบบจัดการกองทุนรวม")
-
-    # สร้าง Tab ย่อยสำหรับการจัดการกองทุน
-    tab_buy, tab_update, tab_summary = st.tabs(["➕ ซื้อกองทุนเพิ่ม", "🔄 อัปเดตราคา/ขาย", "📈 ภาพรวมพอร์ต"])
-    
-    # 1. Tab ซื้อกองทุนใหม่
-    with tab_buy:
-        st.markdown("### บันทึกซื้อกองทุนใหม่")
-        with st.form("form_buy_fund"):
-            col1, col2 = st.columns(2)
-            fund_name = col1.text_input("ชื่อกองทุน (เช่น SCBSET, K-Equity):")
-            # แก้ไขจาก datetime.date.today() เป็น date.today() เพื่อป้องกัน Error
-            date_buy = col2.date_input("วันที่ซื้อ:", date.today())
+            st.subheader("💰 ระบบจัดการกองทุนรวม")
             
-            col3, col4 = st.columns(2)
-            cost_price = col3.number_input("ราคาต้นทุนเฉลี่ยต่อหน่วย:", min_value=0.0, step=0.01, format="%.4f")
-            units = col4.number_input("จำนวนหน่วย (Units):", min_value=0.0001, step=1.0, format="%.4f")
+            # สร้าง Tab ย่อยสำหรับการจัดการกองทุน
+            tab_buy, tab_update, tab_summary = st.tabs(["➕ ซื้อกองทุนเพิ่ม", "🔄 อัปเดตราคา/ขาย", "📈 ภาพรวมพอร์ต"])
             
-            submitted = st.form_submit_button("บันทึกการซื้อกองทุน", use_container_width=True, type="primary")
-            if submitted:
-                if not fund_name:
-                    st.warning("กรุณากรอกชื่อกองทุนครับ")
-                else:
-                    try:
-                        client = get_gsheet_client()
-                        spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' # ใช้ ID เดิมของคุณ
-                        sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
-                        
-                        # หา Fund_ID ถัดไป
-                        existing_data = sheet.get_all_records()
-                        new_id = len(existing_data)
-                        
-                        # ข้อมูลที่จะ append: Fund_ID, Fund_Name, Date_Buy, Date_Sell, Cost_Price, Current_Price, Units, Status
-                        row_data = [new_id, fund_name, str(date_buy), "", cost_price, cost_price, units, "Holding"]
-                        sheet.append_row(row_data)
-                        
-                        st.cache_data.clear()
-                        st.success("บันทึกกองทุนสำเร็จ! 🎉")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"เกิดข้อผิดพลาด: {e}")
-        
-        # 2. Tab อัปเดตราคาปัจจุบัน หรือ ขายกองทุน
-        with tab_update:
-            st.markdown("### อัปเดตราคาตลาด / ขายกองทุน")
-            try:
-                client = get_gsheet_client()
-                spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-                sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
-                fund_df = pd.DataFrame(sheet.get_all_records())
-                
-                if not fund_df.empty and 'Status' in fund_df.columns:
-                    holding_df = fund_df[fund_df['Status'] == 'Holding']
+            # 1. Tab ซื้อกองทุนใหม่
+            with tab_buy:
+                st.markdown("### บันทึกซื้อกองทุนใหม่")
+                with st.form("form_buy_fund"):
+                    col1, col2 = st.columns(2)
+                    fund_name = col1.text_input("ชื่อกองทุน (เช่น SCBSET, K-Equity):")
+                    # แก้ไขจาก datetime.date.today() เป็น date.today() เพื่อป้องกัน Error
+                    date_buy = col2.date_input("วันที่ซื้อ:", date.today())
                     
-                    if not holding_df.empty:
-                        selected_id = st.selectbox("เลือกกองทุนที่ต้องการจัดการ:", holding_df['Fund_ID'].tolist(), format_func=lambda x: f"ID: {x} - {holding_df[holding_df['Fund_ID'] == x]['Fund_Name'].values[0]}")
-                        
-                        selected_row = holding_df[holding_df['Fund_ID'] == selected_id].iloc[0]
-                        st.info(f"📌 กองทุน: **{selected_row['Fund_Name']}** | ต้นทุนเดิม: **{selected_row['Cost_Price']}** | จำนวนหน่วย: **{selected_row['Units']}**")
-                        
-                        up_col1, up_col2 = st.columns(2)
-                        new_current_price = up_col1.number_input("อัปเดราคาปัจจุบันต่อหน่วย:", value=float(selected_row['Cost_Price']), step=0.01, format="%.4f")
-                        action_type = up_col2.selectbox("การจัดการ:", ["อัปเดตราคาปัจจุบัน", "ขายออก (ปิดสถานะ)"])
-                        
-                        if action_type == "ขายออก (ปิดสถานะ)":
-                            sell_date = st.date_input("วันที่ขาย:", datetime.date.today())
-                        
-                        if st.button("ยืนยันการทำรายการ", use_container_width=True, type="primary"):
-                            row_index = int(selected_id) + 2 # คำนวณแถวใน Google Sheets (Header อยู่แถว 1)
-                            if action_type == "อัปเดตราคาปัจจุบัน":
-                                # อัปเดตแค่ Current_Price (Col F คือ Column ที่ 6)
-                                sheet.update_cell(row_index, 6, new_current_price)
-                                st.success("อัปเดตราคาปัจจุบันสำเร็จ!")
-                            else:
-                                # อัปเดต วันที่ขาย, ราคาปัจจุบัน, และเปลี่ยน Status เป็น Sold
-                                sheet.update_cell(row_index, 4, str(sell_date)) # Date_Sell
-                                sheet.update_cell(row_index, 6, new_current_price) # Current_Price
-                                sheet.update_cell(row_index, 8, "Sold") # Status
-                                st.success("บันทึกการขายกองทุนสำเร็จ!")
-                            
-                            st.cache_data.clear()
-                            st.rerun()
-                    else:
-                        st.info("ไม่มีกองทุนที่ถือครองอยู่ขณะนี้")
-                else:
-                    st.info("ยังไม่มีข้อมูลในระบบกองทุน")
-            except Exception as e:
-                st.warning(f"ยังไม่พบชีต Fund_History หรือเกิดข้อผิดพลาด: {e}")
-        
-        # 3. Tab ภาพรวมพอร์ต (แสดงมูลค่าต้นทุน, มูลค่าปัจจุบัน)
-        with tab_summary:
-            st.markdown("### สรุปมูลค่าพอร์ตลงทุน")
-            try:
-                client = get_gsheet_client()
-                spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-                sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
-                summary_df = pd.DataFrame(sheet.get_all_records())
-                
-                if not summary_df.empty and 'Status' in summary_df.columns:
-                    active_df = summary_df[summary_df['Status'] == 'Holding'].copy()
+                    col3, col4 = st.columns(2)
+                    cost_price = col3.number_input("ราคาต้นทุนเฉลี่ยต่อหน่วย:", min_value=0.0, step=0.01, format="%.4f")
+                    units = col4.number_input("จำนวนหน่วย (Units):", min_value=0.0001, step=1.0, format="%.4f")
                     
-                    if not active_df.empty:
-                        # คำนวณค่าพอร์ตแต่ละตัว
-                        total_portfolio_cost = 0
-                        total_portfolio_value = 0
+                    submitted = st.form_submit_button("บันทึกการซื้อกองทุน", use_container_width=True, type="primary")
+                    if submitted:
+                        if not fund_name:
+                            st.warning("กรุณากรอกชื่อกองทุนครับ")
+                        else:
+                            try:
+                                client = get_gsheet_client()
+                                spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' # ใช้ ID เดิมของคุณ
+                                sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
+                                
+                                # หา Fund_ID ถัดไป
+                                existing_data = sheet.get_all_records()
+                                new_id = len(existing_data)
+                                
+                                # ข้อมูลที่จะ append: Fund_ID, Fund_Name, Date_Buy, Date_Sell, Cost_Price, Current_Price, Units, Status
+                                row_data = [new_id, fund_name, str(date_buy), "", cost_price, cost_price, units, "Holding"]
+                                sheet.append_row(row_data)
+                                
+                                st.cache_data.clear()
+                                st.success("บันทึกกองทุนสำเร็จ! 🎉")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"เกิดข้อผิดพลาด: {e}")
+        
+            # 2. Tab อัปเดตราคาปัจจุบัน หรือ ขายกองทุน
+            with tab_update:
+                st.markdown("### อัปเดตราคาตลาด / ขายกองทุน")
+                try:
+                    client = get_gsheet_client()
+                    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+                    sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
+                    fund_df = pd.DataFrame(sheet.get_all_records())
+                    
+                    if not fund_df.empty and 'Status' in fund_df.columns:
+                        holding_df = fund_df[fund_df['Status'] == 'Holding']
                         
-                        display_data = []
-                        for _, row in active_df.iterrows():
-                            cost_p = float(row['Cost_Price'])
-                            curr_p = float(row['Current_Price'])
-                            units = float(row['Units'])
-                            res = calculate_fund_result(cost_p, curr_p, units)
+                        if not holding_df.empty:
+                            selected_id = st.selectbox("เลือกกองทุนที่ต้องการจัดการ:", holding_df['Fund_ID'].tolist(), format_func=lambda x: f"ID: {x} - {holding_df[holding_df['Fund_ID'] == x]['Fund_Name'].values[0]}")
                             
-                            total_portfolio_cost += res['Total_Cost']
-                            total_portfolio_value += res['Current_Value']
+                            selected_row = holding_df[holding_df['Fund_ID'] == selected_id].iloc[0]
+                            st.info(f"📌 กองทุน: **{selected_row['Fund_Name']}** | ต้นทุนเดิม: **{selected_row['Cost_Price']}** | จำนวนหน่วย: **{selected_row['Units']}**")
                             
-                            display_data.append({
-                                "ชื่อกองทุน": row['Fund_Name'],
-                                "วันที่ซื้อ": row['Date_Buy'],
-                                "ต้นทุนเฉลี่ย": cost_p,
-                                "ราคาปัจจุบัน": curr_p,
-                                "จำนวนหน่วย": units,
-                                "มูลค่าต้นทุน": res['Total_Cost'],
-                                "มูลค่าปัจจุบัน": res['Current_Value'],
-                                "กำไร/ขาดทุน": res['Profit_Loss'],
-                                "(%)": f"{res['Profit_Loss_Pct']}%"
-                            })
-                        
-                        # แสดง Metric รวมด้านบน
-                        total_profit = total_portfolio_value - total_portfolio_cost
-                        m1, m2, m3 = st.columns(3)
-                        m1.metric("มูลค่าต้นทุนรวม", f"{total_portfolio_cost:,.2f} บาท")
-                        m2.metric("มูลค่าปัจจุบันรวม", f"{total_portfolio_value:,.2f} บาท", f"{total_profit:,.2f} บาท")
-                        m3.metric("ผลตอบแทนรวม (%)", f"{(total_profit/total_portfolio_cost)*100:.2f}%" if total_portfolio_cost > 0 else "0.00%")
-                        
-                        st.divider()
-                        st.dataframe(pd.DataFrame(display_data), use_container_width=True)
+                            up_col1, up_col2 = st.columns(2)
+                            new_current_price = up_col1.number_input("อัปเดราคาปัจจุบันต่อหน่วย:", value=float(selected_row['Cost_Price']), step=0.01, format="%.4f")
+                            action_type = up_col2.selectbox("การจัดการ:", ["อัปเดตราคาปัจจุบัน", "ขายออก (ปิดสถานะ)"])
+                            
+                            if action_type == "ขายออก (ปิดสถานะ)":
+                                sell_date = st.date_input("วันที่ขาย:", datetime.date.today())
+                            
+                            if st.button("ยืนยันการทำรายการ", use_container_width=True, type="primary"):
+                                row_index = int(selected_id) + 2 # คำนวณแถวใน Google Sheets (Header อยู่แถว 1)
+                                if action_type == "อัปเดตราคาปัจจุบัน":
+                                    # อัปเดตแค่ Current_Price (Col F คือ Column ที่ 6)
+                                    sheet.update_cell(row_index, 6, new_current_price)
+                                    st.success("อัปเดตราคาปัจจุบันสำเร็จ!")
+                                else:
+                                    # อัปเดต วันที่ขาย, ราคาปัจจุบัน, และเปลี่ยน Status เป็น Sold
+                                    sheet.update_cell(row_index, 4, str(sell_date)) # Date_Sell
+                                    sheet.update_cell(row_index, 6, new_current_price) # Current_Price
+                                    sheet.update_cell(row_index, 8, "Sold") # Status
+                                    st.success("บันทึกการขายกองทุนสำเร็จ!")
+                                
+                                st.cache_data.clear()
+                                st.rerun()
+                        else:
+                            st.info("ไม่มีกองทุนที่ถือครองอยู่ขณะนี้")
                     else:
-                        st.info("ไม่มีกองทุนในพอร์ตที่กำลังถืออยู่")
-                else:
-                    st.info("ยังไม่มีข้อมูลกองทุนในชีต")
-            except Exception as e:
-                st.warning(f"ยังไม่พบชีต Fund_History หรือเกิดข้อผิดพลาด: {e}")
+                        st.info("ยังไม่มีข้อมูลในระบบกองทุน")
+                except Exception as e:
+                    st.warning(f"ยังไม่พบชีต Fund_History หรือเกิดข้อผิดพลาด: {e}")
+            
+            # 3. Tab ภาพรวมพอร์ต (แสดงมูลค่าต้นทุน, มูลค่าปัจจุบัน)
+            with tab_summary:
+                st.markdown("### สรุปมูลค่าพอร์ตลงทุน")
+                try:
+                    client = get_gsheet_client()
+                    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
+                    sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
+                    summary_df = pd.DataFrame(sheet.get_all_records())
+                    
+                    if not summary_df.empty and 'Status' in summary_df.columns:
+                        active_df = summary_df[summary_df['Status'] == 'Holding'].copy()
+                        
+                        if not active_df.empty:
+                            # คำนวณค่าพอร์ตแต่ละตัว
+                            total_portfolio_cost = 0
+                            total_portfolio_value = 0
+                            
+                            display_data = []
+                            for _, row in active_df.iterrows():
+                                cost_p = float(row['Cost_Price'])
+                                curr_p = float(row['Current_Price'])
+                                units = float(row['Units'])
+                                res = calculate_fund_result(cost_p, curr_p, units)
+                                
+                                total_portfolio_cost += res['Total_Cost']
+                                total_portfolio_value += res['Current_Value']
+                                
+                                display_data.append({
+                                    "ชื่อกองทุน": row['Fund_Name'],
+                                    "วันที่ซื้อ": row['Date_Buy'],
+                                    "ต้นทุนเฉลี่ย": cost_p,
+                                    "ราคาปัจจุบัน": curr_p,
+                                    "จำนวนหน่วย": units,
+                                    "มูลค่าต้นทุน": res['Total_Cost'],
+                                    "มูลค่าปัจจุบัน": res['Current_Value'],
+                                    "กำไร/ขาดทุน": res['Profit_Loss'],
+                                    "(%)": f"{res['Profit_Loss_Pct']}%"
+                                })
+                            
+                            # แสดง Metric รวมด้านบน
+                            total_profit = total_portfolio_value - total_portfolio_cost
+                            m1, m2, m3 = st.columns(3)
+                            m1.metric("มูลค่าต้นทุนรวม", f"{total_portfolio_cost:,.2f} บาท")
+                            m2.metric("มูลค่าปัจจุบันรวม", f"{total_portfolio_value:,.2f} บาท", f"{total_profit:,.2f} บาท")
+                            m3.metric("ผลตอบแทนรวม (%)", f"{(total_profit/total_portfolio_cost)*100:.2f}%" if total_portfolio_cost > 0 else "0.00%")
+                            
+                            st.divider()
+                            st.dataframe(pd.DataFrame(display_data), use_container_width=True)
+                        else:
+                            st.info("ไม่มีกองทุนในพอร์ตที่กำลังถืออยู่")
+                    else:
+                        st.info("ยังไม่มีข้อมูลกองทุนในชีต")
+                except Exception as e:
+                    st.warning(f"ยังไม่พบชีต Fund_History หรือเกิดข้อผิดพลาด: {e}")
         
         # ==========================================
         # TAB ย่อยที่ 2: บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน)
