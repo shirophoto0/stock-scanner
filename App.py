@@ -5213,22 +5213,22 @@ def main():
             except Exception:
                 sso_value = 0.0
             
-            # --- ดึงมูลค่าประกันบำนาญแบบไดนามิกจากชีต Pension_Schedule ---
+            # --- [ปรับปรุง] ดึงมูลค่าประกันบำนาญจากชีต Pension (ตามอายุ) ---
             pension_insurance_value = 0.0
             try:
-                sheet_pen = get_worksheet_safely(client, 'MyStockData', 'Pension_Schedule')
-                if sheet_pen is not None:
-                    pen_records = sheet_pen.get_all_records()
+                sheet_pen = client.open('MyStockData').worksheet('Pension')
+                pen_records = sheet_pen.get_all_records()
+                
+                # ถ้าระบบของคุณมีอายุปัจจุบัน ให้เลือกค่าของอายุนั้น หรือถ้าจะเอาผลรวมทั้งหมดเหมือนเดิมก็ทำได้
+                # ในที่นี้ผมปรับให้เป็น "ผลรวมของมูลค่าทุกอายุ" ตามที่คุณเคยทำไว้ครับ
+                if pen_records:
                     for row in pen_records:
-                        val_raw = row.get('จำนวนเงินต่อปี/งวด (บาท)', 0)
+                        val_raw = row.get('Value', 0) # ใช้ชื่อคอลัมน์ Value ตามที่คุยกันไว้
                         val_clean = float(str(val_raw).replace(',', '')) if str(val_raw).strip() != "" else 0.0
                         pension_insurance_value += val_clean
-                else:
-                    # Fallback หากยังไม่มีชีต ให้ใช้ค่าเดิมสำรองไว้ก่อน
-                    pension_insurance_value = 1337703.0
-            except Exception:
-                # หากเกิดข้อผิดพลาดในการดึง ให้ใช้ค่าเดิมสำรอง
-                pension_insurance_value = 1337703.0
+            except Exception as e:
+                st.warning(f"ยังไม่มีข้อมูลประกันบำนาญในระบบ: {e}")
+                pension_insurance_value = 0.0
             
             # --- ดึงยอดคงเหลือบัญชีธนาคารล่าสุด ---
             sheet_bank = get_worksheet_safely(client, 'MyStockData', 'Bank_Account')
@@ -5245,7 +5245,7 @@ def main():
                     bank_balance = float(str(bank_data[-1].get('Balance', 0)).replace(',', ''))
                 except:
                     bank_balance = 0.0
-
+        
             # ==========================================
             # 🌟 ดึงข้อมูลอสังหาริมทรัพย์
             # ==========================================
@@ -5261,7 +5261,7 @@ def main():
                         real_estate_items = sheet_re.get_all_records()
                 except:
                     pass
-
+        
             for item in real_estate_items:
                 name = str(item.get("ชื่อทรัพย์สิน", "")).lower()
                 note = str(item.get("หมายเหตุ", "")).lower()
@@ -5282,25 +5282,24 @@ def main():
                     house1_value += net_val
             
             total_real_estate = house1_value + house2_value + condo_value
-            # ==========================================
             
             # 2. มูลค่าพอร์ตหุ้นรวม + พอร์ต TFEX
             base_stock_value = total_value if 'total_value' in locals() else 0.0
             
-            # ⭐️ ดึงค่าพอร์ต TFEX จาก session_state ที่เราฝากไว้
+            # ⭐️ ดึงค่าพอร์ต TFEX จาก session_state
             tfex_portfolio_value = st.session_state.get('tfex_net_worth', 0.0)
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth แบบไม่รวมอสังหาฯ (สินทรัพย์สภาพคล่องและการลงทุนล้วนๆ)
+            # 3. คำนวณ Net Worth แบบไม่รวมอสังหาฯ
             net_worth_excl_re = (total_stock_and_tfex + pvd_value + insurance_value + 
-                                  coop_value + sso_value + pension_insurance_value + 
-                                  bank_balance + total_gold_value)
+                                 coop_value + sso_value + pension_insurance_value + 
+                                 bank_balance + total_gold_value)
             
-            # 4. คำนวณ Net Worth รวมทั้งหมด (รวมอสังหาฯ แล้ว)
+            # 4. คำนวณ Net Worth รวมทั้งหมด
             net_worth_total = net_worth_excl_re + total_real_estate
             
-            # --- 5. แสดงผล Net Worth ทั้งสองแบบด้านบนสุด (แบ่งเป็น 2 คอลัมน์สวยงาม) ---
+            # --- 5. แสดงผล Net Worth ทั้งสองแบบ ---
             col_nw1, col_nw2 = st.columns(2)
             
             with col_nw1:
@@ -5907,58 +5906,52 @@ def main():
                         except Exception as e:
                             st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกบัญชี: {e}")
                             
-            with st.expander("### 🛡️ จัดการแผนรับเงินประกันบำนาญรายช่วงอายุ", expanded=False): 
-                st.markdown("กำหนดช่วงอายุและจำนวนเงินบำนาญที่จะได้รับในแต่ละช่วง เพื่อคำนวณมูลค่ารวมเข้าพอร์ตความมั่งคั่ง")
-                
-                # โหลดข้อมูลตารางประกันบำนาญจาก Google Sheets (ชีตชื่อ Pension_Schedule)
-                if 'pension_schedule_df' not in st.session_state:
-                    try:
-                        sheet_pen = get_worksheet_safely(client, 'MyStockData', 'Pension_Schedule')
-                        if sheet_pen is None:
-                            # ถ้ายังไม่มีชีต ให้สร้างชีตใหม่พร้อมข้อมูลเริ่มต้น
-                            sheet_pen = client.open('MyStockData').add_worksheet(title='Pension_Schedule', rows=10, cols=4)
-                            sheet_pen.append_row(["ช่วงอายุ", "จำนวนเงินต่อปี/งวด (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-                            # ข้อมูลตั้งต้นเดิมของคุณ (รวมกันได้ 1,337,703.0 หรือปรับแต่งตามจริง)
-                            sheet_pen.append_rows([
-                                ["อายุ 60 - 65 ปี", 250000.0, "ช่วงต้นเกษียณ", datetime.now().strftime("%Y-%m-%d")],
-                                ["อายุ 66 - 70 ปี", 300000.0, "ช่วงกลางเกษียณ", datetime.now().strftime("%Y-%m-%d")],
-                                ["อายุ 71 - 80 ปี", 787703.0, "ช่วงปลายเกษียณ", datetime.now().strftime("%Y-%m-%d")]
-                            ])
-                        
-                        pen_records = sheet_pen.get_all_records()
-                        st.session_state['pension_schedule_df'] = pd.DataFrame(pen_records) if pen_records else pd.DataFrame(columns=["ช่วงอายุ", "จำนวนเงินต่อปี/งวด (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-                    except Exception as e:
-                        st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลประกันบำนาญได้: {e}")
-                        st.session_state['pension_schedule_df'] = pd.DataFrame(columns=["ช่วงอายุ", "จำนวนเงินต่อปี/งวด (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-                
-                # แสดงตารางให้ผู้ใช้แก้ไขข้อมูลได้โดยตรง (Data Editor)
-                edited_pension_df = st.data_editor(
-                    st.session_state['pension_schedule_df'],
-                    num_rows="dynamic",
-                    use_container_width=True,
-                    key="pension_data_editor"
-                )
-                
-                if st.button("💾 บันทึกการเปลี่ยนแปลงตารางบำนาญ"):
-                    try:
-                        sheet_pen = get_worksheet_safely(client, 'MyStockData', 'Pension_Schedule')
-                        if sheet_pen is not None:
-                            sheet_pen.clear()
-                            # เขียน Header และข้อมูลใหม่ทั้งหมดลง Google Sheets
-                            headers = list(edited_pension_df.columns)
-                            sheet_pen.append_row(headers)
-                            
-                            rows_to_save = []
-                            for _, row in edited_pension_df.iterrows():
-                                rows_to_save.append([str(row.get(h, "")) for h in headers])
-                            if rows_to_save:
-                                sheet_pen.append_rows(rows_to_save)
+            with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันบำนาญตามอายุ", expanded=False):
+                with st.form("pension_upload_form"):
+                    col_p1, col_p2 = st.columns(2)
+                    with col_p1:
+                        pension_age = st.number_input(
+                            "อายุที่เริ่มรับเงินบำนาญ (ปี)", 
+                            min_value=55, max_value=100, value=55, step=1, 
+                            key="pension_age_input",
+                            help="ประกันบำนาญมักเริ่มถอน/รับเงินได้ตั้งแต่ช่วงอายุ 55 ปีขึ้นไป"
+                        )
+                    with col_p2:
+                        pension_value = st.number_input(
+                            "ยอดเงินบำนาญที่จะได้รับ (บาท)", 
+                            min_value=0.0, format="%.2f", value=0.0, key="pension_value_input",
+                            help="กรอกยอดเงินตามตารางกรมธรรม์ ณ อายุที่เลือก"
+                        )
+                    
+                    submitted_pension = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลประกันบำนาญ")
+                    
+                    if submitted_pension:
+                        if pension_value >= 0:
+                            try:
+                                sheet_pension = get_pension_sheet() 
                                 
-                            st.session_state['pension_schedule_df'] = edited_pension_df
-                            st.success("✅ บันทึกข้อมูลตารางประกันบำนาญลง Google Sheets สำเร็จ!")
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ บันทึกไม่สำเร็จ: {e}")
+                                # แปลงอายุเป็น string เพื่อใช้ตรวจสอบในคอลัมน์ A (สมมติคอลัมน์ A เก็บอายุ)
+                                age_str = str(int(pension_age))
+                                
+                                # ดึงข้อมูลในคอลัมน์ A ทั้งหมดมาเช็คว่ามีอายุนี้หรือยัง
+                                age_column = [str(cell) for cell in sheet_pension.col_values(1)]
+                                
+                                if age_str in age_column:
+                                    row_num = age_column.index(age_str) + 1
+                                    # อัปเดตข้อมูลในบรรทัดเดิม (คอลัมน์ A คือ อายุ, คอลัมน์ B คือ ยอดเงิน)
+                                    sheet_pension.update(f"A{row_num}:B{row_num}", [[age_str, pension_value]])
+                                    st.success(f"✅ อัปเดตข้อมูลประกันบำนาญสำหรับ **อายุ {age_str} ปี** เรียบร้อยแล้ว!")
+                                else:
+                                    # เพิ่มบรรทัดใหม่
+                                    sheet_pension.append_row([age_str, pension_value])
+                                    st.success(f"✅ บันทึกข้อมูลใหม่ประกันบำนาญสำหรับ **อายุ {age_str} ปี** เรียบร้อยแล้ว!")
+                                
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
+                        else:
+                            st.warning("กรุณากรอกยอดเงินให้ถูกต้อง")
+                
         ######## REAL ESTATE ########################                    
         with wealth_tab_real_estate:
             st.markdown("### 🏠 จัดการพอร์ตอสังหาริมทรัพย์ (บ้าน / คอนโด)")
