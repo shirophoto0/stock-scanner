@@ -5327,11 +5327,26 @@ def main():
         # ==========================================
         with wealth_tab_overview:
         
-            # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน (ส่วนเดิมของคุณ)
+            # 1. ดึงมูลค่าสินทรัพย์แต่ละส่วน (ส่วนเดิมของคุณ + กองทุนรวม)
             pvd_value = get_latest_pvd_value()
             insurance_value = get_latest_insurance_value()
             coop_value = get_latest_coop_value()
             
+            # --- ดึงมูลค่ากองทุนรวมล่าสุด ---
+            mutual_fund_value = 0.0
+            try:
+                sheet_mf = get_worksheet_safely(client, 'MyStockData', 'Mutual_Fund')
+                mf_data = []
+                if sheet_mf is not None:
+                    mf_data = sheet_mf.get_all_records()
+                if mf_data:
+                    # รองรับทั้งคอลัมน์ 'Value', 'Market_Value' หรือ 'มูลค่าตลาด'
+                    last_row = mf_data[-1]
+                    raw_mf = last_row.get('Value', last_row.get('Market_Value', last_row.get('มูลค่าตลาด', 0)))
+                    mutual_fund_value = float(str(raw_mf).replace(',', '')) if str(raw_mf).strip() != "" else 0.0
+            except Exception as e:
+                mutual_fund_value = 0.0
+
             # --- ดึงมูลค่าทองคำรวมจาก session_state ---
             total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
             
@@ -5343,17 +5358,15 @@ def main():
             except Exception:
                 sso_value = 0.0
             
-            # --- [ปรับปรุง] ดึงมูลค่าประกันบำนาญจากชีต Pension (ตามอายุ) ---
+            # --- ดึงมูลค่าประกันบำนาญจากชีต Pension (ตามอายุ) ---
             pension_insurance_value = 0.0
             try:
                 sheet_pen = client.open('MyStockData').worksheet('Pension')
                 pen_records = sheet_pen.get_all_records()
                 
-                # ถ้าระบบของคุณมีอายุปัจจุบัน ให้เลือกค่าของอายุนั้น หรือถ้าจะเอาผลรวมทั้งหมดเหมือนเดิมก็ทำได้
-                # ในที่นี้ผมปรับให้เป็น "ผลรวมของมูลค่าทุกอายุ" ตามที่คุณเคยทำไว้ครับ
                 if pen_records:
                     for row in pen_records:
-                        val_raw = row.get('Value', 0) # ใช้ชื่อคอลัมน์ Value ตามที่คุยกันไว้
+                        val_raw = row.get('Value', 0) 
                         val_clean = float(str(val_raw).replace(',', '')) if str(val_raw).strip() != "" else 0.0
                         pension_insurance_value += val_clean
             except Exception as e:
@@ -5421,10 +5434,10 @@ def main():
             
             total_stock_and_tfex = base_stock_value + tfex_portfolio_value
             
-            # 3. คำนวณ Net Worth แบบไม่รวมอสังหาฯ
+            # 3. คำนวณ Net Worth แบบไม่รวมอสังหาฯ (เพิ่มกองทุนรวมเข้าไป)
             net_worth_excl_re = (total_stock_and_tfex + pvd_value + insurance_value + 
                                  coop_value + sso_value + pension_insurance_value + 
-                                 bank_balance + total_gold_value)
+                                 bank_balance + total_gold_value + mutual_fund_value)
             
             # 4. คำนวณ Net Worth รวมทั้งหมด
             net_worth_total = net_worth_excl_re + total_real_estate
@@ -5456,37 +5469,40 @@ def main():
                         
             st.divider()
         
-            # --- 6. แสดงผลใน Metrics ย่อย ---
+            # --- 6. แสดงผลใน Metrics ย่อย (เพิ่มกองทุนรวมเข้ามาในตารางแสดงผล) ---
             st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
             row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
             row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
-            row1_col2.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
-            row1_col3.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
-            row1_col4.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
+            row1_col2.metric("กองทุนรวม", f"{mutual_fund_value:,.0f} ฿")
+            row1_col3.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
+            row1_col4.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
         
             row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-            row2_col1.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
-            row2_col2.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
-            row2_col3.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
-            row2_col4.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
+            row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
+            row2_col2.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
+            row2_col3.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
+            row2_col4.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
+
+            row3_col1, row3_col2, _, _ = st.columns(4)
+            row3_col1.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
             
             st.markdown("<br>", unsafe_allow_html=True)
             
             # --- 7. แสดงผลอสังหาริมทรัพย์ ---
             st.markdown("#### 🏡 อสังหาริมทรัพย์")
-            row3_col1, row3_col2, row3_col3, row3_col4 = st.columns(4)
-            row3_col1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
-            row3_col2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
-            row3_col3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
-            row3_col4.metric("คอนโด", f"{condo_value:,.0f} ฿")
+            row_re1, row_re2, row_re3, row_re4 = st.columns(4)
+            row_re1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
+            row_re2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
+            row_re3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
+            row_re4.metric("คอนโด", f"{condo_value:,.0f} ฿")
             
             st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
         
-            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม 'ทองคำ' เข้าไปในสัดส่วน)
+            # สร้างข้อมูลสำหรับกราฟ (เพิ่ม 'กองทุนรวม' เข้าไปในสัดส่วน)
             asset_data = {
-                "Asset_Type": ["พอร์ตหุ้น + TFEX", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "ประกันสังคม", "บัญชีธนาคาร", "ประกันบำนาญ", "ทองคำ"],
-                "Value": [total_stock_and_tfex, pvd_value, insurance_value, coop_value, sso_value, bank_balance, pension_insurance_value, total_gold_value]
+                "Asset_Type": ["พอร์ตหุ้น + TFEX", "กองทุนรวม", "PVD", "ประกัน Unit Linked", "สหกรณ์ก๊าซ ปตท.", "ประกันสังคม", "บัญชีธนาคาร", "ประกันบำนาญ", "ทองคำ"],
+                "Value": [total_stock_and_tfex, mutual_fund_value, pvd_value, insurance_value, coop_value, sso_value, bank_balance, pension_insurance_value, total_gold_value]
             }
             df_assets = pd.DataFrame(asset_data)
             df_assets = df_assets[df_assets["Value"] > 0]
@@ -5526,8 +5542,7 @@ def main():
             try:
                 import time
             
-                # ฟังก์ชันช่วยดึงข้อมูลแบบมี Cache และระบบลองใหม่ (Retry) อัตโนมัติ ป้องกัน API Error
-                @st.cache_data(ttl=600, show_spinner=False) # แคชข้อมูลเก็บไว้ 10 นาที
+                @st.cache_data(ttl=600, show_spinner=False) 
                 def fetch_all_wealth_data():
                     client = get_gsheet_client()
                     
@@ -5538,7 +5553,7 @@ def main():
                             except Exception:
                                 if i == max_retries - 1:
                                     return pd.DataFrame()
-                                time.sleep(1 + i) # รอแป๊บเดียวก่อนลองใหม่
+                                time.sleep(1 + i) 
                         return pd.DataFrame()
             
                     df_pvd = get_ws_with_retry('Provident_Fund')
@@ -5546,14 +5561,13 @@ def main():
                     df_coop = get_ws_with_retry('Coop')
                     df_bank = get_ws_with_retry('Bank_Account')
                     df_sso = get_ws_with_retry('SSO')
+                    df_mf = get_ws_with_retry('Mutual_Fund') # ดึงประวัติกองทุนรวมเพิ่ม
                     df_portfolio_hist = get_ws_with_retry('Stock_TFEX_History')
                     
-                    return df_pvd, df_ins, df_coop, df_bank, df_sso, df_portfolio_hist
+                    return df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist
             
-                # 1. ดึงข้อมูลผ่านระบบ Cache ปลอดภัยหายห่วงเรื่อง API ล่ม
-                df_pvd, df_ins, df_coop, df_bank, df_sso, df_portfolio_hist = fetch_all_wealth_data()
+                df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist = fetch_all_wealth_data()
                         
-                # 2. ฟังก์ชันเตรียมข้อมูล
                 def prepare_series(df, date_col, val_col, name):
                     df = df.copy()
                     if df.empty:
@@ -5573,12 +5587,12 @@ def main():
                     df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
                     return df.dropna(subset=['Date']).set_index('Date')[[name]]
             
-                # 3. เตรียม Series ทั้งหมด
                 s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                 s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
                 s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
                 s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
                 s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
+                s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund') # เตรียมข้อมูลซีรีส์กองทุนรวม
                 s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
             
                 # รวม Insurance และ SSO เข้าด้วยกัน
@@ -5589,8 +5603,8 @@ def main():
                 elif s_ins.empty and not s_sso.empty:
                     s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
             
-                # 4. รวมข้อมูลโดยใช้ Outer Join และ ffill
-                series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_port] if not s.empty]
+                # รวมข้อมูลทั้งหมดรวมถึงกองทุนรวม
+                series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port] if not s.empty]
                 
                 if series_list:
                     df_merged = series_list[0]
@@ -5600,7 +5614,6 @@ def main():
                     df_merged = df_merged.sort_index().ffill().fillna(0)
                     df_merged['Total'] = df_merged.sum(axis=1)
             
-                    # 5. วาดกราฟ Plotly
                     import plotly.graph_objects as go
                     fig = go.Figure()
                     
