@@ -163,7 +163,22 @@ def extract_pvd_from_image(image_file, year_be, month_name="ธันวาค�
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลรูปภาพ: {e}")
         return None
-        
+
+def st_neumorphic_container():
+    # สร้าง Container ที่มีขอบนูน
+    return st.container(border=True) # ปัจจุบัน streamlit มี parameter border=True ที่สวยงามอยู่แล้ว
+    
+# หากต้องการปรับแต่ง CSS ให้ดูนูนจริงๆ (Soft Shadow)
+st.markdown("""
+    <style>
+    .st-emotion-cache-1r6slb0 { /* คลาสของ container ใน streamlit */
+        border-radius: 15px;
+        background: #e0e0e0;
+        box-shadow:  20px 20px 60px #bebebe, -20px -20px 60px #ffffff;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 def get_latest_pvd_value():
     try:
         client = get_gsheet_client()
@@ -2846,152 +2861,154 @@ def main():
                                 c1, c2 = st.columns(2)
                             
                                 with c1:
-                                    # ย้าย Dropdown เลือกปีเข้ามาไว้ด้านในฝั่งซ้าย (ให้ขนานกับ Dropdown ช่วงเวลากราฟเส้นฝั่งขวา)
-                                    selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงานกราฟแท่ง:", available_years, key="select_year_perf")
-                                    
-                                    df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
-                                    
-                                    months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
-                                    df_full_year = pd.DataFrame({
-                                        'Date': months_range,
-                                        'Month_Label': months_range.strftime('%b %Y')
-                                    })
-                                    
-                                    if not df_filtered_year.empty:
-                                        df_filtered_year['Month_Label'] = df_filtered_year['Sell_Date'].dt.strftime('%b %Y')
-                                        df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
-                                            'กำไร/ขาดทุน (บาท)': 'sum',
-                                            'ต้นทุน (บาท)': 'sum'
-                                        }).reset_index()
+                                    with st.container(border=True):
+                                        # ย้าย Dropdown เลือกปีเข้ามาไว้ด้านในฝั่งซ้าย (ให้ขนานกับ Dropdown ช่วงเวลากราฟเส้นฝั่งขวา)
+                                        selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงานกราฟแท่ง:", available_years, key="select_year_perf")
                                         
-                                        df_monthly = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
-                                            'กำไร/ขาดทุน (บาท)': 0,
-                                            'ต้นทุน (บาท)': 0
+                                        df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
+                                        
+                                        months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
+                                        df_full_year = pd.DataFrame({
+                                            'Date': months_range,
+                                            'Month_Label': months_range.strftime('%b %Y')
                                         })
-                                    else:
-                                        df_monthly = df_full_year.copy()
-                                        df_monthly['กำไร/ขาดทุน (บาท)'] = 0
-                                        df_monthly['ต้นทุน (บาท)'] = 0
-                            
-                                    df_monthly = df_monthly.sort_values('Date').reset_index(drop=True)
-                                    df_monthly.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
-                                    df_monthly['Color'] = df_monthly['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
-                                    df_monthly['Monthly_ROI'] = df_monthly.apply(
-                                        lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
-                                        axis=1
-                                    )
-                                    df_monthly['ROI_Text'] = df_monthly['Monthly_ROI'].apply(lambda x: f"{x:+.2f}%")
-                            
-                                    st.markdown(f"**📊 ผลงานรายเดือน ประจำปี {selected_year}**")
-                                    
-                                    chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
-                                        x=alt.X('Month_Label:O', title='เดือน (ตามวันที่ขาย)', sort=None), 
-                                        y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
-                                        color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=['#2ecc71', '#e74c3c']), legend=None),
-                                        tooltip=['Month_Label', 'Profit_Sum', alt.Tooltip('Monthly_ROI:Q', format='.2f', title='% ROI เดือน')]
-                                    )
-                                    
-                                    text_labels = alt.Chart(df_monthly).mark_text(
-                                        align='center',
-                                        baseline='bottom', 
-                                        dy=-5, 
-                                        color='#888888', 
-                                        fontSize=10
-                                    ).encode(
-                                        x=alt.X('Month_Label:O', sort=None),
-                                        y=alt.Y('Profit_Sum:Q'),
-                                        text='ROI_Text:N'
-                                    )
-                            
-                                    rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
-                                    
-                                    st.altair_chart((chart_bar + text_labels + rule).properties(height=350), use_container_width=True)
+                                        
+                                        if not df_filtered_year.empty:
+                                            df_filtered_year['Month_Label'] = df_filtered_year['Sell_Date'].dt.strftime('%b %Y')
+                                            df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
+                                                'กำไร/ขาดทุน (บาท)': 'sum',
+                                                'ต้นทุน (บาท)': 'sum'
+                                            }).reset_index()
+                                            
+                                            df_monthly = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
+                                                'กำไร/ขาดทุน (บาท)': 0,
+                                                'ต้นทุน (บาท)': 0
+                                            })
+                                        else:
+                                            df_monthly = df_full_year.copy()
+                                            df_monthly['กำไร/ขาดทุน (บาท)'] = 0
+                                            df_monthly['ต้นทุน (บาท)'] = 0
+                                
+                                        df_monthly = df_monthly.sort_values('Date').reset_index(drop=True)
+                                        df_monthly.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
+                                        df_monthly['Color'] = df_monthly['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
+                                        df_monthly['Monthly_ROI'] = df_monthly.apply(
+                                            lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
+                                            axis=1
+                                        )
+                                        df_monthly['ROI_Text'] = df_monthly['Monthly_ROI'].apply(lambda x: f"{x:+.2f}%")
+                                
+                                        st.markdown(f"**📊 ผลงานรายเดือน ประจำปี {selected_year}**")
+                                        
+                                        chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
+                                            x=alt.X('Month_Label:O', title='เดือน (ตามวันที่ขาย)', sort=None), 
+                                            y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
+                                            color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=['#2ecc71', '#e74c3c']), legend=None),
+                                            tooltip=['Month_Label', 'Profit_Sum', alt.Tooltip('Monthly_ROI:Q', format='.2f', title='% ROI เดือน')]
+                                        )
+                                        
+                                        text_labels = alt.Chart(df_monthly).mark_text(
+                                            align='center',
+                                            baseline='bottom', 
+                                            dy=-5, 
+                                            color='#888888', 
+                                            fontSize=10
+                                        ).encode(
+                                            x=alt.X('Month_Label:O', sort=None),
+                                            y=alt.Y('Profit_Sum:Q'),
+                                            text='ROI_Text:N'
+                                        )
+                                
+                                        rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
+                                        
+                                        st.altair_chart((chart_bar + text_labels + rule).properties(height=350), use_container_width=True)
                             
                                 with c2:
-                                    # ==========================================
-                                    # ส่วนที่ 2: สำหรับกราฟเส้น (รองรับหลายปี + ตัวเลือกช่วงเวลา + Dynamic Aggregation + Zoom)
-                                    # ==========================================
-                                    initial_past_profit = 77420.5 # กำไรตั้งต้น
-                                    
-                                    st.markdown("##### 📈 กราฟเส้นกำไรสะสมพอร์ตระยะยาว")
-    
-                                    if not df_closed_perf_sorted.empty:
-                                        # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟเส้นโดยเฉพาะ
-                                        c_f1, c_f2 = st.columns([2, 2])
-                                        with c_f1:
-                                            line_view_range = st.selectbox(
-                                                "⏳ เลือกช่วงเวลาแสดงผล (กราฟเส้น):",
-                                                ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
-                                                key="line_view_range"
-                                            )
+                                    with st.container(border=True):
+                                        # ==========================================
+                                        # ส่วนที่ 2: สำหรับกราฟเส้น (รองรับหลายปี + ตัวเลือกช่วงเวลา + Dynamic Aggregation + Zoom)
+                                        # ==========================================
+                                        initial_past_profit = 77420.5 # กำไรตั้งต้น
                                         
-                                        # กรองข้อมูลตามช่วงเวลาที่เลือก
-                                        df_line_filtered = df_closed_perf_sorted.copy()
-                                        max_date = df_line_filtered['Sell_Date'].max()
-                                        
-                                        if line_view_range == "3 เดือนล่าสุด":
-                                            start_date = max_date - pd.DateOffset(months=3)
-                                            past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
-                                            initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
-                                            df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
-                                        elif line_view_range == "6 เดือนล่าสุด":
-                                            start_date = max_date - pd.DateOffset(months=6)
-                                            past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
-                                            initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
-                                            df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
-                                        elif line_view_range == "1 ปีล่าสุด (YTD / 12M)":
-                                            start_date = max_date - pd.DateOffset(years=1)
-                                            past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
-                                            initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
-                                            df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
-                                        else:
-                                            initial_past_profit_adjusted = initial_past_profit
-                                    
-                                        if not df_line_filtered.empty:
-                                            # 2. Dynamic Aggregation: ตรวจสอบช่วงเวลา ถ้าระยะเวลามากกว่า 1 ปี ให้ยุบเป็น "รายเดือน" อัตโนมัติเพื่อกันกราฟแน่น
-                                            date_span_days = (df_line_filtered['Sell_Date'].max() - df_line_filtered['Sell_Date'].min()).days
+                                        st.markdown("##### 📈 กราฟเส้นกำไรสะสมพอร์ตระยะยาว")
+        
+                                        if not df_closed_perf_sorted.empty:
+                                            # 1. ทำตัวเลือกช่วงเวลา (Quick Filter) สำหรับกราฟเส้นโดยเฉพาะ
+                                            c_f1, c_f2 = st.columns([2, 2])
+                                            with c_f1:
+                                                line_view_range = st.selectbox(
+                                                    "⏳ เลือกช่วงเวลาแสดงผล (กราฟเส้น):",
+                                                    ["ทั้งหมด (All Time)", "3 เดือนล่าสุด", "6 เดือนล่าสุด", "1 ปีล่าสุด (YTD / 12M)"],
+                                                    key="line_view_range"
+                                                )
                                             
-                                            if date_span_days > 365 and line_view_range == "ทั้งหมด (All Time)":
-                                                df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('M')
-                                                df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: r.strftime('%b %Y'))
-                                                df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
-                                                agg_freq_text = "รายเดือน (มุมมองระยะยาว)"
+                                            # กรองข้อมูลตามช่วงเวลาที่เลือก
+                                            df_line_filtered = df_closed_perf_sorted.copy()
+                                            max_date = df_line_filtered['Sell_Date'].max()
+                                            
+                                            if line_view_range == "3 เดือนล่าสุด":
+                                                start_date = max_date - pd.DateOffset(months=3)
+                                                past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
+                                                initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
+                                                df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
+                                            elif line_view_range == "6 เดือนล่าสุด":
+                                                start_date = max_date - pd.DateOffset(months=6)
+                                                past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
+                                                initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
+                                                df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
+                                            elif line_view_range == "1 ปีล่าสุด (YTD / 12M)":
+                                                start_date = max_date - pd.DateOffset(years=1)
+                                                past_slice = df_line_filtered[df_line_filtered['Sell_Date'] < start_date]
+                                                initial_past_profit_adjusted = initial_past_profit + past_slice['กำไร/ขาดทุน (บาท)'].sum()
+                                                df_line_filtered = df_line_filtered[df_line_filtered['Sell_Date'] >= start_date]
                                             else:
-                                                df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('W-MON')
-                                                df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
-                                                df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
-                                                agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
-                                    
-                                            with c_f2:
-                                                st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
-                                    
-                                            # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
-                                            df_line_grouped = df_line_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
-                                                'กำไร/ขาดทุน (บาท)': 'sum'
-                                            }).sort_values('Sort_Time')
-                                            
-                                            # คำนวณกำไรสะสมต่อเนื่อง
-                                            df_line_grouped['Cumulative_Profit'] = initial_past_profit_adjusted + df_line_grouped['กำไร/ขาดทุน (บาท)'].cumsum()
-                                    
-                                            # 3. คำนวณขอบเขตแกน Y ให้เผื่อพื้นที่ด้านบนเพิ่ม 15% (แก้ปัญหาเส้นชนขอบบน)
-                                            y_max = df_line_grouped['Cumulative_Profit'].max()
-                                            y_min = df_line_grouped['Cumulative_Profit'].min()
-                                            y_upper_limit = y_max * 1.15 if y_max > 0 else y_max * 0.85
-                                    
-                                            # สร้างกราฟเส้นพร้อมกำหนด Scale แกน Y และเปิด Interactive Zoom & Pan
-                                            chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
-                                                x=alt.X('Time_Label:O', title='ช่วงเวลาที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Time_Label'])),
-                                                y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)', scale=alt.Scale(domain=[y_min, y_upper_limit], nice=True)),
-                                                tooltip=['Time_Label', 'Cumulative_Profit']
-                                            ).properties(
-                                                height=350
-                                            ).interactive()
-                                            
-                                            st.altair_chart(chart_line, use_container_width=True)
+                                                initial_past_profit_adjusted = initial_past_profit
+                                        
+                                            if not df_line_filtered.empty:
+                                                # 2. Dynamic Aggregation: ตรวจสอบช่วงเวลา ถ้าระยะเวลามากกว่า 1 ปี ให้ยุบเป็น "รายเดือน" อัตโนมัติเพื่อกันกราฟแน่น
+                                                date_span_days = (df_line_filtered['Sell_Date'].max() - df_line_filtered['Sell_Date'].min()).days
+                                                
+                                                if date_span_days > 365 and line_view_range == "ทั้งหมด (All Time)":
+                                                    df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('M')
+                                                    df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: r.strftime('%b %Y'))
+                                                    df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
+                                                    agg_freq_text = "รายเดือน (มุมมองระยะยาว)"
+                                                else:
+                                                    df_line_filtered['Period_Key'] = df_line_filtered['Sell_Date'].dt.to_period('W-MON')
+                                                    df_line_filtered['Time_Label'] = df_line_filtered['Period_Key'].apply(lambda r: f"W{r.week} {r.start_time.strftime('%b %Y')}")
+                                                    df_line_filtered['Sort_Time'] = df_line_filtered['Period_Key'].dt.start_time
+                                                    agg_freq_text = "รายสัปดาห์ (เจาะลึก)"
+                                        
+                                                with c_f2:
+                                                    st.markdown(f"<p style='padding-top:28px; color:gray; font-size:13px;'>ℹ️ ความละเอียด: <b>{agg_freq_text}</b></p>", unsafe_allow_html=True)
+                                        
+                                                # รวมกำไรตามช่วงเวลาที่จัดกลุ่ม
+                                                df_line_grouped = df_line_filtered.groupby(['Sort_Time', 'Time_Label'], as_index=False).agg({
+                                                    'กำไร/ขาดทุน (บาท)': 'sum'
+                                                }).sort_values('Sort_Time')
+                                                
+                                                # คำนวณกำไรสะสมต่อเนื่อง
+                                                df_line_grouped['Cumulative_Profit'] = initial_past_profit_adjusted + df_line_grouped['กำไร/ขาดทุน (บาท)'].cumsum()
+                                        
+                                                # 3. คำนวณขอบเขตแกน Y ให้เผื่อพื้นที่ด้านบนเพิ่ม 15% (แก้ปัญหาเส้นชนขอบบน)
+                                                y_max = df_line_grouped['Cumulative_Profit'].max()
+                                                y_min = df_line_grouped['Cumulative_Profit'].min()
+                                                y_upper_limit = y_max * 1.15 if y_max > 0 else y_max * 0.85
+                                        
+                                                # สร้างกราฟเส้นพร้อมกำหนด Scale แกน Y และเปิด Interactive Zoom & Pan
+                                                chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
+                                                    x=alt.X('Time_Label:O', title='ช่วงเวลาที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Time_Label'])),
+                                                    y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)', scale=alt.Scale(domain=[y_min, y_upper_limit], nice=True)),
+                                                    tooltip=['Time_Label', 'Cumulative_Profit']
+                                                ).properties(
+                                                    height=350
+                                                ).interactive()
+                                                
+                                                st.altair_chart(chart_line, use_container_width=True)
+                                            else:
+                                                st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
                                         else:
-                                            st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
-                                    else:
-                                        st.info("ยังไม่มีข้อมูลประวัติการเทรดที่ปิดสถานะ")
+                                            st.info("ยังไม่มีข้อมูลประวัติการเทรดที่ปิดสถานะ")
                                                             
                             else:
                                 # สำหรับโหมดตาราง (ใช้ปีที่เลือกจากฝั่งซ้ายมาแสดงผล)
