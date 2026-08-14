@@ -3057,7 +3057,6 @@ def main():
                                 )
                                                                                                         
                             ##### กราฟกระจายตัว (Histogram) ###########
-                            st.markdown("---")
                             with st.container(border=True):
                                 st.markdown("##### 🔔 การกระจายตัวกำไร/ขาดทุน (%)")
                                 
@@ -3114,8 +3113,6 @@ def main():
                                     display_performance_dashboard()
                                 except Exception as e:
                                     st.warning(f"ยังไม่พบข้อมูล Portfolio_History หรือเกิดข้อผิดพลาดในการโหลด: {e}")
-        
-                                st.markdown("---")
         
                                 # --- 2. ส่วนวิเคราะห์ Sector Performance (แก้ไขป้องกัน Error ประเภทข้อมูล) ---
                                 journal_df = pd.DataFrame(st.session_state.get('journal_data', []))
@@ -5517,24 +5514,25 @@ def main():
             
             # --- 3. แสดงผล Net Worth ทั้งสองแบบ ---
             col_nw1, col_nw2 = st.columns(2)
-            with col_nw1:
-                st.markdown(
-                    f"""
-                    <div style="text-align: left; padding: 5px;">
-                        <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth (ไม่รวมอสังหาฯ)</h4>
-                        <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_excl_re:,.0f} ฿</h1>
-                    </div>
-                    """, unsafe_allow_html=True
-                )
-            with col_nw2:
-                st.markdown(
-                    f"""
-                    <div style="text-align: left; padding: 5px;">
-                        <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
-                        <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
-                    </div>
-                    """, unsafe_allow_html=True
-                )
+            with st.container(border=True):
+                with col_nw1:
+                    st.markdown(
+                        f"""
+                        <div style="text-align: left; padding: 5px;">
+                            <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth (ไม่รวมอสังหาฯ)</h4>
+                            <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_excl_re:,.0f} ฿</h1>
+                        </div>
+                        """, unsafe_allow_html=True
+                    )
+                with col_nw2:
+                    st.markdown(
+                        f"""
+                        <div style="text-align: left; padding: 5px;">
+                            <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
+                            <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
+                        </div>
+                        """, unsafe_allow_html=True
+                    )
                         
             st.divider()
         
