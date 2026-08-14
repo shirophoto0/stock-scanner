@@ -1273,8 +1273,26 @@ if 'dividend_data' not in st.session_state:
 if 'cash_balance' not in st.session_state:
     st.session_state.cash_balance = 0.0  # หรือใส่จำนวนเงินสดเริ่มต้นของคุณ เช่น 100000.0
 
+st.markdown("""
+    <style>
+    .custom-box {
+        background-color: #fafbfc; /* เปลี่ยนสีพื้นหลังเบาๆ */
+        border: 1px solid #e1e4e8; /* เส้นขอบ */
+        border-radius: 16px;       /* มุมโค้งมน */
+        padding: 20px;             /* ระยะห่างขอบด้านใน */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* เงาให้ดูลอยนูนขึ้นมา */
+        margin-bottom: 20px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+# 2. เริ่มเปิดกล่อง HTML
+st.markdown('<div class="custom-box">', unsafe_allow_html=True)
+
 st.title("📈 Application NJ-Wealth")
 st.write("📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)")
+
+# 3. ปิดกล่อง HTML เมื่อจบส่วน
+st.markdown('</div>', unsafe_allow_html=True)
 
 # จัดการ Session State เพื่อเก็บชื่อหุ้นที่เลือกไว้กลางระบบ
 if "selected_ticker" not in st.session_state:
