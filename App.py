@@ -5538,53 +5538,55 @@ def main():
                 st.divider()
         
             # --- 4. แสดงผลใน Metrics ย่อย ---
-            st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
-            row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-            row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
-            row1_col2.metric("กองทุนรวม", f"{mutual_fund_value:,.0f} ฿")
-            row1_col3.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
-            row1_col4.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
-        
-            row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-            row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
-            row2_col2.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
-            row2_col3.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
-            row2_col4.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
-        
-            # ย้าย Note มาไว้ใน col4 ของแถวนี้ เพื่อให้อยู่ใต้ประกันบำนาญพอดี
-            if all_data["pension"]:
-                pension_notes_html = '<div style="margin-top: -10px; margin-bottom: 5px;">'
-                for row in all_data["pension"]:
-                    age_val = row.get('Age', '-')
-                    money_val = row.get('Value', 0)
+            with st.container(border=True):
+                st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
+                row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+                row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
+                row1_col2.metric("กองทุนรวม", f"{mutual_fund_value:,.0f} ฿")
+                row1_col3.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
+                row1_col4.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
+            
+                row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
+                row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
+                row2_col2.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
+                row2_col3.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
+                row2_col4.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
+            
+                # ย้าย Note มาไว้ใน col4 ของแถวนี้ เพื่อให้อยู่ใต้ประกันบำนาญพอดี
+                if all_data["pension"]:
+                    pension_notes_html = '<div style="margin-top: -10px; margin-bottom: 5px;">'
+                    for row in all_data["pension"]:
+                        age_val = row.get('Age', '-')
+                        money_val = row.get('Value', 0)
+                        
+                        clean_money = float(str(money_val).replace(',', '').replace('฿', '').strip() or 0)
+                        
+                        if clean_money > 0:
+                            pension_notes_html += (
+                                f'<p style="color: #888888; font-size: 0.75em; margin: 0px;">'
+                                f'• ถอนออก ณ อายุ {age_val} ปี: {clean_money:,.0f} ฿'
+                                f'</p>'
+                            )
+                    pension_notes_html += '</div>'
                     
-                    clean_money = float(str(money_val).replace(',', '').replace('฿', '').strip() or 0)
-                    
-                    if clean_money > 0:
-                        pension_notes_html += (
-                            f'<p style="color: #888888; font-size: 0.75em; margin: 0px;">'
-                            f'• ถอนออก ณ อายุ {age_val} ปี: {clean_money:,.0f} ฿'
-                            f'</p>'
-                        )
-                pension_notes_html += '</div>'
+                    # แสดงผลข้อความไว้ใต้ช่องประกันบำนาญโดยตรง
+                    row2_col4.markdown(pension_notes_html, unsafe_allow_html=True)
+            
+                row3_col1, _, _, _ = st.columns(4)
+                row3_col1.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
                 
-                # แสดงผลข้อความไว้ใต้ช่องประกันบำนาญโดยตรง
-                row2_col4.markdown(pension_notes_html, unsafe_allow_html=True)
-        
-            row3_col1, _, _, _ = st.columns(4)
-            row3_col1.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # --- 5. แสดงผลอสังหาริมทรัพย์ ---
+                st.markdown("#### 🏡 อสังหาริมทรัพย์")
+                row_re1, row_re2, row_re3, row_re4 = st.columns(4)
+                row_re1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
+                row_re2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
+                row_re3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
+                row_re4.metric("คอนโด", f"{condo_value:,.0f} ฿")
+                
+                st.divider()
             
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # --- 5. แสดงผลอสังหาริมทรัพย์ ---
-            st.markdown("#### 🏡 อสังหาริมทรัพย์")
-            row_re1, row_re2, row_re3, row_re4 = st.columns(4)
-            row_re1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
-            row_re2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
-            row_re3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
-            row_re4.metric("คอนโด", f"{condo_value:,.0f} ฿")
-            
-            st.divider()
             st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
 
             # 1. เตรียมข้อมูลสัดส่วนสินทรัพย์
