@@ -5583,7 +5583,7 @@ def main():
                 row_re2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
                 row_re3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
                 row_re4.metric("คอนโด", f"{condo_value:,.0f} ฿")
-                )
+                
             
             st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
 
@@ -5594,109 +5594,111 @@ def main():
             }
             df_assets = pd.DataFrame(asset_data)
             df_assets = df_assets[df_assets["Value"] > 0]
-            
-            col_chart1, col_chart2 = st.columns(2)
-            
-            with col_chart1:
-                st.markdown("### 🍩 สัดส่วนสินทรัพย์ปัจจุบัน")
-                if not df_assets.empty:
-                    import plotly.express as px
-                    fig_donut = px.pie(
-                        df_assets, names="Asset_Type", values="Value", hole=0.4,
-                        color_discrete_sequence=px.colors.qualitative.Pastel
-                    )
-                    fig_donut.update_traces(textposition='inside', textinfo='percent+label')
-                    fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
-                    st.plotly_chart(fig_donut, use_container_width=True, key="donut_main_chart")
-                else:
-                    st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟโดนัท")
-            
-            with col_chart2:
-                st.markdown("### 📊 มูลค่าแยกตามประเภทสินทรัพย์")
-                if not df_assets.empty:
-                    fig_bar = px.bar(
-                        df_assets, x="Asset_Type", y="Value", text="Value",
-                        color="Asset_Type", color_discrete_sequence=px.colors.qualitative.Pastel
-                    )
-                    fig_bar.update_traces(texttemplate='%{text:,.0f} ฿', textposition='outside')
-                    fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, xaxis_title="", yaxis_title="บาท")
-                    st.plotly_chart(fig_bar, use_container_width=True, key="bar_main_chart")
-                else:
-                    st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
+
+            with st.container(border=True):
+                col_chart1, col_chart2 = st.columns(2)
+                
+                with col_chart1:
+                    st.markdown("### 🍩 สัดส่วนสินทรัพย์ปัจจุบัน")
+                    if not df_assets.empty:
+                        import plotly.express as px
+                        fig_donut = px.pie(
+                            df_assets, names="Asset_Type", values="Value", hole=0.4,
+                            color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig_donut.update_traces(textposition='inside', textinfo='percent+label')
+                        fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
+                        st.plotly_chart(fig_donut, use_container_width=True, key="donut_main_chart")
+                    else:
+                        st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟโดนัท")
+                
+                with col_chart2:
+                    st.markdown("### 📊 มูลค่าแยกตามประเภทสินทรัพย์")
+                    if not df_assets.empty:
+                        fig_bar = px.bar(
+                            df_assets, x="Asset_Type", y="Value", text="Value",
+                            color="Asset_Type", color_discrete_sequence=px.colors.qualitative.Pastel
+                        )
+                        fig_bar.update_traces(texttemplate='%{text:,.0f} ฿', textposition='outside')
+                        fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, xaxis_title="", yaxis_title="บาท")
+                        st.plotly_chart(fig_bar, use_container_width=True, key="bar_main_chart")
+                    else:
+                        st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
             
             # 2. กราฟแนวโน้ม Net Worth (ดึงข้อมูลใหม่แบบรวมศูนย์)
-            st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
-            
-            try:
-                import time
+            with st.container(border=True):
+                st.markdown("### 📉 กราฟแนวโน้มการเติบโตของความมั่งคั่งสุทธิ (Net Worth)")
                 
-                @st.cache_data(ttl=600, show_spinner=False) 
-                def fetch_all_wealth_data():
-                    client = get_gsheet_client()
-                    def get_ws_with_retry(ws_name, max_retries=3):
-                        for i in range(max_retries):
-                            try:
-                                return pd.DataFrame(client.open('MyStockData').worksheet(ws_name).get_all_records())
-                            except Exception:
-                                if i == max_retries - 1: return pd.DataFrame()
-                                time.sleep(1 + i) 
-                        return pd.DataFrame()
+                try:
+                    import time
                     
-                    return (get_ws_with_retry('Provident_Fund'), get_ws_with_retry('Insurance'), 
-                            get_ws_with_retry('Coop'), get_ws_with_retry('Bank_Account'), 
-                            get_ws_with_retry('SSO'), get_ws_with_retry('Fund_History'), 
-                            get_ws_with_retry('Stock_TFEX_History'))
-            
-                df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist = fetch_all_wealth_data()
+                    @st.cache_data(ttl=600, show_spinner=False) 
+                    def fetch_all_wealth_data():
+                        client = get_gsheet_client()
+                        def get_ws_with_retry(ws_name, max_retries=3):
+                            for i in range(max_retries):
+                                try:
+                                    return pd.DataFrame(client.open('MyStockData').worksheet(ws_name).get_all_records())
+                                except Exception:
+                                    if i == max_retries - 1: return pd.DataFrame()
+                                    time.sleep(1 + i) 
+                            return pd.DataFrame()
                         
-                def prepare_series(df, date_col, val_col, name):
-                    df = df.copy()
-                    if df.empty: return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
-                    if date_col == 'Month':
-                        thai_months = {'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04', 'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08', 'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'}
-                        df['Month_Num'] = df[date_col].map(thai_months).fillna('12')
-                        df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df['Month_Num'] + '-01', errors='coerce')
-                    else:
-                        df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
-                    df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
-                    return df.dropna(subset=['Date']).set_index('Date')[[name]]
-            
-                s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
-                s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
-                s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
-                s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
-                s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
-                s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund')
-                s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
-            
-                if not s_ins.empty and not s_sso.empty:
-                    s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
-                    s_ins['Insurance'] = s_ins['Insurance'] + s_ins['SSO']
-                    s_ins = s_ins[['Insurance']]
-                elif s_ins.empty and not s_sso.empty:
-                    s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
-            
-                series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port] if not s.empty]
+                        return (get_ws_with_retry('Provident_Fund'), get_ws_with_retry('Insurance'), 
+                                get_ws_with_retry('Coop'), get_ws_with_retry('Bank_Account'), 
+                                get_ws_with_retry('SSO'), get_ws_with_retry('Fund_History'), 
+                                get_ws_with_retry('Stock_TFEX_History'))
                 
-                if series_list:
-                    df_merged = series_list[0]
-                    for s in series_list[1:]: df_merged = df_merged.join(s, how='outer')
-                    df_merged = df_merged.sort_index().ffill().fillna(0)
-                    df_merged['Total'] = df_merged.sum(axis=1)
-            
-                    import plotly.graph_objects as go
-                    fig = go.Figure()
-                    for col in df_merged.columns:
-                        fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col, mode='lines+markers', line=dict(width=3 if col == 'Total' else 2)))
+                    df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist = fetch_all_wealth_data()
+                            
+                    def prepare_series(df, date_col, val_col, name):
+                        df = df.copy()
+                        if df.empty: return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
+                        if date_col == 'Month':
+                            thai_months = {'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04', 'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08', 'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'}
+                            df['Month_Num'] = df[date_col].map(thai_months).fillna('12')
+                            df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df['Month_Num'] + '-01', errors='coerce')
+                        else:
+                            df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
+                        df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
+                        return df.dropna(subset=['Date']).set_index('Date')[[name]]
+                
+                    s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
+                    s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
+                    s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
+                    s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
+                    s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
+                    s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund')
+                    s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
+                
+                    if not s_ins.empty and not s_sso.empty:
+                        s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
+                        s_ins['Insurance'] = s_ins['Insurance'] + s_ins['SSO']
+                        s_ins = s_ins[['Insurance']]
+                    elif s_ins.empty and not s_sso.empty:
+                        s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
+                
+                    series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port] if not s.empty]
                     
-                    fig.update_layout(yaxis=dict(range=[0, (df_merged['Total'].max() * 1.2) if df_merged['Total'].max() > 0 else 12000000], tickformat=",.0f"),
-                                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    
-                    st.plotly_chart(fig, use_container_width=True, key="net_worth_trend_chart_final")
-                else:
-                    st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
-            except Exception as e:
-                st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
+                    if series_list:
+                        df_merged = series_list[0]
+                        for s in series_list[1:]: df_merged = df_merged.join(s, how='outer')
+                        df_merged = df_merged.sort_index().ffill().fillna(0)
+                        df_merged['Total'] = df_merged.sum(axis=1)
+                
+                        import plotly.graph_objects as go
+                        fig = go.Figure()
+                        for col in df_merged.columns:
+                            fig.add_trace(go.Scatter(x=df_merged.index, y=df_merged[col], name=col, mode='lines+markers', line=dict(width=3 if col == 'Total' else 2)))
+                        
+                        fig.update_layout(yaxis=dict(range=[0, (df_merged['Total'].max() * 1.2) if df_merged['Total'].max() > 0 else 12000000], tickformat=",.0f"),
+                                          legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+                        
+                        st.plotly_chart(fig, use_container_width=True, key="net_worth_trend_chart_final")
+                    else:
+                        st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
+                except Exception as e:
+                    st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
 
         # --- ส่วน UI สำหรับจัดการกองทุน (นำไปวางในหน้า App ของคุณ) ---
         
