@@ -5513,8 +5513,9 @@ def main():
             net_worth_total = net_worth_excl_re + total_real_estate
             
             # --- 3. แสดงผล Net Worth ทั้งสองแบบ ---
-            col_nw1, col_nw2 = st.columns(2)
             with st.container(border=True):
+                col_nw1, col_nw2 = st.columns(2)
+            
                 with col_nw1:
                     st.markdown(
                         f"""
@@ -5534,7 +5535,7 @@ def main():
                         """, unsafe_allow_html=True
                     )
                         
-            st.divider()
+                st.divider()
         
             # --- 4. แสดงผลใน Metrics ย่อย ---
             st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
