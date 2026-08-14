@@ -5535,7 +5535,6 @@ def main():
                         """, unsafe_allow_html=True
                     )
                         
-                st.divider()
         
             # --- 4. แสดงผลใน Metrics ย่อย ---
             with st.container(border=True):
@@ -5584,8 +5583,7 @@ def main():
                 row_re2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
                 row_re3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
                 row_re4.metric("คอนโด", f"{condo_value:,.0f} ฿")
-                
-                st.divider()
+                )
             
             st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
 
