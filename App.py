@@ -5076,21 +5076,36 @@ def main():
                 # ดึงข้อมูลจากฟังก์ชัน load_data สดๆ ใหม่ๆ
                 tfex_df = load_data("TFEX_History")
                 
-                # กรองเฉพาะรายการที่ยังถืออยู่
-                tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
-                open_trades = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
+                # ตรวจสอบและกรองเฉพาะรายการที่ยังถืออยู่ (ปลอดภัยจาก TypeError)
+                if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
+                    tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+                    open_trades = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
+                else:
+                    open_trades = pd.DataFrame()
                 
-                if not open_trades.empty:
+                if not open_trades.empty and 'Trade_ID' in open_trades.columns:
                     # ให้เลือก Trade_ID
                     selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
                     
                     # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
                     trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
-                    st.info(f"🔍 รายละเอียดออเดอร์เดิม: **{trade_detail['Status']}** จำนวน **{trade_detail['Size']}** สัญญา ที่ราคา **{trade_detail['Open_Price']}**")
+                    
+                    # ป้องกันกรณีคอลัมน์ไม่มีอยู่จริง
+                    status_val = trade_detail.get('Status', 'N/A')
+                    size_val = trade_detail.get('Size', 0)
+                    open_price_val = trade_detail.get('Open_Price', 0)
+                    
+                    st.info(f"🔍 รายละเอียดออเดอร์เดิม: **{status_val}** จำนวน **{size_val}** สัญญา ที่ราคา **{open_price_val}**")
                     
                     # ฟอร์มกรอกข้อมูลปิดสถานะ
                     c_col1, c_col2 = st.columns(2)
-                    close_price = c_col1.number_input("ราคาปิด:", value=float(trade_detail['Open_Price']), step=0.1, format="%.2f")
+                    
+                    # แปลง Open_Price เป็น float ป้องกัน error เวลาใส่ใน number_input
+                    default_open_price = pd.to_numeric(open_price_val, errors='coerce')
+                    if pd.isna(default_open_price):
+                        default_open_price = 0.0
+                        
+                    close_price = c_col1.number_input("ราคาปิด:", value=float(default_open_price), step=0.1, format="%.2f")
                     close_date = c_col2.date_input("วันที่ปิด:")
                     
                     if st.button("ยืนยันการปิดสถานะ", use_container_width=True, type="primary"):
