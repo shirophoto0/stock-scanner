@@ -245,10 +245,8 @@ IM_PER_CONTRACT = 13300
 def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     try:
         client = get_gsheet_client()
-        # ใช้ ID ที่ส่งมาจาก UI โดยตรง
         sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
         
-        # ดึงข้อมูลทั้งหมดมาเช็ค
         records = sheet.get_all_records()
         df = pd.DataFrame(records)
         
@@ -258,20 +256,41 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
             
         row_index = idx_list[0] + 2 
         
-        # คำนวณค่าก่อน Update
+        # คำนวณค่า
         trade_row = df.loc[idx_list[0]]
-        calc = calculate_tfex_result(float(trade_row['Open_Price']), close_price, int(trade_row['Size']), int(trade_row['Size']) * 50, trade_row['Status'])
+        calc = calculate_tfex_result(
+            float(trade_row['Open_Price']), 
+            close_price, 
+            int(trade_row['Size']), 
+            int(trade_row['Size']) * 50, # สมมติ Comm
+            trade_row['Status']
+        )
         
-        # ปรับปรุง: ใช้การ update แบบทีเดียวทั้งแถว (Batch) เพื่อลดการเรียก API หลายครั้ง
-        # สมมติลำดับคอลัมน์คือ: C=Date, H=Close, I=Realized, J=Comm, K=Net, L=Win/Lose
-        data_to_update = [date_close, close_price, calc['Realized'], int(trade_row['Size']) * 50, calc['Net_Profit'], calc['Win_Lose']]
+        # คำนวณ Points (สมมติว่า Long = (Close-Open), Short = (Open-Close))
+        points = (close_price - float(trade_row['Open_Price'])) if trade_row['Status'] == 'Long' else (float(trade_row['Open_Price']) - close_price)
         
-        # update ช่วงคอลัมน์ C ถึง L
-        sheet.update(range_name=f'C{row_index}:L{row_index}', values=[data_to_update])
+        # จัดลำดับข้อมูลให้ตรงกับ Header: C(Date_Close), D(Series), E(Status), F(Size), G(Open_Price), H(Close_Price), I(Realized), J(Comm), K(Net_Profit), L(Win_Lose), M(Points)
+        # เนื่องจากคุณต้องการอัปเดตตั้งแต่ Date_Close (คอลัมน์ C) ไปจนถึง Points (คอลัมน์ M)
+        data_to_update = [
+            date_close,          # C: Date_Close
+            trade_row['Series'], # D: Series (รักษาค่าเดิมไว้)
+            trade_row['Status'], # E: Status (รักษาค่าเดิมไว้)
+            trade_row['Size'],   # F: Size (รักษาค่าเดิมไว้)
+            trade_row['Open_Price'], # G: Open_Price (รักษาค่าเดิมไว้)
+            close_price,         # H: Close_Price
+            calc['Realized'],    # I: Realized
+            int(trade_row['Size']) * 50, # J: Comm
+            calc['Net_Profit'],  # K: Net_Profit
+            calc['Win_Lose'],    # L: Win_Lose
+            round(points, 2)     # M: Points
+        ]
+        
+        # อัปเดตช่วง C ถึง M
+        sheet.update(range_name=f'C{row_index}:M{row_index}', values=[data_to_update])
         
         return True
     except Exception as e:
-        print(f"Error Details: {e}") # ดู error จริงใน Log ของ Streamlit Cloud
+        print(f"Error Details: {e}")
         return False
 
 @st.cache_data(ttl=3600, show_spinner=False)
