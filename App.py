@@ -252,45 +252,53 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
         
         idx_list = df.index[df['Trade_ID'] == trade_id].tolist()
         if not idx_list:
+            print("Error: Trade_ID not found")
             return False
             
         row_index = idx_list[0] + 2 
-        
-        # คำนวณค่า
         trade_row = df.loc[idx_list[0]]
+        
+        # คำนวณผลลัพธ์
+        open_price_val = float(trade_row['Open_Price'])
+        size_val = int(trade_row['Size'])
+        comm_val = size_val * 50
+        
         calc = calculate_tfex_result(
-            float(trade_row['Open_Price']), 
-            close_price, 
-            int(trade_row['Size']), 
-            int(trade_row['Size']) * 50, # สมมติ Comm
-            trade_row['Status']
+            open_price_val, 
+            float(close_price), 
+            size_val, 
+            comm_val, 
+            str(trade_row['Status'])
         )
         
-        # คำนวณ Points (สมมติว่า Long = (Close-Open), Short = (Open-Close))
-        points = (close_price - float(trade_row['Open_Price'])) if trade_row['Status'] == 'Long' else (float(trade_row['Open_Price']) - close_price)
+        # คำนวณ Points
+        if str(trade_row['Status']) == 'Long':
+            points = float(close_price) - open_price_val
+        else:
+            points = open_price_val - float(close_price)
         
-        # จัดลำดับข้อมูลให้ตรงกับ Header: C(Date_Close), D(Series), E(Status), F(Size), G(Open_Price), H(Close_Price), I(Realized), J(Comm), K(Net_Profit), L(Win_Lose), M(Points)
-        # เนื่องจากคุณต้องการอัปเดตตั้งแต่ Date_Close (คอลัมน์ C) ไปจนถึง Points (คอลัมน์ M)
+        # ⭐️ สำคัญมาก: แปลงข้อมูลทั้งหมดให้เป็น Python Native Type (ป้องกัน TypeError จาก gspread)
         data_to_update = [
-            date_close,          # C: Date_Close
-            trade_row['Series'], # D: Series (รักษาค่าเดิมไว้)
-            trade_row['Status'], # E: Status (รักษาค่าเดิมไว้)
-            trade_row['Size'],   # F: Size (รักษาค่าเดิมไว้)
-            trade_row['Open_Price'], # G: Open_Price (รักษาค่าเดิมไว้)
-            close_price,         # H: Close_Price
-            calc['Realized'],    # I: Realized
-            int(trade_row['Size']) * 50, # J: Comm
-            calc['Net_Profit'],  # K: Net_Profit
-            calc['Win_Lose'],    # L: Win_Lose
-            round(points, 2)     # M: Points
+            str(date_close),                 # C: Date_Close
+            str(trade_row['Series']),        # D: Series
+            str(trade_row['Status']),        # E: Status
+            int(size_val),                   # F: Size
+            float(open_price_val),           # G: Open_Price
+            float(close_price),              # H: Close_Price
+            float(calc['Realized']),         # I: Realized
+            float(comm_val),                 # J: Comm
+            float(calc['Net_Profit']),       # K: Net_Profit
+            str(calc['Win_Lose']),           # L: Win_Lose
+            round(float(points), 2)          # M: Points
         ]
         
-        # อัปเดตช่วง C ถึง M
+        # อัปเดตข้อมูลลง Google Sheets แบบระบุ Range
         sheet.update(range_name=f'C{row_index}:M{row_index}', values=[data_to_update])
         
         return True
     except Exception as e:
-        print(f"Error Details: {e}")
+        # ปริ้น Error จริงออกมาดูใน Console ของ Streamlit Cloud
+        print(f"Detailed Error in update_trade_close: {e}")
         return False
 
 @st.cache_data(ttl=3600, show_spinner=False)
