@@ -2116,622 +2116,622 @@ def main():
                     
                 st.info("💡 **ข้อแนะนำจากระบบ:** หุ้นซุปเปอร์สต็อกตามสไตล์ Mark Minervini มักจะมี EPS Growth ขยายตัวมากกว่า 20%-25% ขึ้นไป ควบคู่กับราคาหุ้นที่ยกฐานยืนเหนือเส้น EMA ขาขึ้น")
         
-                with st.expander("⚙️ ตั้งค่าการแสดงผลกราฟ"):
-                    # 3. แสดงผลตารางและกราฟ
-                    # ... (เอาโค้ดส่วนแสดงผล st.dataframe และ st.plotly_chart มาใส่ตรงนี้) ...
-                    #####################################
+            with st.expander("⚙️ ตั้งค่าการแสดงผลกราฟ"):
+                # 3. แสดงผลตารางและกราฟ
+                # ... (เอาโค้ดส่วนแสดงผล st.dataframe และ st.plotly_chart มาใส่ตรงนี้) ...
+                #####################################
+            
+                st.markdown("##### ⚙️ ตั้งค่าการแสดงผลกราฟ")
+                col_tf, col_period = st.columns([1, 1])
                 
-                    st.markdown("##### ⚙️ ตั้งค่าการแสดงผลกราฟ")
-                    col_tf, col_period = st.columns([1, 1])
+                tf_mapping = {
+                    "1 ชม. (1hr)": "1h",
+                    "4 ชม. (4hr)": "4h",
+                    "1 วัน (Day)": "1d",
+                    "1 สัปดาห์ (Week)": "1wk",
+                    "1 เดือน (Month)": "1mo"
+                }
+                # เพิ่ม Mapping นี้ไว้ก่อนส่วนที่เรียก stock_data.history
+                p_map = {
+                    "6 เดือน (6m)": "6mo", 
+                    "1 ปี (1y)": "1y", 
+                    "5 ปี (5y)": "5y", 
+                    "ตั้งแต่เข้าตลาด (All Time)": "max"
+                }
+                
+                
+                with col_tf:
+                    tf_select = st.pills("เลือกความถี่แท่งเทียน (Timeframe):", options=list(tf_mapping.keys()), default="1 วัน (Day)")
+                    if not tf_select:
+                        tf_select = "1 วัน (Day)"
+                    selected_tf = tf_mapping[tf_select]
+                
+                with col_period:
+                    if selected_tf in ["1h", "4h"]:
+                        period_options = ["6 เดือน (6m)", "1 ปี (1y)"]
+                        chart_period = st.pills("เลือกช่วงเวลากราฟ (สั้น/กลาง):", options=period_options, default="6 เดือน (6m)")
+                    else:
+                        period_options = ["6 เดือน (6m)", "1 ปี (1y)", "5 ปี (5y)", "ตั้งแต่เข้าตลาด (All Time)"]
+                        chart_period = st.pills("เลือกช่วงเวลากราฟ (ทั้งหมด):", options=period_options, default="6 เดือน (6m)")
+                    if not chart_period:
+                        chart_period = "6 เดือน (6m)" if selected_tf in ["1h", "4h"] else "1 เดือน (1y)"
+                
+                # =============================================================
+                # 6. กราฟเทคนิคัล
+                # =============================================================
+                try:
+                    ticker = f"{st.session_state.selected_ticker}.BK"
+                    stock_data = yf.Ticker(ticker)
+                    set_market = yf.Ticker("^SET.BK")
+                    info = get_cached_stock_info(ticker)
                     
-                    tf_mapping = {
-                        "1 ชม. (1hr)": "1h",
-                        "4 ชม. (4hr)": "4h",
-                        "1 วัน (Day)": "1d",
-                        "1 สัปดาห์ (Week)": "1wk",
-                        "1 เดือน (Month)": "1mo"
-                    }
-                    # เพิ่ม Mapping นี้ไว้ก่อนส่วนที่เรียก stock_data.history
-                    p_map = {
-                        "6 เดือน (6m)": "6mo", 
-                        "1 ปี (1y)": "1y", 
-                        "5 ปี (5y)": "5y", 
-                        "ตั้งแต่เข้าตลาด (All Time)": "max"
-                    }
                     
+                    # 3.1 กำหนดช่วงเวลา 
+                    p_map = {"6 เดือน (6m)": "6mo", "1 ปี (1y)": "1y", "5 ปี (5y)": "5y", "ตั้งแต่เข้าตลาด (All Time)": "max"}
+                    selected_period = p_map.get(chart_period, "1y")
+                    actual_interval = "1h" if selected_tf == "4h" else selected_tf
                     
-                    with col_tf:
-                        tf_select = st.pills("เลือกความถี่แท่งเทียน (Timeframe):", options=list(tf_mapping.keys()), default="1 วัน (Day)")
-                        if not tf_select:
-                            tf_select = "1 วัน (Day)"
-                        selected_tf = tf_mapping[tf_select]
+                    # กันเหนียว: ถ้า TF สั้น (1h/4h) เลือก Period ยาวเกินไป ให้ตัดเหลือ 1 ปี เพื่อป้องกันกราฟไม่ขึ้น
+                    if selected_tf in ["1h", "4h"] and selected_period in ["5y", "max"]:
+                        selected_period = "1y"
+                
+                    # 3.2 ดึงข้อมูล
+                    hist_chart = stock_data.history(period=selected_period, interval=actual_interval)
+                    hist_market = set_market.history(period=selected_period, interval=actual_interval)
                     
-                    with col_period:
-                        if selected_tf in ["1h", "4h"]:
-                            period_options = ["6 เดือน (6m)", "1 ปี (1y)"]
-                            chart_period = st.pills("เลือกช่วงเวลากราฟ (สั้น/กลาง):", options=period_options, default="6 เดือน (6m)")
-                        else:
-                            period_options = ["6 เดือน (6m)", "1 ปี (1y)", "5 ปี (5y)", "ตั้งแต่เข้าตลาด (All Time)"]
-                            chart_period = st.pills("เลือกช่วงเวลากราฟ (ทั้งหมด):", options=period_options, default="6 เดือน (6m)")
-                        if not chart_period:
-                            chart_period = "6 เดือน (6m)" if selected_tf in ["1h", "4h"] else "1 เดือน (1y)"
-                    
-                    # =============================================================
-                    # 6. กราฟเทคนิคัล
-                    # =============================================================
-                    try:
-                        ticker = f"{st.session_state.selected_ticker}.BK"
-                        stock_data = yf.Ticker(ticker)
-                        set_market = yf.Ticker("^SET.BK")
-                        info = get_cached_stock_info(ticker)
+                    # กรณีดึงข้อมูลมาแล้วว่าง ให้ลองถอยกลับไปดึง period ที่สั้นลง (Fallback)
+                    if hist_chart.empty:
+                        hist_chart = stock_data.history(period="6mo", interval=actual_interval)
+                        hist_market = set_market.history(period="6mo", interval=actual_interval)
+                
+                    # 3.3 จัดการ Resample สำหรับ 4h
+                    if selected_tf == "4h" and not hist_chart.empty:
+                        conversion = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
+                        hist_chart = hist_chart.resample('4h').agg(conversion).ffill()
+                        hist_market = hist_market.resample('4h').agg(conversion).ffill()
                         
+                    if not hist_chart.empty:
+                        # ปรับ Timezone และรวมข้อมูล
+                        if hist_chart.index.tz is not None: hist_chart.index = hist_chart.index.tz_localize(None)
+                        if not hist_market.empty and hist_market.index.tz is not None: hist_market.index = hist_market.index.tz_localize(None)
+                
+                        hist_market_close = hist_market['Close'].to_frame(name='Market_Close')
+                        chart_combined = hist_chart[['Open', 'High', 'Low', 'Close']].join(hist_market_close, how='inner')
                         
-                        # 3.1 กำหนดช่วงเวลา 
-                        p_map = {"6 เดือน (6m)": "6mo", "1 ปี (1y)": "1y", "5 ปี (5y)": "5y", "ตั้งแต่เข้าตลาด (All Time)": "max"}
-                        selected_period = p_map.get(chart_period, "1y")
-                        actual_interval = "1h" if selected_tf == "4h" else selected_tf
-                        
-                        # กันเหนียว: ถ้า TF สั้น (1h/4h) เลือก Period ยาวเกินไป ให้ตัดเหลือ 1 ปี เพื่อป้องกันกราฟไม่ขึ้น
-                        if selected_tf in ["1h", "4h"] and selected_period in ["5y", "max"]:
-                            selected_period = "1y"
-                    
-                        # 3.2 ดึงข้อมูล
-                        hist_chart = stock_data.history(period=selected_period, interval=actual_interval)
-                        hist_market = set_market.history(period=selected_period, interval=actual_interval)
-                        
-                        # กรณีดึงข้อมูลมาแล้วว่าง ให้ลองถอยกลับไปดึง period ที่สั้นลง (Fallback)
-                        if hist_chart.empty:
-                            hist_chart = stock_data.history(period="6mo", interval=actual_interval)
-                            hist_market = set_market.history(period="6mo", interval=actual_interval)
-                    
-                        # 3.3 จัดการ Resample สำหรับ 4h
-                        if selected_tf == "4h" and not hist_chart.empty:
-                            conversion = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
-                            hist_chart = hist_chart.resample('4h').agg(conversion).ffill()
-                            hist_market = hist_market.resample('4h').agg(conversion).ffill()
+                        # คำนวณค่าเทคนิคัล
+                        base_stock = chart_combined['Close'].iloc[0]
+                        chart_combined['Stock_Perf'] = ((chart_combined['Close'] - base_stock) / base_stock) * 100
                             
-                        if not hist_chart.empty:
-                            # ปรับ Timezone และรวมข้อมูล
-                            if hist_chart.index.tz is not None: hist_chart.index = hist_chart.index.tz_localize(None)
-                            if not hist_market.empty and hist_market.index.tz is not None: hist_market.index = hist_market.index.tz_localize(None)
-                    
-                            hist_market_close = hist_market['Close'].to_frame(name='Market_Close')
-                            chart_combined = hist_chart[['Open', 'High', 'Low', 'Close']].join(hist_market_close, how='inner')
+                        base_market = chart_combined['Market_Close'].iloc[0]
+                        market_perf = ((chart_combined['Market_Close'] - base_market) / base_market) * 100
+                        chart_combined['RS_Line'] = chart_combined['Stock_Perf'] - market_perf
+                        chart_combined['RS_EMA20'] = chart_combined['RS_Line'].ewm(span=20, adjust=False).mean()
+                        chart_combined['Is_Above_0'] = chart_combined['RS_Line'] > 0
+                        chart_combined['Days_Above_0'] = chart_combined['Is_Above_0'].groupby((~chart_combined['Is_Above_0']).cumsum()).cumsum()
+                        chart_combined['EMA10'] = chart_combined['Close'].ewm(span=10, adjust=False).mean()
+                        chart_combined['EMA20'] = chart_combined['Close'].ewm(span=20, adjust=False).mean()
+                        chart_combined['EMA50'] = chart_combined['Close'].ewm(span=50, adjust=False).mean()
+                        chart_combined['EMA100'] = chart_combined['Close'].ewm(span=100, adjust=False).mean()
+                        chart_combined['EMA200'] = chart_combined['Close'].ewm(span=200, adjust=False).mean()
+                
+                        # สร้างตารางวันหยุด
+                        missing_dates = pd.date_range(start=chart_combined.index.min(), end=chart_combined.index.max(), freq='D').difference(pd.to_datetime(chart_combined.index.date))
+                
+                        # 3.5 แสดง Metrics
+                        latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
+                        latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
+                        with col_metrics:
+                            m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
                             
-                            # คำนวณค่าเทคนิคัล
-                            base_stock = chart_combined['Close'].iloc[0]
-                            chart_combined['Stock_Perf'] = ((chart_combined['Close'] - base_stock) / base_stock) * 100
-                                
-                            base_market = chart_combined['Market_Close'].iloc[0]
-                            market_perf = ((chart_combined['Market_Close'] - base_market) / base_market) * 100
-                            chart_combined['RS_Line'] = chart_combined['Stock_Perf'] - market_perf
-                            chart_combined['RS_EMA20'] = chart_combined['RS_Line'].ewm(span=20, adjust=False).mean()
-                            chart_combined['Is_Above_0'] = chart_combined['RS_Line'] > 0
-                            chart_combined['Days_Above_0'] = chart_combined['Is_Above_0'].groupby((~chart_combined['Is_Above_0']).cumsum()).cumsum()
-                            chart_combined['EMA10'] = chart_combined['Close'].ewm(span=10, adjust=False).mean()
-                            chart_combined['EMA20'] = chart_combined['Close'].ewm(span=20, adjust=False).mean()
-                            chart_combined['EMA50'] = chart_combined['Close'].ewm(span=50, adjust=False).mean()
-                            chart_combined['EMA100'] = chart_combined['Close'].ewm(span=100, adjust=False).mean()
-                            chart_combined['EMA200'] = chart_combined['Close'].ewm(span=200, adjust=False).mean()
-                    
-                            # สร้างตารางวันหยุด
-                            missing_dates = pd.date_range(start=chart_combined.index.min(), end=chart_combined.index.max(), freq='D').difference(pd.to_datetime(chart_combined.index.date))
-                    
-                            # 3.5 แสดง Metrics
-                            latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
-                            latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
-                            with col_metrics:
-                                m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
-                                
-                                # ปรับส่วนดึงข้อมูลปันผล
-                                raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
-                                
-                                if raw_div:
-                                    if raw_div > 1:
-                                        div_display = f"{raw_div:.2f}%"
-                                    else:
-                                        div_display = f"{raw_div * 100:.2f}%"
+                            # ปรับส่วนดึงข้อมูลปันผล
+                            raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
+                            
+                            if raw_div:
+                                if raw_div > 1:
+                                    div_display = f"{raw_div:.2f}%"
                                 else:
-                                    div_display = "N/A"
+                                    div_display = f"{raw_div * 100:.2f}%"
+                            else:
+                                div_display = "N/A"
+            
+                            # --- m1: ชื่อบริษัท ---
+                            m1.caption("ชื่อบริษัท")
+                            m1.write(f"**{info.get('longName', 'N/A')}**")
+                            
+                            # --- m2: ราคาล่าสุด ---
+                            m2.caption("ราคาล่าสุด")
+                            m2.write(f"**{latest_price_single:.2f} บ.**")
+                            
+                            # --- m3: สถานะ RS ---
+                            m3.caption("สถานะ RS")
+                            m3.write(f"**{'แข็งแกร่งกว่าตลาด' if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else 'อ่อนแอกว่าตลาด'}**")
+                            
+                            # --- m4: ปันผล (Yield) ---
+                            m4.caption("ปันผล (Yield)")
+                            m4.write(f"**{div_display}**")
+                                    
+                        # 3.4 วาดกราฟ
+                        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
+                        fig.add_trace(go.Candlestick(x=chart_combined.index, open=chart_combined['Open'], high=chart_combined['High'], low=chart_combined['Low'], close=chart_combined['Close'], name='Price'), row=1, col=1)
+                        
+                        ema_hover_config = dict(bgcolor='rgba(255, 255, 255, 0.20)', bordercolor='rgba(0,0,0,0)')
+                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA10'], line=dict(color='orange', width=1.5), name='EMA 10', hovertemplate="EMA10: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA20'], line=dict(color='magenta', width=1.5), name='EMA 20', hovertemplate="EMA20: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA50'], line=dict(color='blue', width=1.5), name='EMA 50', hovertemplate="EMA50: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA100'], line=dict(color='brown', width=1.5), name='EMA 100', hovertemplate="EMA100: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA200'], line=dict(color='black', width=2.0), name='EMA 200', hovertemplate="EMA200: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                        
+                        # กราฟ RS Line (Purple)
+                        fig.add_trace(go.Scatter(
+                            x=chart_combined.index, 
+                            y=chart_combined['RS_Line'], 
+                            line=dict(color='#9c27b0', width=2), 
+                            name='RS Line',
+                            hovertemplate="RS Line: %{y:.2f}%<extra></extra>"
+                        ), row=2, col=1)
+                        
+                        # กราฟ RS EMA 20 (Orange Dash)
+                        fig.add_trace(go.Scatter(
+                            x=chart_combined.index, 
+                            y=chart_combined['RS_EMA20'], 
+                            line=dict(color='#ff9800', width=1.5, dash='dot'), 
+                            name='RS EMA20',
+                            hovertemplate="RS EMA20: %{y:.2f}%<extra></extra>"
+                        ), row=2, col=1)
                 
-                                # --- m1: ชื่อบริษัท ---
-                                m1.caption("ชื่อบริษัท")
-                                m1.write(f"**{info.get('longName', 'N/A')}**")
-                                
-                                # --- m2: ราคาล่าสุด ---
-                                m2.caption("ราคาล่าสุด")
-                                m2.write(f"**{latest_price_single:.2f} บ.**")
-                                
-                                # --- m3: สถานะ RS ---
-                                m3.caption("สถานะ RS")
-                                m3.write(f"**{'แข็งแกร่งกว่าตลาด' if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else 'อ่อนแอกว่าตลาด'}**")
-                                
-                                # --- m4: ปันผล (Yield) ---
-                                m4.caption("ปันผล (Yield)")
-                                m4.write(f"**{div_display}**")
-                                        
-                            # 3.4 วาดกราฟ
-                            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
-                            fig.add_trace(go.Candlestick(x=chart_combined.index, open=chart_combined['Open'], high=chart_combined['High'], low=chart_combined['Low'], close=chart_combined['Close'], name='Price'), row=1, col=1)
-                            
-                            ema_hover_config = dict(bgcolor='rgba(255, 255, 255, 0.20)', bordercolor='rgba(0,0,0,0)')
-                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA10'], line=dict(color='orange', width=1.5), name='EMA 10', hovertemplate="EMA10: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA20'], line=dict(color='magenta', width=1.5), name='EMA 20', hovertemplate="EMA20: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA50'], line=dict(color='blue', width=1.5), name='EMA 50', hovertemplate="EMA50: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA100'], line=dict(color='brown', width=1.5), name='EMA 100', hovertemplate="EMA100: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA200'], line=dict(color='black', width=2.0), name='EMA 200', hovertemplate="EMA200: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                            
-                            # กราฟ RS Line (Purple)
-                            fig.add_trace(go.Scatter(
-                                x=chart_combined.index, 
-                                y=chart_combined['RS_Line'], 
-                                line=dict(color='#9c27b0', width=2), 
-                                name='RS Line',
-                                hovertemplate="RS Line: %{y:.2f}%<extra></extra>"
-                            ), row=2, col=1)
-                            
-                            # กราฟ RS EMA 20 (Orange Dash)
-                            fig.add_trace(go.Scatter(
-                                x=chart_combined.index, 
-                                y=chart_combined['RS_EMA20'], 
-                                line=dict(color='#ff9800', width=1.5, dash='dot'), 
-                                name='RS EMA20',
-                                hovertemplate="RS EMA20: %{y:.2f}%<extra></extra>"
-                            ), row=2, col=1)
-                    
-                            # เส้นอ้างอิงแนวนอน (Hline)
-                            fig.add_hline(y=0, line_dash="solid", line_color="grey", line_width=1, row=2, col=1)
-                            fig.add_hline(y=20, line_dash="dot", line_color="rgba(255, 0, 0, 0.3)", row=2, col=1)
-                            fig.add_hline(y=-20, line_dash="dot", line_color="rgba(0, 0, 255, 0.3)", row=2, col=1)
-                    
-                            # 1. ตั้งค่า Candlestick ให้แสดงข้อมูลพื้นฐาน
-                            fig.update_xaxes(
-                                    rangebreaks=[dict(values=missing_dates)],
-                                    showgrid=True,
-                                    gridcolor='rgba(150,150,150,0.08)',
-                                    showspikes=True,
-                                    spikecolor='#888',
-                                    spikethickness=1,
-                                    spikesnap='cursor',
-                                    spikemode='across'
-                                )
-                            fig.update_yaxes(
-                                    showgrid=True,
-                                    gridcolor='rgba(150,150,150,0.08)',
-                                    showspikes=True,
-                                    spikecolor='#888',
-                                    spikethickness=1,
-                                    spikesnap='cursor',
-                                    spikemode='across'
-                                )
-                            
-                            fig.update_layout(
-                        height=800,
-                        margin=dict(l=40, r=60, t=50, b=40), # เพิ่มขอบขวา (r=60) เพื่อให้มีที่ว่างสำหรับป้ายราคา
-                        hovermode='x unified',
-                        xaxis_rangeslider_visible=False,
-                        # ปรับแกน Y ให้แสดงป้ายราคาที่ "ชี้" ไปที่ราคาล่าสุด
-                        yaxis=dict(
-                            showspikes=False, # ปิด spike แกน Y เพื่อไม่ให้บังป้ายราคา
-                            side='right',     # ย้ายแกนราคาไปไว้ขวาเหมือน TradingView
-                            showgrid=True,
-                        )
+                        # เส้นอ้างอิงแนวนอน (Hline)
+                        fig.add_hline(y=0, line_dash="solid", line_color="grey", line_width=1, row=2, col=1)
+                        fig.add_hline(y=20, line_dash="dot", line_color="rgba(255, 0, 0, 0.3)", row=2, col=1)
+                        fig.add_hline(y=-20, line_dash="dot", line_color="rgba(0, 0, 255, 0.3)", row=2, col=1)
+                
+                        # 1. ตั้งค่า Candlestick ให้แสดงข้อมูลพื้นฐาน
+                        fig.update_xaxes(
+                                rangebreaks=[dict(values=missing_dates)],
+                                showgrid=True,
+                                gridcolor='rgba(150,150,150,0.08)',
+                                showspikes=True,
+                                spikecolor='#888',
+                                spikethickness=1,
+                                spikesnap='cursor',
+                                spikemode='across'
+                            )
+                        fig.update_yaxes(
+                                showgrid=True,
+                                gridcolor='rgba(150,150,150,0.08)',
+                                showspikes=True,
+                                spikecolor='#888',
+                                spikethickness=1,
+                                spikesnap='cursor',
+                                spikemode='across'
+                            )
+                        
+                        fig.update_layout(
+                    height=800,
+                    margin=dict(l=40, r=60, t=50, b=40), # เพิ่มขอบขวา (r=60) เพื่อให้มีที่ว่างสำหรับป้ายราคา
+                    hovermode='x unified',
+                    xaxis_rangeslider_visible=False,
+                    # ปรับแกน Y ให้แสดงป้ายราคาที่ "ชี้" ไปที่ราคาล่าสุด
+                    yaxis=dict(
+                        showspikes=False, # ปิด spike แกน Y เพื่อไม่ให้บังป้ายราคา
+                        side='right',     # ย้ายแกนราคาไปไว้ขวาเหมือน TradingView
+                        showgrid=True,
                     )
-                            st.plotly_chart(fig, use_container_width=True)
-                        # (แนะนำให้พี่อ้ำใช้โค้ดเดิมในส่วนนี้ได้เลยครับ ผมตัดมาให้สั้นลงเพื่อดูโครงสร้าง)
-                        # ...
-                    
-                    
-                    except Exception as e:
-                        st.error(f"⚠️ เกิดข้อผิดพลาดในการวาดกราฟ: {str(e)}")
-                # ==========================================
-                # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
-                # ==========================================
-                with tab_risk:
-                    st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
-    
-                    # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
-                    if "cash_balance" not in st.session_state:
-                        st.session_state.cash_balance = load_total_cash_balance()
-                    cash_balance = st.session_state.cash_balance
-                    market_value = get_total_market_value()
-                    total_equity = cash_balance + market_value
-                    
-                    st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
-                    col_a, col_b, col_c = st.columns(3)
-                    col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
-                    col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
-                    col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
-                    
-                    st.divider()
-                    
-                    # --- ส่วนป้องกัน Error: ดึงค่า EMA และตรวจสอบตาราง chart_combined อย่างปลอดภัย ---
-                    has_chart = 'chart_combined' in locals() and isinstance(chart_combined, pd.DataFrame) and not chart_combined.empty
-                    
-                    if has_chart and 'EMA10' in chart_combined.columns:
-                        ema10_val = float(chart_combined['EMA10'].iloc[-1])
-                        ema10_str = f"เส้น EMA 10 ({ema10_val:.2f} บาท)"
-                    else:
-                        ema10_val = 0.0
-                        ema10_str = "เส้น EMA 10 (ไม่มีข้อมูล)"
-    
-                    if has_chart and 'EMA20' in chart_combined.columns:
-                        ema20_val = float(chart_combined['EMA20'].iloc[-1])
-                        ema20_str = f"เส้น EMA 20 ({ema20_val:.2f} บาท)"
-                    else:
-                        ema20_val = 0.0
-                        ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
-                    # -------------------------------------------------------------
-    
-                    # 2. ส่วนการคำนวณ
-                    r_col1, r_col2 = st.columns([1, 1])
-    
-                    with r_col1:
-                        # --- ป้องกัน Error: ตรวจสอบและบังคับค่าเริ่มต้นไม่ให้ต่ำกว่า min_value (1000) ---
-                        try:
-                            safe_equity = int(total_equity)
-                        except (ValueError, TypeError):
-                            safe_equity = 1000
-                        
-                        if safe_equity < 1000:
-                            safe_equity = 1000
-                    
-                        total_cap = st.number_input(
-                            "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
-                            min_value=1000, 
-                            value=safe_equity, # ใช้ค่าที่ผ่านการตรวจสอบความปลอดภัยแล้ว
-                            step=1000,
-                            help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
-                        )
-                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
-                     
-                    with r_col2:
-                        # กำหนดค่าเริ่มต้นให้ปลอดภัยก่อน ถ้าตัวแปรไม่มีค่าให้เป็น 0.0
-                        try:
-                            latest_p = float(latest_price_single) if 'latest_price_single' in locals() and latest_price_single is not None else 0.0
-                        except (ValueError, TypeError):
-                            latest_p = 0.0
-                     
-                        sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
-                            ema10_str,
-                            ema20_str,
-                            "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
-                            "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
-                        ])
-                     
-                        # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
-                        if "EMA 10" in sl_type and ema10_val > 0:
-                            sl_price = ema10_val
-                        elif "EMA 20" in sl_type and ema20_val > 0:
-                            sl_price = ema20_val
-                        elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                            fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
-                            sl_price = latest_p * (1 - (fixed_sl_pct / 100))
-                        else: # Manual Price หรือกรณี EMA ไม่มีข้อมูล
-                            if "EMA" in sl_type and ema10_val == 0:
-                                st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
-                            sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
-                    # 3. คำนวณผลลัพธ์
-                    max_risk_money = total_cap * (risk_pct / 100)
-                    risk_per_share = latest_p - sl_price
-                    
-                    # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
-                    if risk_per_share <= 0:
-                        st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
-                    else:
-                        shares_to_buy = int(max_risk_money / risk_per_share)
-                        total_buy_value = shares_to_buy * latest_p
-                        
-                        st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
-                        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-                        res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
-                        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
-                        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
-                        res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
-                                            
-            #######################          
-                    st.markdown("---")
-                    st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
-    
-                    # 1. ดึงข้อมูลจาก journal_data มาแปลงเป็น DataFrame
-                    if 'journal_data' in st.session_state and st.session_state.journal_data:
-                        df_filtered = pd.DataFrame(st.session_state.journal_data)
-                    else:
-                        df_filtered = pd.DataFrame()
-    
-                    # แปลงคอลัมน์ 'กำไร/ขาดทุน (บาท)' ให้เป็นตัวเลขอย่างปลอดภัย (กันกรณีมีคอมมาหรือข้อความปน)
-                    if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
-                        df_filtered['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(
-                            df_filtered['กำไร/ขาดทุน (บาท)'].astype(str).str.replace(',', ''), 
-                            errors='coerce'
-                        ).fillna(0)
-    
-                    # 2. คำนวณ Exposure
-                    total_market_val = calculate_total_portfolio_value() 
-                    current_cash = st.session_state.get('cash_balance', 0.0)
-                    total_equity = total_market_val + current_cash
-                    
-                    exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
-                    
-                    # 3. คำนวณ Expectancy และแยกไม้ชนะ/แพ้
-                    if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
-                        wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
-                        losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
-                        
-                        win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
-                        avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
-                        avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
-                        loss_rate = 1 - win_rate
-                        
-                        expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
-                    else:
-                        win_rate = 0.0
-                        avg_win = 0.0
-                        avg_loss = 0.0
-                        loss_rate = 0.0
-                        expectancy = 0.0
-                    
-                    # 3. แสดงผลด้วย st.metric
-                    col_r1, col_r2 = st.columns(2)
-                    col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
-                    col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
-    
+                )
+                        st.plotly_chart(fig, use_container_width=True)
+                    # (แนะนำให้พี่อ้ำใช้โค้ดเดิมในส่วนนี้ได้เลยครับ ผมตัดมาให้สั้นลงเพื่อดูโครงสร้าง)
+                    # ...
                 
-                    # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
-                    def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
-                        fixed_capital = initial_capital
-                        fixed_balance = initial_capital
-                        comp_balance = initial_capital
-                        
-                        for i in range(trades):
-                            win = np.random.rand() < win_rate
-                            # คำนวณแบบไม่ทบต้น
-                            fixed_profit = (profit_pct * fixed_capital) if win else (-loss_pct * fixed_capital)
-                            fixed_balance += fixed_profit
-                            # คำนวณแบบทบต้น
-                            comp_profit = (profit_pct * comp_balance) if win else (-loss_pct * comp_balance)
-                            comp_balance += comp_profit
-                            
-                        return fixed_balance, comp_balance
-                    
-                    def show_strategy_analysis():
-                        st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
-                        initial_cap = 100000
-                        loss_pct = 0.08
-                        trades = 30
-                        win_rates = [0.4, 0.5, 0.6]
-                        profit_pcts = [0.10, 0.12, 0.14, 0.16]
-                    
-                        data = []
-                        for wr in win_rates:
-                            for pr in profit_pcts:
-                                wins = trades * wr
-                                losses = trades * (1 - wr)
-                                fixed_profit = (wins * pr * initial_cap) - (losses * loss_pct * initial_cap)
-                                
-                                comp_cap = initial_cap
-                                for i in range(trades):
-                                    if np.random.rand() < wr: comp_cap *= (1 + pr)
-                                    else: comp_cap *= (1 - loss_pct)
-                                
-                                data.append({
-                                    "Win Rate": f"{int(wr*100)}%",
-                                    "Profit %": f"{int(pr*100)}%",
-                                    "ไม่ทบต้น (กำไร)": f"{fixed_profit:,.0f}",
-                                    "ทบต้น (กำไร)": f"{comp_cap - initial_cap:,.0f}",
-                                    "กลยุทธ์ที่แนะนำ": "ทบต้น" if comp_cap > (initial_cap + fixed_profit) else "ไม่ทบต้น"
-                                })
-                        st.table(pd.DataFrame(data))
-                    
-                    # --- ส่วนแสดงผลความเสี่ยง ทบต้น VS ไม่ทบต้น ---
-                    st.markdown("---")
-                    
-                    st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
                 
-                    # เพิ่มส่วนเลือกช่วงเวลา
-                    time_period = st.radio(
-                        "เลือกช่วงเวลาที่ต้องการวิเคราะห์:",
-                        ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "Overall"],
-                        horizontal=True
-                    )
-                    
-                    if "journal_data" in st.session_state and st.session_state.journal_data:
-                        df_journal = pd.DataFrame(st.session_state.journal_data)
-                        # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime
-                        df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
-                        
-                        # คำนวณวันย้อนหลังตามช่วงเวลา
-                        today = pd.Timestamp.now()
-                        if time_period == "1 เดือน": filter_date = today - pd.Timedelta(days=30)
-                        elif time_period == "3 เดือน": filter_date = today - pd.Timedelta(days=90)
-                        elif time_period == "6 เดือน": filter_date = today - pd.Timedelta(days=180)
-                        elif time_period == "1 ปี": filter_date = today - pd.Timedelta(days=365)
-                        else: filter_date = pd.Timestamp('1900-01-01') # Overall
-                        
-                        # กรองข้อมูล
-                        df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date].copy()
-                        
-                        if not df_filtered.empty:
-                            # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
-                            # คำนวณ ROI% เองโดยตรงจาก df_filtered
-                            df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
-                            
-                            total_trades = len(df_filtered)
-                            win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
-                            loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
-                            
-                            win_rate_val = (len(win_trades) / total_trades) * 100
-                            avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
-                            avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
-                            rr_ratio = (avg_profit_val / avg_loss_val) if avg_loss_val != 0 else 0
-                            
-                            # แสดงผล
-                            col1, col2, col3 = st.columns(3)
-                            col1.metric("Win Rate", f"{win_rate_val:.1f}%")
-                            col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
-                            col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
-                            
-                            st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
-                        else:
-                            st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
-                            
-                    st.divider()
+                except Exception as e:
+                    st.error(f"⚠️ เกิดข้อผิดพลาดในการวาดกราฟ: {str(e)}")
+            # ==========================================
+            # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
+            # ==========================================
+            with tab_risk:
+                st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
+
+                # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
+                if "cash_balance" not in st.session_state:
+                    st.session_state.cash_balance = load_total_cash_balance()
+                cash_balance = st.session_state.cash_balance
+                market_value = get_total_market_value()
+                total_equity = cash_balance + market_value
                 
-                    # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
-                    with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
-                        # 1. ดึงข้อมูลจาก df_period มาคำนวณแบบสดๆ ตรงนี้เลย เพื่อความชัวร์ (ไม่ให้ไปดึงตัวแปรเก่าข้างนอกมาปน)
-                        if 'df_period' in locals() and not df_period.empty:
-                            col_pl_sim = 'กำไร/ขาดทุน (บาท)'
-                            col_cost_sim = 'ต้นทุน (บาท)'
-                            
-                            # คำนวณ Win Rate สดๆ
-                            wr_val = (df_period[col_pl_sim] > 0).mean() * 100
-                            
-                            # คำนวณ Avg Profit สดๆ
-                            p_mask = (df_period[col_pl_sim] > 0) & (df_period[col_cost_sim] > 0)
-                            p_series = (df_period.loc[p_mask, col_pl_sim] / df_period.loc[p_mask, col_cost_sim]) * 100
-                            pr_val = p_series.clip(upper=500).mean() if not p_series.empty else 10.0 # ค่าสำรองถ้าไม่มีข้อมูล
-                            
-                            # คำนวณ Avg Loss สดๆ (และบังคับให้เป็นบวกทันทีด้วย abs)
-                            l_mask = (df_period[col_pl_sim] <= 0) & (df_period[col_cost_sim] > 0)
-                            l_series = (df_period.loc[l_mask, col_pl_sim] / df_period.loc[l_mask, col_cost_sim]) * 100
-                            l_series = l_series[l_series >= -100] # กรองค่าเพี้ยน
-                            ls_val = abs(l_series.mean()) if not l_series.empty else 5.0 # ค่าสำรองถ้าไม่มีข้อมูล
-                        else:
-                            # ค่า Default เผื่อกรณีไม่มีข้อมูลในช่วงเวลานั้น
-                            wr_val, pr_val, ls_val = 50.0, 10.0, 5.0
-                    
-                        act_wr = wr_val / 100.0
-                        act_profit = pr_val / 100.0
-                        act_loss = ls_val / 100.0  # ตอนนี้ ls_val จะเป็นค่าบวกปกติ (เช่น 7.49%) หาร 100 จะได้ 0.0749
-                        
-                        # 2. สร้าง Range สำหรับจำลองตาราง
-                        wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
-                        pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
-                        
-                        sim_data = []
-                        for wr in wr_range:
-                            wr_display = max(0.0, min(1.0, wr)) 
-                            row = {"Win Rate": f"{wr_display*100:.1f}%"}
-                            for pr in pr_range:
-                                # คำนวณ Expected Value (EV) 
-                                ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
-                                
-                                # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%)
-                                row[f"{pr*100:.1f}% Profit"] = ev * 100 
-                                
-                            sim_data.append(row)
-                        
-                        # 3. เตรียมข้อมูลและเซต Index
-                        df_full = pd.DataFrame(sim_data)
-                        df_full = df_full.set_index("Win Rate")
-                        
-                        # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
-                        df_numeric = df_full.astype(float)
-                        
-                        # 5. สร้าง Styler และจัด Format เป็น %
-                        st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
-                        
-                        # 6. แสดงผลผ่านตาราง
-                        st.dataframe(st_table, use_container_width=True)
-                        
-                        st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูลที่ {ls_val:.2f}%")
-                    
-                # =============================================================
-                # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรองผ่าน Sidebar มาแล้ว)
-                # =============================================================
-                with st.expander("📊 ผลลัพธ์การสแกน"):
-                    # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
-                    # แก้ไขบรรทัดที่ 1152 เป็นแบบนี้ครับ
+                st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
+                col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
+                col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
+                
+                st.divider()
+                
+                # --- ส่วนป้องกัน Error: ดึงค่า EMA และตรวจสอบตาราง chart_combined อย่างปลอดภัย ---
+                has_chart = 'chart_combined' in locals() and isinstance(chart_combined, pd.DataFrame) and not chart_combined.empty
+                
+                if has_chart and 'EMA10' in chart_combined.columns:
+                    ema10_val = float(chart_combined['EMA10'].iloc[-1])
+                    ema10_str = f"เส้น EMA 10 ({ema10_val:.2f} บาท)"
+                else:
+                    ema10_val = 0.0
+                    ema10_str = "เส้น EMA 10 (ไม่มีข้อมูล)"
+
+                if has_chart and 'EMA20' in chart_combined.columns:
+                    ema20_val = float(chart_combined['EMA20'].iloc[-1])
+                    ema20_str = f"เส้น EMA 20 ({ema20_val:.2f} บาท)"
+                else:
+                    ema20_val = 0.0
+                    ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
+                # -------------------------------------------------------------
+
+                # 2. ส่วนการคำนวณ
+                r_col1, r_col2 = st.columns([1, 1])
+
+                with r_col1:
+                    # --- ป้องกัน Error: ตรวจสอบและบังคับค่าเริ่มต้นไม่ให้ต่ำกว่า min_value (1000) ---
                     try:
-                        # พยายามใช้ filtered_df ถ้ามี และมีค่า
-                        if 'filtered_df' in locals() and filtered_df is not None:
-                            df_scan = filtered_df.copy()
-                        # ถ้าไม่มี ให้ใช้ df_all_stocks แต่ต้องเช็คว่ามีอยู่จริงด้วย
-                        elif 'df_all_stocks' in locals() and df_all_stocks is not None:
-                            df_scan = df_all_stocks.copy()
-                        else:
-                            # กรณีแย่ที่สุด คือไม่มีข้อมูลเลย ให้สร้าง DataFrame เปล่าขึ้นมา
-                            df_scan = pd.DataFrame()
-                            st.error("ไม่พบข้อมูลหุ้นในระบบ กรุณาตรวจสอบการโหลดข้อมูล")
-                    except Exception as e:
-                        df_scan = pd.DataFrame()
-                        st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
-                
-                    df_scan = filtered_df.copy() if filtered_df is not None else df_all_stocks.copy()
+                        safe_equity = int(total_equity)
+                    except (ValueError, TypeError):
+                        safe_equity = 1000
                     
-                    # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
-                    if strategy_option == "3 Month High":
-                        final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
-                    elif strategy_option == "6 Month High":
-                        final_sorted_df = df_scan[df_scan['Is_6M_High'] == True]
-                    elif strategy_option == "52 Week High":
-                        final_sorted_df = df_scan[df_scan['Is_52W_High'] == True]
-                    elif strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
-                        final_sorted_df = df_scan[df_scan['Is_RS_Above_0'] == True]
-                    elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
-                        final_sorted_df = df_scan[df_scan['RS_Line'] >= df_scan['RS_Line_50D_Max']]
-                    else:
-                        final_sorted_df = df_scan
+                    if safe_equity < 1000:
+                        safe_equity = 1000
                 
-                    # 3. แสดงผลหัวข้อ
-                    st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): พบทั้งหมด {len(final_sorted_df)} ตัว")
-                    
-                    # 4. เลือกคอลัมน์ที่จะแสดง (Whitelist)
-                    fixed_cols = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
-                    strategy_cols_map = {
-                        "3 Month High": ['New_High_3M_มาแล้ว(วัน)'], 
-                        "6 Month High": ['New_High_6M_มาแล้ว(วัน)'],
-                        "52 Week High": ['New_High_52W_มาแล้ว(วัน)'],
-                        "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว": ['ตัดเส้น0ขึ้นมาแล้ว(วัน)'],
-                        "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)": ['อยู่ใต้เส้น0มาแล้ว(วัน)']
-                    }
-                    
-                    cols_to_show = fixed_cols + strategy_cols_map.get(strategy_option, [])
-                    existing_cols = [c for c in cols_to_show if c in final_sorted_df.columns]
-                    df_display = final_sorted_df[existing_cols].copy()
-                
-                    # 5. บังคับแปลงตัวเลขเพื่อจัดรูปแบบ
-                    numeric_cols = ['PE_Ratio', 'ปันผล_%', 'ราคาล่าสุด', 'RSI_14', 'RS_Line']
-                    for col in numeric_cols:
-                        if col in df_display.columns:
-                            df_display[col] = pd.to_numeric(df_display[col], errors='coerce')
-                    
-                    # 6. จัดรูปแบบตาราง
-                    styled_df = df_display.style.format({
-                        'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
-                        'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
-                    }, na_rep='-').apply(highlight_rsi_zones, axis=1)
-                
-                    # 7. แสดงตารางและดึง Event
-                    event = st.dataframe(
-                        styled_df,
-                        use_container_width=True,
-                        selection_mode="single-row",
-                        on_select="rerun",
-                        key="stock_table"
+                    total_cap = st.number_input(
+                        "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
+                        min_value=1000, 
+                        value=safe_equity, # ใช้ค่าที่ผ่านการตรวจสอบความปลอดภัยแล้ว
+                        step=1000,
+                        help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
                     )
+                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
+                 
+                with r_col2:
+                    # กำหนดค่าเริ่มต้นให้ปลอดภัยก่อน ถ้าตัวแปรไม่มีค่าให้เป็น 0.0
+                    try:
+                        latest_p = float(latest_price_single) if 'latest_price_single' in locals() and latest_price_single is not None else 0.0
+                    except (ValueError, TypeError):
+                        latest_p = 0.0
+                 
+                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", [
+                        ema10_str,
+                        ema20_str,
+                        "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
+                        "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
+                    ])
+                 
+                    # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
+                    if "EMA 10" in sl_type and ema10_val > 0:
+                        sl_price = ema10_val
+                    elif "EMA 20" in sl_type and ema20_val > 0:
+                        sl_price = ema20_val
+                    elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
+                        fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
+                        sl_price = latest_p * (1 - (fixed_sl_pct / 100))
+                    else: # Manual Price หรือกรณี EMA ไม่มีข้อมูล
+                        if "EMA" in sl_type and ema10_val == 0:
+                            st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
+                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
+                # 3. คำนวณผลลัพธ์
+                max_risk_money = total_cap * (risk_pct / 100)
+                risk_per_share = latest_p - sl_price
+                
+                # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
+                if risk_per_share <= 0:
+                    st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
+                else:
+                    shares_to_buy = int(max_risk_money / risk_per_share)
+                    total_buy_value = shares_to_buy * latest_p
                     
-                    # 8. ดึงข้อมูลการเลือกหุ้น (สรุปรวมเหลือบล็อกเดียว)
-                    if event.selection and "rows" in event.selection and event.selection["rows"]:
-                        selected_index = event.selection["rows"][0]
+                    st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
+                    res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+                    res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
+                    res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
+                    res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
+                    res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
+                                        
+        #######################          
+                st.markdown("---")
+                st.markdown("##### 🛡️ การบริหารความเสี่ยง (Risk Monitoring)")
+
+                # 1. ดึงข้อมูลจาก journal_data มาแปลงเป็น DataFrame
+                if 'journal_data' in st.session_state and st.session_state.journal_data:
+                    df_filtered = pd.DataFrame(st.session_state.journal_data)
+                else:
+                    df_filtered = pd.DataFrame()
+
+                # แปลงคอลัมน์ 'กำไร/ขาดทุน (บาท)' ให้เป็นตัวเลขอย่างปลอดภัย (กันกรณีมีคอมมาหรือข้อความปน)
+                if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
+                    df_filtered['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(
+                        df_filtered['กำไร/ขาดทุน (บาท)'].astype(str).str.replace(',', ''), 
+                        errors='coerce'
+                    ).fillna(0)
+
+                # 2. คำนวณ Exposure
+                total_market_val = calculate_total_portfolio_value() 
+                current_cash = st.session_state.get('cash_balance', 0.0)
+                total_equity = total_market_val + current_cash
+                
+                exposure_pct = (total_market_val / total_equity) * 100 if total_equity > 0 else 0
+                
+                # 3. คำนวณ Expectancy และแยกไม้ชนะ/แพ้
+                if not df_filtered.empty and 'กำไร/ขาดทุน (บาท)' in df_filtered.columns:
+                    wins = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] > 0]
+                    losses = df_filtered[df_filtered['กำไร/ขาดทุน (บาท)'] <= 0]
+                    
+                    win_rate = len(wins) / len(df_filtered) if len(df_filtered) > 0 else 0
+                    avg_win = wins['กำไร/ขาดทุน (บาท)'].mean() if len(wins) > 0 else 0
+                    avg_loss = abs(losses['กำไร/ขาดทุน (บาท)'].mean()) if len(losses) > 0 else 0
+                    loss_rate = 1 - win_rate
+                    
+                    expectancy = (win_rate * avg_win) - (loss_rate * avg_loss)
+                else:
+                    win_rate = 0.0
+                    avg_win = 0.0
+                    avg_loss = 0.0
+                    loss_rate = 0.0
+                    expectancy = 0.0
+                
+                # 3. แสดงผลด้วย st.metric
+                col_r1, col_r2 = st.columns(2)
+                col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
+                col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
+
+            
+                # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
+                def calculate_strategy(win_rate, profit_pct, loss_pct, trades=30, initial_capital=100000):
+                    fixed_capital = initial_capital
+                    fixed_balance = initial_capital
+                    comp_balance = initial_capital
+                    
+                    for i in range(trades):
+                        win = np.random.rand() < win_rate
+                        # คำนวณแบบไม่ทบต้น
+                        fixed_profit = (profit_pct * fixed_capital) if win else (-loss_pct * fixed_capital)
+                        fixed_balance += fixed_profit
+                        # คำนวณแบบทบต้น
+                        comp_profit = (profit_pct * comp_balance) if win else (-loss_pct * comp_balance)
+                        comp_balance += comp_profit
                         
-                        # ตรวจสอบว่า Index อยู่ในขอบเขตข้อมูลปัจจุบันหรือไม่
-                        if selected_index < len(final_sorted_df):
-                            clicked_ticker = final_sorted_df.iloc[selected_index]['Ticker']
+                    return fixed_balance, comp_balance
+                
+                def show_strategy_analysis():
+                    st.header("📊 ตารางเปรียบเทียบกลยุทธ์: ทบต้น vs ไม่ทบต้น")
+                    initial_cap = 100000
+                    loss_pct = 0.08
+                    trades = 30
+                    win_rates = [0.4, 0.5, 0.6]
+                    profit_pcts = [0.10, 0.12, 0.14, 0.16]
+                
+                    data = []
+                    for wr in win_rates:
+                        for pr in profit_pcts:
+                            wins = trades * wr
+                            losses = trades * (1 - wr)
+                            fixed_profit = (wins * pr * initial_cap) - (losses * loss_pct * initial_cap)
                             
-                            # ถ้าหุ้นที่เลือกเปลี่ยนไปจากเดิม ถึงจะสั่ง Rerun
-                            if st.session_state.get("selected_ticker") != clicked_ticker:
-                                st.session_state.selected_ticker = clicked_ticker
-                                st.rerun()
-                        else:
-                            # กรณีตารางถูกกรองจน Index เดิมหายไป (เช่น สลับหน้าเทรด) 
-                            # ล้างค่า Selection เก่าออกเพื่อความปลอดภัย
-                            if st.session_state.get("selected_ticker"):
-                                del st.session_state.selected_ticker
-                                st.rerun()
-                                
-            st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
+                            comp_cap = initial_cap
+                            for i in range(trades):
+                                if np.random.rand() < wr: comp_cap *= (1 + pr)
+                                else: comp_cap *= (1 - loss_pct)
+                            
+                            data.append({
+                                "Win Rate": f"{int(wr*100)}%",
+                                "Profit %": f"{int(pr*100)}%",
+                                "ไม่ทบต้น (กำไร)": f"{fixed_profit:,.0f}",
+                                "ทบต้น (กำไร)": f"{comp_cap - initial_cap:,.0f}",
+                                "กลยุทธ์ที่แนะนำ": "ทบต้น" if comp_cap > (initial_cap + fixed_profit) else "ไม่ทบต้น"
+                            })
+                    st.table(pd.DataFrame(data))
+                
+                # --- ส่วนแสดงผลความเสี่ยง ทบต้น VS ไม่ทบต้น ---
+                st.markdown("---")
+                
+                st.header("🧮 วิเคราะห์ความเสี่ยงและกลยุทธ์ ทบต้น VS ไม่ทบต้น")
+            
+                # เพิ่มส่วนเลือกช่วงเวลา
+                time_period = st.radio(
+                    "เลือกช่วงเวลาที่ต้องการวิเคราะห์:",
+                    ["1 เดือน", "3 เดือน", "6 เดือน", "1 ปี", "Overall"],
+                    horizontal=True
+                )
+                
+                if "journal_data" in st.session_state and st.session_state.journal_data:
+                    df_journal = pd.DataFrame(st.session_state.journal_data)
+                    # ตรวจสอบว่าคอลัมน์วันที่เป็น datetime
+                    df_journal['วันที่ขาย'] = pd.to_datetime(df_journal['วันที่ขาย'], errors='coerce')
+                    
+                    # คำนวณวันย้อนหลังตามช่วงเวลา
+                    today = pd.Timestamp.now()
+                    if time_period == "1 เดือน": filter_date = today - pd.Timedelta(days=30)
+                    elif time_period == "3 เดือน": filter_date = today - pd.Timedelta(days=90)
+                    elif time_period == "6 เดือน": filter_date = today - pd.Timedelta(days=180)
+                    elif time_period == "1 ปี": filter_date = today - pd.Timedelta(days=365)
+                    else: filter_date = pd.Timestamp('1900-01-01') # Overall
+                    
+                    # กรองข้อมูล
+                    df_filtered = df_journal[df_journal['วันที่ขาย'] >= filter_date].copy()
+                    
+                    if not df_filtered.empty:
+                        # --- ปรับ Logic การคำนวณให้ใช้ข้อมูลทั้งหมดที่กรองได้ ---
+                        # คำนวณ ROI% เองโดยตรงจาก df_filtered
+                        df_filtered['ROI_Percent'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
+                        
+                        total_trades = len(df_filtered)
+                        win_trades = df_filtered[df_filtered['ROI_Percent'] > 0]
+                        loss_trades = df_filtered[df_filtered['ROI_Percent'] <= 0]
+                        
+                        win_rate_val = (len(win_trades) / total_trades) * 100
+                        avg_profit_val = win_trades['ROI_Percent'].mean() if not win_trades.empty else 0
+                        avg_loss_val = abs(loss_trades['ROI_Percent'].mean()) if not loss_trades.empty else 0
+                        rr_ratio = (avg_profit_val / avg_loss_val) if avg_loss_val != 0 else 0
+                        
+                        # แสดงผล
+                        col1, col2, col3 = st.columns(3)
+                        col1.metric("Win Rate", f"{win_rate_val:.1f}%")
+                        col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
+                        col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+                        
+                        st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
+                    else:
+                        st.warning("ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
+                        
+                st.divider()
+            
+                # --- 3. ตารางเปรียบเทียบ (แบบซ่อนได้) ---
+                with st.expander("📊 ดูตาราง Simulation เทียบเคียง"):
+                    # 1. ดึงข้อมูลจาก df_period มาคำนวณแบบสดๆ ตรงนี้เลย เพื่อความชัวร์ (ไม่ให้ไปดึงตัวแปรเก่าข้างนอกมาปน)
+                    if 'df_period' in locals() and not df_period.empty:
+                        col_pl_sim = 'กำไร/ขาดทุน (บาท)'
+                        col_cost_sim = 'ต้นทุน (บาท)'
+                        
+                        # คำนวณ Win Rate สดๆ
+                        wr_val = (df_period[col_pl_sim] > 0).mean() * 100
+                        
+                        # คำนวณ Avg Profit สดๆ
+                        p_mask = (df_period[col_pl_sim] > 0) & (df_period[col_cost_sim] > 0)
+                        p_series = (df_period.loc[p_mask, col_pl_sim] / df_period.loc[p_mask, col_cost_sim]) * 100
+                        pr_val = p_series.clip(upper=500).mean() if not p_series.empty else 10.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                        
+                        # คำนวณ Avg Loss สดๆ (และบังคับให้เป็นบวกทันทีด้วย abs)
+                        l_mask = (df_period[col_pl_sim] <= 0) & (df_period[col_cost_sim] > 0)
+                        l_series = (df_period.loc[l_mask, col_pl_sim] / df_period.loc[l_mask, col_cost_sim]) * 100
+                        l_series = l_series[l_series >= -100] # กรองค่าเพี้ยน
+                        ls_val = abs(l_series.mean()) if not l_series.empty else 5.0 # ค่าสำรองถ้าไม่มีข้อมูล
+                    else:
+                        # ค่า Default เผื่อกรณีไม่มีข้อมูลในช่วงเวลานั้น
+                        wr_val, pr_val, ls_val = 50.0, 10.0, 5.0
+                
+                    act_wr = wr_val / 100.0
+                    act_profit = pr_val / 100.0
+                    act_loss = ls_val / 100.0  # ตอนนี้ ls_val จะเป็นค่าบวกปกติ (เช่น 7.49%) หาร 100 จะได้ 0.0749
+                    
+                    # 2. สร้าง Range สำหรับจำลองตาราง
+                    wr_range = [act_wr - 0.10, act_wr - 0.05, act_wr, act_wr + 0.05, act_wr + 0.10]
+                    pr_range = [act_profit - 0.05, act_profit - 0.025, act_profit, act_profit + 0.025, act_profit + 0.05]
+                    
+                    sim_data = []
+                    for wr in wr_range:
+                        wr_display = max(0.0, min(1.0, wr)) 
+                        row = {"Win Rate": f"{wr_display*100:.1f}%"}
+                        for pr in pr_range:
+                            # คำนวณ Expected Value (EV) 
+                            ev = (wr_display * pr) - ((1.0 - wr_display) * act_loss)
+                            
+                            # แปลงค่า EV กลับเป็นเปอร์เซ็นต์ (%)
+                            row[f"{pr*100:.1f}% Profit"] = ev * 100 
+                            
+                        sim_data.append(row)
+                    
+                    # 3. เตรียมข้อมูลและเซต Index
+                    df_full = pd.DataFrame(sim_data)
+                    df_full = df_full.set_index("Win Rate")
+                    
+                    # 4. แปลงข้อมูลเป็นตัวเลขเพื่อทำ Style
+                    df_numeric = df_full.astype(float)
+                    
+                    # 5. สร้าง Styler และจัด Format เป็น %
+                    st_table = df_numeric.style.background_gradient(cmap="RdYlGn", axis=None).format("{:.2f}%")
+                    
+                    # 6. แสดงผลผ่านตาราง
+                    st.dataframe(st_table, use_container_width=True)
+                    
+                    st.caption(f"ตารางแสดง Expected Return (%) ต่อไม้ โดยอ้างอิงจาก Avg Loss ฐานข้อมูลที่ {ls_val:.2f}%")
+                
+            # =============================================================
+            # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรองผ่าน Sidebar มาแล้ว)
+            # =============================================================
+            with st.expander("📊 ผลลัพธ์การสแกน"):
+                # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
+                # แก้ไขบรรทัดที่ 1152 เป็นแบบนี้ครับ
+                try:
+                    # พยายามใช้ filtered_df ถ้ามี และมีค่า
+                    if 'filtered_df' in locals() and filtered_df is not None:
+                        df_scan = filtered_df.copy()
+                    # ถ้าไม่มี ให้ใช้ df_all_stocks แต่ต้องเช็คว่ามีอยู่จริงด้วย
+                    elif 'df_all_stocks' in locals() and df_all_stocks is not None:
+                        df_scan = df_all_stocks.copy()
+                    else:
+                        # กรณีแย่ที่สุด คือไม่มีข้อมูลเลย ให้สร้าง DataFrame เปล่าขึ้นมา
+                        df_scan = pd.DataFrame()
+                        st.error("ไม่พบข้อมูลหุ้นในระบบ กรุณาตรวจสอบการโหลดข้อมูล")
+                except Exception as e:
+                    df_scan = pd.DataFrame()
+                    st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
+            
+                df_scan = filtered_df.copy() if filtered_df is not None else df_all_stocks.copy()
+                
+                # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
+                if strategy_option == "3 Month High":
+                    final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
+                elif strategy_option == "6 Month High":
+                    final_sorted_df = df_scan[df_scan['Is_6M_High'] == True]
+                elif strategy_option == "52 Week High":
+                    final_sorted_df = df_scan[df_scan['Is_52W_High'] == True]
+                elif strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
+                    final_sorted_df = df_scan[df_scan['Is_RS_Above_0'] == True]
+                elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
+                    final_sorted_df = df_scan[df_scan['RS_Line'] >= df_scan['RS_Line_50D_Max']]
+                else:
+                    final_sorted_df = df_scan
+            
+                # 3. แสดงผลหัวข้อ
+                st.subheader(f"📊 ผลลัพธ์การสแกน ({strategy_option}): พบทั้งหมด {len(final_sorted_df)} ตัว")
+                
+                # 4. เลือกคอลัมน์ที่จะแสดง (Whitelist)
+                fixed_cols = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
+                strategy_cols_map = {
+                    "3 Month High": ['New_High_3M_มาแล้ว(วัน)'], 
+                    "6 Month High": ['New_High_6M_มาแล้ว(วัน)'],
+                    "52 Week High": ['New_High_52W_มาแล้ว(วัน)'],
+                    "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว": ['ตัดเส้น0ขึ้นมาแล้ว(วัน)'],
+                    "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)": ['อยู่ใต้เส้น0มาแล้ว(วัน)']
+                }
+                
+                cols_to_show = fixed_cols + strategy_cols_map.get(strategy_option, [])
+                existing_cols = [c for c in cols_to_show if c in final_sorted_df.columns]
+                df_display = final_sorted_df[existing_cols].copy()
+            
+                # 5. บังคับแปลงตัวเลขเพื่อจัดรูปแบบ
+                numeric_cols = ['PE_Ratio', 'ปันผล_%', 'ราคาล่าสุด', 'RSI_14', 'RS_Line']
+                for col in numeric_cols:
+                    if col in df_display.columns:
+                        df_display[col] = pd.to_numeric(df_display[col], errors='coerce')
+                
+                # 6. จัดรูปแบบตาราง
+                styled_df = df_display.style.format({
+                    'ราคาล่าสุด': '{:.2f}', 'RSI_14': '{:.2f}', 'RS_Line': '{:.2f}', 
+                    'PE_Ratio': '{:.2f}', 'ปันผล_%': '{:.2f}'
+                }, na_rep='-').apply(highlight_rsi_zones, axis=1)
+            
+                # 7. แสดงตารางและดึง Event
+                event = st.dataframe(
+                    styled_df,
+                    use_container_width=True,
+                    selection_mode="single-row",
+                    on_select="rerun",
+                    key="stock_table"
+                )
+                
+                # 8. ดึงข้อมูลการเลือกหุ้น (สรุปรวมเหลือบล็อกเดียว)
+                if event.selection and "rows" in event.selection and event.selection["rows"]:
+                    selected_index = event.selection["rows"][0]
+                    
+                    # ตรวจสอบว่า Index อยู่ในขอบเขตข้อมูลปัจจุบันหรือไม่
+                    if selected_index < len(final_sorted_df):
+                        clicked_ticker = final_sorted_df.iloc[selected_index]['Ticker']
+                        
+                        # ถ้าหุ้นที่เลือกเปลี่ยนไปจากเดิม ถึงจะสั่ง Rerun
+                        if st.session_state.get("selected_ticker") != clicked_ticker:
+                            st.session_state.selected_ticker = clicked_ticker
+                            st.rerun()
+                    else:
+                        # กรณีตารางถูกกรองจน Index เดิมหายไป (เช่น สลับหน้าเทรด) 
+                        # ล้างค่า Selection เก่าออกเพื่อความปลอดภัย
+                        if st.session_state.get("selected_ticker"):
+                            del st.session_state.selected_ticker
+                            st.rerun()
+                            
+        st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
             
         # 1. ส่วนหุ้น
         with tab_stock:
