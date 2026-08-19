@@ -5151,8 +5151,9 @@ def main():
                 
                 if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
                     # 1. จัดเตรียมข้อมูล
-                    closed_trades = tfex_df[tfex_df['Close_Price'] > 0].copy()
-                    closed_trades['Date_Close'] = pd.to_datetime(closed_trades['Date_Close'])
+                    # แปลงคอลัมน์ Close_Price เป็นตัวเลขก่อนเปรียบเทียบ > 0 ป้องกัน TypeError
+                    close_prices_5154 = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+                    closed_trades = tfex_df[close_prices_5154 > 0].copy()
                     
                     # 3. ตารางแสดงราย Series (เปรียบเทียบว่า Series ไหนเทรดแล้วกำไรที่สุด)
                     st.write("📊 สรุปผลงานราย Series:")
