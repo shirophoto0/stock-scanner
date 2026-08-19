@@ -5046,27 +5046,37 @@ def main():
                         # คำนวณราคา Stop Loss จริงบนกระดาน โดยใช้ calculated_sl_pts ที่คำนวณจาก user_atr
                         calculated_sl_price = (entry - calculated_sl_pts) if Status == "Long" else (entry + calculated_sl_pts)
                             
+                        required_columns = [
+                            "Trade_ID", "Date_Open", "Date_Close", "Series", "Status", 
+                            "Size", "Open_Price", "Close_Price", "Realized", 
+                            "Comm", "Net_Profit", "Win_Lose", "Points", "Reason"
+                        ]
+                        
+                        # สร้าง Dictionary ใหม่ที่มั่นใจว่ามีครบทุกคอลัมน์ (เผื่ออนาคตมีการเพิ่ม/ลด)
                         new_record = {
                             "Trade_ID": final_trade_id,
                             "Date_Open": date_open.strftime("%Y-%m-%d"),
-                            "Date_Close": "",          
+                            "Date_Close": "",
                             "Series": series,
                             "Status": Status,
                             "Size": size,
                             "Open_Price": entry,
-                            "Close_Price": 0,          
-                            "Realized": 0,            
-                            "Comm": comm_input,        
+                            "Close_Price": 0,
+                            "Realized": 0,
+                            "Comm": comm_input,
                             "Net_Profit": 0,
-                            "Win_Lose": "",            
+                            "Win_Lose": "",
+                            "Points": 0,  # เพิ่มคอลัมน์ Points ที่ขาดไปใน dictionary เดิม
                             "Reason": f"{reason} | ATR SL: {calculated_sl_price:.2f}"
                         }
                         
+                        # สร้าง DataFrame และ Reindex ให้ตรงเป๊ะ
                         df_to_save = pd.DataFrame([new_record])
+                        df_to_save = df_to_save.reindex(columns=required_columns)
                         
                         with st.spinner("⏳ กำลังเปิดสถานะและบันทึกลง Google Sheets..."):
                             if save_data_to_sheet(df_to_save, "TFEX_History"):
-                                st.cache_data.clear()  
+                                st.cache_data.clear()
                                 st.toast("เปิดสถานะเทรดเรียบร้อย! 🎉", icon="✅")
                                 st.rerun()
                                 
@@ -5076,8 +5086,9 @@ def main():
                 # ดึงข้อมูลจากฟังก์ชัน load_data สดๆ ใหม่ๆ
                 tfex_df = load_data("TFEX_History")
                 
-                # ตรวจสอบและกรองเฉพาะรายการที่ยังถืออยู่ (ปลอดภัยจาก TypeError)
+                # ตรวจสอบว่ามีข้อมูลและคอลัมน์ที่จำเป็นอยู่ครบถ้วนหรือไม่
                 if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
+                    # แปลง Close_Price เป็นตัวเลข (ถ้าค่าว่าง, ไม่มี หรือเป็น 0 จะนับว่ายังไม่ปิดสถานะ)
                     tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
                     open_trades = tfex_df[tfex_df['Close_Price_Cleaned'] == 0]
                 else:
@@ -5087,37 +5098,41 @@ def main():
                     # ให้เลือก Trade_ID
                     selected_trade_id = st.selectbox("เลือก Trade ที่ต้องการปิด:", open_trades['Trade_ID'].tolist())
                     
-                    # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด
+                    # แสดงรายละเอียดออเดอร์เดิมให้เห็นก่อนปิด (ดึงตาม Header จริงของคุณ)
                     trade_detail = open_trades[open_trades['Trade_ID'] == selected_trade_id].iloc[0]
                     
-                    # ป้องกันกรณีคอลัมน์ไม่มีอยู่จริง
                     status_val = trade_detail.get('Status', 'N/A')
                     size_val = trade_detail.get('Size', 0)
                     open_price_val = trade_detail.get('Open_Price', 0)
+                    series_val = trade_detail.get('Series', 'N/A')
                     
-                    st.info(f"🔍 รายละเอียดออเดอร์เดิม: **{status_val}** จำนวน **{size_val}** สัญญา ที่ราคา **{open_price_val}**")
+                    st.info(f"🔍 รายละเอียด: ซีรีส์ **{series_val}** | สถานะ: **{status_val}** | จำนวน: **{size_val}** สัญญา | ราคาเปิด: **{open_price_val}**")
                     
                     # ฟอร์มกรอกข้อมูลปิดสถานะ
                     c_col1, c_col2 = st.columns(2)
                     
-                    # แปลง Open_Price เป็น float ป้องกัน error เวลาใส่ใน number_input
+                    # แปลง Open_Price เป็น float สำหรับค่าเริ่มต้นใน number_input
                     default_open_price = pd.to_numeric(open_price_val, errors='coerce')
                     if pd.isna(default_open_price):
                         default_open_price = 0.0
                         
-                    close_price = c_col1.number_input("ราคาปิด:", value=float(default_open_price), step=0.1, format="%.2f")
-                    close_date = c_col2.date_input("วันที่ปิด:")
+                    close_price = c_col1.number_input("ราคาปิด (Close_Price):", value=float(default_open_price), step=0.1, format="%.2f")
+                    close_date = c_col2.date_input("วันที่ปิด (Date_Close):")
                     
                     if st.button("ยืนยันการปิดสถานะ", use_container_width=True, type="primary"):
                         # บันทึกปิดสถานะพร้อม Loading Spinner และล้าง Cache ทันที
                         with st.spinner("⏳ กำลังบันทึกการปิดสถานะและคำนวณผลลัพธ์..."):
+                            # ส่งค่าไปอัปเดต (ตรวจสอบให้แน่ใจว่าฟังก์ชัน update_trade_close รับพารามิเตอร์ตามนี้)
                             success = update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
+                            
                             if success:
                                 st.cache_data.clear()  # ล้าง Cache ข้อมูลในหน่วยความจำ
                                 st.toast("ปิดสถานะสำเร็จ และคำนวณกำไรเรียบร้อย! 🏁", icon="🏆")
                                 st.rerun()             # โหลดหน้าจอใหม่เพื่อให้ข้อมูลปัจจุบันที่สุดแสดงทันที
+                            else:
+                                st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลลงฐานข้อมูล กรุณาลองใหม่อีกครั้ง")
                 else:
-                    st.info("ไม่มีรายการที่ถือครองอยู่ครับ")
+                    st.info("ไม่มีรายการที่ถือครองอยู่ครับ (ไม่พบรายการที่ Close_Price เป็นค่าว่างหรือ 0)")
                     
             with sub_tfex_cash:
                 st.subheader("💰 บันทึกเติม/ถอนเงิน")
