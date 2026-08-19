@@ -5707,8 +5707,10 @@ def main():
                         def get_ws_with_retry(ws_name, max_retries=3):
                             for i in range(max_retries):
                                 try:
-                                    return pd.DataFrame(client.open('MyStockData').worksheet(ws_name).get_all_records())
-                                except Exception:
+                                    records = client.open('MyStockData').worksheet(ws_name).get_all_records()
+                                    return pd.DataFrame(records)
+                                except Exception as ex:
+                                    print(f"Error loading {ws_name}: {ex}")
                                     if i == max_retries - 1: return pd.DataFrame()
                                     time.sleep(1 + i) 
                             return pd.DataFrame()
@@ -5717,21 +5719,27 @@ def main():
                                 get_ws_with_retry('Coop'), get_ws_with_retry('Bank_Account'), 
                                 get_ws_with_retry('SSO'), get_ws_with_retry('Fund_History'), 
                                 get_ws_with_retry('Stock_TFEX_History'))
-                
+                    
                     df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist = fetch_all_wealth_data()
-                            
+                    
+                    # 🔍 เปิดบรรทัดล่างนี้ไว้ชั่วคราวเพื่อดูว่า DataFrame ไหนว่างเปล่า (เช็คในหน้าจอแอปได้เลย)
+                    # st.write("Check Dataframes:", {"PVD": df_pvd.empty, "Ins": df_ins.empty, "Coop": df_coop.empty, "Bank": df_bank.empty, "SSO": df_sso.empty, "MF": df_mf.empty, "Port": df_portfolio_hist.empty})
+                        
                     def prepare_series(df, date_col, val_col, name):
                         df = df.copy()
-                        if df.empty: return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
+                        if df.empty or date_col not in df.columns or val_col not in df.columns: 
+                            return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
+                        
                         if date_col == 'Month':
                             thai_months = {'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04', 'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08', 'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'}
-                            df['Month_Num'] = df[date_col].map(thai_months).fillna('12')
+                            df['Month_Num'] = df[date_col].astype(str).map(thai_months).fillna('12')
                             df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df['Month_Num'] + '-01', errors='coerce')
                         else:
                             df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
-                        df[name] = df[val_col].astype(str).str.replace(',', '').astype(float)
+                            
+                        df[name] = pd.to_numeric(df[val_col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
                         return df.dropna(subset=['Date']).set_index('Date')[[name]]
-                
+                    
                     s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
                     s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
                     s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
@@ -5739,14 +5747,14 @@ def main():
                     s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
                     s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund')
                     s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
-                
+                    
                     if not s_ins.empty and not s_sso.empty:
                         s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
                         s_ins['Insurance'] = s_ins['Insurance'] + s_ins['SSO']
                         s_ins = s_ins[['Insurance']]
                     elif s_ins.empty and not s_sso.empty:
                         s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
-                
+                    
                     series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port] if not s.empty]
                     
                     if series_list:
@@ -5754,7 +5762,7 @@ def main():
                         for s in series_list[1:]: df_merged = df_merged.join(s, how='outer')
                         df_merged = df_merged.sort_index().ffill().fillna(0)
                         df_merged['Total'] = df_merged.sum(axis=1)
-                
+                        
                         import plotly.graph_objects as go
                         fig = go.Figure()
                         for col in df_merged.columns:
@@ -5765,7 +5773,7 @@ def main():
                         
                         st.plotly_chart(fig, use_container_width=True, key="net_worth_trend_chart_final")
                     else:
-                        st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
+                        st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม (ทุกชีทส่งค่าว่างกลับมา)")
                 except Exception as e:
                     st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
 
