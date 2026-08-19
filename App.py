@@ -4741,11 +4741,22 @@ def main():
             cash_df = load_data("Cash_Flow")
             
             # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
-            # สมมติว่าถ้ายังไม่ปิด Close_Price จะเป็น 0 หรือเป็นค่าว่าง
-            # หากคอลัมน์พี่อ้ำชื่ออื่น (เช่น 'Status' ที่บอกว่า 'Open') ให้เปลี่ยนในบรรทัดถัดไปครับ
-            closed_trades = tfex_df[tfex_df['Close_Price'] > 0] if not tfex_df.empty and 'Close_Price' in tfex_df.columns else tfex_df
-            total_pnl = closed_trades['Net_Profit'].sum() if not closed_trades.empty and 'Net_Profit' in closed_trades.columns else 0
+            if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
+                # แปลงคอลัมน์ Close_Price ให้เป็นตัวเลขก่อน (errors='coerce' จะเปลี่ยนค่าที่อ่านไม่ได้เป็น NaN)
+                # จากนั้น fillna(0) เพื่อเปลี่ยน NaN ให้เป็น 0 จะได้เปรียบเทียบ > 0 ได้
+                close_prices = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+                
+                # กรองเอาเฉพาะที่ราคามากกว่า 0
+                closed_trades = tfex_df[close_prices > 0].copy()
+            else:
+                closed_trades = tfex_df.copy()
             
+            # คำนวณ Net_Profit
+            if not closed_trades.empty and 'Net_Profit' in closed_trades.columns:
+                # แปลง Net_Profit เป็นตัวเลขด้วย เพื่อป้องกัน error ในอนาคต
+                total_pnl = pd.to_numeric(closed_trades['Net_Profit'], errors='coerce').sum()
+            else:
+                total_pnl = 0
             # 3. คำนวณเงินต้นสุทธิ
             # ใช้ .astype(str).str.lower() เพื่อป้องกันปัญหาตัวอักษรพิมพ์เล็ก/ใหญ่
             total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum() if not cash_df.empty else 0
