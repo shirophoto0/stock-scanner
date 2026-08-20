@@ -6077,7 +6077,11 @@ def main():
                 # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
                 st.markdown("---")
                 st.subheader("📊 กราฟแสดง % ผลตอบแทนรายบุคคล (YTD Net Return %)")
+
+                # --- ประกาศตัวแปรเริ่มต้นให้เป็น None ไว้ก่อน ---
+                chart_bar = None
                 df_monthly = pd.DataFrame()
+                
                 if not df_pvd_history.empty:
                     try:
                         def clean_num(series):
@@ -6091,7 +6095,6 @@ def main():
                                 errors='coerce'
                             ).fillna(0.0)
                 
-                        # 1. ทำความสะอาดค่าตัวเลข YTD Return
                         if 'YTD_Net_Return_Pct' in df_pvd_history.columns:
                             chart_col = 'YTD_Net_Return_Pct'
                             df_pvd_history[chart_col] = clean_num(df_pvd_history[chart_col])
@@ -6113,44 +6116,31 @@ def main():
                                 'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
                             }
                             
-                            # ใช้ชื่อตัวแปร df_monthly ให้ตรงกับที่บรรทัดอื่นเรียกใช้ต่อ
                             df_monthly = df_pvd_history.copy()
                             
                             if 'Month' in df_monthly.columns and 'Year_BE' in df_monthly.columns:
                                 df_monthly['Clean_Month'] = df_monthly['Month'].astype(str).str.strip()
                                 df_monthly['Month_Num'] = df_monthly['Clean_Month'].map(month_map)
-                                
-                                # แปลงปี พ.ศ. เป็น ค.ศ. เพื่อสร้างลำดับเวลา
                                 df_monthly['Year_CE'] = pd.to_numeric(df_monthly['Year_BE'], errors='coerce') - 543
-                                
-                                # สร้าง Date Object สำหรับใช้เรียงลำดับเป๊ะๆ
                                 df_monthly['Date_Obj'] = pd.to_datetime(
                                     df_monthly['Year_CE'].astype(str) + '-' + df_monthly['Month_Num'].astype(str).str.zfill(2) + '-01',
                                     errors='coerce'
                                 )
-                                
-                                # เรียงข้อมูลตามเวลาจริงจากเก่าไปใหม่
                                 df_monthly = df_monthly.sort_values('Date_Obj')
-                                
-                                # สร้างคอลัมน์ Period สำหรับโชว์บนกราฟ
                                 df_monthly['Period_Label'] = df_monthly['Clean_Month'] + " " + df_monthly['Year_BE'].astype(str)
-                                
-                                # ดึง List ของ Period_Label ที่เรียงลำดับแล้วมาบังคับให้กราฟแสดงผลตามนี้
                                 sorted_periods = df_monthly['Period_Label'].tolist()
                                 
-                                # 2. สร้างกราฟด้วย Altair พร้อมกำหนดความกว้างแท่ง (width=25) ตามเดิมที่คุณเคยเขียนไว้
+                                # สร้างกราฟและเก็บไว้ในตัวแปร chart_bar
                                 chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
                                     x=alt.X('Period_Label:N', sort=sorted_periods, title='ช่วงเวลา'),
                                     y=alt.Y(f'{chart_col}:Q', title='YTD Net Return (%)'),
                                     tooltip=['Period_Label', chart_col]
-                                ).properties(
-                                    height=400
-                                )
+                                ).properties(height=400)
                                 
+                                # แสดงผลที่นี่ได้เลย
                                 st.altair_chart(chart_bar, use_container_width=True)
                             else:
                                 st.info("💡 ไม่พบคอลัมน์ Month หรือ Year_BE ในข้อมูล")
-                                
                         except Exception as e:
                             st.warning(f"⚠️ เกิดข้อผิดพลาดในการสร้างกราฟ: {e}")
                     else:
