@@ -6106,7 +6106,26 @@ def main():
                         
                     if chart_col and chart_col in df_pvd_history.columns:
                         if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
+                            
+                            # 1. สร้าง Mapping สำหรับชื่อเดือนเป็นตัวเลขเพื่อใช้เรียงลำดับ
+                            month_map = {
+                                'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4,
+                                'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'สิงหาคม': 8,
+                                'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
+                            }
+                            
+                            # 2. แปลงข้อมูล Month ให้เป็นตัวเลข (จัดการกรณีมีช่องว่าง)
+                            df_pvd_history['Month_Num'] = df_pvd_history['Month'].astype(str).str.strip().map(month_map)
+                            
+                            # 3. สร้างคอลัมน์เรียงลำดับ (Year + Month)
+                            df_pvd_history['Sort_Order'] = df_pvd_history['Year_BE'].astype(int) * 100 + df_pvd_history['Month_Num'].fillna(0).astype(int)
+                            
+                            # 4. จัดเรียง DataFrame ตามคอลัมน์ Sort_Order
+                            df_pvd_history = df_pvd_history.sort_values('Sort_Order')
+                            
+                            # 5. สร้างคอลัมน์ Period สำหรับแสดงผล
                             df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
+                            
                             chart_data = df_pvd_history.set_index('Period')[chart_col]
                         else:
                             chart_data = df_pvd_history[chart_col]
