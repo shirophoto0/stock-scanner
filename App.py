@@ -1513,37 +1513,43 @@ def main():
             from datetime import datetime, timedelta
 
             def get_thaigold_prices_daily():
-                # 1. ตรวจสอบ Timestamp แทนการใช้แค่วันที่ (ป้องกันกรณีเปิดค้างไว้ข้ามวันแต่ Session เดิม)
-                now = datetime.now()
+                # 1. กำหนดค่าเริ่มต้นถ้าดึงไม่สำเร็จ
+                fallback_bar = 67500.0
+                fallback_jewelry = 68000.0
                 
-                # ถ้ามี cache และยังไม่เกิน 12 ชั่วโมง ให้ใช้ค่าเดิม
+                # 2. ตรวจสอบว่าเคยดึงสำเร็จและยังสดใหม่อยู่ไหม (ใน 12 ชม.)
                 if 'cached_gold_date' in st.session_state:
                     last_update = st.session_state['cached_gold_date']
-                    if isinstance(last_update, datetime) and (now - last_update) < timedelta(hours=12):
-                        if 'cached_gold_bar' in st.session_state and 'cached_gold_jewelry' in st.session_state:
-                            return st.session_state['cached_gold_bar'], st.session_state['cached_gold_jewelry']
+                    if isinstance(last_update, datetime) and (datetime.now() - last_update) < timedelta(hours=12):
+                        return st.session_state.get('cached_gold_bar', fallback_bar), st.session_state.get('cached_gold_jewelry', fallback_jewelry)
             
-                # 2. ถ้าเกินเวลา หรือยังไม่มี cache ให้ยิง API
+                # 3. ลองดึงข้อมูลด้วย Timeout ที่นานขึ้น
                 try:
-                    url = "https://api.chnwt.dev/thai-gold-api/"
-                    response = requests.get(url, timeout=5) # เพิ่ม timeout เป็น 5 วินาที
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data.get("status") == "success":
-                            p = data["response"]["price"]
-                            gold_bar_sell = float(str(p["gold_bar"]["sell"]).replace(",", ""))
-                            gold_jewelry_sell = float(str(p["gold"]["sell"]).replace(",", ""))
-                            
-                            # บันทึกเวลาปัจจุบันลงไปแทนที่ String
-                            st.session_state['cached_gold_date'] = now
-                            st.session_state['cached_gold_bar'] = gold_bar_sell
-                            st.session_state['cached_gold_jewelry'] = gold_jewelry_sell
-                            
-                            return gold_bar_sell, gold_jewelry_sell
-                except Exception as e:
-                    st.warning(f"ไม่สามารถอัปเดตราคาทองได้: {e}")
-                    # ใช้ค่าจาก Cache เก่าไปก่อนถ้ามี
-                    return st.session_state.get('cached_gold_bar', 67500.0), st.session_state.get('cached_gold_jewelry', 68000.0)
+                    # ใช้ requests.Session() เพื่อความเสถียร
+                    with requests.Session() as s:
+                        url = "https://api.chnwt.dev/thai-gold-api/"
+                        # เพิ่ม timeout เป็น 10 วินาที
+                        response = s.get(url, timeout=10) 
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            if data.get("status") == "success":
+                                p = data["response"]["price"]
+                                gold_bar_sell = float(str(p["gold_bar"]["sell"]).replace(",", ""))
+                                gold_jewelry_sell = float(str(p["gold"]["sell"]).replace(",", ""))
+                                
+                                # อัปเดต Cache
+                                st.session_state['cached_gold_date'] = datetime.now()
+                                st.session_state['cached_gold_bar'] = gold_bar_sell
+                                st.session_state['cached_gold_jewelry'] = gold_jewelry_sell
+                                
+                                return gold_bar_sell, gold_jewelry_sell
+                except Exception:
+                    # หาก API Timeout หรือล่ม ให้เงียบไว้และใช้ค่าเดิมที่มีใน Session หรือค่า Default
+                    pass
+            
+                # ถ้าดึงไม่ได้เลย ให้ใช้ค่าล่าสุดที่เคยมี (ถ้ามี) หรือค่าเริ่มต้น
+                return st.session_state.get('cached_gold_bar', fallback_bar), st.session_state.get('cached_gold_jewelry', fallback_jewelry)
             
             # --- เพิ่มปุ่มรีเฟรชราคาที่หน้า UI ---
             if st.button("🔄 อัปเดตราคาทองล่าสุด"):
