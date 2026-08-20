@@ -6105,58 +6105,55 @@ def main():
                 
                     if chart_col and chart_col in df_pvd_history.columns:
                         try:
-                            # 2. แปลงชื่อเดือนไทยเป็นเลขเดือน
+                            import altair as alt
+                            
                             month_map = {
                                 'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4,
                                 'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'สิงหาคม': 8,
                                 'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
                             }
                             
-                            # คัดลอก DataFrame ป้องกัน SettingWithCopyWarning
                             df_chart = df_pvd_history.copy()
                             
                             if 'Month' in df_chart.columns and 'Year_BE' in df_chart.columns:
-                                # ทำความสะอาดข้อมูลเดือนและปี
                                 df_chart['Clean_Month'] = df_chart['Month'].astype(str).str.strip()
                                 df_chart['Month_Num'] = df_chart['Clean_Month'].map(month_map)
                                 
-                                # แปลงปี พ.ศ. เป็น ค.ศ. (ลบ 543) เพื่อให้สร้าง Datetime ได้ถูกต้อง
+                                # แปลงปี พ.ศ. เป็น ค.ศ. เพื่อสร้างลำดับเวลา
                                 df_chart['Year_CE'] = pd.to_numeric(df_chart['Year_BE'], errors='coerce') - 543
                                 
-                                # สร้างคอลัมน์ Datetime จริงๆ (ใช้วันที่ 1 ของทุกเดือน)
+                                # สร้าง Date Object สำหรับใช้เรียงลำดับเป๊ะๆ
                                 df_chart['Date_Obj'] = pd.to_datetime(
                                     df_chart['Year_CE'].astype(str) + '-' + df_chart['Month_Num'].astype(str).str.zfill(2) + '-01',
                                     errors='coerce'
                                 )
                                 
-                                # ถ้าแปลง Datetime สำเร็จ ให้ใช้เรียงลำดับและตั้งชื่อแกน
-                                if not df_chart['Date_Obj'].isna().all():
-                                    df_chart = df_chart.sort_values('Date_Obj')
-                                    # สร้าง Label สวยๆ สำหรับแสดงผล (เช่น มกราคม 2569)
-                                    df_chart['Period_Label'] = df_chart['Clean_Month'] + " " + df_chart['Year_BE'].astype(str)
-                                    
-                                    chart_data = df_chart.set_index('Period_Label')[chart_col]
-                                else:
-                                    # Fallback กรณีแปลง Datetime ไม่ผ่าน ใช้ Index เดิมแต่บังคับ Plot
-                                    chart_data = df_chart[chart_col]
+                                # เรียงข้อมูลตามเวลาจริงจากเก่าไปใหม่
+                                df_chart = df_chart.sort_values('Date_Obj')
+                                
+                                # สร้างคอลัมน์ Period สำหรับโชว์บนกราฟ
+                                df_chart['Period_Label'] = df_chart['Clean_Month'] + " " + df_chart['Year_BE'].astype(str)
+                                
+                                # ดึง List ของ Period_Label ที่เรียงลำดับแล้วมาบังคับให้กราฟแสดงผลตามนี้
+                                sorted_periods = df_chart['Period_Label'].tolist()
+                                
+                                # 2. สร้างกราฟด้วย Altair เพื่อบังคับลำดับแกน X ได้ตามต้องการ
+                                chart = alt.Chart(df_chart).mark_bar().encode(
+                                    x=alt.X('Period_Label:N', sort=sorted_periods, title='ช่วงเวลา'),
+                                    y=alt.Y(f'{chart_col}:Q', title='YTD Net Return (%)'),
+                                    tooltip=['Period_Label', chart_col]
+                                ).properties(
+                                    height=400
+                                )
+                                
+                                st.altair_chart(chart, use_container_width=True)
                             else:
-                                chart_data = df_chart[chart_col]
-                            
-                            chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
-                            
-                            # 3. แสดงกราฟแท่ง
-                            if not chart_data.empty:
-                                st.bar_chart(chart_data)
-                            else:
-                                st.info("💡 ไม่มีข้อมูลสำหรับแสดงกราฟในรูปแบบนี้")
+                                st.info("💡 ไม่พบคอลัมน์ Month หรือ Year_BE ในข้อมูล")
                                 
                         except Exception as e:
-                            st.warning(f"⚠️ เกิดข้อผิดพลาดในการจัดเรียงกราฟ: {e}")
+                            st.warning(f"⚠️ เกิดข้อผิดพลาดในการสร้างกราฟ: {e}")
                     else:
-                        st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
-                else:
-                    st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลก่อนครับ")
-            
+                    ...
                 # --- 3. ส่วนแสดงตารางสรุปการเติบโต ---
                 st.markdown("---")
                 st.subheader("📈 ตารางสรุปการเติบโตและผลตอบแทนกองทุน PVD")
