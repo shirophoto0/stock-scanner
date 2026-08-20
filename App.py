@@ -1510,38 +1510,49 @@ def main():
             from datetime import datetime
             
             # 🔄 ฟังก์ชันดึงราคาทอง (อัปเดตวันละ 1 ครั้ง หรือเมื่อเปลี่ยนวัน)
+            from datetime import datetime, timedelta
+
             def get_thaigold_prices_daily():
-                today_str = str(date.today())
+                # 1. ตรวจสอบ Timestamp แทนการใช้แค่วันที่ (ป้องกันกรณีเปิดค้างไว้ข้ามวันแต่ Session เดิม)
+                now = datetime.now()
                 
-                # ตรวจสอบว่าเคยดึงของวันนี้หรือยัง ถ้ามีแล้วและเป็นวันเดียวกัน ให้ใช้ค่าเดิมใน session ได้เลย
-                if 'cached_gold_date' in st.session_state and st.session_state['cached_gold_date'] == today_str:
-                    if 'cached_gold_bar' in st.session_state and 'cached_gold_jewelry' in st.session_state:
-                        return st.session_state['cached_gold_bar'], st.session_state['cached_gold_jewelry']
-                
-                # ถ้ายังไม่เคยดึง หรือขึ้นวันใหม่แล้ว ให้ยิง API สดๆ วันละครั้ง
+                # ถ้ามี cache และยังไม่เกิน 12 ชั่วโมง ให้ใช้ค่าเดิม
+                if 'cached_gold_date' in st.session_state:
+                    last_update = st.session_state['cached_gold_date']
+                    if isinstance(last_update, datetime) and (now - last_update) < timedelta(hours=12):
+                        if 'cached_gold_bar' in st.session_state and 'cached_gold_jewelry' in st.session_state:
+                            return st.session_state['cached_gold_bar'], st.session_state['cached_gold_jewelry']
+            
+                # 2. ถ้าเกินเวลา หรือยังไม่มี cache ให้ยิง API
                 try:
                     url = "https://api.chnwt.dev/thai-gold-api/"
-                    response = requests.get(url, timeout=3)
+                    response = requests.get(url, timeout=5) # เพิ่ม timeout เป็น 5 วินาที
                     if response.status_code == 200:
                         data = response.json()
                         if data.get("status") == "success":
                             p = data["response"]["price"]
-                            gold_bar_sell = float(p["gold_bar"]["sell"].replace(",", ""))
-                            gold_jewelry_sell = float(p["gold"]["sell"].replace(",", ""))
+                            gold_bar_sell = float(str(p["gold_bar"]["sell"]).replace(",", ""))
+                            gold_jewelry_sell = float(str(p["gold"]["sell"]).replace(",", ""))
                             
-                            # บันทึกลง Session State พร้อมจำวันที่ปัจจุบันไว้
-                            st.session_state['cached_gold_date'] = today_str
+                            # บันทึกเวลาปัจจุบันลงไปแทนที่ String
+                            st.session_state['cached_gold_date'] = now
                             st.session_state['cached_gold_bar'] = gold_bar_sell
                             st.session_state['cached_gold_jewelry'] = gold_jewelry_sell
                             
                             return gold_bar_sell, gold_jewelry_sell
-                except Exception:
-                    pass
-                    
-                # กรณีดึง API ไม่สำเร็จ ให้ใช้ค่าสำรองหรือค่าล่าสุดที่มีในระบบ
-                fallback_bar = st.session_state.get('cached_gold_bar', 67500.0)
-                fallback_jewelry = st.session_state.get('cached_gold_jewelry', 68000.0)
-                return fallback_bar, fallback_jewelry
+                except Exception as e:
+                    st.warning(f"ไม่สามารถอัปเดตราคาทองได้: {e}")
+                    # ใช้ค่าจาก Cache เก่าไปก่อนถ้ามี
+                    return st.session_state.get('cached_gold_bar', 67500.0), st.session_state.get('cached_gold_jewelry', 68000.0)
+            
+                return 67500.0, 68000.0
+            
+            # --- เพิ่มปุ่มรีเฟรชราคาที่หน้า UI ---
+            if st.button("🔄 อัปเดตราคาทองล่าสุด"):
+                # ล้างค่าใน session เพื่อบังคับให้ดึงใหม่
+                if 'cached_gold_date' in st.session_state:
+                    del st.session_state['cached_gold_date']
+                st.rerun()
             
             # เรียกใช้งานฟังก์ชัน
             ref_gold_bar, ref_gold_jewelry = get_thaigold_prices_daily()
