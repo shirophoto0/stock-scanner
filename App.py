@@ -299,7 +299,8 @@ def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
     except Exception as e:
         # ปริ้น Error จริงออกมาดูใน Console ของ Streamlit Cloud
         print(f"Detailed Error in update_trade_close: {e}")
-        return False
+        return False 
+        
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_auto_atr_cached(symbol="^SET50"):
