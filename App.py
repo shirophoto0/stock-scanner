@@ -1423,7 +1423,6 @@ def main():
     # 0. ประกาศตัวแปรป้องกัน UnboundLocalError เบื้องต้นทั้งหมด
     df_sector_map = pd.DataFrame()
     filtered_df = None
-    df_monthly = pd.DataFrame()
 
     # 1. เชื่อมต่อ Google Sheets (ปลอดภัยขึ้นด้วย try-except)
     try:
