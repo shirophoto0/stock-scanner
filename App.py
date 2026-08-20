@@ -6113,32 +6113,33 @@ def main():
                                 'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
                             }
                             
-                            df_chart = df_pvd_history.copy()
+                            # ใช้ชื่อตัวแปร df_monthly ให้ตรงกับที่บรรทัดอื่นเรียกใช้ต่อ
+                            df_monthly = df_pvd_history.copy()
                             
-                            if 'Month' in df_chart.columns and 'Year_BE' in df_chart.columns:
-                                df_chart['Clean_Month'] = df_chart['Month'].astype(str).str.strip()
-                                df_chart['Month_Num'] = df_chart['Clean_Month'].map(month_map)
+                            if 'Month' in df_monthly.columns and 'Year_BE' in df_monthly.columns:
+                                df_monthly['Clean_Month'] = df_monthly['Month'].astype(str).str.strip()
+                                df_monthly['Month_Num'] = df_monthly['Clean_Month'].map(month_map)
                                 
                                 # แปลงปี พ.ศ. เป็น ค.ศ. เพื่อสร้างลำดับเวลา
-                                df_chart['Year_CE'] = pd.to_numeric(df_chart['Year_BE'], errors='coerce') - 543
+                                df_monthly['Year_CE'] = pd.to_numeric(df_monthly['Year_BE'], errors='coerce') - 543
                                 
                                 # สร้าง Date Object สำหรับใช้เรียงลำดับเป๊ะๆ
-                                df_chart['Date_Obj'] = pd.to_datetime(
-                                    df_chart['Year_CE'].astype(str) + '-' + df_chart['Month_Num'].astype(str).str.zfill(2) + '-01',
+                                df_monthly['Date_Obj'] = pd.to_datetime(
+                                    df_monthly['Year_CE'].astype(str) + '-' + df_monthly['Month_Num'].astype(str).str.zfill(2) + '-01',
                                     errors='coerce'
                                 )
                                 
                                 # เรียงข้อมูลตามเวลาจริงจากเก่าไปใหม่
-                                df_chart = df_chart.sort_values('Date_Obj')
+                                df_monthly = df_monthly.sort_values('Date_Obj')
                                 
                                 # สร้างคอลัมน์ Period สำหรับโชว์บนกราฟ
-                                df_chart['Period_Label'] = df_chart['Clean_Month'] + " " + df_chart['Year_BE'].astype(str)
+                                df_monthly['Period_Label'] = df_monthly['Clean_Month'] + " " + df_monthly['Year_BE'].astype(str)
                                 
                                 # ดึง List ของ Period_Label ที่เรียงลำดับแล้วมาบังคับให้กราฟแสดงผลตามนี้
-                                sorted_periods = df_chart['Period_Label'].tolist()
+                                sorted_periods = df_monthly['Period_Label'].tolist()
                                 
-                                # 2. สร้างกราฟด้วย Altair เพื่อบังคับลำดับแกน X ได้ตามต้องการ
-                                chart = alt.Chart(df_chart).mark_bar().encode(
+                                # 2. สร้างกราฟด้วย Altair พร้อมกำหนดความกว้างแท่ง (width=25) ตามเดิมที่คุณเคยเขียนไว้
+                                chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
                                     x=alt.X('Period_Label:N', sort=sorted_periods, title='ช่วงเวลา'),
                                     y=alt.Y(f'{chart_col}:Q', title='YTD Net Return (%)'),
                                     tooltip=['Period_Label', chart_col]
@@ -6146,7 +6147,7 @@ def main():
                                     height=400
                                 )
                                 
-                                st.altair_chart(chart, use_container_width=True)
+                                st.altair_chart(chart_bar, use_container_width=True)
                             else:
                                 st.info("💡 ไม่พบคอลัมน์ Month หรือ Year_BE ในข้อมูล")
                                 
