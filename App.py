@@ -2363,26 +2363,21 @@ def main():
                     ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
                 # -------------------------------------------------------------
 
-                # 2. ส่วนการคำนวณ
+                # 2. ส่วนการคำนวณ (ปรับปรุงใหม่ให้เลือกสัดส่วนงบลงทุนต่อไม้ได้ ไม่ใช่เอาพอร์ตทั้งหมดมาทุ่ม)
                 r_col1, r_col2 = st.columns([1, 1])
 
                 with r_col1:
-                    # --- ป้องกัน Error: ตรวจสอบและบังคับค่าเริ่มต้นไม่ให้ต่ำกว่า min_value (1000) ---
-                    try:
-                        safe_equity = int(total_equity)
-                    except (ValueError, TypeError):
-                        safe_equity = 1000
+                    # กำหนด % สัดส่วนเงินลงทุนสำหรับหุ้นตัวนี้ (เช่น ตั้งไว้ 20% ของพอร์ตเพื่อกระจายความเสี่ยง)
+                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0)
                     
-                    if safe_equity < 1000:
-                        safe_equity = 1000
-                
-                    total_cap = st.number_input(
-                        "👉 ระบุจำนวนเงินทุนที่ต้องการใช้คำนวณไม้ซื้อนี้ (บาท):", 
-                        min_value=1000, 
-                        value=safe_equity, # ใช้ค่าที่ผ่านการตรวจสอบความปลอดภัยแล้ว
-                        step=1000,
-                        help="สามารถลบตัวเลขนี้แล้วพิมพ์จำนวนเงินที่ต้องการใช้ซื้อจริงได้เลยครับ"
-                    )
+                    # คำนวณวงเงินงบประมาณสูงสุดที่อนุญาตให้ใช้กับหุ้นตัวนี้จากสัดส่วนพอร์ต
+                    max_budget_by_alloc = total_equity * (max_alloc_pct / 100.0)
+                    
+                    # แสดงขอบเขตเงินที่ใช้ได้จริง (ชนเพดานงบ หรือชนเงินสดที่มีจริงในพอร์ต)
+                    effective_budget = min(max_budget_by_alloc, cash_balance)
+                    
+                    st.info(f"💡 วงเงินสูงสุดสำหรับไม้นี้: **{effective_budget:,.0f} ฿** (จำกัดด้วยสัดส่วน {max_alloc_pct}% หรือเงินสดในพอร์ต)")
+
                     risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
                  
                 with r_col2:
@@ -2411,15 +2406,23 @@ def main():
                         if "EMA" in sl_type and ema10_val == 0:
                             st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
                         sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
+                
                 # 3. คำนวณผลลัพธ์
-                max_risk_money = total_cap * (risk_pct / 100)
+                max_risk_money = total_equity * (risk_pct / 100) # เงินที่ยอมขาดทุนได้ตาม % ความเสี่ยงพอร์ต
                 risk_per_share = latest_p - sl_price
                 
                 # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
                 if risk_per_share <= 0:
                     st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
+                elif latest_p <= 0:
+                    st.warning("⚠️ กรุณาระบุราคาหุ้นปัจจุบันให้ถูกต้อง")
                 else:
-                    shares_to_buy = int(max_risk_money / risk_per_share)
+                    # คำนวณ 2 เงื่อนไขเพื่อหาจำนวนหุ้นที่เหมาะสมที่สุด
+                    shares_by_risk = max_risk_money / risk_per_share          # จำกัดด้วยความเสี่ยง (Risk-based)
+                    shares_by_budget = effective_budget / latest_p          # จำกัดด้วยงบประมาณจัดสรร (Capital-based)
+                    
+                    # เลือกจำนวนหุ้นที่น้อยกว่า เพื่อให้ปลอดภัยทั้งเรื่องความเสี่ยงและเงินทุน
+                    shares_to_buy = int(min(shares_by_risk, shares_by_budget))
                     total_buy_value = shares_to_buy * latest_p
                     
                     st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
@@ -2428,6 +2431,12 @@ def main():
                     res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
                     res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
                     res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
+                    
+                    # เช็คเตือนเรื่องเงินสดเพิ่มเติม
+                    if total_buy_value > cash_balance:
+                        st.warning(f"⚠️ เงินลงทุนที่คำนวณได้ ({total_buy_value:,.0f} ฿) สูงกว่าเงินสดคงเหลือที่คุณมี ({cash_balance:,.0f} ฿)")
+                    else:
+                        st.success(f"✅ วงเงินและเงินสดในพอร์ตเพียงพอสำหรับการซื้อไม้นี้")
                                         
         #######################          
                 st.markdown("---")
