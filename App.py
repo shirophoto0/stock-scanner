@@ -2890,53 +2890,54 @@ def main():
                             df_closed_perf_sorted = df_closed_perf.sort_values('Sell_Date')
                             
                             # --- 3. ตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
+                            # --- 3. ตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
                             view_mode = st.radio("เลือกรูปแบบการแสดงผล:", ["📊 แสดงกราฟ", "📋 แสดงตารางข้อมูล"], horizontal=True, label_visibility="collapsed", key="view_mode_perf")
                             
+                            # --- 💡 แก้ปัญหา UnboundLocalError: คำนวณข้อมูลกราฟแท่งเตรียมไว้ล่วงหน้าเสมอ ไม่ว่าจะเลือกโหมดไหน ---
+                            selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงานกราฟแท่ง:", available_years, key="select_year_perf")
+                            df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
+                            
+                            months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
+                            df_full_year = pd.DataFrame({
+                                'Date': months_range,
+                                'Month_Label': months_range.strftime('%b %Y')
+                            })
+                            
+                            if not df_filtered_year.empty:
+                                df_filtered_year['Month_Label'] = df_filtered_year['Sell_Date'].dt.strftime('%b %Y')
+                                df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
+                                    'กำไร/ขาดทุน (บาท)': 'sum',
+                                    'ต้นทุน (บาท)': 'sum'
+                                }).reset_index()
+                                
+                                df_local_chart = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
+                                    'กำไร/ขาดทุน (บาท)': 0,
+                                    'ต้นทุน (บาท)': 0
+                                })
+                            else:
+                                df_local_chart = df_full_year.copy()
+                                df_local_chart['กำไร/ขาดทุน (บาท)'] = 0
+                                df_local_chart['ต้นทุน (บาท)'] = 0
+                            
+                            df_local_chart = df_local_chart.sort_values('Date').reset_index(drop=True)
+                            df_local_chart.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
+                            df_local_chart['Color'] = df_local_chart['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
+                            df_local_chart['Monthly_ROI'] = df_local_chart.apply(
+                                lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
+                                axis=1
+                            )
+                            df_local_chart['ROI_Text'] = df_local_chart['Monthly_ROI'].apply(lambda x: f"{x:+.2f}%")
+                            sorted_month_labels = df_local_chart['Month_Label'].tolist()
+                            
+                            
+                            # --- แยกการแสดงผลตาม view_mode ที่เลือก ---
                             if view_mode == "📊 แสดงกราฟ":
                                 c1, c2 = st.columns(2)
                             
                                 with c1:
                                     with st.container(border=True):
-                                        selected_year = st.selectbox("📅 เลือกปีที่ต้องการดูผลงานกราฟแท่ง:", available_years, key="select_year_perf")
-                                        
-                                        df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
-                                        
-                                        months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
-                                        df_full_year = pd.DataFrame({
-                                            'Date': months_range,
-                                            'Month_Label': months_range.strftime('%b %Y')
-                                        })
-                                        
-                                        if not df_filtered_year.empty:
-                                            df_filtered_year['Month_Label'] = df_filtered_year['Sell_Date'].dt.strftime('%b %Y')
-                                            df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
-                                                'กำไร/ขาดทุน (บาท)': 'sum',
-                                                'ต้นทุน (บาท)': 'sum'
-                                            }).reset_index()
-                                            
-                                            df_local_chart = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
-                                                'กำไร/ขาดทุน (บาท)': 0,
-                                                'ต้นทุน (บาท)': 0
-                                            })
-                                        else:
-                                            df_local_chart = df_full_year.copy()
-                                            df_local_chart['กำไร/ขาดทุน (บาท)'] = 0
-                                            df_local_chart['ต้นทุน (บาท)'] = 0
-                                        
-                                        df_local_chart = df_local_chart.sort_values('Date').reset_index(drop=True)
-                                        df_local_chart.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
-                                        df_local_chart['Color'] = df_local_chart['Profit_Sum'].apply(lambda x: 'Profit' if x >= 0 else 'Loss')
-                                        df_local_chart['Monthly_ROI'] = df_local_chart.apply(
-                                            lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
-                                            axis=1
-                                        )
-                                        df_local_chart['ROI_Text'] = df_local_chart['Monthly_ROI'].apply(lambda x: f"{x:+.2f}%")
-                            
-                                        sorted_month_labels = df_local_chart['Month_Label'].tolist()
-                                        
                                         st.markdown(f"**📊 ผลงานรายเดือน ประจำปี {selected_year}**")
                                         
-                                        # ใช้ df_local_chart เพียวๆ ไม่มีทางชนกับตัวแปรอื่นแน่นอน
                                         chart_bar = alt.Chart(df_local_chart).mark_bar(width=25).encode(
                                             x=alt.X('Month_Label:N', title='เดือน (ตามวันที่ขาย)', sort=sorted_month_labels), 
                                             y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
@@ -3037,40 +3038,9 @@ def main():
                                             st.info("ยังไม่มีข้อมูลประวัติการเทรดที่ปิดสถานะ")
                                                         
                             else:
-                                # โหมดตารางข้อมูล ใช้ตัวแปรตารางแยกต่างหาก
-                                selected_year = st.session_state.get('select_year_perf', available_years[0])
-                                df_filtered_year = df_closed_perf_sorted[df_closed_perf_sorted['Sell_Date'].dt.year == selected_year].copy()
-                                
-                                months_range = pd.date_range(start=f"{selected_year}-01-01", end=f"{selected_year}-12-01", freq='MS')
-                                df_full_year = pd.DataFrame({
-                                    'Date': months_range,
-                                    'Month_Label': months_range.strftime('%b %Y')
-                                })
-                                
-                                if not df_filtered_year.empty:
-                                    df_filtered_year['Month_Label'] = df_filtered_year['Sell_Date'].dt.strftime('%b %Y')
-                                    df_grouped = df_filtered_year.groupby('Month_Label', sort=False).agg({
-                                        'กำไร/ขาดทุน (บาท)': 'sum',
-                                        'ต้นทุน (บาท)': 'sum'
-                                    }).reset_index()
-                                    df_table_monthly = pd.merge(df_full_year, df_grouped, on='Month_Label', how='left').fillna({
-                                        'กำไร/ขาดทุน (บาท)': 0,
-                                        'ต้นทุน (บาท)': 0
-                                    })
-                                else:
-                                    df_table_monthly = df_full_year.copy()
-                                    df_table_monthly['กำไร/ขาดทุน (บาท)'] = 0
-                                    df_table_monthly['ต้นทุน (บาท)'] = 0
-                            
-                                df_table_monthly = df_table_monthly.sort_values('Date').reset_index(drop=True)
-                                df_table_monthly.columns = ['Date', 'Month_Label', 'Profit_Sum', 'Cost_Sum']
-                                df_table_monthly['Monthly_ROI'] = df_table_monthly.apply(
-                                    lambda row: (row['Profit_Sum'] / row['Cost_Sum'] * 100) if row['Cost_Sum'] > 0 else 0, 
-                                    axis=1
-                                )
-                            
+                                # โหมดตารางข้อมูล (ใช้ข้อมูลจาก df_local_chart ที่เตรียมไว้ด้านบนได้เลย สะอาดและไม่พัง)
                                 st.markdown(f"##### 📋 ตารางสรุปผลงานรายเดือน (อิงวันที่ขาย) ประจำปี {selected_year}")
-                                df_display = df_table_monthly[['Month_Label', 'Profit_Sum', 'Cost_Sum', 'Monthly_ROI']].copy()
+                                df_display = df_local_chart[['Month_Label', 'Profit_Sum', 'Cost_Sum', 'Monthly_ROI']].copy()
                                 df_display.columns = ['เดือน', 'กำไร/ขาดทุน (บาท)', 'ต้นทุนประจำเดือน (บาท)', '% กำไร/ขาดทุน (ROI)']
                                 
                                 st.dataframe(
@@ -3081,6 +3051,7 @@ def main():
                                     }),
                                     use_container_width=True
                                 )
+                                                    
                                                                                                         
                             ##### กราฟกระจายตัว (Histogram) ###########
                             with st.container(border=True):
