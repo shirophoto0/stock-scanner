@@ -1545,8 +1545,6 @@ def main():
                     # ใช้ค่าจาก Cache เก่าไปก่อนถ้ามี
                     return st.session_state.get('cached_gold_bar', 67500.0), st.session_state.get('cached_gold_jewelry', 68000.0)
             
-                return 67500.0, 68000.0
-            
             # --- เพิ่มปุ่มรีเฟรชราคาที่หน้า UI ---
             if st.button("🔄 อัปเดตราคาทองล่าสุด"):
                 # ล้างค่าใน session เพื่อบังคับให้ดึงใหม่
