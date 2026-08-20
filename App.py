@@ -6077,7 +6077,7 @@ def main():
                 # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
                 st.markdown("---")
                 st.subheader("📊 กราฟแสดง % ผลตอบแทนรายบุคคล (YTD Net Return %)")
-                
+
                 if not df_pvd_history.empty:
                     try:
                         def clean_num(series):
@@ -6090,50 +6090,68 @@ def main():
                                 .str.replace('%', '', regex=False),
                                 errors='coerce'
                             ).fillna(0.0)
-            
-                        # ดึงข้อมูลจากคอลัมน์ YTD_Net_Return_Pct โดยตรง
+                
+                        # 1. ทำความสะอาดค่าตัวเลข YTD Return
                         if 'YTD_Net_Return_Pct' in df_pvd_history.columns:
                             chart_col = 'YTD_Net_Return_Pct'
                             df_pvd_history[chart_col] = clean_num(df_pvd_history[chart_col])
                         else:
-                            # เผื่อกรณียังไม่มีคอลัมน์นี้ในชีต ให้สร้างเป็น 0 ไปก่อนเพื่อกัน error
                             df_pvd_history['YTD_Net_Return_Pct'] = 0.0
                             chart_col = 'YTD_Net_Return_Pct'
                             
                     except Exception as e:
-                        st.warning(f"⚠️ เกิดข้อผิดพลาดในการอ่านข้อมูลกราฟ: {e}")
+                        st.warning(f"⚠️ เกิดข้อผิดพลาดในการอ่านข้อมูลตัวเลข: {e}")
                         chart_col = None
-                        
+                
                     if chart_col and chart_col in df_pvd_history.columns:
-                        if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
-                            
-                            # 1. สร้าง Mapping สำหรับชื่อเดือนเป็นตัวเลขเพื่อใช้เรียงลำดับ
+                        try:
+                            # 2. แปลงชื่อเดือนไทยเป็นเลขเดือน
                             month_map = {
                                 'มกราคม': 1, 'กุมภาพันธ์': 2, 'มีนาคม': 3, 'เมษายน': 4,
                                 'พฤษภาคม': 5, 'มิถุนายน': 6, 'กรกฎาคม': 7, 'สิงหาคม': 8,
                                 'กันยายน': 9, 'ตุลาคม': 10, 'พฤศจิกายน': 11, 'ธันวาคม': 12
                             }
                             
-                            # 2. แปลงข้อมูล Month ให้เป็นตัวเลข (จัดการกรณีมีช่องว่าง)
-                            df_pvd_history['Month_Num'] = df_pvd_history['Month'].astype(str).str.strip().map(month_map)
+                            # คัดลอก DataFrame ป้องกัน SettingWithCopyWarning
+                            df_chart = df_pvd_history.copy()
                             
-                            # 3. สร้างคอลัมน์เรียงลำดับ (Year + Month)
-                            df_pvd_history['Sort_Order'] = df_pvd_history['Year_BE'].astype(int) * 100 + df_pvd_history['Month_Num'].fillna(0).astype(int)
+                            if 'Month' in df_chart.columns and 'Year_BE' in df_chart.columns:
+                                # ทำความสะอาดข้อมูลเดือนและปี
+                                df_chart['Clean_Month'] = df_chart['Month'].astype(str).str.strip()
+                                df_chart['Month_Num'] = df_chart['Clean_Month'].map(month_map)
+                                
+                                # แปลงปี พ.ศ. เป็น ค.ศ. (ลบ 543) เพื่อให้สร้าง Datetime ได้ถูกต้อง
+                                df_chart['Year_CE'] = pd.to_numeric(df_chart['Year_BE'], errors='coerce') - 543
+                                
+                                # สร้างคอลัมน์ Datetime จริงๆ (ใช้วันที่ 1 ของทุกเดือน)
+                                df_chart['Date_Obj'] = pd.to_datetime(
+                                    df_chart['Year_CE'].astype(str) + '-' + df_chart['Month_Num'].astype(str).str.zfill(2) + '-01',
+                                    errors='coerce'
+                                )
+                                
+                                # ถ้าแปลง Datetime สำเร็จ ให้ใช้เรียงลำดับและตั้งชื่อแกน
+                                if not df_chart['Date_Obj'].isna().all():
+                                    df_chart = df_chart.sort_values('Date_Obj')
+                                    # สร้าง Label สวยๆ สำหรับแสดงผล (เช่น มกราคม 2569)
+                                    df_chart['Period_Label'] = df_chart['Clean_Month'] + " " + df_chart['Year_BE'].astype(str)
+                                    
+                                    chart_data = df_chart.set_index('Period_Label')[chart_col]
+                                else:
+                                    # Fallback กรณีแปลง Datetime ไม่ผ่าน ใช้ Index เดิมแต่บังคับ Plot
+                                    chart_data = df_chart[chart_col]
+                            else:
+                                chart_data = df_chart[chart_col]
                             
-                            # 4. จัดเรียง DataFrame ตามคอลัมน์ Sort_Order
-                            df_pvd_history = df_pvd_history.sort_values('Sort_Order')
+                            chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
                             
-                            # 5. สร้างคอลัมน์ Period สำหรับแสดงผล
-                            df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
-                            
-                            chart_data = df_pvd_history.set_index('Period')[chart_col]
-                        else:
-                            chart_data = df_pvd_history[chart_col]
-                        
-                        chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
-                        
-                        # แสดงกราฟแท่ง
-                        st.bar_chart(chart_data)
+                            # 3. แสดงกราฟแท่ง
+                            if not chart_data.empty:
+                                st.bar_chart(chart_data)
+                            else:
+                                st.info("💡 ไม่มีข้อมูลสำหรับแสดงกราฟในรูปแบบนี้")
+                                
+                        except Exception as e:
+                            st.warning(f"⚠️ เกิดข้อผิดพลาดในการจัดเรียงกราฟ: {e}")
                     else:
                         st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
                 else:
