@@ -2892,6 +2892,7 @@ def main():
                             
                             # --- ประกาศตัวแปรป้องกัน UnboundLocalError ---
                             chart_bar = None
+                            df_monthly = pd.DataFrame()
                             
                             # --- 3. ตัวเลือกสลับดูเป็น กราฟ หรือ ตาราง ---
                             view_mode = st.radio("เลือกรูปแบบการแสดงผล:", ["📊 แสดงกราฟ", "📋 แสดงตารางข้อมูล"], horizontal=True, label_visibility="collapsed", key="view_mode_perf")
