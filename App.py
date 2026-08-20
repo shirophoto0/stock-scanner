@@ -6077,7 +6077,7 @@ def main():
                 # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
                 st.markdown("---")
                 st.subheader("📊 กราฟแสดง % ผลตอบแทนรายบุคคล (YTD Net Return %)")
-
+                df_monthly = pd.DataFrame()
                 if not df_pvd_history.empty:
                     try:
                         def clean_num(series):
