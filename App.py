@@ -2156,7 +2156,7 @@ def main():
                 # ... (เอาโค้ดส่วนแสดงผล st.dataframe และ st.plotly_chart มาใส่ตรงนี้) ...
                 #####################################
             
-                with st.expander ("##### ⚙️ ตั้งค่าการแสดงผลกราฟ")
+                with st.expander ("##### ⚙️ ตั้งค่าการแสดงผลกราฟ"):
                     col_tf, col_period = st.columns([1, 1])
                     
                     tf_mapping = {
