@@ -2023,45 +2023,41 @@ def main():
                 # 📌 ดึงข้อมูลจาก Session State ที่โหลดไว้แล้วจาก def main() แทนการโหลดซ้ำจาก Google Sheets
                 df_all_stocks = st.session_state.get('df_all_stocks', pd.DataFrame())
                 
-                # ถ้าใน Session State ยังว่างเปล่า (เช่นเปิดแอปมาครั้งแรกแล้วโหลดไม่ติด) ค่อยดึงจาก Sheet อีกรอบ
+                # ถ้าใน Session State ยังว่างเปล่า ค่อยดึงจาก Sheet อีกรอบ
                 if df_all_stocks.empty:
                     df_all_stocks = load_from_gsheet()
                     st.session_state.df_all_stocks = df_all_stocks
-                
+            
             col_input, col_metrics = st.columns([1, 3])
             
             with col_input:
                 all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS]
                 
-                # 1. กำหนดค่าเริ่มต้น
+                # 1. กำหนดค่าเริ่มต้นจาก Session State กลาง
                 current_selected = st.session_state.get("selected_ticker", "KBANK")
                 
-                # 2. สร้าง Selectbox
+                # 2. สร้าง Selectbox สำหรับเลือกหุ้น
                 ticker_input = st.selectbox(
                     "เลือกหรือพิมพ์ชื่อหุ้นที่ต้องการดูราคากราฟรายละเอียด:", 
                     options=all_tickers, 
-                    index=all_tickers.index(current_selected) if current_selected in all_tickers else 0
+                    index=all_tickers.index(current_selected) if current_selected in all_tickers else 0,
+                    key="tech_stock_selectbox"
                 )
                 
-                # 3. จุดสำคัญ: ถ้าค่าที่เลือกใหม่ไม่ตรงกับค่าใน session_state ให้สั่งอัปเดตและ Rerun
+                # 3. ถ้าค่าที่เลือกเปลี่ยน ให้บันทึกเข้า session_state แล้ว Rerun ทันที
                 if ticker_input != current_selected:
                     st.session_state.selected_ticker = ticker_input
-                    st.rerun()  # บังคับให้โปรแกรมเริ่มทำงานใหม่ตั้งแต่บรรทัดบนสุดเพื่อให้กราฟโหลดข้อมูลหุ้นตัวใหม่
-                
-                ticker = f"{st.session_state.selected_ticker}.BK"
+                    st.rerun() 
             
+            # ใช้ค่ากลางจาก session_state
             selected_ticker = st.session_state.selected_ticker 
             ticker = f"{selected_ticker}.BK"
             
-            # ใช้ฟังก์ชัน Cache ดึงข้อมูลแทนการดึงตรงจาก Ticker object
+            # ใช้ฟังก์ชัน Cache ดึงข้อมูล
             info = get_cached_stock_info(ticker) 
-            
-            # ถ้าพี่อ้ำยังต้องใช้ stock_data เพื่อดึงข้อมูลกราฟ หรืออย่างอื่น
-            # ก็ให้ประกาศ stock_data ไว้เหมือนเดิมได้ แต่ไม่ต้องดึง .info แล้วครับ
             stock_data = yf.Ticker(ticker) 
                 
             ##### link web set and trading view ########
-            # สร้างคอลัมน์ 2 ช่อง (ขนาดเท่ากัน)
             col1, col2 = st.columns(2)
             
             with col1:
@@ -2363,11 +2359,12 @@ def main():
             # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
             # ==========================================
             with tab_risk:
-                st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
-
-                # 1. แสดงสถานะพอร์ตปัจจุบัน (เอาไว้ดูข้อมูล)
+                st.markdown(f"#### 🚀 ระบบคำนวณ Risk Management & Position Sizing (หุ้นปัจจุบัน: **{st.session_state.get('selected_ticker', 'KBANK')}**)")
+            
+                # 1. แสดงสถานะพอร์ตปัจจุบัน
                 if "cash_balance" not in st.session_state:
                     st.session_state.cash_balance = load_total_cash_balance()
+                
                 cash_balance = st.session_state.cash_balance
                 market_value = get_total_market_value()
                 total_equity = cash_balance + market_value
@@ -2380,7 +2377,7 @@ def main():
                 
                 st.divider()
                 
-                # --- ส่วนป้องกัน Error: ดึงค่า EMA และตรวจสอบตาราง chart_combined อย่างปลอดภัย ---
+                # --- ดึงค่า EMA และตรวจสอบตาราง chart_combined ของหุ้นที่เลือก ---
                 has_chart = 'chart_combined' in locals() and isinstance(chart_combined, pd.DataFrame) and not chart_combined.empty
                 
                 if has_chart and 'EMA10' in chart_combined.columns:
@@ -2389,34 +2386,26 @@ def main():
                 else:
                     ema10_val = 0.0
                     ema10_str = "เส้น EMA 10 (ไม่มีข้อมูล)"
-
+            
                 if has_chart and 'EMA20' in chart_combined.columns:
                     ema20_val = float(chart_combined['EMA20'].iloc[-1])
                     ema20_str = f"เส้น EMA 20 ({ema20_val:.2f} บาท)"
                 else:
                     ema20_val = 0.0
                     ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
-                # -------------------------------------------------------------
-
-                # 2. ส่วนการคำนวณ (ปรับปรุงใหม่ให้เลือกสัดส่วนงบลงทุนต่อไม้ได้ ไม่ใช่เอาพอร์ตทั้งหมดมาทุ่ม)
+            
+                # 2. ส่วนการคำนวณสัดส่วนและ Position Sizing
                 r_col1, r_col2 = st.columns([1, 1])
-
+            
                 with r_col1:
-                    # กำหนด % สัดส่วนเงินลงทุนสำหรับหุ้นตัวนี้ (เช่น ตั้งไว้ 20% ของพอร์ตเพื่อกระจายความเสี่ยง)
-                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0)
-                    
-                    # คำนวณวงเงินงบประมาณสูงสุดที่อนุญาตให้ใช้กับหุ้นตัวนี้จากสัดส่วนพอร์ต
+                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0, key="risk_alloc_slider")
                     max_budget_by_alloc = total_equity * (max_alloc_pct / 100.0)
-                    
-                    # แสดงขอบเขตเงินที่ใช้ได้จริง (ชนเพดานงบ หรือชนเงินสดที่มีจริงในพอร์ต)
                     effective_budget = min(max_budget_by_alloc, cash_balance)
                     
                     st.info(f"💡 วงเงินสูงสุดสำหรับไม้นี้: **{effective_budget:,.0f} ฿** (จำกัดด้วยสัดส่วน {max_alloc_pct}% หรือเงินสดในพอร์ต)")
-
-                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25)
-                 
+                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key="risk_pct_slider")
+                
                 with r_col2:
-                    # กำหนดค่าเริ่มต้นให้ปลอดภัยก่อน ถ้าตัวแปรไม่มีค่าให้เป็น 0.0
                     try:
                         latest_p = float(latest_price_single) if 'latest_price_single' in locals() and latest_price_single is not None else 0.0
                     except (ValueError, TypeError):
@@ -2427,36 +2416,32 @@ def main():
                         ema20_str,
                         "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
                         "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
-                    ])
+                    ], key="risk_sl_type")
                  
-                    # กำหนดค่า sl_price ตามเงื่อนไขที่เลือก
                     if "EMA 10" in sl_type and ema10_val > 0:
                         sl_price = ema10_val
                     elif "EMA 20" in sl_type and ema20_val > 0:
                         sl_price = ema20_val
                     elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                        fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5)
+                        fixed_sl_pct = st.slider("ระบุ % Stop Loss ที่ต้องการ:", min_value=2.0, max_value=12.0, value=7.0, step=0.5, key="risk_fixed_sl")
                         sl_price = latest_p * (1 - (fixed_sl_pct / 100))
-                    else: # Manual Price หรือกรณี EMA ไม่มีข้อมูล
+                    else: 
                         if "EMA" in sl_type and ema10_val == 0:
                             st.warning("⚠️ ไม่พบข้อมูลเส้น EMA ระบบจึงใช้ค่าเริ่มต้นแบบ Manual แทนครับ")
-                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25)
+                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=latest_p * 0.93 if latest_p > 0 else 0.0, step=0.25, key="risk_manual_sl")
                 
                 # 3. คำนวณผลลัพธ์
-                max_risk_money = total_equity * (risk_pct / 100) # เงินที่ยอมขาดทุนได้ตาม % ความเสี่ยงพอร์ต
+                max_risk_money = total_equity * (risk_pct / 100) 
                 risk_per_share = latest_p - sl_price
                 
-                # ตรวจสอบก่อนนำไปหาร เพื่อป้องกัน Error
                 if risk_per_share <= 0:
                     st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
                 elif latest_p <= 0:
                     st.warning("⚠️ กรุณาระบุราคาหุ้นปัจจุบันให้ถูกต้อง")
                 else:
-                    # คำนวณ 2 เงื่อนไขเพื่อหาจำนวนหุ้นที่เหมาะสมที่สุด
-                    shares_by_risk = max_risk_money / risk_per_share          # จำกัดด้วยความเสี่ยง (Risk-based)
-                    shares_by_budget = effective_budget / latest_p          # จำกัดด้วยงบประมาณจัดสรร (Capital-based)
+                    shares_by_risk = max_risk_money / risk_per_share       
+                    shares_by_budget = effective_budget / latest_p         
                     
-                    # เลือกจำนวนหุ้นที่น้อยกว่า เพื่อให้ปลอดภัยทั้งเรื่องความเสี่ยงและเงินทุน
                     shares_to_buy = int(min(shares_by_risk, shares_by_budget))
                     total_buy_value = shares_to_buy * latest_p
                     
@@ -2467,7 +2452,6 @@ def main():
                     res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
                     res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
                     
-                    # เช็คเตือนเรื่องเงินสดเพิ่มเติม
                     if total_buy_value > cash_balance:
                         st.warning(f"⚠️ เงินลงทุนที่คำนวณได้ ({total_buy_value:,.0f} ฿) สูงกว่าเงินสดคงเหลือที่คุณมี ({cash_balance:,.0f} ฿)")
                     else:
