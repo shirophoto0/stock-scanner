@@ -2061,26 +2061,24 @@ def main():
             stock_data = yf.Ticker(ticker) 
                 
             ##### link web set and trading view ########
-            # สร้างคอลัมน์ 2 ช่องสำหรับปุ่มลิงก์
+            # สร้างคอลัมน์ 2 ช่อง (ขนาดเท่ากัน)
             col1, col2 = st.columns(2)
             
+            # ปุ่มที่ 1 (ใส่ในคอลัมน์ที่ 1)
             with col1:
                 set_url = f"https://www.set.or.th/th/market/product/stock/quote/{st.session_state.selected_ticker}/company-profile/information"
-                st.link_button("🌐 ข้อมูล SET", set_url, use_container_width=True)
+                st.link_button(f"🌐 ข้อมูล SET", set_url, use_container_width=True)
             
+            # ปุ่มที่ 2 (ใส่ในคอลัมน์ที่ 2)
             with col2:
                 tv_url = f"https://www.tradingview.com/chart/?symbol=SET%3A{st.session_state.selected_ticker}"
-                st.link_button("📈 กราฟ TradingView", tv_url, use_container_width=True)
+                st.link_button(f"📈 กราฟ TradingView", tv_url, use_container_width=True)
             
-            st.markdown("---")
-            
-            # ==========================================
-            # 5. Fundamental Dashboard (ให้อยู่ระดับชิดซ้ายปกติ)
-            # ==========================================
+            # 5. Fundamental Dashboard
             if info:
                 st.markdown("#### 📊 Fundamental Growth Dashboard (คัดกรองพลังขับเคลื่อนตามสูตร SEPA)")
             
-                # ดึงงบอย่างปลอดภัย
+                # ดึงงบอย่างปลอดภัย (เนื่องจากหุ้นไทยบางตัวบน Yahoo Finance ข้อมูลบางช่องอาจเป็น None)
                 m_cap = info.get('marketCap', None)
                 rev_growth = info.get('quarterlyRevenueGrowth', info.get('revenueGrowth', None))
                 eps_growth = info.get('quarterlyEarningsGrowth', info.get('earningsGrowth', None))
@@ -2116,16 +2114,14 @@ def main():
                         st.write(f"• **ผลตอบแทนต่อส่วนผู้ถือหุ้น (ROE):** {roe * 100:.2f} %")
                     if pb_ratio is not None:
                         st.write(f"• **ราคาต่อมูลค่าทางบัญชี (P/B Ratio):** {pb_ratio:.2f} เท่า")
-                        
                     pe_value = info.get('trailingPE')
+                    
                     if pe_value is not None:
                         st.write(f"• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** {pe_value:.2f} เท่า")
                     else:
                         st.write("• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** ไม่มีข้อมูล")
-                
+                    
                 st.info("💡 **ข้อแนะนำจากระบบ:** หุ้นซุปเปอร์สต็อกตามสไตล์ Mark Minervini มักจะมี EPS Growth ขยายตัวมากกว่า 20%-25% ขึ้นไป ควบคู่กับราคาหุ้นที่ยกฐานยืนเหนือเส้น EMA ขาขึ้น")
-            else:
-                st.warning(f"⚠️ ไม่สามารถดึงข้อมูล Fundamental สำหรับหุ้น {st.session_state.selected_ticker} จาก Yahoo Finance ได้ในขณะนี้")
                 
             with st.expander("⚙️ ตั้งค่าการแสดงผลกราฟ"):
                 # 3. แสดงผลตารางและกราฟ
