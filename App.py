@@ -2379,17 +2379,31 @@ def main():
             
                 st.divider()
             
-                # --- 2. ดึงข้อมูลราคาและคำนวณกราฟของหุ้นตัวที่เลือกในหน้านี้โดยเฉพาะ ---
+                # --- 2. ดึงข้อมูลราคาและคำนวณกราฟของหุ้นตัวที่เลือกใหม่ ---
                 current_ticker_symbol = f"{st.session_state.selected_ticker}.BK"
                 
-                # ดึงข้อมูลจาก Yahoo Finance (Cache ไว้เพื่อความรวดเร็ว)
                 @st.cache_data(ttl=600)
                 def get_risk_data(ticker):
-                    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
-                    if not df.empty:
-                        df['EMA10'] = df['Close'].ewm(span=10, adjust=False).mean()
-                        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
-                        return df, float(df['Close'].iloc[-1])
+                    try:
+                        df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+                        if df is not None and not df.empty:
+                            # จัดการเผื่อกรณี Column เป็น MultiIndex
+                            if isinstance(df.columns, pd.MultiIndex):
+                                df.columns = df.columns.get_level_values(0)
+                            
+                            if 'Close' in df.columns:
+                                # แปลงเป็น Series แบบ 1 มิติ เพื่อป้องกัน error ตอนคำนวณ
+                                close_series = df['Close'].squeeze()
+                                if isinstance(close_series, pd.DataFrame):
+                                    close_series = close_series.iloc[:, 0]
+                                    
+                                df['EMA10'] = close_series.ewm(span=10, adjust=False).mean()
+                                df['EMA20'] = close_series.ewm(span=20, adjust=False).mean()
+                                
+                                latest_price = float(close_series.iloc[-1])
+                                return df, latest_price
+                    except Exception as e:
+                        st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล: {e}")
                     return pd.DataFrame(), 0.0
             
                 chart_combined, latest_price_single = get_risk_data(current_ticker_symbol)
