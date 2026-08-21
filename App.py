@@ -1634,8 +1634,7 @@ def main():
                                 })
                 except Exception as e:
                     st.error(f"⚠️ โหลดข้อมูลพอร์ตทองคำไม่สำเร็จ: {e}")
-            
-            st.markdown("---")
+
             st.markdown("#### 📝 บันทึกข้อมูลการถือครองทองคำ")
             
             gold_type = st.selectbox(
