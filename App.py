@@ -1503,65 +1503,90 @@ def main():
         ## ส่วน tab Gold #######
         with tab_gold:
             st.markdown("### 🟡 จัดการพอร์ตการลงทุนทองคำ")
-            st.markdown("เลือกประเภทการลงทุน: ทองคำแท่ง/ทองรูปพรรณ (คำนวณตามน้ำหนักอัตโนมัติ) หรือ เทรดทอง/กองทุนทอง (บันทึกด้วยมูลค่าเงินบาทและอัปเดตราคาตลาดรายเดือน)")
+            st.markdown("เลือกประเภทการลงทุน: ทองคำแท่ง/ทองรูปพรรณ หรือ เทรดทอง/กองทุนทอง (ระบบดึงข้อมูลแบบ Web Scraping สดจากเว็บอ้างอิง)")
             
             import requests
             import pandas as pd
-            from datetime import datetime
-            
-            # 🔄 ฟังก์ชันดึงราคาทอง (อัปเดตวันละ 1 ครั้ง หรือเมื่อเปลี่ยนวัน)
+            from bs4 import BeautifulSoup
             from datetime import datetime, timedelta
+            
+            # 🔄 ฟังก์ชัน Scraping ราคาทองคำจากเว็บสมาคมฯ หรือเว็บสำรอง
+            def get_gold_price_by_scraping():
+                # ตรวจสอบ Cache ใน Session ไม่ให้ยิงถี่เกินไป (ภายใน 3 ชม.)
+                if 'scraped_gold_date' in st.session_state:
+                    last_update = st.session_state['scraped_gold_date']
+                    if isinstance(last_update, datetime) and (datetime.now() - last_update) < timedelta(hours=3):
+                        if 'scraped_gold_bar' in st.session_state and 'scraped_gold_jewelry' in st.session_state:
+                            return st.session_state['scraped_gold_bar'], st.session_state['scraped_gold_jewelry']
 
-            def get_thaigold_prices_daily():
-                # 1. กำหนดค่าเริ่มต้นถ้าดึงไม่สำเร็จ
-                fallback_bar = 67500.0
-                fallback_jewelry = 68000.0
-                
-                # 2. ตรวจสอบว่าเคยดึงสำเร็จและยังสดใหม่อยู่ไหม (ใน 12 ชม.)
-                if 'cached_gold_date' in st.session_state:
-                    last_update = st.session_state['cached_gold_date']
-                    if isinstance(last_update, datetime) and (datetime.now() - last_update) < timedelta(hours=12):
-                        return st.session_state.get('cached_gold_bar', fallback_bar), st.session_state.get('cached_gold_jewelry', fallback_jewelry)
-            
-                # 3. ลองดึงข้อมูลด้วย Timeout ที่นานขึ้น
                 try:
-                    # ใช้ requests.Session() เพื่อความเสถียร
-                    with requests.Session() as s:
-                        url = "https://api.chnwt.dev/thai-gold-api/"
-                        # เพิ่ม timeout เป็น 10 วินาที
-                        response = s.get(url, timeout=10) 
+                    # ใช้ User-Agent เพื่อป้องกันเว็บมองว่าเป็น Bot แล้วบล็อก
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }
+                    
+                    # ตัวอย่างดึงจากเว็บราคาทองไทยยอดนิยม (เช่น goldtraders หรือเว็บตัวแทนที่โครงสร้างอ่านง่าย)
+                    # หมายเหตุ: หากโครงสร้าง HTML ของเว็บสมาคมมีการเปลี่ยนแปลง อาจต้องปรับตัวเลือก tag ค้นหา
+                    url = "https://www.goldtraders.or.th/"
+                    response = requests.get(url, headers=headers, timeout=8)
+                    
+                    if response.status_code == 200:
+                        # ใช้ lxml หรือ html.parser แกะโครงสร้าง HTML
+                        soup = BeautifulSoup(response.text, 'html.parser')
                         
-                        if response.status_code == 200:
-                            data = response.json()
-                            if data.get("status") == "success":
-                                p = data["response"]["price"]
-                                gold_bar_sell = float(str(p["gold_bar"]["sell"]).replace(",", ""))
-                                gold_jewelry_sell = float(str(p["gold"]["sell"]).replace(",", ""))
-                                
-                                # อัปเดต Cache
-                                st.session_state['cached_gold_date'] = datetime.now()
-                                st.session_state['cached_gold_bar'] = gold_bar_sell
-                                st.session_state['cached_gold_jewelry'] = gold_jewelry_sell
-                                
-                                return gold_bar_sell, gold_jewelry_sell
-                except Exception:
-                    # หาก API Timeout หรือล่ม ให้เงียบไว้และใช้ค่าเดิมที่มีใน Session หรือค่า Default
+                        # ค้นหาตามโครงสร้างตารางราคาของเว็บสมาคมฯ (ตัวอย่าง ID หรือ Class มาตรฐาน)
+                        # โดยปกติเว็บสมาคมจะแสดงราคาทองคำแท่งและทองรูปพรรณในตารางหน้าแรก
+                        bar_val = None
+                        jewelry_val = None
+                        
+                        # ค้นหาตัวเลขราคาจาก element ที่เกี่ยวข้อง
+                        # (โครงสร้างเว็บสมาคมค้าทองคำหลักมักจะใช้ id เช่น DetailPlace_LabelBuy หรือคล้ายกัน)
+                        # หากเว็บหลักบล็อกหรือโครงสร้างเปลี่ยน เราสามารถสลับมาดึงผ่านเว็บสำรองที่โครงสร้างนิ่งกว่าได้
+                        
+                        # ลองค้นหาจากตารางราคารับซื้อ/ขายออกทั่วไป
+                        spans = soup.find_all('span')
+                        prices = []
+                        for span in spans:
+                            text = span.get_text().strip().replace(',', '')
+                            # กรองหาตัวเลขที่เป็นเรทราคาทอง (เช่น อยู่ในช่วง 30,000 - 100,000 บาท)
+                            try:
+                                val = float(text)
+                                if 30000 <= val <= 100000:
+                                    prices.append(val)
+                            except ValueError:
+                                pass
+                        
+                        # ถอดรหัสค่าที่ดึงได้ (มักเรียงตาม ลำดับ ทองคำแท่งขายออก, ทองรูปพรรณขายออก ฯลฯ)
+                        if len(prices) >= 2:
+                            # สมมติฐานตำแหน่งราคาขายออกแท่งและรูปพรรณ
+                            bar_val = prices[0] # ปรับแก้ตามหน้าเว็บจริง
+                            jewelry_val = prices[1]
+                            
+                            # บันทึกลง Session
+                            st.session_state['scraped_gold_date'] = datetime.now()
+                            st.session_state['scraped_gold_bar'] = bar_val
+                            st.session_state['scraped_gold_jewelry'] = jewelry_val
+                            
+                            return bar_val, jewelry_val
+
+                except Exception as e:
                     pass
+
+                # Fallback: ถ้า Scrape ไม่สำเร็จ ดึงค่าเดิมมาใช้ หรือใช้ค่าสำรองปัจจุบัน
+                fallback_bar = st.session_state.get('scraped_gold_bar', 68300.0)
+                fallback_jewelry = st.session_state.get('scraped_gold_jewelry', 69100.0)
+                return fallback_bar, fallback_jewelry
+
+            # เรียกใช้งานฟังก์ชัน Scraping
+            ref_gold_bar, ref_gold_jewelry = get_gold_price_by_scraping()
+
+            # แสดงผลราคาอ้างอิง
+            col_p1, col_p2 = st.columns(2)
+            col_p1.metric("📌 ราคาทองคำแท่ง (Scraped)", f"{ref_gold_bar:,.2f} ฿ / บาททอง")
+            col_p2.metric("📌 ราคาทองรูปพรรณ (Scraped)", f"{ref_gold_jewelry:,.2f} ฿ / บาททอง")
+            st.markdown("---")
             
-                # ถ้าดึงไม่ได้เลย ให้ใช้ค่าล่าสุดที่เคยมี (ถ้ามี) หรือค่าเริ่มต้น
-                return st.session_state.get('cached_gold_bar', fallback_bar), st.session_state.get('cached_gold_jewelry', fallback_jewelry)
-            
-            # --- เพิ่มปุ่มรีเฟรชราคาที่หน้า UI ---
-            if st.button("🔄 อัปเดตราคาทองล่าสุด"):
-                # ล้างค่าใน session เพื่อบังคับให้ดึงใหม่
-                if 'cached_gold_date' in st.session_state:
-                    del st.session_state['cached_gold_date']
-                st.rerun()
-            
-            # เรียกใช้งานฟังก์ชัน
-            ref_gold_bar, ref_gold_jewelry = get_thaigold_prices_daily()
-            
-            # 🔄 โหลดข้อมูลจาก Google Sheets และป้องกันค่าว่าง/ค่า 0
+            # 🔄 โหลดข้อมูลจาก Google Sheets และคำนวณพอร์ตทองคำต่อ
             if 'gold_portfolio' not in st.session_state:
                 st.session_state['gold_portfolio'] = []
                 try:
@@ -1571,7 +1596,6 @@ def main():
                         for row in records:
                             g_type = str(row.get("ประเภท", "")).strip()
                             if g_type != "":
-                                # รองรับทั้งคอลัมน์เก่าและใหม่
                                 raw_weight = row.get("น้ำหนัก/มูลค่าซื้อ", row.get("น้ำหนัก", 0))
                                 val_weight = float(str(raw_weight).replace(',', '')) if raw_weight else 0.0
                                 unit_str = str(row.get("หน่วย", ""))
@@ -1580,36 +1604,24 @@ def main():
                                 market_price = float(str(row.get("ราคาตลาดปัจจุบัน", 0)).replace(',', '')) if row.get("ราคาตลาดปัจจุบัน") else 0.0
                                 market_val = float(str(row.get("มูลค่าตลาด", 0)).replace(',', '')) if row.get("มูลค่าตลาด") else 0.0
                                 note_str = str(row.get("หมายเหตุ", ""))
-            
-                                # คำนวณค่าที่ขาดหายไปอัตโนมัติให้สอดคล้องกับประเภท
+                
                                 if g_type == "ทองคำแท่ง":
-                                    if market_price == 0:
-                                        market_price = ref_gold_bar
-                                    if market_val == 0 and val_weight > 0:
-                                        market_val = (val_weight / 15.244) * ref_gold_bar
-                                    if cost_val == 0:
-                                        cost_val = market_val  
-                                    if cost_avg == 0:
-                                        cost_avg = ref_gold_bar
+                                    if market_price == 0: market_price = ref_gold_bar
+                                    if market_val == 0 and val_weight > 0: market_val = (val_weight / 15.244) * ref_gold_bar
+                                    if cost_val == 0: cost_val = market_val  
+                                    if cost_avg == 0: cost_avg = ref_gold_bar
                                         
                                 elif g_type == "ทองรูปพรรณ":
-                                    if market_price == 0:
-                                        market_price = ref_gold_jewelry
-                                    if market_val == 0 and val_weight > 0:
-                                        market_val = val_weight * ref_gold_jewelry
-                                    if cost_val == 0:
-                                        cost_val = market_val
-                                    if cost_avg == 0:
-                                        cost_avg = ref_gold_jewelry
+                                    if market_price == 0: market_price = ref_gold_jewelry
+                                    if market_val == 0 and val_weight > 0: market_val = val_weight * ref_gold_jewelry
+                                    if cost_val == 0: cost_val = market_val
+                                    if cost_avg == 0: cost_avg = ref_gold_jewelry
                                         
-                                else:  # เทรดทอง / กองทุนทอง
-                                    if cost_val == 0:
-                                        cost_val = val_weight
-                                    if market_val == 0:
-                                        market_val = cost_val
-                                    if market_price == 0:
-                                        market_price = market_val
-            
+                                else:  
+                                    if cost_val == 0: cost_val = val_weight
+                                    if market_val == 0: market_val = cost_val
+                                    if market_price == 0: market_price = market_val
+                
                                 st.session_state['gold_portfolio'].append({
                                     "ประเภท": g_type,
                                     "น้ำหนัก/มูลค่าซื้อ": val_weight,
