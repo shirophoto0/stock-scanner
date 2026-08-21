@@ -2382,11 +2382,17 @@ def main():
                 # --- 2. ดึงข้อมูลราคาและคำนวณกราฟของหุ้นตัวที่เลือกในหน้านี้โดยเฉพาะ ---
                 current_ticker_symbol = f"{st.session_state.selected_ticker}.BK"
                 
-                # สมมติใช้ฟังก์ชันดึงข้อมูลราคาและคำนวณ Indicator (ใช้ชื่อฟังก์ชันเดิมที่คุณใช้ในระบบ เช่น load_and_calculate_stock_data หรือฟังก์ชันดึงรายตัว)
-                # ตรงนี้แนะนำให้เรียกฟังก์ชันดึงข้อมูลย้อนหลังของหุ้นตัวนี้ เพื่อให้ได้ chart_combined และ latest_price_single ของหุ้นตัวใหม่ครับ
-                # ตัวอย่างเช่น:
-                # chart_combined, latest_price_single = get_stock_technical_data(current_ticker_symbol)
-                # *หมายเหตุ: หากฟังก์ชันของคุณชื่อต่างออกไป สามารถปรับชื่อตัวแปรให้ตรงกันได้เลยครับ*
+                # ดึงข้อมูลจาก Yahoo Finance (Cache ไว้เพื่อความรวดเร็ว)
+                @st.cache_data(ttl=600)
+                def get_risk_data(ticker):
+                    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+                    if not df.empty:
+                        df['EMA10'] = df['Close'].ewm(span=10, adjust=False).mean()
+                        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+                        return df, float(df['Close'].iloc[-1])
+                    return pd.DataFrame(), 0.0
+            
+                chart_combined, latest_price_single = get_risk_data(current_ticker_symbol)
             
                 # --- 3. แสดงสถานะพอร์ตปัจจุบัน ---
                 if "cash_balance" not in st.session_state:
