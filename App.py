@@ -2077,9 +2077,26 @@ def main():
             # ==========================================
             # 5. Fundamental Dashboard (ให้อยู่ระดับชิดซ้ายปกติ)
             # ==========================================
-            if info:
-                st.markdown("#### 📊 Fundamental Growth Dashboard (คัดกรองพลังขับเคลื่อนตามสูตร SEPA)")
+            # 5. Fundamental Dashboard (พร้อมระบบ Try-Catch และ Fallback ป้องกันเว็บพัง)
+            st.markdown("#### 📊 Fundamental Growth Dashboard (คัดกรองพลังขับเคลื่อนตามสูตร SEPA)")
             
+            # ฟังก์ชันดึงข้อมูลแบบปลอดภัยด้วย Try-Catch
+            def safe_get_stock_fundamentals(ticker_symbol):
+                try:
+                    # ดึงข้อมูลจากฟังก์ชันแคชเดิมของคุณ
+                    stock_info = get_cached_stock_info(ticker_symbol)
+                    if stock_info and isinstance(stock_info, dict) and len(stock_info) > 0:
+                        return stock_info, True
+                except Exception as e:
+                    pass
+                
+                # Fallback: ถ้าดึงไม่ได้ ให้ส่งค่าว่างและบอกสถานะว่าดึงไม่สำเร็จ
+                return {}, False
+
+            # เรียกใช้งานฟังก์ชัน
+            info, is_success = safe_get_stock_fundamentals(ticker)
+            
+            if is_success and info:
                 # ดึงงบอย่างปลอดภัย
                 m_cap = info.get('marketCap', None)
                 rev_growth = info.get('quarterlyRevenueGrowth', info.get('revenueGrowth', None))
@@ -2124,9 +2141,16 @@ def main():
                         st.write("• **ราคาต่อกำไรสุทธิ (P/E Ratio ยืนยัน):** ไม่มีข้อมูล")
                 
                 st.info("💡 **ข้อแนะนำจากระบบ:** หุ้นซุปเปอร์สต็อกตามสไตล์ Mark Minervini มักจะมี EPS Growth ขยายตัวมากกว่า 20%-25% ขึ้นไป ควบคู่กับราคาหุ้นที่ยกฐานยืนเหนือเส้น EMA ขาขึ้น")
+            
             else:
-                st.warning(f"⚠️ ไม่สามารถดึงข้อมูล Fundamental สำหรับหุ้น {st.session_state.selected_ticker} จาก Yahoo Finance ได้ในขณะนี้")
-            with st.expander("⚙️ ตั้งค่าการแสดงผลกราฟ"):
+                # กรณีดึงข้อมูลไม่สำเร็จ แสดงกล่องแจ้งเตือนแบบนุ่มนวล พร้อมปุ่มให้ลองกดโหลดใหม่เฉพาะจุด
+                st.warning(f"⚠️ ขณะนี้ Yahoo Finance ไม่ตอบสนองต่อการดึงข้อมูลพื้นฐานของหุ้น `{selected_ticker}` (อาจติดปัญหา Rate Limit หรือการเชื่อมต่อ)")
+                
+                if st.button(f"🔄 ลองดึงข้อมูล {selected_ticker} อีกครั้ง"):
+                    # เคลียร์ Cache เฉพาะตัวหรือสั่ง Rerun ให้ลองใหม่
+                    if 'get_cached_stock_info' in globals() and hasattr(get_cached_stock_info, 'clear'):
+                        get_cached_stock_info.clear()
+                    st.rerun()
                 # 3. แสดงผลตารางและกราฟ
                 # ... (เอาโค้ดส่วนแสดงผล st.dataframe และ st.plotly_chart มาใส่ตรงนี้) ...
                 #####################################
