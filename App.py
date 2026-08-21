@@ -2359,7 +2359,25 @@ def main():
             # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
             # ==========================================
             with tab_risk:
-                st.markdown(f"#### 🚀 ระบบคำนวณ Risk Management & Position Sizing (หุ้นปัจจุบัน: **{st.session_state.get('selected_ticker', 'KBANK')}**)")
+                st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
+            
+                # --- ส่วนเลือก/พิมพ์ชื่อหุ้น เพื่อให้ลิงก์กับ Tab กราฟเทคนิคอล ---
+                all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS] if 'SET100_TICKERS' in locals() else ["KBANK", "PTT", "SCB", "CPALL", "PTTEP"]
+                current_selected = st.session_state.get("selected_ticker", "KBANK")
+                
+                risk_ticker_input = st.selectbox(
+                    "🔍 เลือกหรือพิมพ์ชื่อหุ้นที่ต้องการคำนวณความเสี่ยง:",
+                    options=all_tickers,
+                    index=all_tickers.index(current_selected) if current_selected in all_tickers else 0,
+                    key="risk_stock_selectbox_main"
+                )
+            
+                # ถ้าเปลี่ยนชื่อหุ้นตรงนี้ ให้บันทึกเข้า session_state แล้วสั่ง Rerun เพื่อให้ Tab กราฟเปลี่ยนตาม
+                if risk_ticker_input != current_selected:
+                    st.session_state.selected_ticker = risk_ticker_input
+                    st.rerun()
+            
+                st.divider()
             
                 # 1. แสดงสถานะพอร์ตปัจจุบัน
                 if "cash_balance" not in st.session_state:
@@ -2369,7 +2387,7 @@ def main():
                 market_value = get_total_market_value()
                 total_equity = cash_balance + market_value
                 
-                st.markdown("##### 💰 สรุปสถานะพอร์ตปัจจุบัน")
+                st.markdown(f"##### 💰 สรุปสถานะพอร์ตปัจจุบัน (หุ้นที่เลือก: **{st.session_state.selected_ticker}**)")
                 col_a, col_b, col_c = st.columns(3)
                 col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
                 col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
@@ -2377,7 +2395,7 @@ def main():
                 
                 st.divider()
                 
-                # --- ดึงค่า EMA และตรวจสอบตาราง chart_combined ของหุ้นที่เลือก ---
+                # --- ส่วนป้องกัน Error: ดึงค่า EMA และตรวจสอบตาราง chart_combined ---
                 has_chart = 'chart_combined' in locals() and isinstance(chart_combined, pd.DataFrame) and not chart_combined.empty
                 
                 if has_chart and 'EMA10' in chart_combined.columns:
@@ -2394,7 +2412,7 @@ def main():
                     ema20_val = 0.0
                     ema20_str = "เส้น EMA 20 (ไม่มีข้อมูล)"
             
-                # 2. ส่วนการคำนวณสัดส่วนและ Position Sizing
+                # 2. ส่วนการคำนวณ (Position Sizing)
                 r_col1, r_col2 = st.columns([1, 1])
             
                 with r_col1:
