@@ -1635,11 +1635,6 @@ def main():
                 except Exception as e:
                     st.error(f"⚠️ โหลดข้อมูลพอร์ตทองคำไม่สำเร็จ: {e}")
             
-            # แสดงราคาอ้างอิงทองแท่ง/รูปพรรณ
-            col_p1, col_p2 = st.columns(2)
-            col_p1.metric("📌 ราคาทองคำแท่ง (ขายออกอ้างอิง)", f"{ref_gold_bar:,.2f} ฿ / บาททอง")
-            col_p2.metric("📌 ราคาทองรูปพรรณ (ขายออกอ้างอิง)", f"{ref_gold_jewelry:,.2f} ฿ / บาททอง")
-            
             st.markdown("---")
             st.markdown("#### 📝 บันทึกข้อมูลการถือครองทองคำ")
             
