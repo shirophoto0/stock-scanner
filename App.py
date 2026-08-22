@@ -2374,11 +2374,15 @@ def main():
             
                 if risk_ticker_input != current_selected:
                     st.session_state.selected_ticker = risk_ticker_input
+                    # ล้างค่า Widget เก่าทิ้งเมื่อเปลี่ยนหุ้น เพื่อบังคับให้สร้าง Widget ใหม่
+                    for k in list(st.session_state.keys()):
+                        if k.startswith("risk_") and k != "risk_stock_selectbox_main":
+                            del st.session_state[k]
                     st.rerun()
             
                 st.divider()
             
-                # --- 2. ดึงข้อมูลราคาและคำนวณกราฟ (บังคับ Cache แยกตามรายหุ้น) ---
+                # --- 2. ดึงข้อมูลราคาและคำนวณกราฟ ---
                 current_ticker_symbol = f"{st.session_state.selected_ticker}.BK"
                 
                 @st.cache_data(ttl=600)
@@ -2393,10 +2397,7 @@ def main():
                     return pd.DataFrame(), 0.0
             
                 chart_risk, price_risk = get_risk_data(current_ticker_symbol)
-                
-                # บันทึกราคาล่าสุดลง Session State เพื่อให้ทุกส่วนดึงค่าใหม่เสมอ
-                st.session_state.current_price_for_risk = price_risk
-                current_p = st.session_state.current_price_for_risk
+                current_p = price_risk
             
                 # --- 3. แสดงสถานะพอร์ตปัจจุบัน ---
                 if "cash_balance" not in st.session_state:
@@ -2425,11 +2426,12 @@ def main():
                 r_col1, r_col2 = st.columns([1, 1])
             
                 with r_col1:
-                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0, key="risk_alloc_slider")
+                    # ผูก Key ให้เปลี่ยนตามชื่อหุ้น เพื่อบังคับ Reset ค่า slider เมื่อเปลี่ยนหุ้น
+                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0, key=f"risk_alloc_slider_{st.session_state.selected_ticker}")
                     max_budget = total_equity * (max_alloc_pct / 100.0)
                     effective_budget = min(max_budget, cash_balance)
                     st.info(f"💡 วงเงินสูงสุดสำหรับไม้นี้: **{effective_budget:,.0f} ฿**")
-                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key="risk_pct_slider")
+                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key=f"risk_pct_slider_{st.session_state.selected_ticker}")
                 
                 with r_col2:
                     st.markdown(f"📌 **ราคาปัจจุบันของ {st.session_state.selected_ticker}:** `{current_p:,.2f} ฿`")
@@ -2440,17 +2442,18 @@ def main():
                         "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
                         "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
                     ]
-                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", sl_options, key="risk_sl_type")
+                    # ผูก Key ตามชื่อหุ้นเช่นกัน
+                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", sl_options, key=f"risk_sl_type_{st.session_state.selected_ticker}")
                  
                     if "EMA 10" in sl_type:
                         sl_price = ema10_val
                     elif "EMA 20" in sl_type:
                         sl_price = ema20_val
                     elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                        fixed_sl_pct = st.slider("ระบุ % Stop Loss:", min_value=2.0, max_value=12.0, value=7.0, step=0.5, key="risk_fixed_sl")
+                        fixed_sl_pct = st.slider("ระบุ % Stop Loss:", min_value=2.0, max_value=12.0, value=7.0, step=0.5, key=f"risk_fixed_sl_{st.session_state.selected_ticker}")
                         sl_price = current_p * (1 - (fixed_sl_pct / 100))
                     else: 
-                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=current_p * 0.93, step=0.25, key="risk_manual_sl")
+                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=float(current_p * 0.93), step=0.25, key=f"risk_manual_sl_{st.session_state.selected_ticker}")
                 
                 # --- 5. คำนวณผลลัพธ์ ---
                 max_risk_money = total_equity * (risk_pct / 100) 
