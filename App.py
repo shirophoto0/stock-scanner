@@ -2379,22 +2379,23 @@ def main():
                 st.divider()
             
                 # --- 2. ดึงข้อมูลราคาและคำนวณกราฟ (ใช้ตัวแปรแยกต่างหาก) ---
+                # --- 2. ดึงข้อมูลราคาและคำนวณกราฟ (บังคับให้ Cache รีเฟรชเมื่อเปลี่ยนหุ้น) ---
                 current_ticker_symbol = f"{st.session_state.selected_ticker}.BK"
                 
-                # ดึงข้อมูลโดยตรงใน Tab นี้
-                df_risk = yf.download(current_ticker_symbol, period="6mo", interval="1d", progress=False)
-                
-                # จัดการกรณีข้อมูลเป็น MultiIndex 
-                if isinstance(df_risk.columns, pd.MultiIndex):
-                    df_risk.columns = df_risk.columns.get_level_values(0)
-                
-                # คำนวณ EMA
-                df_risk['EMA10'] = df_risk['Close'].ewm(span=10, adjust=False).mean()
-                df_risk['EMA20'] = df_risk['Close'].ewm(span=20, adjust=False).mean()
-                
-                # ตั้งชื่อตัวแปรเฉพาะของหน้านี้
-                chart_risk = df_risk
-                price_risk = float(df_risk['Close'].iloc[-1])
+                # เพิ่ม current_ticker_symbol เข้าไปในฟังก์ชัน เพื่อให้ cache แยกตามตัวแปรนี้
+                @st.cache_data(ttl=600)
+                def get_risk_data(ticker):
+                    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+                    if not df.empty:
+                        if isinstance(df.columns, pd.MultiIndex):
+                            df.columns = df.columns.get_level_values(0)
+                        df['EMA10'] = df['Close'].ewm(span=10, adjust=False).mean()
+                        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+                        return df, float(df['Close'].iloc[-1])
+                    return pd.DataFrame(), 0.0
+            
+                # เรียกใช้โดยส่ง ticker เข้าไปเพื่อให้ Cache ทำงานแยกหุ้น
+                chart_risk, price_risk = get_risk_data(current_ticker_symbol)
             
                 # --- 3. แสดงสถานะพอร์ตปัจจุบัน ---
                 if "cash_balance" not in st.session_state:
