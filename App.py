@@ -2361,15 +2361,16 @@ def main():
             with tab_risk:
                 st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
             
-                # --- 1. ส่วนเลือก/พิมพ์ชื่อหุ้น ---
+                # --- 1. ส่วนเลือก/พิมพ์ชื่อหุ้น (ผูก Key ตามตัวแปรหุ้นเพื่อบังคับ Refresh Widget) ---
                 all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS] if 'SET100_TICKERS' in globals() else ["KBANK", "PTT", "SCB", "CPALL", "PTTEP"]
                 current_selected = st.session_state.get("selected_ticker", "KBANK")
                 
+                # 🟢 เทคนิคสำคัญ: ใส่ชื่อหุ้นลงไปใน Key ด้วย เพื่อป้องกัน Streamlit จำค่าเก่า
                 risk_ticker_input = st.selectbox(
                     "🔍 เลือกหรือพิมพ์ชื่อหุ้นที่ต้องการคำนวณความเสี่ยง:",
                     options=all_tickers,
                     index=all_tickers.index(current_selected) if current_selected in all_tickers else 0,
-                    key="risk_stock_select_v2"
+                    key=f"risk_stock_selectbox_{current_selected}"
                 )
             
                 if risk_ticker_input != current_selected:
@@ -2425,13 +2426,12 @@ def main():
                 r_col1, r_col2 = st.columns([1, 1])
             
                 with r_col1:
-                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0, key="risk_alloc_slider")
+                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0, key=f"risk_alloc_{st.session_state.selected_ticker}")
                     max_budget = total_equity * (max_alloc_pct / 100.0)
                     effective_budget = min(max_budget, cash_balance)
                     st.info(f"💡 วงเงินสูงสุดสำหรับไม้นี้: **{effective_budget:,.0f} ฿**")
                     
-                    # ประกาศตัวแปร risk_pct ให้เรียบร้อยตรงนี้
-                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key="risk_pct_slider")
+                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key=f"risk_pct_{st.session_state.selected_ticker}")
                 
                 with r_col2:
                     st.markdown(f"📌 **ราคาปัจจุบันของ {st.session_state.selected_ticker}:** `{current_p:,.2f} ฿`")
@@ -2442,17 +2442,17 @@ def main():
                         "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
                         "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
                     ]
-                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", sl_options, key="final_sl_type_choice")
+                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", sl_options, key=f"final_sl_type_{st.session_state.selected_ticker}")
                  
                     if "EMA 10" in sl_type:
                         sl_price = ema10_val
                     elif "EMA 20" in sl_type:
                         sl_price = ema20_val
                     elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                        fixed_sl_pct = st.slider("ระบุ % Stop Loss:", min_value=2.0, max_value=12.0, value=7.0, step=0.5, key="risk_fixed_sl")
+                        fixed_sl_pct = st.slider("ระบุ % Stop Loss:", min_value=2.0, max_value=12.0, value=7.0, step=0.5, key=f"risk_fixed_sl_{st.session_state.selected_ticker}")
                         sl_price = current_p * (1 - (fixed_sl_pct / 100))
                     else: 
-                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=float(current_p * 0.93), step=0.25, key="risk_manual_sl")
+                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=float(current_p * 0.93), step=0.25, key=f"risk_manual_sl_{st.session_state.selected_ticker}")
                 
                 # --- 5. คำนวณผลลัพธ์ ---
                 max_risk_money = total_equity * (risk_pct / 100) 
