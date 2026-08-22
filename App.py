@@ -2361,119 +2361,125 @@ def main():
             with tab_risk:
                 st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
             
-                # --- 1. ส่วนเลือกหุ้น (ให้ใช้ Form หรือ Callback ตรงๆ เพื่อให้อัปเดตค่าทันที) ---
-                all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS] if 'SET100_TICKERS' in locals() else ["KBANK", "PTT", "SCB", "CPALL", "PTTEP"]
-                
-                # สร้างช่องเลือกหุ้น โดยให้ดึงค่าจาก session_state มาเป็น index
-                if "selected_ticker" not in st.session_state:
-                    st.session_state.selected_ticker = "KBANK"
+                # --- 1. ส่วนเลือก/พิมพ์ชื่อหุ้น (ใช้โครงสร้างเดียวกับแท็บเทคนิคอล) ---
+                all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS] if 'SET100_TICKERS' in globals() or 'SET100_TICKERS' in locals() else []
+                if not all_tickers:
+                    # ดึงจาก session_state หรือใช้ค่าพื้นฐานถ้าไม่มีจริงๆ
+                    all_tickers = ["KBANK", "PTT", "SCB", "CPALL", "PTTEP"]
             
-                selected_stock = st.selectbox(
+                current_selected = st.session_state.get("selected_ticker", "KBANK")
+            
+                risk_ticker_input = st.selectbox(
                     "🔍 เลือกหรือพิมพ์ชื่อหุ้นที่ต้องการคำนวณความเสี่ยง:",
                     options=all_tickers,
-                    index=all_tickers.index(st.session_state.selected_ticker) if st.session_state.selected_ticker in all_tickers else 0,
-                    key="unique_risk_selectbox_final"
+                    index=all_tickers.index(current_selected) if current_selected in all_tickers else 0,
+                    key="risk_stock_selectbox_main"
                 )
             
-                # ถ้ามีการเปลี่ยนค่าใน Selectbox ให้บันทึกและสั่ง rerun ทันที
-                if selected_stock != st.session_state.selected_ticker:
-                    st.session_state.selected_ticker = selected_stock
+                # ถ้าเลือกหุ้นเปลี่ยนไป ให้บันทึกและสั่ง rerun ทันที (เหมือนแท็บเทคนิคอลเป๊ะๆ)
+                if risk_ticker_input != current_selected:
+                    st.session_state.selected_ticker = risk_ticker_input
                     st.rerun()
+            
+                # ใช้ค่ากลางจาก session_state เหมือนแท็บเทคนิคอล
+                selected_ticker = st.session_state.selected_ticker
+                current_ticker_symbol = f"{selected_ticker}.BK"
             
                 st.divider()
             
-                # --- 2. ดึงข้อมูลราคาแบบไม่ใช้ Cache ชั่วคราว (เพื่อทดสอบว่าราคาเปลี่ยนตามมั้ย) ---
-                # หมายเหตุ: ถ้าใช้ yf.download แบบไม่ใส่ cache แล้วราคาเปลี่ยน แปลว่าปัญาหาอยู่ที่ Cache เก่าค้าง
-                symbol_to_fetch = f"{st.session_state.selected_ticker}.BK"
-                
-                # ดึงข้อมูลสดๆ เคลียร์ตัวแปรเก่า
-                df_risk = yf.download(symbol_to_fetch, period="6mo", interval="1d", progress=False)
-                
-                if df_risk.empty:
-                    st.error(f"ไม่พบข้อมูลของหุ้น {symbol_to_fetch} กรุณาตรวจสอบชื่อหุ้นอีกครั้ง")
+                # --- 2. ดึงข้อมูลราคาและคำนวณกราฟแบบสดๆ ตามหุ้นที่เลือก ---
+                @st.cache_data(ttl=600)
+                def get_risk_data(ticker):
+                    df = yf.download(ticker, period="6mo", interval="1d", progress=False)
+                    if not df.empty:
+                        if isinstance(df.columns, pd.MultiIndex):
+                            df.columns = df.columns.get_level_values(0)
+                        df['EMA10'] = df['Close'].ewm(span=10, adjust=False).mean()
+                        df['EMA20'] = df['Close'].ewm(span=20, adjust=False).mean()
+                        return df, float(df['Close'].iloc[-1])
+                    return pd.DataFrame(), 0.0
+            
+                chart_risk, price_risk = get_risk_data(current_ticker_symbol)
+                current_p = price_risk
+            
+                # --- 3. แสดงสถานะพอร์ตปัจจุบัน ---
+                if "cash_balance" not in st.session_state:
+                    st.session_state.cash_balance = load_total_cash_balance()
+            
+                cash_balance = st.session_state.cash_balance
+                market_value = get_total_market_value()
+                total_equity = cash_balance + market_value
+            
+                st.markdown(f"##### 💰 สรุปสถานะพอร์ตปัจจุบัน (กำลังวิเคราะห์หุ้น: **{selected_ticker}**)")
+                col_a, col_b, col_c = st.columns(3)
+                col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
+                col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
+                col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
+            
+                st.divider()
+            
+                # --- 4. เตรียมข้อมูล Stop Loss ---
+                if not chart_risk.empty and 'EMA10' in chart_risk.columns and 'EMA20' in chart_risk.columns:
+                    ema10_val = float(chart_risk['EMA10'].iloc[-1])
+                    ema20_val = float(chart_risk['EMA20'].iloc[-1])
                 else:
-                    if isinstance(df_risk.columns, pd.MultiIndex):
-                        df_risk.columns = df_risk.columns.get_level_values(0)
-                        
-                    df_risk['EMA10'] = df_risk['Close'].ewm(span=10, adjust=False).mean()
-                    df_risk['EMA20'] = df_risk['Close'].ewm(span=20, adjust=False).mean()
-                    
-                    # ดึงราคาปัจจุบันสดๆ จากแถวสุดท้ายของ DataFrame หุ้นตัวนั้นๆ
-                    current_p = float(df_risk['Close'].iloc[-1])
-                    ema10_val = float(df_risk['EMA10'].iloc[-1])
-                    ema20_val = float(df_risk['EMA20'].iloc[-1])
+                    ema10_val = current_p * 0.95
+                    ema20_val = current_p * 0.90
             
-                    # --- 3. แสดงสถานะพอร์ตปัจจุบัน ---
-                    if "cash_balance" not in st.session_state:
-                        st.session_state.cash_balance = load_total_cash_balance()
-                    
-                    cash_balance = st.session_state.cash_balance
-                    market_value = get_total_market_value()
-                    total_equity = cash_balance + market_value
-                    
-                    st.markdown(f"##### 💰 สรุปสถานะพอร์ตปัจจุบัน (กำลังวิเคราะห์หุ้น: **{st.session_state.selected_ticker}**)")
-                    col_a, col_b, col_c = st.columns(3)
-                    col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
-                    col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
-                    col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
-                    
-                    st.divider()
+                r_col1, r_col2 = st.columns([1, 1])
             
-                    # --- 4. เตรียมข้อมูล Stop Loss ---
-                    r_col1, r_col2 = st.columns([1, 1])
+                with r_col1:
+                    max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0, key="risk_alloc_slider")
+                    max_budget = total_equity * (max_alloc_pct / 100.0)
+                    effective_budget = min(max_budget, cash_balance)
+                    st.info(f"💡 วงเงินสูงสุดสำหรับไม้นี้: **{effective_budget:,.0f} ฿**")
+                    risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key="risk_pct_slider")
             
-                    with r_col1:
-                        max_alloc_pct = st.slider("1. สัดส่วนเงินลงทุนสูงสุดสำหรับไม้ซื้อนี้ (% ของพอร์ต):", min_value=5.0, max_value=100.0, value=20.0, step=5.0, key="f_alloc")
-                        max_budget = total_equity * (max_alloc_pct / 100.0)
-                        effective_budget = min(max_budget, cash_balance)
-                        st.info(f"💡 วงเงินสูงสุดสำหรับไม้นี้: **{effective_budget:,.0f} ฿**")
-                        risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key="f_risk")
+                with r_col2:
+                    st.markdown(f"📌 **ราคาปัจจุบันของ {selected_ticker}:** `{current_p:,.2f} ฿`")
                     
-                    with r_col2:
-                        # ตรงนี้จะแสดงราคาตามหุ้นที่เลือกจริงแน่นอน เพราะดึงสดจาก DataFrame ด้านบน
-                        st.markdown(f"📌 **ราคาปัจจุบันของ {st.session_state.selected_ticker}:** `{current_p:,.2f} ฿`")
-                        
-                        sl_options = [
-                            f"เส้น EMA 10 ({ema10_val:.2f} บาท)",
-                            f"เส้น EMA 20 ({ema20_val:.2f} บาท)",
-                            "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
-                            "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
-                        ]
-                        sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", sl_options, key="f_sl_type")
-                     
-                        if "EMA 10" in sl_type:
-                            sl_price = ema10_val
-                        elif "EMA 20" in sl_type:
-                            sl_price = ema20_val
-                        elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
-                            fixed_sl_pct = st.slider("ระบุ % Stop Loss:", min_value=2.0, max_value=12.0, value=7.0, step=0.5, key="f_fixed")
-                            sl_price = current_p * (1 - (fixed_sl_pct / 100))
-                        else: 
-                            sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=float(current_p * 0.93), step=0.25, key="f_manual")
-                    
-                    # --- 5. คำนวณผลลัพธ์ ---
-                    max_risk_money = total_equity * (risk_pct / 100) 
-                    risk_per_share = current_p - sl_price
-                    
-                    if risk_per_share <= 0:
-                        st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
+                    # ผูก key ให้เปลี่ยนตามชื่อหุ้น เพื่อบังคับให้ Streamlit สร้าง Selectbox ใหม่และรีเซ็ตค่าเก่าทิ้งทันที
+                    sl_options = [
+                        f"เส้น EMA 10 ({ema10_val:.2f} บาท)",
+                        f"เส้น EMA 20 ({ema20_val:.2f} บาท)",
+                        "กำหนดเป็นเปอร์เซ็นต์คงที่ (Fixed %)",
+                        "กำหนดราคาคัทด้วยตัวเอง (Manual Price)"
+                    ]
+                    sl_type = st.selectbox("3. เลือกเกณฑ์จุดตัดขาดทุน (Stop Loss):", sl_options, key=f"risk_sl_type_{selected_ticker}")
+            
+                    if "EMA 10" in sl_type:
+                        sl_price = ema10_val
+                    elif "EMA 20" in sl_type:
+                        sl_price = ema20_val
+                    elif "กำหนดเป็นเปอร์เซ็นต์คงที่" in sl_type:
+                        fixed_sl_pct = st.slider("ระบุ % Stop Loss:", min_value=2.0, max_value=12.0, value=7.0, step=0.5, key=f"risk_fixed_sl_{selected_ticker}")
+                        sl_price = current_p * (1 - (fixed_sl_pct / 100))
+                    else: 
+                        sl_price = st.number_input("ระบุราคา Stop Loss (บาท):", min_value=0.0, value=float(current_p * 0.93), step=0.25, key=f"risk_manual_sl_{selected_ticker}")
+            
+                # --- 5. คำนวณผลลัพธ์ ---
+                max_risk_money = total_equity * (risk_pct / 100) 
+                risk_per_share = current_p - sl_price
+            
+                if risk_per_share <= 0:
+                    st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
+                else:
+                    shares_by_risk = max_risk_money / risk_per_share       
+                    shares_by_budget = effective_budget / current_p         
+                    shares_to_buy = int(min(shares_by_risk, shares_by_budget))
+                    total_buy_value = shares_to_buy * current_p
+            
+                    st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
+                    res_col1, res_col2, res_col3, res_col4 = st.columns(4)
+                    res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
+                    res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
+                    res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
+                    res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
+            
+                    if total_buy_value > cash_balance:
+                        st.warning(f"⚠️ เงินลงทุนที่คำนวณได้สูงกว่าเงินสดคงเหลือในพอร์ต")
                     else:
-                        shares_by_risk = max_risk_money / risk_per_share       
-                        shares_by_budget = effective_budget / current_p         
-                        shares_to_buy = int(min(shares_by_risk, shares_by_budget))
-                        total_buy_value = shares_to_buy * current_p
-                        
-                        st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
-                        res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-                        res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
-                        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
-                        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
-                        res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
-                        
-                        if total_buy_value > cash_balance:
-                            st.warning(f"⚠️ เงินลงทุนที่คำนวณได้สูงกว่าเงินสดคงเหลือในพอร์ต")
-                        else:
-                            st.success(f"✅ วงเงินและเงินสดในพอร์ตเพียงพอสำหรับการซื้อไม้นี้")
+                        st.success(f"✅ วงเงินและเงินสดในพอร์ตเพียงพอสำหรับการซื้อไม้นี้")
                                         
         #######################          
                 st.markdown("---")
