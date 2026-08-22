@@ -2361,10 +2361,9 @@ def main():
             with tab_risk:
                 st.markdown("#### 🚀 ระบบคำนวณ Risk Management & Position Sizing")
             
-                # --- 1. ส่วนเลือก/พิมพ์ชื่อหุ้น (ใช้โครงสร้างเดียวกับแท็บเทคนิคอล) ---
+                # --- 1. ส่วนเลือก/พิมพ์ชื่อหุ้น (ปรับให้ Rerun ทันทีเมื่อเปลี่ยนค่า) ---
                 all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS] if 'SET100_TICKERS' in globals() or 'SET100_TICKERS' in locals() else []
                 if not all_tickers:
-                    # ดึงจาก session_state หรือใช้ค่าพื้นฐานถ้าไม่มีจริงๆ
                     all_tickers = ["KBANK", "PTT", "SCB", "CPALL", "PTTEP"]
             
                 current_selected = st.session_state.get("selected_ticker", "KBANK")
@@ -2376,12 +2375,12 @@ def main():
                     key="risk_stock_selectbox_main"
                 )
             
-                # ถ้าเลือกหุ้นเปลี่ยนไป ให้บันทึกและสั่ง rerun ทันที (เหมือนแท็บเทคนิคอลเป๊ะๆ)
+                # 🟢 ย้ายคำสั่ง Rerun มาไว้ตรงนี้ทันที! เพื่อไม่ให้โค้ดส่วนล่างไปดึงค่าเก่ามาแสดงผลก่อน
                 if risk_ticker_input != current_selected:
                     st.session_state.selected_ticker = risk_ticker_input
                     st.rerun()
             
-                # ใช้ค่ากลางจาก session_state เหมือนแท็บเทคนิคอล
+                # ใช้ค่าที่อัปเดตแล้วแน่นอน
                 selected_ticker = st.session_state.selected_ticker
                 current_ticker_symbol = f"{selected_ticker}.BK"
             
@@ -2410,6 +2409,7 @@ def main():
                 market_value = get_total_market_value()
                 total_equity = cash_balance + market_value
             
+                # ตอนนี้ตัวแปร selected_ticker จะตรงกับหุ้นที่เลือกเป๊ะๆ แล้วครับ
                 st.markdown(f"##### 💰 สรุปสถานะพอร์ตปัจจุบัน (กำลังวิเคราะห์หุ้น: **{selected_ticker}**)")
                 col_a, col_b, col_c = st.columns(3)
                 col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
@@ -2436,9 +2436,9 @@ def main():
                     risk_pct = st.slider("2. ความเสี่ยงสูงสุดต่อไม้ (% ของพอร์ต):", min_value=0.25, max_value=3.0, value=1.0, step=0.25, key="risk_pct_slider")
             
                 with r_col2:
+                    # แสดงราคาปัจจุบันตามหุ้นที่เลือกจริง
                     st.markdown(f"📌 **ราคาปัจจุบันของ {selected_ticker}:** `{current_p:,.2f} ฿`")
                     
-                    # ผูก key ให้เปลี่ยนตามชื่อหุ้น เพื่อบังคับให้ Streamlit สร้าง Selectbox ใหม่และรีเซ็ตค่าเก่าทิ้งทันที
                     sl_options = [
                         f"เส้น EMA 10 ({ema10_val:.2f} บาท)",
                         f"เส้น EMA 20 ({ema20_val:.2f} บาท)",
