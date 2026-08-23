@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import plotly.graph_objects as go
 import plotly.express as px
-from backend_functions import get_gsheet_client, get_cached_spreadsheet
+from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name
 
 
 def render_tab_overview():
@@ -23,7 +23,7 @@ def render_tab_overview():
         last_error = None
         for i in range(max_retries):
             try:
-                sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet(ws_name)
+                sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet(ws_name)
                 return sheet.get_all_records()
             except Exception as e:
                 last_error = str(e)
