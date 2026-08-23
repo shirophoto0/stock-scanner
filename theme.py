@@ -92,10 +92,23 @@ p, span, div, label {
     font-family: 'Prompt', sans-serif;
     color: var(--text-secondary);
     font-weight: 500;
+    background-color: transparent !important;
 }
 [data-testid="stTabs"] button[aria-selected="true"] {
     color: var(--accent-primary) !important;
     font-weight: 600;
+    background-color: transparent !important;
+}
+/* 🔧 แก้บั๊ก: ปิดไฮไลท์สีเหลืองพื้นหลังตอนคลิก/โฟกัสแท็บ (ค่าเริ่มต้นของเบราว์เซอร์ที่ยังไม่ได้ปิด
+   ทำให้ตัวหนังสือสีขาวบนพื้นเหลืองอ่านยาก) บังคับให้พื้นหลังโปร่งใสเสมอไม่ว่าจะอยู่ในสถานะไหน */
+[data-testid="stTabs"] button[role="tab"]:hover,
+[data-testid="stTabs"] button[role="tab"]:focus,
+[data-testid="stTabs"] button[role="tab"]:focus-visible,
+[data-testid="stTabs"] button[role="tab"]:active {
+    background-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+    color: var(--accent-primary) !important;
 }
 [data-testid="stTabs"] [data-baseweb="tab-highlight"] {
     background-color: var(--accent-primary) !important;
