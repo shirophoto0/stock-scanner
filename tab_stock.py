@@ -803,7 +803,8 @@ def render_tab_stock():
         with st.expander("🔄 บันทึกการซื้อขายหุ้น (อัปเดต Portfolio & Journal)"):
             col1, col2 = st.columns(2)
 
-            portfolio_stocks = [item['หุ้น'] for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
+            # 🔧 แก้บั๊ก: รองรับชื่อคอลัมน์ 'Ticker' ด้วย เผื่อบางบัญชีบันทึกเป็นภาษาอังกฤษ
+            portfolio_stocks = [item.get('หุ้น', item.get('Ticker', '')) for item in st.session_state.my_portfolio] if "my_portfolio" in st.session_state else []
 
             with col1:
                 options = ["  "] + portfolio_stocks
