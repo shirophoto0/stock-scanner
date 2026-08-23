@@ -19,6 +19,7 @@ from backend_functions import (
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name
 )
+from theme import style_plotly
 
 
 def render_tab_stock():
@@ -408,7 +409,7 @@ def render_tab_stock():
 
                         # เพิ่ม margin top เพื่อให้มีพื้นที่เหลือให้ป้ายข้อความด้านบนไม่ถูกตัด
                         fig.update_layout(margin=dict(t=50, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(style_plotly(fig), use_container_width=True)
 
                     else:
                         st.info("ยังไม่มีข้อมูลเพียงพอที่จะแสดงกราฟการกระจายตัวครับ")
@@ -498,7 +499,7 @@ def render_tab_stock():
                                 margin=dict(l=20, r=20, t=30, b=20), 
                                 coloraxis_showscale=False
                             )
-                            st.plotly_chart(fig_bar, use_container_width=True)
+                            st.plotly_chart(style_plotly(fig_bar), use_container_width=True)
 
                             # 🗺️ ส่วน Treemap
                             st.markdown("##### 🗺️ แผนผังแสดงสัดส่วนและผลงานพอร์ตตาม Sector (Treemap)")
@@ -515,7 +516,7 @@ def render_tab_stock():
                                 hovertemplate='<b>Sector:</b> %{label}<br><b>เงินลงทุนรวม:</b> %{value:,.2f} ฿<br><b>กำไร/ขาดทุน:</b> %{customdata[0]:,.2f} ฿<br><b>ผลตอบแทน:</b> %{customdata[1]:+.2f}%<br><b>หุ้นในกลุ่ม:</b> %{customdata[2]}'
                             )
                             fig_tree.update_layout(height=400, margin=dict(l=10, r=10, t=10, b=10))
-                            st.plotly_chart(fig_tree, use_container_width=True)
+                            st.plotly_chart(style_plotly(fig_tree), use_container_width=True)
 
                             # 📋 ตารางสรุปข้อมูล Sector (ปัดเศษทศนิยม 2 ตำแหน่งจริง ๆ ก่อนแสดงผล)
                             st.markdown("##### 📋 ตารางสรุปข้อมูลแยกตาม Sector")
@@ -730,7 +731,7 @@ def render_tab_stock():
                     fig.update_traces(textposition='top center')
 
                     # 4. แสดงผล
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(style_plotly(fig), use_container_width=True)
 
                     # 5. สรุปคำแนะนำจากกราฟ
                     st.markdown("""
@@ -1088,7 +1089,7 @@ def render_tab_stock():
                 automargin=True
             )
             fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
-            st.plotly_chart(fig_pie1, use_container_width=True)
+            st.plotly_chart(style_plotly(fig_pie1), use_container_width=True)
             st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
 
         # 2. Pie Chart: มูลค่าต้นทุน (25%)
@@ -1102,7 +1103,7 @@ def render_tab_stock():
                 automargin=True
             )
             fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
-            st.plotly_chart(fig_pie2, use_container_width=True)
+            st.plotly_chart(style_plotly(fig_pie2), use_container_width=True)
             st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
 
         # 3. Bar Chart: กำไร/ขาดทุน (50%)
@@ -1117,7 +1118,7 @@ def render_tab_stock():
             )])
             fig_bar.update_traces(textfont_size=10)
             fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(style_plotly(fig_bar), use_container_width=True)
             st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
 
         # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
@@ -1172,7 +1173,7 @@ def render_tab_stock():
                     showlegend=False
                 )
                 if 'fig_donut_cost' in locals() and fig_donut_cost is not None:
-                    st.plotly_chart(fig_donut_cost, use_container_width=True, key="donut_cost_chart")
+                    st.plotly_chart(style_plotly(fig_donut_cost), use_container_width=True, key="donut_cost_chart")
                 else:
                     st.warning("ไม่มีข้อมูลสำหรับกราฟ Cost Weight")
 
@@ -1195,7 +1196,7 @@ def render_tab_stock():
                     showlegend=True
                 )
                 if 'fig_donut_market' in locals() and fig_donut_market is not None:
-                    st.plotly_chart(fig_donut_market, use_container_width=True, key="donut_market_chart")
+                    st.plotly_chart(style_plotly(fig_donut_market), use_container_width=True, key="donut_market_chart")
                 else:
                     st.warning("ไม่มีข้อมูลสำหรับกราฟ Market Weight")
 
@@ -1521,7 +1522,7 @@ def render_tab_stock():
                             margin=dict(l=10, r=20, t=20, b=20),
                             coloraxis_showscale=False
                         )
-                        st.plotly_chart(fig_yield_bar, use_container_width=True)
+                        st.plotly_chart(style_plotly(fig_yield_bar), use_container_width=True)
 
                         st.markdown(f"##### 📋 ตารางสรุป Yield on Cost ({selected_period})")
                         df_table_display = df_yield_sorted[['Ticker', 'ยอดรับสุทธิ', 'ต้นทุนหุ้น', 'Yield_on_Cost']].copy()
@@ -1593,7 +1594,7 @@ def render_tab_stock():
                         margin=dict(l=10, r=10, t=20, b=20),
                         coloraxis_showscale=False
                     )
-                    st.plotly_chart(fig_yearly, use_container_width=True)
+                    st.plotly_chart(style_plotly(fig_yearly), use_container_width=True)
 
                 # --- กราฟที่ 3: Stacked Horizontal Bar Chart (ยอดปันผลแยกตามหุ้น ซ้อนสีตามปี) ---
                 st.markdown("---")
@@ -1640,7 +1641,7 @@ def render_tab_stock():
                             margin=dict(l=10, r=20, t=20, b=20),
                             legend_title="ปีที่ได้รับ (Year)"
                         )
-                        st.plotly_chart(fig_stacked_bar, use_container_width=True)
+                        st.plotly_chart(style_plotly(fig_stacked_bar), use_container_width=True)
                     else:
                         st.info("ไม่มีข้อมูลเพียงพอสำหรับสร้างกราฟ Stacked Bar ในช่วงเวลานี้")
                 else:
@@ -1737,7 +1738,7 @@ def render_tab_stock():
                                 margin=dict(l=10, r=20, t=20, b=20),
                                 legend_title="ปีที่ได้รับ (Year)"
                             )
-                            st.plotly_chart(fig_stacked, use_container_width=True)
+                            st.plotly_chart(style_plotly(fig_stacked), use_container_width=True)
                         else:
                             st.info("ไม่มีข้อมูลเพียงพอสำหรับกราฟ Stacked Bar รายปีนี้")
                     else:
