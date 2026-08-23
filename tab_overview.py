@@ -149,7 +149,9 @@ def render_tab_overview():
     total_real_estate = house1_value + house2_value + condo_value
 
     # พอร์ตหุ้นรวม + พอร์ต TFEX
-    base_stock_value = total_value if 'total_value' in locals() else 0.0
+    # 🔧 แก้บั๊ก: เดิมใช้ 'total_value' in locals() ซึ่งใช้ได้ตอนแท็บนี้ยังอยู่ไฟล์เดียวกับแท็บหุ้น
+    # แต่หลังแยกไฟล์แล้ว ต้องอ่านค่าผ่าน session_state แทน (แท็บหุ้นตั้งค่านี้ไว้ให้แล้ว)
+    base_stock_value = st.session_state.get('stock_net_worth', 0.0)
     tfex_portfolio_value = st.session_state.get('tfex_net_worth', 0.0)
     total_stock_and_tfex = base_stock_value + tfex_portfolio_value
 
