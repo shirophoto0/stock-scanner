@@ -26,5 +26,4 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
         run: |
-          # ตรงนี้คือการเรียกไฟล์ App.py ของพี่อ้ำให้ทำงานในโหมด Background
-          python App.py
+          python daily_scan.py
