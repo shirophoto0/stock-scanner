@@ -573,27 +573,20 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
     # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรองผ่าน Sidebar มาแล้ว)
     # =============================================================
     with st.expander("📊 ผลลัพธ์การสแกน"):
-        # 1. เช็คข้อมูลจาก Sidebar (ถ้าไม่มีให้ใช้ df_all_stocks)
-        # แก้ไขบรรทัดที่ 1152 เป็นแบบนี้ครับ
+        # 🔧 แก้บั๊ก: ปรับให้เรียบง่ายและแน่นหนาขึ้น เดิมใช้ 'x' in locals() เช็คก่อน ซึ่งไม่จำเป็น
+        # แล้ว (filtered_df ถูกตั้งค่าเริ่มต้นเป็น None ไว้แน่นอนแล้วตั้งแต่ต้นฟังก์ชัน ส่วน
+        # df_all_stocks เป็นพารามิเตอร์ที่มีอยู่เสมอ) เช็คแค่ is not None ตรงๆ ปลอดภัยกว่าและชัดเจนกว่า
         try:
-            # พยายามใช้ filtered_df ถ้ามี และมีค่า
-            if 'filtered_df' in locals() and filtered_df is not None:
+            if filtered_df is not None:
                 df_scan = filtered_df.copy()
-            # ถ้าไม่มี ให้ใช้ df_all_stocks แต่ต้องเช็คว่ามีอยู่จริงด้วย
-            elif 'df_all_stocks' in locals() and df_all_stocks is not None:
+            elif df_all_stocks is not None:
                 df_scan = df_all_stocks.copy()
             else:
-                # กรณีแย่ที่สุด คือไม่มีข้อมูลเลย ให้สร้าง DataFrame เปล่าขึ้นมา
                 df_scan = pd.DataFrame()
                 st.error("ไม่พบข้อมูลหุ้นในระบบ กรุณาตรวจสอบการโหลดข้อมูล")
         except Exception as e:
             df_scan = pd.DataFrame()
             st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
-
-        # 🔧 แก้บั๊ก: เดิมมีบรรทัดนี้ซ้ำอยู่ต่อท้าย ซึ่งเขียนทับผลลัพธ์ที่คำนวณไว้อย่างปลอดภัย
-        # ด้านบนแล้ว (try/except ครอบคลุมทุกกรณีแล้ว) ด้วยเวอร์ชันที่ไม่ปลอดภัย จะพังทันทีถ้าทั้ง
-        # filtered_df และ df_all_stocks ไม่มีข้อมูลเลยทั้งคู่ (เช่น กดอัปเดตครั้งแรกสุดที่ยังไม่เคย
-        # มีข้อมูลหุ้นมาก่อน) ลบบรรทัดที่ซ้ำซ้อนและไม่ปลอดภัยนี้ออก ใช้ผลลัพธ์จาก try/except ด้านบนแทน
 
         # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
         if strategy_option == "3 Month High":
