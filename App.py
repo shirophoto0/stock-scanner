@@ -50,7 +50,7 @@ from tab_stock import render_tab_stock
 from auth import check_login, show_user_bar
 
 # 🆕 ระบบธีมสี (Dark/Light) ของแอป
-from theme import apply_theme
+from theme import apply_theme, apply_final_override
 
 # --- ตั้งค่าหน้าเว็บ: ต้องอยู่เป็นคำสั่ง Streamlit คำสั่งแรกสุดของแอปเสมอ ---
 st.set_page_config(layout="wide")
@@ -271,6 +271,11 @@ def main():
             render_tab_pvd()
         with wealth_tab_real_estate:
             render_tab_real_estate()
+
+    # 🆕 ฉีด CSS ไม้ตายซ้ำอีกครั้งท้ายสุด (หลังทุกแท็บ/ตารางแสดงผลเสร็จหมดแล้ว)
+    # เพื่อชนะสไตล์ที่ Streamlit แทรกเองแบบไดนามิกทีหลัง (ดูรายละเอียดใน theme.py)
+    apply_final_override()
+
 # ------------------------------
 if __name__ == "__main__":
     main()
