@@ -1,9 +1,11 @@
 # =============================================================
 # auth.py
-# ระบบ Login แยกผู้ใช้ + กำหนดว่าแต่ละคนใช้ Google Sheet ชื่อไหน + จำโหมดสีที่แต่ละคนชอบ
+# ระบบ Login แยกผู้ใช้ + กำหนดว่าแต่ละคนใช้ Google Sheet ชื่อไหน
+# 🔧 หมายเหตุ: เดิมมีสวิตช์สลับโหมดสี Dark/Light ของเราเองอยู่ในไฟล์นี้ด้วย แต่เอาออกแล้ว
+# เพราะซ้ำซ้อนกับเมนู Light/Dark/System ของ Streamlit เอง (มุมขวาบนของแอป ⋮ → เลือกโหมด)
+# ซึ่งทำงานได้ครอบคลุมกว่ามาก (เข้าถึง dropdown/ตารางที่ CSS ของเราเข้าไม่ถึง)
 # =============================================================
 import streamlit as st
-from theme import render_theme_toggle
 
 
 def check_login():
@@ -37,9 +39,6 @@ def check_login():
             st.session_state["logged_in"] = True
             st.session_state["username"] = username
             st.session_state["active_sheet_name"] = user_info.get("sheet_name", "MyStockData")
-            # 🆕 จำโหมดสี (Dark/Light) ที่ผู้ใช้คนนี้ตั้งไว้ใน Secrets เป็นค่าเริ่มต้นให้อัตโนมัติ
-            # (ตั้งค่า theme = "dark" หรือ "light" ต่อผู้ใช้ได้ใน Secrets ถ้าไม่ตั้งไว้ จะใช้ dark)
-            st.session_state["theme_mode"] = user_info.get("theme", "dark")
             st.rerun()
         else:
             st.error("❌ รหัสผ่านไม่ถูกต้อง")
@@ -55,10 +54,10 @@ def logout():
 
 
 def show_user_bar():
-    """แสดงชื่อผู้ใช้ที่ login อยู่ + สวิตช์สลับโหมดสี + ปุ่มออกจากระบบ ไว้ที่แถบด้านข้าง (Sidebar)"""
+    """แสดงชื่อผู้ใช้ที่ login อยู่ + ปุ่มออกจากระบบ ไว้ที่แถบด้านข้าง (Sidebar)"""
     with st.sidebar:
         st.markdown(f"👤 เข้าสู่ระบบในชื่อ: **{st.session_state.get('username', '')}**")
-        render_theme_toggle()
+        st.caption("💡 สลับโหมด Light/Dark ได้ที่เมนู ⋮ มุมขวาบนของแอป")
         if st.button("🚪 ออกจากระบบ (Logout)", use_container_width=True):
             logout()
         st.divider()
