@@ -1344,7 +1344,34 @@ def load_and_calculate_stock_data_optimized():
             high_3m = df['High'].iloc[:-1].tail(60).max()
             high_6m = df['High'].iloc[:-1].tail(120).max()
             high_52w = df['High'].iloc[:-1].tail(250).max()
-            
+            low_52w = df['Low'].iloc[:-1].tail(250).min()
+
+            # 🆕 1. Trend Template (สไตล์ Minervini): ราคาอยู่เหนือเส้นค่าเฉลี่ย + เส้นค่าเฉลี่ยเรียงตัวขาขึ้น
+            ma50 = df['Close'].rolling(window=50).mean().iloc[-1]
+            ma150 = df['Close'].rolling(window=150).mean().iloc[-1]
+            ma200 = df['Close'].rolling(window=200).mean().iloc[-1]
+            price_above_all_ma = bool(latest_price > ma50 and latest_price > ma150 and latest_price > ma200)
+            ma_aligned_uptrend = bool(ma50 > ma150 > ma200)
+            trend_template_pass = bool(price_above_all_ma and ma_aligned_uptrend)
+
+            # 🆕 2. ระยะห่างจากจุดสูงสุด/ต่ำสุด 52 สัปดาห์ (เป็น % เทียบกับราคาปัจจุบัน)
+            pct_from_52w_high = ((latest_price - high_52w) / high_52w) * 100  # ค่าติดลบ = ต่ำกว่าจุดสูงสุดอยู่เท่าไหร่
+            pct_above_52w_low = ((latest_price - low_52w) / low_52w) * 100    # ค่าบวก = สูงกว่าจุดต่ำสุดอยู่เท่าไหร่
+            near_52w_high = bool(pct_from_52w_high >= -15)  # ห่างจากจุดสูงสุดไม่เกิน 15%
+            recovered_from_low = bool(pct_above_52w_low >= 30)  # ฟื้นตัวจากจุดต่ำอย่างน้อย 30%
+
+            # 🆕 3. ปริมาณการซื้อขายพุ่งผิดปกติ (Volume Spike): เทียบ Volume ล่าสุดกับค่าเฉลี่ย 50 วัน
+            avg_vol_50 = df['Volume'].iloc[:-1].tail(50).mean()
+            latest_vol = df['Volume'].iloc[-1]
+            volume_spike_ratio = (latest_vol / avg_vol_50) if avg_vol_50 > 0 else 0.0
+            is_volume_spike = bool(volume_spike_ratio >= 2.0)  # ปริมาณมากกว่าค่าเฉลี่ย 2 เท่าขึ้นไป
+
+            # 🆕 4. หุ้นแกว่งตัวแคบก่อนวิ่ง (Volatility Contraction): ช่วงแกว่งราคา 10 วันล่าสุด แคบกว่า 50 วันก่อนหน้า
+            daily_range_pct = (df['High'] - df['Low']) / df['Close'] * 100
+            recent_volatility = daily_range_pct.tail(10).mean()
+            baseline_volatility = daily_range_pct.tail(50).mean()
+            is_volatility_contracting = bool(baseline_volatility > 0 and recent_volatility <= (baseline_volatility * 0.7))
+
             stock_list.append({
                 'Ticker': ticker.replace('.BK', ''),
                 'ราคาล่าสุด': round(float(latest_price), 2),
@@ -1353,6 +1380,18 @@ def load_and_calculate_stock_data_optimized():
                 'Is_3M_High': latest_price >= (high_3m * 0.95),
                 'Is_6M_High': latest_price >= (high_6m * 0.95),
                 'Is_52W_High': latest_price >= (high_52w * 0.95),
+                # 🆕 คอลัมน์ใหม่สำหรับตัวกรองเพิ่มเติม
+                'MA50': round(float(ma50), 2) if pd.notna(ma50) else None,
+                'MA150': round(float(ma150), 2) if pd.notna(ma150) else None,
+                'MA200': round(float(ma200), 2) if pd.notna(ma200) else None,
+                'Trend_Template_Pass': trend_template_pass,
+                'Pct_From_52W_High': round(float(pct_from_52w_high), 2),
+                'Pct_Above_52W_Low': round(float(pct_above_52w_low), 2),
+                'Near_52W_High': near_52w_high,
+                'Recovered_From_Low': recovered_from_low,
+                'Volume_Spike_Ratio': round(float(volume_spike_ratio), 2),
+                'Is_Volume_Spike': is_volume_spike,
+                'Is_Volatility_Contracting': is_volatility_contracting,
             })
             
         except Exception:
