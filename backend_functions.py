@@ -249,10 +249,12 @@ def calculate_fund_result(cost_price, current_price, units):
 # =============================================================
 IM_PER_CONTRACT = 13300 
 
-def update_trade_close(spreadsheet_id, trade_id, close_price, date_close):
+def update_trade_close(trade_id, close_price, date_close):
     try:
         client = get_gsheet_client()
-        sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
+        # 🔧 แก้บั๊ก: เดิมรับ spreadsheet_id ตายตัวจากภายนอก (ผู้เรียกใช้ส่ง ID ตายตัวมา)
+        # ตอนนี้เปิดตามชื่อชีตของผู้ใช้ที่ login อยู่แทน สอดคล้องกับฟังก์ชันอื่นในระบบ
+        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('TFEX_History')
         
         records = sheet.get_all_records()
         df = pd.DataFrame(records)
@@ -449,8 +451,8 @@ def save_cash_to_gsheet(df):
 def save_data_to_sheet(new_df, sheet_name):
     try:
         client = get_gsheet_client()
-        spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' 
-        sheet = client.open_by_key(spreadsheet_id).worksheet('TFEX_History')
+        # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
+        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('TFEX_History')
         
         cols = ["Trade_ID", "Date_Open", "Date_Close", "Series", "Status", "Size", "Open_Price", 
                 "Close_Price", "Realized", "Comm", "Net_Profit", "Win_Lose", "Reason"]
@@ -593,8 +595,8 @@ def clear_and_save_data(df, sheet_name):
 
 def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
-    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-    sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
+    # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
+    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('StockData')
     
     df = df.replace([np.inf, -np.inf], 0).fillna("")
     data_to_write = [df.columns.tolist()] + df.values.tolist()
@@ -901,8 +903,8 @@ def get_current_portfolio_value():
 
 def update_stock_data(df):
     client = get_gsheet_client()
-    spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-    sheet = client.open_by_key(spreadsheet_id).worksheet('StockData')
+    # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
+    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('StockData')
     
     # 1. เตรียมข้อมูล: แปลง Header และข้อมูลเป็น list
     data_to_update = [df.columns.values.tolist()] + df.values.tolist()
