@@ -1272,18 +1272,22 @@ def calculate_rsi(series, period=14):
     rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
     return rsi
+
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
 # 📌 ตรวจสอบและดึงข้อมูลจากแท็บ JournalData มาเก็บไว้ใน session_state
-    if 'journal_data' not in st.session_state or not st.session_state.journal_data:
-        try:
-            client = get_gsheet_client()
-            # ดึงข้อมูลจากชีท JournalData ที่คุณใช้งานอยู่
-            sheet_journal = client.open('MyStockData').worksheet('JournalData') 
-            st.session_state.journal_data = sheet_journal.get_all_records()
-        except Exception as e:
-            st.session_state.journal_data = []
+# 🔧 แก้บั๊ก: ย้ายบล็อกนี้ออกมาจากใน calculate_rsi() (เดิมเยื้องผิดจนไปติดอยู่ในฟังก์ชันนั้น
+# ทำให้โค้ดนี้ถูกเรียกซ้ำทุกครั้งที่คำนวณ RSI ของหุ้นแต่ละตัว แทนที่จะรันแค่ครั้งเดียวตอนเปิดแอป
+# ซึ่งอาจเป็นสาเหตุที่ทำให้ยิง Google Sheets ซ้ำๆ จนโควตาเกินได้)
+if 'journal_data' not in st.session_state or not st.session_state.journal_data:
+    try:
+        client = get_gsheet_client()
+        # ดึงข้อมูลจากชีท JournalData ที่คุณใช้งานอยู่
+        sheet_journal = client.open('MyStockData').worksheet('JournalData') 
+        st.session_state.journal_data = sheet_journal.get_all_records()
+    except Exception as e:
+        st.session_state.journal_data = []
             
 if "journal_data" not in st.session_state:
     load_journal()   # <--- ใส่บรรทัดนี้ลงไปครับ! มันจะช่วยดึงข้อมูลจากไฟล์มาโชว์ตอนเปิดแอป
