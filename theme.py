@@ -152,7 +152,7 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     background-color: var(--accent-hover);
 }
 
-/* ---------- ช่องกรอกข้อมูล / Dropdown ---------- */
+/* ---------- ช่องกรอกข้อมูล / Dropdown (กล่องตอนปิด) ---------- */
 [data-testid="stTextInput"] input,
 [data-testid="stNumberInput"] input,
 [data-testid="stDateInput"] input,
@@ -162,6 +162,28 @@ div[data-testid="stVerticalBlockBorderWrapper"] {
     border-color: var(--border-color) !important;
     color: var(--text-primary) !important;
     border-radius: 8px !important;
+}
+
+/* ---------- เมนูตัวเลือกตอนกดเปิด Dropdown (Popup/Listbox) ---------- */
+/* จุดนี้แยกจากกล่องตอนปิดด้านบน เพราะ Streamlit เปิดเมนูเป็นชั้นลอยแยกต่างหาก (Popover) */
+div[data-baseweb="popover"] [data-baseweb="menu"],
+ul[data-baseweb="menu"],
+div[role="listbox"] {
+    background-color: var(--bg-tertiary) !important;
+    border: 1px solid var(--border-color) !important;
+}
+li[role="option"], div[role="option"] {
+    background-color: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+}
+li[role="option"]:hover, div[role="option"]:hover,
+li[aria-selected="true"], div[aria-selected="true"] {
+    background-color: var(--accent-primary-soft) !important;
+    color: var(--text-on-accent) !important;
+}
+/* ปุ่มตัวเลือกแบบ Radio / Segmented (เช่น "แสดงกราฟ" / "แสดงตาราง") */
+[data-testid="stRadio"] label, [data-testid="stRadio"] p {
+    color: var(--text-primary) !important;
 }
 
 /* ---------- ตาราง (Dataframe) ---------- */
@@ -188,6 +210,18 @@ hr {
 }
 </style>
 """
+
+
+def get_theme_colors():
+    """
+    🆕 คืนค่าสีของโหมดที่เลือกอยู่ตอนนี้ เป็น dict — ใช้กับจุดที่ CSS ธรรมดาเข้าไม่ถึง
+    เช่น ตารางที่สร้างผ่าน pandas Styler (.style.set_properties()) ซึ่งต้องกำหนดสีเป็น
+    inline style ตรงๆ ไม่สามารถใช้ CSS variable จากภายนอกอ้างอิงได้เสมอไป
+    """
+    mode = st.session_state.get("theme_mode", "dark")
+    if mode == "dark":
+        return {"bg": "#1A2029", "text": "#EAE7E0", "border": "#2A3441"}
+    return {"bg": "#FFFFFF", "text": "#2D3142", "border": "#E5E1D8"}
 
 
 def apply_theme():
@@ -237,3 +271,35 @@ def style_plotly(fig):
     fig.update_xaxes(gridcolor=grid_color, zerolinecolor=grid_color, color=text_color)
     fig.update_yaxes(gridcolor=grid_color, zerolinecolor=grid_color, color=text_color)
     return fig
+
+
+def style_altair(chart):
+    """
+    🆕 ทำให้พื้นหลังกราฟ Altair โปร่งใส และปรับสีตัวอักษร/แกน/เส้นกริดให้เข้ากับโหมดสีที่เลือกอยู่
+    (Altair เป็นคนละไลบรารีกับ Plotly ใช้คนละวิธีตั้งค่าสี ต้องมีฟังก์ชันของตัวเองแยกจาก style_plotly)
+    ต้องเรียกครอบ "กราฟระดับบนสุด" เท่านั้น (หลังรวมหลายเลเยอร์เข้าด้วยกันแล้ว เช่น chart1 + chart2)
+    """
+    mode = st.session_state.get("theme_mode", "dark")
+    text_color = "#EAE7E0" if mode == "dark" else "#2D3142"
+    grid_color = "#2A3441" if mode == "dark" else "#E5E1D8"
+
+    return chart.properties(
+        background='transparent'
+    ).configure_view(
+        strokeWidth=0
+    ).configure_axis(
+        labelColor=text_color,
+        titleColor=text_color,
+        gridColor=grid_color,
+        domainColor=grid_color,
+        labelFont='Sarabun',
+        titleFont='Sarabun',
+    ).configure_legend(
+        labelColor=text_color,
+        titleColor=text_color,
+        labelFont='Sarabun',
+        titleFont='Sarabun',
+    ).configure_title(
+        color=text_color,
+        font='Prompt',
+    )
