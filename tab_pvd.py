@@ -188,9 +188,31 @@ def render_tab_pvd():
         st.markdown("---")
         st.subheader("📈 ตารางสรุปการเติบโตและผลตอบแทนกองทุน PVD")
         if not df_pvd_history.empty:
-            if 'Year_BE' in df_pvd_history.columns:
-                df_pvd_history['Year_BE'] = pd.to_numeric(df_pvd_history['Year_BE'], errors='coerce')
-            st.dataframe(df_pvd_history, use_container_width=True, hide_index=True)
+            # 🔧 แก้บั๊ก: ข้อมูลจาก Google Sheets มาเป็น "ข้อความ" ไม่ใช่ตัวเลขจริง แม้หน้าตาจะเหมือนตัวเลข
+            # ทำให้เช็ค dtype ตัวเลขไม่เจอ ต้อง "บังคับแปลง" เป็นตัวเลขก่อนเสมอ ถึงจะใส่ comma ได้ถูกต้อง
+            df_display_pvd = df_pvd_history.copy()
+            skip_cols = ['Month']  # คอลัมน์ที่เป็นข้อความล้วน ไม่ต้องแปลง
+            numeric_cols = []
+            for col in df_display_pvd.columns:
+                if col in skip_cols:
+                    continue
+                converted = pd.to_numeric(
+                    df_display_pvd[col].astype(str).str.replace(',', '', regex=False),
+                    errors='coerce'
+                )
+                if converted.notna().any():
+                    df_display_pvd[col] = converted
+                    numeric_cols.append(col)
+            
+            # ปี พ.ศ./ค.ศ. ไม่ต้องมี comma คั่น (ใส่ทศนิยม 0 ตำแหน่งแทน)
+            format_dict = {}
+            for col in numeric_cols:
+                if col in ('Year_BE', 'Year_CE'):
+                    format_dict[col] = '{:.0f}'
+                else:
+                    format_dict[col] = '{:,.2f}'
+            
+            st.dataframe(df_display_pvd.style.format(format_dict), use_container_width=True, hide_index=True)
         else:
             st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund")
 
