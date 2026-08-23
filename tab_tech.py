@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from constants import SET100_TICKERS
 from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet
+from theme import style_plotly
 from tab_risk import render_tab_risk
 
 
@@ -445,7 +446,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     showgrid=True,
                 )
             )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(style_plotly(fig), use_container_width=True)
                 else:
                     st.warning(f"⚠️ ไม่มีข้อมูลกราฟเพียงพอสำหรับ Timeframe นี้ (พบแค่ {len(chart_combined)} แท่งเทียน) "
                                      f"อาจเป็นเพราะ Yahoo Finance ไม่มีข้อมูลรายชั่วโมง/4ชั่วโมงของหุ้นไทยตัวนี้ "
