@@ -76,11 +76,19 @@ def render_tab_overview():
         coop_value = float(str(raw_coop).replace(',', '')) if str(raw_coop).strip() != "" else 0.0
 
     # กองทุนรวม (Fund_History)
+    # 🔧 แก้บั๊ก: เดิมไปดึง "แถวสุดท้าย" แถวเดียวแล้วหาฟิลด์ Value/Market_Value ซึ่งไม่มีอยู่จริง
+    # ในตาราง Fund_History เพราะตารางนี้เก็บแบบ 1 แถวต่อการซื้อกองทุน 1 ครั้ง (มีคอลัมน์ราคาต้นทุน/
+    # ราคาปัจจุบัน/จำนวนหน่วยแยกกัน) ไม่ใช่แบบ "ยอดรวมล่าสุด" เหมือน PVD/ประกัน/สหกรณ์
+    # ต้องรวมมูลค่าปัจจุบัน (ราคาปัจจุบัน x จำนวนหน่วย) ของทุกกองทุนที่ยังถืออยู่ (Status = Holding) แทน
     mutual_fund_value = 0.0
-    if all_data["mutual_fund"]:
-        last_mf = all_data["mutual_fund"][-1]
-        raw_mf = last_mf.get('Value', last_mf.get('Market_Value', last_mf.get('มูลค่าตลาด', 0)))
-        mutual_fund_value = float(str(raw_mf).replace(',', '')) if str(raw_mf).strip() != "" else 0.0
+    for fund_row in all_data["mutual_fund"]:
+        if fund_row.get('Status', 'Holding') == 'Holding':
+            try:
+                curr_p = float(str(fund_row.get('Current_Price', 0)).replace(',', ''))
+                units = float(str(fund_row.get('Units', 0)).replace(',', ''))
+                mutual_fund_value += curr_p * units
+            except (ValueError, TypeError):
+                pass
 
     # ทองคำ (จาก session_state)
     total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
