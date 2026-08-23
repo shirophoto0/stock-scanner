@@ -8,7 +8,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from constants import SET100_TICKERS
-from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet
+from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet, load_and_calculate_stock_data_optimized
 from theme import style_plotly
 from tab_risk import render_tab_risk
 
@@ -113,7 +113,9 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
     # ส่วนจัดการการโหลดข้อมูล (ปรับแก้ให้เข้ากับ Session State)
     if st.button("🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)"):
         with st.spinner("กำลังดึงข้อมูล..."):
-            df_new = load_and_calculate_stock_data()
+            # 🔧 แก้บั๊ก: เดิมเรียกชื่อฟังก์ชันผิด (load_and_calculate_stock_data ซึ่งไม่มีอยู่จริง)
+            # ทำให้กดปุ่มนี้แล้ว error ทันที ชื่อที่ถูกต้องคือ load_and_calculate_stock_data_optimized
+            df_new = load_and_calculate_stock_data_optimized()
 
             # 🟢 เติม Sector อัตโนมัติหลังกดอัปเดตจาก Yahoo
             if not df_new.empty and 'df_sector_map' in locals() and not df_sector_map.empty:
