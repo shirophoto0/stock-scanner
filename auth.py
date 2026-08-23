@@ -57,7 +57,6 @@ def show_user_bar():
     """แสดงชื่อผู้ใช้ที่ login อยู่ + ปุ่มออกจากระบบ ไว้ที่แถบด้านข้าง (Sidebar)"""
     with st.sidebar:
         st.markdown(f"👤 เข้าสู่ระบบในชื่อ: **{st.session_state.get('username', '')}**")
-        st.caption("💡 สลับโหมด Light/Dark ได้ที่เมนู ⋮ มุมขวาบนของแอป")
         if st.button("🚪 ออกจากระบบ (Logout)", use_container_width=True):
             logout()
         st.divider()
