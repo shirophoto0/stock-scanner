@@ -1955,7 +1955,7 @@ def render_tab_stock():
                     }
 
                     # 2. โหลดข้อมูลปัจจุบันจาก Google Sheet ออกมาก่อน
-                    current_df = load_data("TradingPlan")
+                    current_df = load_data("TradingPlan", get_active_sheet_name())
 
                     # ถ้าตารางว่าง ให้สร้าง DataFrame ใหม่ขึ้นมาเลย
                     if current_df is None or current_df.empty:
@@ -1977,7 +1977,7 @@ def render_tab_stock():
             # 2. ส่วนตารางแสดงผล
             st.divider()
             st.subheader("📊 ตารางแผนการเทรดของฉัน")
-            plan_df = load_data("TradingPlan")
+            plan_df = load_data("TradingPlan", get_active_sheet_name())
 
             # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
             cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
