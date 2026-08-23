@@ -79,8 +79,12 @@ if 'dividend_data' not in st.session_state:
     st.session_state.dividend_data = load_dividend_data()
 
 # กำหนดค่าเริ่มต้นเงินสดในพอร์ต หากยังไม่มีใน session_state
+# 🔧 แก้บั๊ก: เดิมมีโค้ดคำนวณเงินสดจริงซ่อนอยู่ใน backend_functions.py แต่รันแค่ครั้งเดียว
+# ตอนเซิร์ฟเวอร์เริ่มทำงาน (เพราะเป็นโค้ดระดับบนสุดของไฟล์ที่ import ไปใช้ ไม่ใช่โค้ดในไฟล์หลัก)
+# ทำให้คนที่เปิดแอปทีหลังไม่ได้รับการคำนวณจริง ไปเจอค่า 0.0 สำรองแทน
+# ตอนนี้ให้คำนวณค่าจริงตรงนี้เลย เพราะ App.py จะรันโค้ดนี้ใหม่ทุกครั้งที่มีคนเปิดแอป (ถูกต้องตามที่ควรจะเป็น)
 if 'cash_balance' not in st.session_state:
-    st.session_state.cash_balance = 0.0  # หรือใส่จำนวนเงินสดเริ่มต้นของคุณ เช่น 100000.0
+    st.session_state.cash_balance = load_total_cash_balance()
 
 ##### Header UI Application box - Start ######
 st.markdown("""
