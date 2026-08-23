@@ -398,14 +398,14 @@ def render_tab_stock():
                         # 3. วาดกราฟ (เรียกผ่าน plotly.express โดยตรง ป้องกัน Error ซ้ำซ้อน)
                         fig = plotly.express.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
 
-                        # เพิ่ม annotation_yshift ให้ต่ำลงเล็กน้อย และลดระยะห่าง
-                        fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58", 
-                                      annotation_text=f"Mean ({mean_val:.1f}%)", annotation_position="top right", annotation_yshift=20)
-                        fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6", 
-                                      annotation_text=f"Avg Loss ({avg_loss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-10)
+                        # 🔧 แก้บั๊ก: เดิมมีป้ายข้อความ (annotation_text) ลอยอยู่ในกราฟด้วย ซึ่งซ้ำกับ
+                        # ตัวเลข Mean/Avg Loss/Target Cut ที่แสดงเป็นกล่องสีด้านบนอยู่แล้ว พอจอแคบ
+                        # (เช่น มือถือ) เส้นทั้ง 3 เส้นอยู่ใกล้กันในข้อมูล ป้ายข้อความเลยไปทับกันจนอ่านไม่ออก
+                        # ตอนนี้ตัดป้ายข้อความในกราฟออก เหลือแค่เส้นสีอ้างอิง ไม่เสียข้อมูลเพราะมีกล่องด้านบนอยู่แล้ว
+                        fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58")
+                        fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6")
                         if optimal_cutloss_pct is not None:
-                            fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b", 
-                                          annotation_text=f"Target ({optimal_cutloss_pct:.1f}%)", annotation_position="top right", annotation_yshift=-40)
+                            fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b")
 
                         # เพิ่ม margin top เพื่อให้มีพื้นที่เหลือให้ป้ายข้อความด้านบนไม่ถูกตัด
                         fig.update_layout(margin=dict(t=50, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')
@@ -492,12 +492,16 @@ def render_tab_stock():
                                 color_continuous_scale=['#EF5350', '#26A69A']
                             )
                             fig_bar.update_traces(textposition='outside')
+                            # 🔧 แก้บั๊ก: เดิมไม่ได้กำหนดมุมเอียงและพื้นที่ด้านล่างไว้ให้ชื่อ Sector
+                            # ภาษาไทยยาวๆ ปล่อยให้ Plotly เดาเอง พอจอแคบ (มือถือ) ป้ายชื่อเลยเอียง/ทับกันจนอ่านยาก
+                            # ตอนนี้กำหนดมุมเอียงคงที่ + เผื่อพื้นที่ด้านล่างให้มากพอเสมอ ไม่ว่าจอกว้างแค่ไหน
                             fig_bar.update_layout(
                                 xaxis_title="กลุ่มอุตสาหกรรม (Sector)", 
                                 yaxis_title="กำไร/ขาดทุนสุทธิ (บาท)", 
-                                height=400, 
-                                margin=dict(l=20, r=20, t=30, b=20), 
-                                coloraxis_showscale=False
+                                height=450, 
+                                margin=dict(l=20, r=20, t=30, b=160), 
+                                coloraxis_showscale=False,
+                                xaxis=dict(tickangle=-45)
                             )
                             st.plotly_chart(style_plotly(fig_bar), use_container_width=True)
 
