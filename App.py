@@ -4192,20 +4192,29 @@ def main():
         with wealth_tab_overview:
 
             # 1. ใช้ @st.cache_data เพื่อดึงข้อมูลทุกชีตรวมกันครั้งเดียวและเก็บไว้ 10 นาที (ลดจำนวน Request มหาศาล)
+            # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ดึงข้อมูล 9 ชีตพร้อมกันแล้ว Cache รวมเป็นก้อนเดียว 10 นาที
+            # ถ้าชีตใดชีตหนึ่งโหลดพลาดแค่ชีตเดียว ระบบจะจำเป็นค่าว่างของ "ทั้ง 9 ชีต" รวมกันไปเลย 10 นาที
+            # (และ Cache นี้ใช้ร่วมกันทุกคนที่เปิดแอป ไม่ใช่แค่เครื่องคุณ) ทำให้ข้อมูลหายไปเป็นช่วงๆ โดยไม่ทราบสาเหตุ
+            # ตอนนี้แยก Cache เป็นรายชีต ถ้าชีตไหนพลาด จะลองใหม่แค่ชีตนั้นในรอบถัดไป ไม่กระทบชีตอื่นที่โหลดสำเร็จแล้ว
             @st.cache_data(ttl=600, show_spinner=False)
-            def fetch_all_wealth_overview_data():
+            def _fetch_ws_records_safe(ws_name, max_retries=3):
                 client = get_gsheet_client()
-                
-                def get_ws_records_safe(ws_name, max_retries=3):
-                    for i in range(max_retries):
-                        try:
-                            sheet = client.open('MyStockData').worksheet(ws_name)
-                            return sheet.get_all_records()
-                        except Exception:
-                            if i == max_retries - 1:
-                                return []
-                            time.sleep(1 + i)  # หน่วงเวลาก่อนลองใหม่ (Exponential Backoff)
-                    return []
+                last_error = None
+                for i in range(max_retries):
+                    try:
+                        sheet = client.open('MyStockData').worksheet(ws_name)
+                        return sheet.get_all_records()
+                    except Exception as e:
+                        last_error = str(e)
+                        time.sleep(1 + i)  # หน่วงเวลาก่อนลองใหม่ (Exponential Backoff)
+                raise RuntimeError(last_error or f"โหลดชีต {ws_name} ไม่สำเร็จ")
+
+            def fetch_all_wealth_overview_data():
+                def get_ws_records_safe(ws_name):
+                    try:
+                        return _fetch_ws_records_safe(ws_name)
+                    except Exception:
+                        return []
         
                 return {
                     "pvd": get_ws_records_safe('Provident_Fund'),
@@ -5194,20 +5203,22 @@ def main():
             st.markdown("บันทึกมูลค่าประเมินปัจจุบันและหักลบด้วยยอดหนี้คงเหลือ เพื่อคำนวณมูลค่าสุทธิ (Equity) เข้าพอร์ตความมั่งคั่ง")
         
             # ฟังก์ชันดึงข้อมูลชีต Real_Estate พร้อมระบบ Cache และ Retry อัตโนมัติ ป้องกันการติด Limit API
+            # 🔧 แก้บั๊ก: ถ้าโหลดไม่สำเร็จหลังลองครบ 3 ครั้ง ให้ "โยน error" ออกไป แทนที่จะคืนค่า [] เงียบๆ
+            # เพราะถ้าคืน [] เฉยๆ ระบบจะเข้าใจผิดว่า "โหลดสำเร็จแต่ไม่มีข้อมูล" แล้วจะไม่ยอมลองโหลดใหม่อีกเลย
             @st.cache_data(ttl=600, show_spinner=False)
             def fetch_real_estate_data_cached():
                 client = get_gsheet_client()
+                last_error = None
                 for attempt in range(3):
                     try:
                         sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
                         if sheet_re is not None:
                             return sheet_re.get_all_records()
-                        return []
-                    except Exception:
-                        if attempt == 2:
-                            return []
-                        time.sleep(1 + attempt)
-                return []
+                        last_error = "ไม่พบชีต Real_Estate"
+                    except Exception as e:
+                        last_error = str(e)
+                    time.sleep(1 + attempt)
+                raise RuntimeError(last_error or "โหลดข้อมูลไม่สำเร็จ")
         
             # ฟังก์ชันช่วยบันทึกข้อมูลลง Google Sheets พร้อม Retry ป้องกัน API พัง
             def save_real_estate_to_sheet_safe(portfolio_items):
@@ -5254,10 +5265,12 @@ def main():
                     st.rerun()
         
             # โหลดข้อมูลจาก Google Sheets / Cache เข้า session_state
+            # 🔧 แก้บั๊ก: ถ้าโหลดไม่สำเร็จ จะ "ไม่" ตั้งค่า session_state ให้เป็น [] เพื่อให้ระบบลองโหลดใหม่
+            # อัตโนมัติในรอบถัดไปที่หน้าเว็บรีเฟรช (เช่น สลับแท็บ, กดปุ่มอื่น) โดยไม่ต้องรอให้ผู้ใช้กดปุ่ม reload เอง
             if 'real_estate_portfolio' not in st.session_state:
-                st.session_state['real_estate_portfolio'] = []
                 try:
                     records = fetch_real_estate_data_cached()
+                    loaded_items = []
                     for row in records:
                         asset_name = str(row.get("ชื่อทรัพย์สิน", "")).strip()
                         if asset_name != "":
@@ -5269,14 +5282,16 @@ def main():
                             
                             n_val = str(row.get("หมายเหตุ", ""))
                             
-                            st.session_state['real_estate_portfolio'].append({
+                            loaded_items.append({
                                 "ชื่อทรัพย์สิน": asset_name,
                                 "มูลค่าตลาด": m_val,
                                 "ยอดหนี้คงเหลือ": d_val,
                                 "หมายเหตุ": n_val
                             })
+                    # ตั้งค่า session_state ก็ต่อเมื่อโหลดสำเร็จเท่านั้น (ไม่ว่าจะมีข้อมูลจริงหรือว่างเปล่าจริงๆ ก็ตาม)
+                    st.session_state['real_estate_portfolio'] = loaded_items
                 except Exception as e:
-                    st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้: {e}")
+                    st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้ กำลังจะลองใหม่อัตโนมัติ: {e}")
                     
             st.markdown("---")
             st.markdown("#### 📝 เพิ่ม / แก้ไขข้อมูลอสังหาริมทรัพย์")
