@@ -1581,28 +1581,31 @@ def main():
                             st.markdown("##### 🔍 สถิติการเทรดเชิงลึก")
                             col_s1, col_s2, col_s3 = st.columns(3)
                             
-                            # 1. คำนวณกำไร/ขาดทุนต่อไม้ (เพื่อหา Best/Worst)
-                            df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)']) * 100
-                            idx_best = df_filtered['กำไร/ขาดทุน (บาท)'].idxmax()
-                            idx_worst = df_filtered['กำไร/ขาดทุน (บาท)'].idxmin()
+                            if not df_filtered.empty:  # 🔧 กันเหนียว: ถ้าเดือน/ปีที่เลือกไม่มีข้อมูลการเทรด ให้แจ้งเตือนแทนการ error
+                                # 1. คำนวณกำไร/ขาดทุนต่อไม้ (เพื่อหา Best/Worst)
+                                df_filtered['Profit_Pct'] = (df_filtered['กำไร/ขาดทุน (บาท)'] / df_filtered['ต้นทุน (บาท)']) * 100
+                                idx_best = df_filtered['กำไร/ขาดทุน (บาท)'].idxmax()
+                                idx_worst = df_filtered['กำไร/ขาดทุน (บาท)'].idxmin()
                             
-                            # 2. คำนวณ Max Drawdown จากประวัติมูลค่าพอร์ตสะสม (สมมติว่าคุณมี df_history หรือคำนวณจากยอดสะสม)
-                            # กรณีนี้ผมใช้ logic หาค่า Drawdown สูงสุดจากยอดสะสมใน df_filtered
-                            cumulative_profit = df_filtered['กำไร/ขาดทุน (บาท)'].cumsum()
-                            running_max = cumulative_profit.cummax()
-                            drawdown = (cumulative_profit - running_max) / (running_max + abs(df_filtered['ต้นทุน (บาท)'].sum())) # ประมาณการ MDD
-                            max_drawdown = drawdown.min() * 100
+                                # 2. คำนวณ Max Drawdown จากประวัติมูลค่าพอร์ตสะสม (สมมติว่าคุณมี df_history หรือคำนวณจากยอดสะสม)
+                                # กรณีนี้ผมใช้ logic หาค่า Drawdown สูงสุดจากยอดสะสมใน df_filtered
+                                cumulative_profit = df_filtered['กำไร/ขาดทุน (บาท)'].cumsum()
+                                running_max = cumulative_profit.cummax()
+                                drawdown = (cumulative_profit - running_max) / (running_max + abs(df_filtered['ต้นทุน (บาท)'].sum())) # ประมาณการ MDD
+                                max_drawdown = drawdown.min() * 100
                             
-                            # 3. ดึงค่า Best/Worst
-                            best_val = df_filtered.loc[idx_best, 'กำไร/ขาดทุน (บาท)']
-                            best_pct = df_filtered.loc[idx_best, 'Profit_Pct']
-                            worst_val = df_filtered.loc[idx_worst, 'กำไร/ขาดทุน (บาท)']
-                            worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
+                                # 3. ดึงค่า Best/Worst
+                                best_val = df_filtered.loc[idx_best, 'กำไร/ขาดทุน (บาท)']
+                                best_pct = df_filtered.loc[idx_best, 'Profit_Pct']
+                                worst_val = df_filtered.loc[idx_worst, 'กำไร/ขาดทุน (บาท)']
+                                worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
                             
-                            # 4. แสดงผล 3 ช่อง
-                            col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
-                            col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
-                            col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
+                                # 4. แสดงผล 3 ช่อง
+                                col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
+                                col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
+                                col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
+                            else:
+                                st.info(f"ℹ️ ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
                             
                             ######### กราฟรายเดือน vs พร์อตสะสม ###################
                             st.markdown("##### 📈 ผลงานรายเดือน vs พอร์ตสะสม")
