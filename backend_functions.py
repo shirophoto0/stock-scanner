@@ -32,7 +32,7 @@ from constants import SET100_TICKERS
 # 🆕 ระบบ Login หลายผู้ใช้: ฟังก์ชันนี้คืนชื่อ Google Sheet ของผู้ใช้ที่ล็อกอินอยู่ตอนนี้
 # (ตั้งค่าไว้ตอน Login สำเร็จใน auth.py) ถ้ายังไม่มีการล็อกอิน จะใช้ 'MyStockData' เป็นค่าเริ่มต้น
 def get_active_sheet_name():
-    return st.session_state.get('active_sheet_name', get_active_sheet_name())
+    return st.session_state.get('active_sheet_name', 'MyStockData')
 
 def get_gsheet_client():
     scope = [
