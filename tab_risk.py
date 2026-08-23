@@ -8,6 +8,7 @@ import numpy as np
 import yfinance as yf
 from constants import SET100_TICKERS
 from backend_functions import calculate_total_portfolio_value, get_total_market_value, load_total_cash_balance
+from theme import render_metric_card
 
 
 def render_tab_risk():
@@ -68,9 +69,9 @@ def render_tab_risk():
 
     st.markdown(f"##### 💰 สรุปสถานะพอร์ตปัจจุบัน (กำลังวิเคราะห์หุ้น: **{st.session_state.selected_ticker}**)")
     col_a, col_b, col_c = st.columns(3)
-    col_a.metric("เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿")
-    col_b.metric("มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿")
-    col_c.metric("มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿")
+    render_metric_card(col_a, "เงินสดคงเหลือ", f"{cash_balance:,.0f} ฿", icon="💵")
+    render_metric_card(col_b, "มูลค่าหุ้นที่ถือ", f"{market_value:,.0f} ฿", icon="📈")
+    render_metric_card(col_c, "มูลค่าพอร์ตสุทธิ", f"{total_equity:,.0f} ฿", icon="💰")
 
     st.divider()
 
@@ -120,10 +121,10 @@ def render_tab_risk():
 
         st.markdown("##### 📊 ผลลัพธ์หน้าเทรดและขนาดไม้ที่เหมาะสม:")
         res_col1, res_col2, res_col3, res_col4 = st.columns(4)
-        res_col1.metric("จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น")
-        res_col2.metric("เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿")
-        res_col3.metric("ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿")
-        res_col4.metric("เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿")
+        render_metric_card(res_col1, "จำนวนที่ควรซื้อ", f"{shares_to_buy:,} หุ้น", icon="🛒")
+        render_metric_card(res_col2, "เงินลงทุน (Position Size)", f"{total_buy_value:,.0f} ฿", icon="📥")
+        render_metric_card(res_col3, "ตั้ง SL ที่ราคา", f"{sl_price:.2f} ฿", icon="🛑")
+        render_metric_card(res_col4, "เสียเงินสูงสุดหากแพ้", f"{max_risk_money:,.0f} ฿", icon="⚠️")
 
         if total_buy_value > cash_balance:
             st.warning(f"⚠️ เงินลงทุนที่คำนวณได้สูงกว่าเงินสดคงเหลือในพอร์ต")
@@ -172,10 +173,10 @@ def render_tab_risk():
         loss_rate = 0.0
         expectancy = 0.0
 
-    # 3. แสดงผลด้วย st.metric
+    # 3. แสดงผลด้วยการ์ด
     col_r1, col_r2 = st.columns(2)
-    col_r1.metric("Market Exposure", f"{exposure_pct:.1f}%")
-    col_r2.metric("Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿")
+    render_metric_card(col_r1, "Market Exposure", f"{exposure_pct:.1f}%", icon="📊")
+    render_metric_card(col_r2, "Expectancy (ต่อไม้)", f"{expectancy:,.0f} ฿", icon="🧮")
 
 
     # --- 1. ประกาศฟังก์ชันไว้ด้านบน (ห้ามย่อหน้า) ---
@@ -268,9 +269,9 @@ def render_tab_risk():
 
             # แสดงผล
             col1, col2, col3 = st.columns(3)
-            col1.metric("Win Rate", f"{win_rate_val:.1f}%")
-            col2.metric("R:R Ratio", f"{rr_ratio:.2f} : 1")
-            col3.metric("กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น")
+            render_metric_card(col1, "Win Rate", f"{win_rate_val:.1f}%", icon="🎯")
+            render_metric_card(col2, "R:R Ratio", f"{rr_ratio:.2f} : 1", icon="📏")
+            render_metric_card(col3, "กลยุทธ์แนะนำ", "ทบต้น" if win_rate_val >= 45 and rr_ratio >= 1.5 else "ไม่ทบต้น", icon="🧭")
 
             st.write(f"ผลงานรวมในช่วง {time_period} (ทั้งหมด **{total_trades} ไม้**):")
         else:
