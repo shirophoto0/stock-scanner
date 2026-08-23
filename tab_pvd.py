@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import plotly.graph_objects as go
 from datetime import date, datetime
-from backend_functions import extract_pvd_from_image, get_cached_spreadsheet, get_gsheet_client, get_worksheet_safely
+from backend_functions import extract_pvd_from_image, get_cached_spreadsheet, get_gsheet_client, get_worksheet_safely, get_active_sheet_name
 
 
 def render_tab_pvd():
@@ -58,7 +58,7 @@ def render_tab_pvd():
             if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets", key="confirm_pvd_save"):
                 try:
                     client = get_gsheet_client()
-                    sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('Provident_Fund')
+                    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Provident_Fund')
 
                     existing_data = sheet.get_all_records()
                     df_existing = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
@@ -105,7 +105,7 @@ def render_tab_pvd():
         df_pvd_history = pd.DataFrame()
         try:
             client = get_gsheet_client()
-            sheet_pvd = get_cached_spreadsheet(client, 'MyStockData').worksheet('Provident_Fund')
+            sheet_pvd = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Provident_Fund')
             pvd_records = sheet_pvd.get_all_records()
             if pvd_records:
                 df_pvd_history = pd.DataFrame(pvd_records)
@@ -240,7 +240,7 @@ def render_tab_pvd():
                 if ins_redemption_value > 0:
                     try:
                         client = get_gsheet_client()
-                        sheet_ins = get_cached_spreadsheet(client, 'MyStockData').worksheet('Insurance')
+                        sheet_ins = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Insurance')
 
                         existing_data = sheet_ins.get_all_records()
                         df_existing_ins = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
@@ -276,15 +276,15 @@ def render_tab_pvd():
     # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. (พร้อมระบบ Auto เพิ่มเงินทุกสิ้นเดือน) ---
     def get_coop_sheet():
         client = get_gsheet_client()
-        return get_cached_spreadsheet(client, 'MyStockData').worksheet('Coop')
+        return get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Coop')
 
     def get_sso_sheet():
         client = get_gsheet_client()
-        return get_cached_spreadsheet(client, 'MyStockData').worksheet('SSO')
+        return get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('SSO')
 
     def get_bank_sheet():
         client = get_gsheet_client()
-        return get_cached_spreadsheet(client, 'MyStockData').worksheet('Bank_Account')
+        return get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Bank_Account')
 
     # --- ฟังก์ชันคำนวณยอดอัติโนมัติสะสมตามเดือนที่ผ่านไป ---
     def calculate_auto_coop_value(last_date_str, last_val, monthly_add, is_auto_active):
@@ -487,7 +487,7 @@ def render_tab_pvd():
                     try:
                         # ปรับวิธีเรียกใช้งานให้รองรับฟังก์ชันกลางและป้องกัน Error
                         client = get_gsheet_client()
-                        sheet_pension = get_worksheet_safely(client, 'MyStockData', 'Pension')
+                        sheet_pension = get_worksheet_safely(client, get_active_sheet_name(), 'Pension')
 
                         if sheet_pension is None:
                             raise Exception("ไม่สามารถเชื่อมต่อกับชีต 'Pension' ได้ กรุณาตรวจสอบชื่อชีตอีกครั้ง")
