@@ -350,17 +350,6 @@ def calculate_tfex_result(entry, close, size, comm, Status):
 # =============================================================
 # 4. ฟังก์ชันการจัดการบันทึกข้อมูลและเงินสด (Logging & Cash Balance)
 # =============================================================
-def log_to_sheet(sheet_name, row_data):
-    """ฟังก์ชันสำหรับบันทึกข้อมูลแถวใหม่ลง Google Sheets"""
-    try:
-        client = get_gsheet_client() # เรียกใช้ client ที่อยู่ด้านบน
-        sheet = client.open('MyStockData').worksheet(sheet_name)
-        sheet.append_row(row_data)
-        return True
-    except Exception as e:
-        print(f"Error logging to {sheet_name}: {e}")
-        return False
-        
 def load_total_cash_balance():
     """คำนวณเงินสดคงเหลือที่แท้จริง: (ยอดรวม Cash Flow ทั้งหมด) - (ผลรวม shares * avg_price ของทุกหุ้นในพอร์ต)"""
     try:
