@@ -91,9 +91,10 @@ if 'cash_balance' not in st.session_state:
     st.session_state.cash_balance = load_total_cash_balance()
 
 ##### Header UI Application box - Start ######
-st.markdown("""
+_app_title = st.session_state.get("app_title", "NJ-Wealth")
+st.markdown(f"""
     <style>
-    .custom-box {
+    .custom-box {{
         background: linear-gradient(135deg, #FFFFFF 0%, #F1EEE8 100%);
         border: 1px solid #E5E1D8;
         border-radius: 16px;       /* มุมโค้งมน */
@@ -101,11 +102,11 @@ st.markdown("""
         box-shadow: 0 4px 16px rgba(45, 49, 66, 0.08);
         margin-bottom: 20px;
         border-left: 4px solid #7C9885;
-    }
+    }}
     </style>
 
     <div class="custom-box">
-        <h1 style="margin:0; font-size: 28px; font-family: 'Prompt', sans-serif; color: #7C9885 !important;">📈 Application NJ-Wealth</h1>
+        <h1 style="margin:0; font-size: 28px; font-family: 'Prompt', sans-serif; color: #7C9885 !important;">📈 Application {_app_title}</h1>
         <p style="margin-top: 10px; margin-bottom: 0; color: #6B7280;">📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)</p>
     </div>
 """, unsafe_allow_html=True)
