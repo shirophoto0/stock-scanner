@@ -202,11 +202,15 @@ def render_tab_tfex():
             st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
 
         # 1. แสดงรายการที่ถืออยู่ (Open Positions)
-        # 1. แสดงรายการที่ถืออยู่ (Open Positions)
         st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
 
-        tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
-        open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
+        # 🔧 แก้บั๊ก: กันเหนียวเพิ่ม เผื่อ load_data() ลองใหม่ครบ 3 ครั้งแล้วยังพลาด (เช่นโควตาติดยาว)
+        # จะได้ตารางว่างสนิทไม่มีคอลัมน์เลย ป้องกันไม่ให้เข้าถึงคอลัมน์ 'Close_Price'/'Size' ตรงๆ
+        if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
+            tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
+            open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
+        else:
+            open_positions = pd.DataFrame()
 
         if not open_positions.empty:
             # ⭐️ เชื่อมโยงค่า ATR และ Multiplier ที่ผู้ใช้ใช้งานล่าสุด (จากฟอร์มด้านบน) มาแสดงและคำนวณในตาราง
@@ -234,7 +238,11 @@ def render_tab_tfex():
             st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
 
         # คำนวณ Margin Utilization
-        total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT 
+        # 🔧 กันเหนียว: ถ้า open_positions ว่างสนิทไม่มีคอลัมน์ Size ให้ถือว่ายังไม่ได้ใช้ margin เลย
+        if not open_positions.empty and 'Size' in open_positions.columns:
+            total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT
+        else:
+            total_margin_used = 0
         utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
 
         # --- แบ่งหน้าจอเป็น 2 คอลัมน์ เพื่อวางกราฟคู่กัน ---
@@ -466,7 +474,7 @@ def render_tab_tfex():
     with sub_tfex_history:
         st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
 
-        if not tfex_df.empty and 'Net_Profit' in tfex_df.columns:
+        if not tfex_df.empty and 'Net_Profit' in tfex_df.columns and 'Close_Price' in tfex_df.columns:
             # 1. จัดเตรียมข้อมูล
             # แปลงคอลัมน์ Close_Price เป็นตัวเลขก่อนเปรียบเทียบ > 0 ป้องกัน TypeError
             close_prices_5154 = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
