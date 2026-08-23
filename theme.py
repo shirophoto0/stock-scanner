@@ -248,6 +248,56 @@ def apply_theme():
     st.markdown(css, unsafe_allow_html=True)
 
 
+# --- CSS "ไม้ตาย" สำหรับจุดที่ Streamlit แทรกสไตล์ของตัวเองมาทีหลังจนชนะโค้ดปกติ ---
+# ต้องฉีดจุดนี้ไว้ "ท้ายสุดของหน้า" (หลังทุกแท็บ/ตารางแสดงผลเสร็จแล้ว) เพราะกฎ CSS ที่มาทีหลัง
+# ในหน้าเดียวกันจะชนะกฎที่มาก่อนเสมอเมื่อมีความสำคัญ (!important) เท่ากัน
+FINAL_OVERRIDE_CSS = """
+<style>
+:root {
+    %(vars)s
+}
+[data-testid="stTabs"] button[role="tab"],
+[data-testid="stTabs"] button[role="tab"]:hover,
+[data-testid="stTabs"] button[role="tab"]:focus,
+[data-testid="stTabs"] button[role="tab"]:focus-visible,
+[data-testid="stTabs"] button[role="tab"]:active,
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"],
+[data-testid="stTabs"] button[role="tab"][aria-selected="false"] {
+    background: transparent !important;
+    background-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"] p,
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    color: var(--accent-primary) !important;
+}
+[data-testid="stTabs"] button[role="tab"][aria-selected="false"] p,
+[data-testid="stTabs"] button[role="tab"][aria-selected="false"] {
+    color: var(--text-secondary) !important;
+}
+[data-testid="stDataFrame"] thead tr th,
+[data-testid="stDataFrame"] [role="columnheader"],
+[data-testid="stDataFrame"] [role="row"]:first-child {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+}
+</style>
+"""
+
+
+def apply_final_override():
+    """
+    🆕 ฉีด CSS ไม้ตายซ้ำอีกครั้งท้ายสุดของสคริปต์ (เรียกหลัง main() ทำงานเสร็จ)
+    ให้เรียกคู่กับ apply_theme() เสมอ — apply_theme() ฉีดตอนต้น (ครอบคลุมส่วนใหญ่ของแอป)
+    ส่วนตัวนี้มาปิดท้ายจุดที่ดื้อ (เช่น แท็บที่ยังมีพื้นหลังเหลืองค้าง) เป็นด่านสุดท้าย
+    """
+    mode = st.session_state.get("theme_mode", "dark")
+    theme_vars = DARK_VARS if mode == "dark" else LIGHT_VARS
+    css = FINAL_OVERRIDE_CSS % {"vars": theme_vars}
+    st.markdown(css, unsafe_allow_html=True)
+
+
 def render_theme_toggle():
     """แสดงสวิตช์สลับโหมด Dark/Light ไว้ที่แถบด้านข้าง (Sidebar)"""
     current_mode = st.session_state.get("theme_mode", "dark")
