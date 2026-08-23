@@ -28,6 +28,7 @@ from PIL import Image
 import time
 from gspread.exceptions import APIError
 from constants import SET100_TICKERS
+from theme import style_plotly
 
 # 🆕 ระบบ Login หลายผู้ใช้: ฟังก์ชันนี้คืนชื่อ Google Sheet ของผู้ใช้ที่ล็อกอินอยู่ตอนนี้
 # (ตั้งค่าไว้ตอน Login สำเร็จใน auth.py) ถ้ายังไม่มีการล็อกอิน จะใช้ 'MyStockData' เป็นค่าเริ่มต้น
@@ -866,14 +867,14 @@ def display_performance_dashboard():
     with col1:
         st.subheader("🚀 ความสามารถในการทำกำไร (Indexed)")
         fig1 = px.line(df, x='Date', y='Indexed_Performance', markers=True)
-        st.plotly_chart(fig1, use_container_width=True)
+        st.plotly_chart(style_plotly(fig1), use_container_width=True)
         
     with col2:
         st.subheader("💰 พอร์ตจริง vs เงินลงทุน")
         fig2 = go.Figure()
         fig2.add_trace(go.Scatter(x=df['Date'], y=df['Market_Value'], name='มูลค่าพอร์ต', fill='tozeroy'))
         fig2.add_trace(go.Scatter(x=df['Date'], y=df['Invested_Capital'], name='เงินทุนจริง', line=dict(dash='dash')))
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(style_plotly(fig2), use_container_width=True)
 
 def backfill_portfolio_history():
     # 1. เตรียมข้อมูล
@@ -1168,7 +1169,7 @@ def plot_dual_equity_curve(df_equity):
     fig.update_yaxes(title_text="มูลค่าพอร์ตจริง (฿)", secondary_y=False)
     fig.update_yaxes(title_text="เงินสดสะสม (฿)", secondary_y=True)
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(style_plotly(fig), use_container_width=True)
     
 def get_pe_ratio(ticker_obj):
     try:
