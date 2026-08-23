@@ -52,6 +52,16 @@ def get_gsheet_client():
         raise e
 
 
+# 🔧 แก้บั๊ก: จุดสำคัญที่ช่วยลดปัญหา "Google Sheets API เกินโควตา (429)"
+# เดิม client.open('MyStockData') ถูกเรียกซ้ำๆ หลายสิบครั้งในทุกครั้งที่หน้าเว็บโหลด/รีเฟรช
+# (ทุกฟังก์ชันที่ต้องใช้ชีต จะเปิดสเปรดชีตด้วยชื่อใหม่ทุกครั้ง ซึ่งกิน API quota เยอะมาก)
+# ตอนนี้ "จำ" สเปรดชีตที่เปิดไว้แล้วไว้ 5 นาที ทุกฟังก์ชันที่เรียกชื่อเดียวกันจะใช้ตัวที่จำไว้แทน
+# การเปิดซ้ำ ลดจำนวนครั้งที่ยิง API ลงได้มาก โดยไม่กระทบพฤติกรรมการทำงานของแอปเลย
+@st.cache_resource(ttl=300, show_spinner=False)
+def get_cached_spreadsheet(_client, spreadsheet_name):
+    return _client.open(spreadsheet_name)
+
+
 # =============================================================
 # 2. ฟังก์ชันจัดการ Google Sheets & ข้อมูลทรัพย์สิน (Wealth & Google Sheets)
 # =============================================================
@@ -59,7 +69,7 @@ def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, de
     """ฟังก์ชันเปิด Google Sheet พร้อมระบบป้องกันและลองใหม่เมื่อติดปัญหา Quota Exceeded (429)"""
     for attempt in range(retries):
         try:
-            sheet = client.open(spreadsheet_name).worksheet(worksheet_name)
+            sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet(worksheet_name)
             return sheet
         except APIError as e:
             if "429" in str(e) or "Quota exceeded" in str(e):
@@ -79,7 +89,7 @@ def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, de
     
 def check_and_auto_stamp_portfolio(client, current_total_value):
     try:
-        sheet_history = client.open('MyStockData').worksheet('Stock_TFEX_History')
+        sheet_history = get_cached_spreadsheet(client, 'MyStockData').worksheet('Stock_TFEX_History')
         data = sheet_history.get_all_records()
         
         last_recorded_month = ""
@@ -181,7 +191,7 @@ st.markdown("""
 def get_latest_pvd_value():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('Provident_Fund')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('Provident_Fund')
         data = sheet.get_all_records()
         if data:
             df = pd.DataFrame(data)
@@ -193,7 +203,7 @@ def get_latest_pvd_value():
 
 def get_pension_sheet(client):
     try:
-        sheet_pen = client.open('MyStockData').worksheet('Pension')
+        sheet_pen = get_cached_spreadsheet(client, 'MyStockData').worksheet('Pension')
         return sheet_pen
     except Exception:
         return None
@@ -201,7 +211,7 @@ def get_pension_sheet(client):
 def get_latest_insurance_value():
     try:
         client = get_gsheet_client()
-        sheet_ins = client.open('MyStockData').worksheet('Insurance')
+        sheet_ins = get_cached_spreadsheet(client, 'MyStockData').worksheet('Insurance')
         data = sheet_ins.get_all_records()
         if data:
             df_ins = pd.DataFrame(data)
@@ -214,7 +224,7 @@ def get_latest_insurance_value():
 def get_latest_coop_value():
     try:
         client = get_gsheet_client()
-        sheet_coop = client.open('MyStockData').worksheet('Coop')
+        sheet_coop = get_cached_spreadsheet(client, 'MyStockData').worksheet('Coop')
         data = sheet_coop.get_all_records()
         if data:
             df_coop = pd.DataFrame(data)
@@ -356,7 +366,7 @@ def load_total_cash_balance():
         spreadsheet_name = 'MyStockData'
         
         # 1. ดึงยอดรวมจากชีต Cash_Flow ทั้งหมด
-        sheet_cash = client.open(spreadsheet_name).worksheet('CashFlow')
+        sheet_cash = get_cached_spreadsheet(client, spreadsheet_name).worksheet('CashFlow')
         records_cash = sheet_cash.get_all_records()
         
         total_cash_flow = 0.0
@@ -367,7 +377,7 @@ def load_total_cash_balance():
                 total_cash_flow = float(df_cash['Amount'].sum())
                 
         # 2. บังคับคำนวณต้นทุนหุ้นทั้งหมดจาก shares * avg_price โดยตรง
-        sheet_portfolio = client.open(spreadsheet_name).worksheet('PortfolioData')
+        sheet_portfolio = get_cached_spreadsheet(client, spreadsheet_name).worksheet('PortfolioData')
         records_portfolio = sheet_portfolio.get_all_records()
         
         total_stock_cost = 0.0
@@ -430,7 +440,7 @@ def save_cash_to_gsheet(df):
         
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet("Cash_Flow")
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet("Cash_Flow")
         sheet.append_rows(df.values.tolist())
         return True
     except Exception as e:
@@ -497,7 +507,7 @@ def save_dividend_data(df_div=None):
         # 3. บันทึกลง Google Sheets แบบปลอดภัย
         try:
             client = get_gsheet_client()
-            sheet = client.open('MyStockData').worksheet('Dividend')
+            sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('Dividend')
             
             df_clean = df_div.fillna("")
             data_to_write = [df_clean.columns.tolist()] + df_clean.astype(str).values.tolist()
@@ -541,7 +551,7 @@ def calculate_atr(df, period=14):
 def load_data(sheet_name):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet(sheet_name) 
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet(sheet_name) 
         data = sheet.get_all_records()
         return pd.DataFrame(data)
     except Exception as e:
@@ -568,7 +578,7 @@ def get_cached_stock_info(ticker):
 def clear_and_save_data(df, sheet_name):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('TradingPlan')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('TradingPlan')
         
         sheet.clear()
         
@@ -604,7 +614,7 @@ def save_journal():
             df_temp[col] = pd.to_datetime(df_temp[col], errors='coerce').dt.strftime('%Y-%m-%d')
             
     client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('JournalData')
+    sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('JournalData')
     
     sheet.clear()
     sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
@@ -613,7 +623,7 @@ def save_journal():
 def load_journal():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('JournalData')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('JournalData')
         data = sheet.get_all_records()
         st.session_state.journal_data = data
     except Exception as e:
@@ -627,7 +637,7 @@ def save_portfolio():
             st.session_state.my_portfolio = []
             
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('PortfolioData')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('PortfolioData')
         
         sheet.clear() 
         if st.session_state.my_portfolio:
@@ -644,7 +654,7 @@ def save_portfolio():
 def load_portfolio():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('PortfolioData')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('PortfolioData')
         data = sheet.get_all_records()
         
         st.session_state.my_portfolio = data if data else []
@@ -656,7 +666,7 @@ def load_portfolio():
 def log_portfolio_snapshot():
     """บันทึกยอดพอร์ตรายวันลงตาราง Portfolio_History"""
     client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('Portfolio_History')
+    sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('Portfolio_History')
     
     current_date = datetime.now().strftime('%Y-%m-%d')
     market_val = calculate_total_portfolio_value() 
@@ -763,7 +773,7 @@ def save_portfolio_snapshot():
 def display_performance_dashboard():
     # 1. โหลดข้อมูล
     client = get_gsheet_client()
-    sheet = client.open('MyStockData').worksheet('Portfolio_History')
+    sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('Portfolio_History')
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     
@@ -813,7 +823,7 @@ def backfill_portfolio_history():
     # โหลดข้อมูล CashFlow เผื่อไว้คำนวณเงินลงทุนจริง (ถ้ามี)
     try:
         client = get_gsheet_client()
-        sheet_cash = client.open('MyStockData').worksheet('CashFlow')
+        sheet_cash = get_cached_spreadsheet(client, 'MyStockData').worksheet('CashFlow')
         cash_data = sheet_cash.get_all_records()
         df_cash = pd.DataFrame(cash_data) if cash_data else pd.DataFrame()
         if not df_cash.empty:
@@ -867,7 +877,7 @@ def backfill_portfolio_history():
     
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('Portfolio_History')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('Portfolio_History')
         
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
@@ -910,7 +920,7 @@ def update_stock_data(df):
 def log_cash_transaction(date, trans_type, amount, note):
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('CashFlow')
         
         # เตรียมข้อมูลที่จะบันทึก (Date, Type, Amount, Note)
         row_data = [str(date), trans_type, amount, note]
@@ -944,7 +954,7 @@ def get_equity_curve_data():
         # ลองโหลดจาก Google Sheets ดูก่อนถ้า session ว่าง
         try:
             client = get_gsheet_client()
-            sheet = client.open('MyStockData').worksheet('JournalData')
+            sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('JournalData')
             data = sheet.get_all_records()
             if not data:
                 return pd.DataFrame()
@@ -982,7 +992,7 @@ def get_equity_curve_data():
     # 2. เตรียมข้อมูล CashFlow (ป้องกันกรณีชีท CashFlow Error)
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('CashFlow')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('CashFlow')
         cash_data = sheet.get_all_records()
         df_cash = pd.DataFrame(cash_data) if cash_data else pd.DataFrame()
     except:
@@ -1132,7 +1142,7 @@ def check_alerts(row):
 def load_from_gsheet():
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet('StockData')
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('StockData')
         data = sheet.get_all_records()
         
         if not data:
@@ -1161,7 +1171,7 @@ def log_to_sheet(sheet_name, row_data):
     """ฟังก์ชันอเนกประสงค์สำหรับ append แถวข้อมูลใหม่ลงใน Google Sheets"""
     try:
         client = get_gsheet_client()
-        sheet = client.open('MyStockData').worksheet(sheet_name)
+        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet(sheet_name)
         sheet.append_row(row_data)
     except Exception as e:
         print(f"DEBUG: Error ใน log_to_sheet ({sheet_name}): {e}")
