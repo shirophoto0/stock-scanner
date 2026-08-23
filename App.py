@@ -2022,6 +2022,11 @@ def main():
             with col_input:
                 all_tickers = [t.replace('.BK', '') for t in SET100_TICKERS]
                 
+                # 🔧 แก้บั๊ก: ถ้ามีค่าที่ฝากไว้จากการกดเลือกแถวในตาราง ให้ตั้งค่าให้ dropdown
+                # ตรงนี้ (ก่อน dropdown ถูกสร้างด้านล่าง) เท่านั้นที่ Streamlit อนุญาตให้ตั้งค่าได้
+                if "_pending_ticker_sync" in st.session_state:
+                    st.session_state["tech_stock_selectbox"] = st.session_state.pop("_pending_ticker_sync")
+                
                 # 1. กำหนดค่าเริ่มต้นจาก Session State กลาง
                 current_selected = st.session_state.get("selected_ticker", "KBANK")
                 
@@ -2761,10 +2766,10 @@ def main():
                         # ถ้าหุ้นที่เลือกเปลี่ยนไปจากเดิม ถึงจะสั่ง Rerun
                         if st.session_state.get("selected_ticker") != clicked_ticker:
                             st.session_state.selected_ticker = clicked_ticker
-                            # 🔧 แก้บั๊ก: ต้อง sync ค่าให้ dropdown ด้านบน (key="tech_stock_selectbox")
-                            # ด้วย ไม่งั้น dropdown จะจำค่าเก่าของตัวเองและเขียนทับค่านี้กลับไป
-                            # ทำให้ Fundamental Dashboard ไม่เปลี่ยนตามตารางที่เพิ่งกด
-                            st.session_state["tech_stock_selectbox"] = clicked_ticker
+                            # 🔧 แก้บั๊ก: "ฝากค่า" ไว้ก่อน ไม่ตั้งค่า dropdown ตรงนี้ทันที
+                            # เพราะ dropdown (key="tech_stock_selectbox") ถูกสร้างไปแล้วก่อนหน้านี้ในรอบเดียวกัน
+                            # ต้องรอไปตั้งค่าตอนเริ่มรอบใหม่ ก่อน dropdown จะถูกสร้าง (ดูจุดที่ตั้งค่าไว้ด้านบน)
+                            st.session_state["_pending_ticker_sync"] = clicked_ticker
                             st.rerun()
                     else:
                         # กรณีตารางถูกกรองจน Index เดิมหายไป (เช่น สลับหน้าเทรด) 
