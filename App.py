@@ -6130,15 +6130,41 @@ def main():
                         
                     if chart_col and chart_col in df_pvd_history.columns:
                         if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
-                            df_pvd_history['Period'] = df_pvd_history['Month'].astype(str) + " " + df_pvd_history['Year_BE'].astype(str)
-                            chart_data = df_pvd_history.set_index('Period')[chart_col]
+                            # 🔧 แก้บั๊ก: เรียงลำดับข้อมูลตามปี พ.ศ. และเดือนจริงๆ ก่อนสร้างกราฟ
+                            # (เดิมกราฟแสดงตามลำดับแถวที่กรอกใน Google Sheets ทำให้เดือนสลับกัน)
+                            thai_month_order = {
+                                "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4,
+                                "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8,
+                                "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
+                            }
+                            df_pvd_sorted = df_pvd_history.copy()
+                            df_pvd_sorted['_Month_Num'] = df_pvd_sorted['Month'].map(thai_month_order).fillna(0).astype(int)
+                            df_pvd_sorted['_Year_Num'] = pd.to_numeric(df_pvd_sorted['Year_BE'], errors='coerce').fillna(0).astype(int)
+                            df_pvd_sorted = df_pvd_sorted.sort_values(by=['_Year_Num', '_Month_Num'])
+                            
+                            df_pvd_sorted['Period'] = df_pvd_sorted['Month'].astype(str) + " " + df_pvd_sorted['Year_BE'].astype(str)
+                            chart_data = df_pvd_sorted.set_index('Period')[chart_col]
                         else:
                             chart_data = df_pvd_history[chart_col]
                         
                         chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
                         
-                        # แสดงกราฟแท่ง
-                        st.bar_chart(chart_data)
+                        # แสดงกราฟแท่ง (เปลี่ยนมาใช้ Plotly เพื่อกำหนดสีแยกตามค่าบวก/ลบได้)
+                        # 🎨 บวก = เขียว, ลบ = แดง
+                        bar_colors = ['#2ECC71' if v >= 0 else '#E74C3C' for v in chart_data]
+                        fig_pvd = go.Figure(data=[
+                            go.Bar(
+                                x=chart_data.index.tolist(),
+                                y=chart_data.values.tolist(),
+                                marker_color=bar_colors
+                            )
+                        ])
+                        fig_pvd.update_layout(
+                            height=400,
+                            margin=dict(l=20, r=20, t=20, b=20),
+                            yaxis_title="YTD Net Return (%)"
+                        )
+                        st.plotly_chart(fig_pvd, use_container_width=True)
                     else:
                         st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
                 else:
