@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
-from backend_functions import get_worksheet_safely
+from backend_functions import get_worksheet_safely, get_active_sheet_name
 
 
 def render_tab_gold(client):
@@ -98,7 +98,7 @@ def render_tab_gold(client):
     if 'gold_portfolio' not in st.session_state:
         st.session_state['gold_portfolio'] = []
         try:
-            sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+            sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
             if sheet_gold is not None:
                 records = sheet_gold.get_all_records()
                 for row in records:
@@ -211,7 +211,7 @@ def render_tab_gold(client):
 
                 # บันทึกลง Google Sheets
                 try:
-                    sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                    sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
                     if sheet_gold is not None:
                         sheet_gold.clear()
                         sheet_gold.append_row(["ประเภท", "น้ำหนัก/มูลค่าซื้อ", "หน่วย", "ราคาต้นทุนเฉลี่ย", "มูลค่าตั้งต้น", "ราคาตลาดปัจจุบัน", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
@@ -262,7 +262,7 @@ def render_tab_gold(client):
                         })
 
                         try:
-                            sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                            sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
                             if sheet_gold is not None:
                                 sheet_gold.clear()
                                 sheet_gold.append_row(["ประเภท", "น้ำหนัก/มูลค่าซื้อ", "หน่วย", "ราคาต้นทุนเฉลี่ย", "มูลค่าตั้งต้น", "ราคาตลาดปัจจุบัน", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
@@ -402,7 +402,7 @@ def render_tab_gold(client):
             st.session_state['gold_portfolio'] = []
             st.session_state['total_gold_portfolio_value'] = 0.0
             try:
-                sheet_gold = get_worksheet_safely(client, 'MyStockData', 'Gold_Portfolio')
+                sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
                 if sheet_gold is not None:
                     sheet_gold.clear()
                     sheet_gold.append_row(["ประเภท", "น้ำหนัก/มูลค่าซื้อ", "หน่วย", "ราคาต้นทุนเฉลี่ย", "มูลค่าตั้งต้น", "ราคาตลาดปัจจุบัน", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
