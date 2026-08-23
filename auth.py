@@ -39,6 +39,9 @@ def check_login():
             st.session_state["logged_in"] = True
             st.session_state["username"] = username
             st.session_state["active_sheet_name"] = user_info.get("sheet_name", "MyStockData")
+            # 🆕 จำชื่อแอปที่จะแสดงบนหัวข้อใหญ่ ต่อผู้ใช้แต่ละคน (ตั้งค่าได้ใน Secrets ด้วย
+            # app_title ถ้าไม่ตั้งไว้ จะใช้ "NJ-Wealth" เป็นค่าเริ่มต้น)
+            st.session_state["app_title"] = user_info.get("app_title", "NJ-Wealth")
             st.rerun()
         else:
             st.error("❌ รหัสผ่านไม่ถูกต้อง")
