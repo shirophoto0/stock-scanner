@@ -50,7 +50,7 @@ from tab_stock import render_tab_stock
 from auth import check_login, show_user_bar
 
 # 🆕 ระบบธีมสี (Dark/Light) ของแอป
-from theme import apply_theme, apply_final_override
+from theme import apply_theme
 
 # --- ตั้งค่าหน้าเว็บ: ต้องอยู่เป็นคำสั่ง Streamlit คำสั่งแรกสุดของแอปเสมอ ---
 st.set_page_config(layout="wide")
@@ -94,19 +94,19 @@ if 'cash_balance' not in st.session_state:
 st.markdown("""
     <style>
     .custom-box {
-        background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%);
-        border: 1px solid var(--border-color);
+        background: linear-gradient(135deg, #FFFFFF 0%, #F1EEE8 100%);
+        border: 1px solid #E5E1D8;
         border-radius: 16px;       /* มุมโค้งมน */
         padding: 24px;             /* ระยะห่างขอบด้านใน */
-        box-shadow: 0 4px 16px var(--shadow-color);
+        box-shadow: 0 4px 16px rgba(45, 49, 66, 0.08);
         margin-bottom: 20px;
-        border-left: 4px solid var(--accent-primary);
+        border-left: 4px solid #7C9885;
     }
     </style>
 
     <div class="custom-box">
-        <h1 style="margin:0; font-size: 28px; font-family: 'Prompt', sans-serif; color: var(--accent-primary) !important;">📈 Application NJ-Wealth</h1>
-        <p style="margin-top: 10px; margin-bottom: 0; color: var(--text-secondary);">📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)</p>
+        <h1 style="margin:0; font-size: 28px; font-family: 'Prompt', sans-serif; color: #7C9885 !important;">📈 Application NJ-Wealth</h1>
+        <p style="margin-top: 10px; margin-bottom: 0; color: #6B7280;">📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)</p>
     </div>
 """, unsafe_allow_html=True)
 ##### Header UI Application box - Start ######
@@ -271,10 +271,6 @@ def main():
             render_tab_pvd()
         with wealth_tab_real_estate:
             render_tab_real_estate()
-
-    # 🆕 ฉีด CSS ไม้ตายซ้ำอีกครั้งท้ายสุด (หลังทุกแท็บ/ตารางแสดงผลเสร็จหมดแล้ว)
-    # เพื่อชนะสไตล์ที่ Streamlit แทรกเองแบบไดนามิกทีหลัง (ดูรายละเอียดใน theme.py)
-    apply_final_override()
 
 # ------------------------------
 if __name__ == "__main__":
