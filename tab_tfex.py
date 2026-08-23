@@ -400,7 +400,9 @@ def render_tab_tfex():
                 # บันทึกปิดสถานะพร้อม Loading Spinner และล้าง Cache ทันที
                 with st.spinner("⏳ กำลังบันทึกการปิดสถานะและคำนวณผลลัพธ์..."):
                     # ส่งค่าไปอัปเดต (ตรวจสอบให้แน่ใจว่าฟังก์ชัน update_trade_close รับพารามิเตอร์ตามนี้)
-                    success = update_trade_close('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU', selected_trade_id, close_price, str(close_date))
+                    # 🔧 แก้บั๊ก: เดิมส่ง ID ของ Google Sheet ตายตัวเป็นพารามิเตอร์แรก ตอนนี้ฟังก์ชันเปิดชีต
+                    # ตามผู้ใช้ที่ login เองแล้ว จึงไม่ต้องส่ง ID มาจากตรงนี้อีกต่อไป
+                    success = update_trade_close(selected_trade_id, close_price, str(close_date))
 
                     if success:
                         st.cache_data.clear()  # ล้าง Cache ข้อมูลในหน่วยความจำ
