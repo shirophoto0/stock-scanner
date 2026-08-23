@@ -2152,12 +2152,12 @@ def main():
                 col_tf, col_period = st.columns([1, 1])
                 
                 tf_mapping = {
-                    "1 ชม. (1hr)": "1h",
-                    "4 ชม. (4hr)": "4h",
                     "1 วัน (Day)": "1d",
                     "1 สัปดาห์ (Week)": "1wk",
                     "1 เดือน (Month)": "1mo"
                 }
+                # 🔧 ตัดตัวเลือก 1hr/4hr ออก เพราะ Yahoo Finance ไม่มีข้อมูลราคารายชั่วโมงสำหรับหุ้นไทย (.BK)
+                # ทำให้กราฟไม่ขึ้น — มีลิงก์ TradingView ไว้สำหรับดูกราฟช่วงเวลาสั้นแทนอยู่แล้ว
                 # เพิ่ม Mapping นี้ไว้ก่อนส่วนที่เรียก stock_data.history
                 p_map = {
                     "6 เดือน (6m)": "6mo", 
@@ -2174,14 +2174,10 @@ def main():
                     selected_tf = tf_mapping[tf_select]
                 
                 with col_period:
-                    if selected_tf in ["1h", "4h"]:
-                        period_options = ["6 เดือน (6m)", "1 ปี (1y)"]
-                        chart_period = st.pills("เลือกช่วงเวลากราฟ (สั้น/กลาง):", options=period_options, default="6 เดือน (6m)")
-                    else:
-                        period_options = ["6 เดือน (6m)", "1 ปี (1y)", "5 ปี (5y)", "ตั้งแต่เข้าตลาด (All Time)"]
-                        chart_period = st.pills("เลือกช่วงเวลากราฟ (ทั้งหมด):", options=period_options, default="6 เดือน (6m)")
+                    period_options = ["6 เดือน (6m)", "1 ปี (1y)", "5 ปี (5y)", "ตั้งแต่เข้าตลาด (All Time)"]
+                    chart_period = st.pills("เลือกช่วงเวลากราฟ (ทั้งหมด):", options=period_options, default="6 เดือน (6m)")
                     if not chart_period:
-                        chart_period = "6 เดือน (6m)" if selected_tf in ["1h", "4h"] else "1 เดือน (1y)"
+                        chart_period = "6 เดือน (6m)"
                 
                 # =============================================================
                 # 6. กราฟเทคนิคัล
@@ -2196,11 +2192,7 @@ def main():
                     # 3.1 กำหนดช่วงเวลา 
                     p_map = {"6 เดือน (6m)": "6mo", "1 ปี (1y)": "1y", "5 ปี (5y)": "5y", "ตั้งแต่เข้าตลาด (All Time)": "max"}
                     selected_period = p_map.get(chart_period, "1y")
-                    actual_interval = "1h" if selected_tf == "4h" else selected_tf
-                    
-                    # กันเหนียว: ถ้า TF สั้น (1h/4h) เลือก Period ยาวเกินไป ให้ตัดเหลือ 1 ปี เพื่อป้องกันกราฟไม่ขึ้น
-                    if selected_tf in ["1h", "4h"] and selected_period in ["5y", "max"]:
-                        selected_period = "1y"
+                    actual_interval = selected_tf
                 
                     # 3.2 ดึงข้อมูล
                     hist_chart = stock_data.history(period=selected_period, interval=actual_interval)
@@ -2211,12 +2203,6 @@ def main():
                         hist_chart = stock_data.history(period="6mo", interval=actual_interval)
                         hist_market = set_market.history(period="6mo", interval=actual_interval)
                 
-                    # 3.3 จัดการ Resample สำหรับ 4h
-                    if selected_tf == "4h" and not hist_chart.empty:
-                        conversion = {'Open': 'first', 'High': 'max', 'Low': 'min', 'Close': 'last', 'Volume': 'sum'}
-                        hist_chart = hist_chart.resample('4h').agg(conversion).ffill()
-                        hist_market = hist_market.resample('4h').agg(conversion).ffill()
-                        
                     if not hist_chart.empty:
                         # ปรับ Timezone และรวมข้อมูล
                         if hist_chart.index.tz is not None: hist_chart.index = hist_chart.index.tz_localize(None)
