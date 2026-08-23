@@ -177,16 +177,9 @@ def st_neumorphic_container():
     # สร้าง Container ที่มีขอบนูน
     return st.container(border=True) # ปัจจุบัน streamlit มี parameter border=True ที่สวยงามอยู่แล้ว
     
-# หากต้องการปรับแต่ง CSS ให้ดูนูนจริงๆ (Soft Shadow)
-st.markdown("""
-    <style>
-    .st-emotion-cache-1r6slb0 { /* คลาสของ container ใน streamlit */
-        border-radius: 15px;
-        background: #e0e0e0;
-        box-shadow:  20px 20px 60px #bebebe, -20px -20px 60px #ffffff;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# 🔧 แก้บั๊ก: เอาโค้ดแต่งสไตล์ CSS ที่เคยอยู่ตรงนี้ออก เพราะเป็นโค้ดระดับบนสุดของไฟล์นี้เช่นกัน
+# (รันแค่ครั้งเดียวตอน import ครั้งแรก ไม่ได้ผลกับผู้ใช้คนอื่นๆ อยู่แล้ว และอาจทำให้ Streamlit
+# error เรื่องลำดับคำสั่งได้ เนื่องจากรันก่อน st.set_page_config() ซึ่ง Streamlit กำหนดว่าต้องมาก่อนเสมอ)
 
 def get_latest_pvd_value():
     try:
@@ -416,9 +409,9 @@ def load_total_cash_balance():
 # 5. ฟังก์ชันการจัดการ Cash Balance และข้อมูลพอร์ตการลงทุน (Portfolio & Cash)
 # =============================================================
 
-# --- กำหนดค่าเริ่มต้น Cash Balance จาก Google Sheets โดยตรง ---
-if "cash_balance" not in st.session_state:
-    st.session_state.cash_balance = load_total_cash_balance()
+# --- 🔧 แก้บั๊ก: เอาโค้ดกำหนดค่าเริ่มต้น Cash Balance ที่เคยอยู่ตรงนี้ออก
+# เพราะเป็นโค้ดระดับบนสุดของไฟล์นี้ (backend_functions.py) ซึ่งจะรันแค่ครั้งเดียวตอน import ครั้งแรกเท่านั้น
+# ไม่ได้รันซ้ำทุกครั้งที่มีคนเปิดแอปเหมือนโค้ดใน App.py ทำให้คนที่เปิดแอปทีหลังได้ค่าผิด (ดู App.py แทน) ---
 
 
 def save_cash_balance(balance):
