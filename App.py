@@ -2225,126 +2225,131 @@ def main():
                         hist_market_close = hist_market['Close'].to_frame(name='Market_Close')
                         chart_combined = hist_chart[['Open', 'High', 'Low', 'Close']].join(hist_market_close, how='inner')
                         
-                        # คำนวณค่าเทคนิคัล
-                        base_stock = chart_combined['Close'].iloc[0]
-                        chart_combined['Stock_Perf'] = ((chart_combined['Close'] - base_stock) / base_stock) * 100
+                        if len(chart_combined) >= 5:  # 🔧 กันเหนียว: ถ้าข้อมูลน้อยเกินไป (เช่น Timeframe 1ชม./4ชม. ไม่มีข้อมูล) ให้แจ้งเตือนแทนการวาดกราฟเปล่า
+                            # คำนวณค่าเทคนิคัล
+                            base_stock = chart_combined['Close'].iloc[0]
+                            chart_combined['Stock_Perf'] = ((chart_combined['Close'] - base_stock) / base_stock) * 100
                             
-                        base_market = chart_combined['Market_Close'].iloc[0]
-                        market_perf = ((chart_combined['Market_Close'] - base_market) / base_market) * 100
-                        chart_combined['RS_Line'] = chart_combined['Stock_Perf'] - market_perf
-                        chart_combined['RS_EMA20'] = chart_combined['RS_Line'].ewm(span=20, adjust=False).mean()
-                        chart_combined['Is_Above_0'] = chart_combined['RS_Line'] > 0
-                        chart_combined['Days_Above_0'] = chart_combined['Is_Above_0'].groupby((~chart_combined['Is_Above_0']).cumsum()).cumsum()
-                        chart_combined['EMA10'] = chart_combined['Close'].ewm(span=10, adjust=False).mean()
-                        chart_combined['EMA20'] = chart_combined['Close'].ewm(span=20, adjust=False).mean()
-                        chart_combined['EMA50'] = chart_combined['Close'].ewm(span=50, adjust=False).mean()
-                        chart_combined['EMA100'] = chart_combined['Close'].ewm(span=100, adjust=False).mean()
-                        chart_combined['EMA200'] = chart_combined['Close'].ewm(span=200, adjust=False).mean()
+                            base_market = chart_combined['Market_Close'].iloc[0]
+                            market_perf = ((chart_combined['Market_Close'] - base_market) / base_market) * 100
+                            chart_combined['RS_Line'] = chart_combined['Stock_Perf'] - market_perf
+                            chart_combined['RS_EMA20'] = chart_combined['RS_Line'].ewm(span=20, adjust=False).mean()
+                            chart_combined['Is_Above_0'] = chart_combined['RS_Line'] > 0
+                            chart_combined['Days_Above_0'] = chart_combined['Is_Above_0'].groupby((~chart_combined['Is_Above_0']).cumsum()).cumsum()
+                            chart_combined['EMA10'] = chart_combined['Close'].ewm(span=10, adjust=False).mean()
+                            chart_combined['EMA20'] = chart_combined['Close'].ewm(span=20, adjust=False).mean()
+                            chart_combined['EMA50'] = chart_combined['Close'].ewm(span=50, adjust=False).mean()
+                            chart_combined['EMA100'] = chart_combined['Close'].ewm(span=100, adjust=False).mean()
+                            chart_combined['EMA200'] = chart_combined['Close'].ewm(span=200, adjust=False).mean()
                 
-                        # สร้างตารางวันหยุด
-                        missing_dates = pd.date_range(start=chart_combined.index.min(), end=chart_combined.index.max(), freq='D').difference(pd.to_datetime(chart_combined.index.date))
+                            # สร้างตารางวันหยุด
+                            missing_dates = pd.date_range(start=chart_combined.index.min(), end=chart_combined.index.max(), freq='D').difference(pd.to_datetime(chart_combined.index.date))
                 
-                        # 3.5 แสดง Metrics
-                        latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
-                        latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
-                        with col_metrics:
-                            m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
+                            # 3.5 แสดง Metrics
+                            latest_price_single = info.get('currentPrice', chart_combined['Close'].iloc[-1])
+                            latest_rs_status = "แข็งแกร่งกว่าตลาด (Outperform)" if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else "อ่อนแอกว่าตลาด (Underperform)"
+                            with col_metrics:
+                                m1, m2, m3, m4 = st.columns([2, 1, 1.5, 1]) 
                             
-                            # ปรับส่วนดึงข้อมูลปันผล
-                            raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
+                                # ปรับส่วนดึงข้อมูลปันผล
+                                raw_div = info.get('dividendYield') or info.get('trailingAnnualDividendYield', 0)
                             
-                            if raw_div:
-                                if raw_div > 1:
-                                    div_display = f"{raw_div:.2f}%"
+                                if raw_div:
+                                    if raw_div > 1:
+                                        div_display = f"{raw_div:.2f}%"
+                                    else:
+                                        div_display = f"{raw_div * 100:.2f}%"
                                 else:
-                                    div_display = f"{raw_div * 100:.2f}%"
-                            else:
-                                div_display = "N/A"
+                                    div_display = "N/A"
             
-                            # --- m1: ชื่อบริษัท ---
-                            m1.caption("ชื่อบริษัท")
-                            m1.write(f"**{info.get('longName', 'N/A')}**")
+                                # --- m1: ชื่อบริษัท ---
+                                m1.caption("ชื่อบริษัท")
+                                m1.write(f"**{info.get('longName', 'N/A')}**")
                             
-                            # --- m2: ราคาล่าสุด ---
-                            m2.caption("ราคาล่าสุด")
-                            m2.write(f"**{latest_price_single:.2f} บ.**")
+                                # --- m2: ราคาล่าสุด ---
+                                m2.caption("ราคาล่าสุด")
+                                m2.write(f"**{latest_price_single:.2f} บ.**")
                             
-                            # --- m3: สถานะ RS ---
-                            m3.caption("สถานะ RS")
-                            m3.write(f"**{'แข็งแกร่งกว่าตลาด' if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else 'อ่อนแอกว่าตลาด'}**")
+                                # --- m3: สถานะ RS ---
+                                m3.caption("สถานะ RS")
+                                m3.write(f"**{'แข็งแกร่งกว่าตลาด' if chart_combined['RS_Line'].iloc[-1] > chart_combined['RS_EMA20'].iloc[-1] else 'อ่อนแอกว่าตลาด'}**")
                             
-                            # --- m4: ปันผล (Yield) ---
-                            m4.caption("ปันผล (Yield)")
-                            m4.write(f"**{div_display}**")
+                                # --- m4: ปันผล (Yield) ---
+                                m4.caption("ปันผล (Yield)")
+                                m4.write(f"**{div_display}**")
                                     
-                        # 3.4 วาดกราฟ
-                        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
-                        fig.add_trace(go.Candlestick(x=chart_combined.index, open=chart_combined['Open'], high=chart_combined['High'], low=chart_combined['Low'], close=chart_combined['Close'], name='Price'), row=1, col=1)
+                            # 3.4 วาดกราฟ
+                            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.04, row_width=[0.3, 0.7])
+                            fig.add_trace(go.Candlestick(x=chart_combined.index, open=chart_combined['Open'], high=chart_combined['High'], low=chart_combined['Low'], close=chart_combined['Close'], name='Price'), row=1, col=1)
                         
-                        ema_hover_config = dict(bgcolor='rgba(255, 255, 255, 0.20)', bordercolor='rgba(0,0,0,0)')
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA10'], line=dict(color='orange', width=1.5), name='EMA 10', hovertemplate="EMA10: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA20'], line=dict(color='magenta', width=1.5), name='EMA 20', hovertemplate="EMA20: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA50'], line=dict(color='blue', width=1.5), name='EMA 50', hovertemplate="EMA50: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA100'], line=dict(color='brown', width=1.5), name='EMA 100', hovertemplate="EMA100: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA200'], line=dict(color='black', width=2.0), name='EMA 200', hovertemplate="EMA200: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            ema_hover_config = dict(bgcolor='rgba(255, 255, 255, 0.20)', bordercolor='rgba(0,0,0,0)')
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA10'], line=dict(color='orange', width=1.5), name='EMA 10', hovertemplate="EMA10: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA20'], line=dict(color='magenta', width=1.5), name='EMA 20', hovertemplate="EMA20: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA50'], line=dict(color='blue', width=1.5), name='EMA 50', hovertemplate="EMA50: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA100'], line=dict(color='brown', width=1.5), name='EMA 100', hovertemplate="EMA100: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=chart_combined.index, y=chart_combined['EMA200'], line=dict(color='black', width=2.0), name='EMA 200', hovertemplate="EMA200: %{y:.2f}<extra></extra>", hoverlabel=ema_hover_config), row=1, col=1)
                         
-                        # กราฟ RS Line (Purple)
-                        fig.add_trace(go.Scatter(
-                            x=chart_combined.index, 
-                            y=chart_combined['RS_Line'], 
-                            line=dict(color='#9c27b0', width=2), 
-                            name='RS Line',
-                            hovertemplate="RS Line: %{y:.2f}%<extra></extra>"
-                        ), row=2, col=1)
+                            # กราฟ RS Line (Purple)
+                            fig.add_trace(go.Scatter(
+                                x=chart_combined.index, 
+                                y=chart_combined['RS_Line'], 
+                                line=dict(color='#9c27b0', width=2), 
+                                name='RS Line',
+                                hovertemplate="RS Line: %{y:.2f}%<extra></extra>"
+                            ), row=2, col=1)
                         
-                        # กราฟ RS EMA 20 (Orange Dash)
-                        fig.add_trace(go.Scatter(
-                            x=chart_combined.index, 
-                            y=chart_combined['RS_EMA20'], 
-                            line=dict(color='#ff9800', width=1.5, dash='dot'), 
-                            name='RS EMA20',
-                            hovertemplate="RS EMA20: %{y:.2f}%<extra></extra>"
-                        ), row=2, col=1)
+                            # กราฟ RS EMA 20 (Orange Dash)
+                            fig.add_trace(go.Scatter(
+                                x=chart_combined.index, 
+                                y=chart_combined['RS_EMA20'], 
+                                line=dict(color='#ff9800', width=1.5, dash='dot'), 
+                                name='RS EMA20',
+                                hovertemplate="RS EMA20: %{y:.2f}%<extra></extra>"
+                            ), row=2, col=1)
                 
-                        # เส้นอ้างอิงแนวนอน (Hline)
-                        fig.add_hline(y=0, line_dash="solid", line_color="grey", line_width=1, row=2, col=1)
-                        fig.add_hline(y=20, line_dash="dot", line_color="rgba(255, 0, 0, 0.3)", row=2, col=1)
-                        fig.add_hline(y=-20, line_dash="dot", line_color="rgba(0, 0, 255, 0.3)", row=2, col=1)
+                            # เส้นอ้างอิงแนวนอน (Hline)
+                            fig.add_hline(y=0, line_dash="solid", line_color="grey", line_width=1, row=2, col=1)
+                            fig.add_hline(y=20, line_dash="dot", line_color="rgba(255, 0, 0, 0.3)", row=2, col=1)
+                            fig.add_hline(y=-20, line_dash="dot", line_color="rgba(0, 0, 255, 0.3)", row=2, col=1)
                 
-                        # 1. ตั้งค่า Candlestick ให้แสดงข้อมูลพื้นฐาน
-                        fig.update_xaxes(
-                                rangebreaks=[dict(values=missing_dates)],
-                                showgrid=True,
-                                gridcolor='rgba(150,150,150,0.08)',
-                                showspikes=True,
-                                spikecolor='#888',
-                                spikethickness=1,
-                                spikesnap='cursor',
-                                spikemode='across'
-                            )
-                        fig.update_yaxes(
-                                showgrid=True,
-                                gridcolor='rgba(150,150,150,0.08)',
-                                showspikes=True,
-                                spikecolor='#888',
-                                spikethickness=1,
-                                spikesnap='cursor',
-                                spikemode='across'
-                            )
+                            # 1. ตั้งค่า Candlestick ให้แสดงข้อมูลพื้นฐาน
+                            fig.update_xaxes(
+                                    rangebreaks=[dict(values=missing_dates)],
+                                    showgrid=True,
+                                    gridcolor='rgba(150,150,150,0.08)',
+                                    showspikes=True,
+                                    spikecolor='#888',
+                                    spikethickness=1,
+                                    spikesnap='cursor',
+                                    spikemode='across'
+                                )
+                            fig.update_yaxes(
+                                    showgrid=True,
+                                    gridcolor='rgba(150,150,150,0.08)',
+                                    showspikes=True,
+                                    spikecolor='#888',
+                                    spikethickness=1,
+                                    spikesnap='cursor',
+                                    spikemode='across'
+                                )
                         
-                        fig.update_layout(
-                    height=800,
-                    margin=dict(l=40, r=60, t=50, b=40), # เพิ่มขอบขวา (r=60) เพื่อให้มีที่ว่างสำหรับป้ายราคา
-                    hovermode='x unified',
-                    xaxis_rangeslider_visible=False,
-                    # ปรับแกน Y ให้แสดงป้ายราคาที่ "ชี้" ไปที่ราคาล่าสุด
-                    yaxis=dict(
-                        showspikes=False, # ปิด spike แกน Y เพื่อไม่ให้บังป้ายราคา
-                        side='right',     # ย้ายแกนราคาไปไว้ขวาเหมือน TradingView
-                        showgrid=True,
+                            fig.update_layout(
+                        height=800,
+                        margin=dict(l=40, r=60, t=50, b=40), # เพิ่มขอบขวา (r=60) เพื่อให้มีที่ว่างสำหรับป้ายราคา
+                        hovermode='x unified',
+                        xaxis_rangeslider_visible=False,
+                        # ปรับแกน Y ให้แสดงป้ายราคาที่ "ชี้" ไปที่ราคาล่าสุด
+                        yaxis=dict(
+                            showspikes=False, # ปิด spike แกน Y เพื่อไม่ให้บังป้ายราคา
+                            side='right',     # ย้ายแกนราคาไปไว้ขวาเหมือน TradingView
+                            showgrid=True,
+                        )
                     )
-                )
-                        st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.warning(f"⚠️ ไม่มีข้อมูลกราฟเพียงพอสำหรับ Timeframe นี้ (พบแค่ {len(chart_combined)} แท่งเทียน) "
+                                             f"อาจเป็นเพราะ Yahoo Finance ไม่มีข้อมูลรายชั่วโมง/4ชั่วโมงของหุ้นไทยตัวนี้ "
+                                             f"ลองเปลี่ยนเป็น Timeframe รายวัน (Day) แทนครับ")
                     # (แนะนำให้พี่อ้ำใช้โค้ดเดิมในส่วนนี้ได้เลยครับ ผมตัดมาให้สั้นลงเพื่อดูโครงสร้าง)
                     # ...
                 
