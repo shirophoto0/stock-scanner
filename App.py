@@ -52,7 +52,7 @@ if 'journal_data' not in st.session_state or not st.session_state.journal_data:
     try:
         client = get_gsheet_client()
         # ดึงข้อมูลจากชีท JournalData ที่คุณใช้งานอยู่
-        sheet_journal = client.open('MyStockData').worksheet('JournalData') 
+        sheet_journal = get_cached_spreadsheet(client, 'MyStockData').worksheet('JournalData') 
         st.session_state.journal_data = sheet_journal.get_all_records()
     except Exception as e:
         st.session_state.journal_data = []
@@ -781,7 +781,7 @@ def main():
                     if 'journal_data' not in st.session_state or not st.session_state['journal_data']:
                         try:
                             client = get_gsheet_client()
-                            sheet_journal = client.open('MyStockData').worksheet('JournalData') 
+                            sheet_journal = get_cached_spreadsheet(client, 'MyStockData').worksheet('JournalData') 
                             raw_journal_data = sheet_journal.get_all_records()
                             if raw_journal_data:
                                 st.session_state['journal_data'] = raw_journal_data
@@ -1704,7 +1704,7 @@ def main():
                     if "my_portfolio" not in st.session_state or not st.session_state["my_portfolio"]:
                         try:
                             client = get_gsheet_client()
-                            sheet_portfolio = client.open('MyStockData').worksheet('PortfolioData')
+                            sheet_portfolio = get_cached_spreadsheet(client, 'MyStockData').worksheet('PortfolioData')
                             raw_portfolio_data = sheet_portfolio.get_all_records()
                             
                             if raw_portfolio_data:
@@ -2132,7 +2132,7 @@ def main():
                         try:
                             client = get_gsheet_client()
                             # ดึงข้อมูลจาก worksheet ชื่อ 'Dividend' (ปรับชื่อให้ตรงกับชีตจริงของคุณ เช่น 'Dividend' หรือ 'Dividend_History')
-                            div_records = client.open('MyStockData').worksheet('Dividend').get_all_records()
+                            div_records = get_cached_spreadsheet(client, 'MyStockData').worksheet('Dividend').get_all_records()
                             st.session_state.dividend_data = div_records
                         except Exception as e:
                             # ถ้าดึงไม่สำเร็จหรือยังไม่มีชีต ให้ปล่อยเป็น list เปล่า
@@ -3483,7 +3483,7 @@ def main():
                 last_error = None
                 for i in range(max_retries):
                     try:
-                        sheet = client.open('MyStockData').worksheet(ws_name)
+                        sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet(ws_name)
                         return sheet.get_all_records()
                     except Exception as e:
                         last_error = str(e)
@@ -3745,7 +3745,7 @@ def main():
                         def get_ws_with_retry(ws_name, max_retries=3):
                             for i in range(max_retries):
                                 try:
-                                    return pd.DataFrame(client.open('MyStockData').worksheet(ws_name).get_all_records())
+                                    return pd.DataFrame(get_cached_spreadsheet(client, 'MyStockData').worksheet(ws_name).get_all_records())
                                 except Exception:
                                     if i == max_retries - 1: return pd.DataFrame()
                                     time.sleep(1 + i) 
@@ -3864,7 +3864,7 @@ def main():
                     if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets", key="confirm_pvd_save"):
                         try:
                             client = get_gsheet_client()
-                            sheet = client.open('MyStockData').worksheet('Provident_Fund')
+                            sheet = get_cached_spreadsheet(client, 'MyStockData').worksheet('Provident_Fund')
                             
                             existing_data = sheet.get_all_records()
                             df_existing = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
@@ -3911,7 +3911,7 @@ def main():
                 df_pvd_history = pd.DataFrame()
                 try:
                     client = get_gsheet_client()
-                    sheet_pvd = client.open('MyStockData').worksheet('Provident_Fund')
+                    sheet_pvd = get_cached_spreadsheet(client, 'MyStockData').worksheet('Provident_Fund')
                     pvd_records = sheet_pvd.get_all_records()
                     if pvd_records:
                         df_pvd_history = pd.DataFrame(pvd_records)
@@ -4024,7 +4024,7 @@ def main():
                         if ins_redemption_value > 0:
                             try:
                                 client = get_gsheet_client()
-                                sheet_ins = client.open('MyStockData').worksheet('Insurance')
+                                sheet_ins = get_cached_spreadsheet(client, 'MyStockData').worksheet('Insurance')
                                 
                                 existing_data = sheet_ins.get_all_records()
                                 df_existing_ins = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
@@ -4060,15 +4060,15 @@ def main():
             # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. (พร้อมระบบ Auto เพิ่มเงินทุกสิ้นเดือน) ---
             def get_coop_sheet():
                 client = get_gsheet_client()
-                return client.open('MyStockData').worksheet('Coop')
+                return get_cached_spreadsheet(client, 'MyStockData').worksheet('Coop')
             
             def get_sso_sheet():
                 client = get_gsheet_client()
-                return client.open('MyStockData').worksheet('SSO')
+                return get_cached_spreadsheet(client, 'MyStockData').worksheet('SSO')
             
             def get_bank_sheet():
                 client = get_gsheet_client()
-                return client.open('MyStockData').worksheet('Bank_Account')
+                return get_cached_spreadsheet(client, 'MyStockData').worksheet('Bank_Account')
             
             # --- ฟังก์ชันคำนวณยอดอัติโนมัติสะสมตามเดือนที่ผ่านไป ---
             def calculate_auto_coop_value(last_date_str, last_val, monthly_add, is_auto_active):
