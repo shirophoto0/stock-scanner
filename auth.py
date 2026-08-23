@@ -40,3 +40,18 @@ def check_login():
 
     # ยังไม่ล็อกอินสำเร็จ ให้หยุดการทำงานของแอปไว้ตรงนี้ ไม่ให้รันโค้ดส่วนอื่นต่อ
     st.stop()
+
+
+def logout():
+    """เคลียร์ข้อมูลทั้งหมดในเซสชันนี้ แล้วพากลับไปหน้า Login"""
+    st.session_state.clear()
+    st.rerun()
+
+
+def show_user_bar():
+    """แสดงชื่อผู้ใช้ที่ login อยู่ + ปุ่มออกจากระบบ ไว้ที่แถบด้านข้าง (Sidebar)"""
+    with st.sidebar:
+        st.markdown(f"👤 เข้าสู่ระบบในชื่อ: **{st.session_state.get('username', '')}**")
+        if st.button("🚪 ออกจากระบบ (Logout)", use_container_width=True):
+            logout()
+        st.divider()
