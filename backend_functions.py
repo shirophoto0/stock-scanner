@@ -889,15 +889,23 @@ def backfill_portfolio_history():
     
 def get_current_portfolio_value():
     # ฟังก์ชันนี้ดึงราคาปัจจุบันของหุ้นทุกตัวใน st.session_state.my_portfolio
+    # 🔧 แก้บั๊ก: เหมือนจุดที่แก้ใน get_total_market_value() ด้านบน รองรับชื่อคอลัมน์ทั้งไทย/อังกฤษ
     total_market_value = 0
     for item in st.session_state.my_portfolio:
-        ticker = item['หุ้น']
-        shares = item['shares']
+        ticker = item.get('หุ้น', item.get('Ticker', ''))
+        try:
+            shares = float(str(item.get('จำนวน', item.get('shares', 0))).replace(',', ''))
+        except (ValueError, TypeError):
+            shares = 0.0
+        try:
+            avg_price = float(str(item.get('ต้นทุนเฉลี่ย', item.get('avg_price', 0))).replace(',', ''))
+        except (ValueError, TypeError):
+            avg_price = 0.0
         # ดึงราคาตลาดปัจจุบัน (Real-time)
         try:
             m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
         except:
-            m_price = item['avg_price'] # ถ้าดึงไม่ได้ ให้ใช้ราคาต้นทุน
+            m_price = avg_price # ถ้าดึงไม่ได้ ให้ใช้ราคาต้นทุน
         total_market_value += (shares * m_price)
     return total_market_value
 
@@ -1041,13 +1049,24 @@ def get_total_market_value():
     total_val = 0
     if "my_portfolio" in st.session_state:
         for item in st.session_state.my_portfolio:
-            ticker = item['หุ้น']
-            shares = float(item['shares'])
+            # 🔧 แก้บั๊ก: เดิมอ่านคอลัมน์ 'shares' ตรงๆ เท่านั้น ถ้าชีตของผู้ใช้บันทึกด้วยชื่อ
+            # คอลัมน์ภาษาไทย ('จำนวน', 'ต้นทุนเฉลี่ย') แทน จะเจอ KeyError ทันที
+            # (เจอกับบัญชีแฟนที่ Google Sheet บันทึกชื่อคอลัมน์ต่างจากของคุณ)
+            # ตอนนี้รองรับทั้งสองแบบ เหมือนจุดอื่นๆ ในแอปที่ทำไว้อยู่แล้ว
+            ticker = item.get('หุ้น', item.get('Ticker', ''))
+            try:
+                shares = float(str(item.get('จำนวน', item.get('shares', 0))).replace(',', ''))
+            except (ValueError, TypeError):
+                shares = 0.0
+            try:
+                avg_price = float(str(item.get('ต้นทุนเฉลี่ย', item.get('avg_price', 0))).replace(',', ''))
+            except (ValueError, TypeError):
+                avg_price = 0.0
             try:
                 # ดึงราคาปิดล่าสุด
                 m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
             except:
-                m_price = float(item['avg_price']) # ถ้าดึงไม่ได้ ให้ใช้ต้นทุนไปก่อน
+                m_price = avg_price # ถ้าดึงไม่ได้ ให้ใช้ต้นทุนไปก่อน
             total_val += (shares * m_price)
     return total_val
     
