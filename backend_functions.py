@@ -1306,7 +1306,9 @@ def get_sector_from_mapping(ticker, df_mapping=None):
 @st.cache_data(ttl=86400) # เก็บข้อมูลไว้วันละครั้งเพื่อความเร็ว
 def load_and_calculate_stock_data_optimized():
     status_text = st.empty()
-    status_text.text("กำลังดาวน์โหลดข้อมูลหุ้น SET100... (กรุณารอ)")
+    # 🔧 แก้บั๊ก: เดิมข้อความบอกว่า "SET100" ตายตัว แต่จริงๆ ดึงข้อมูลหุ้นตามจำนวนในระบบ
+    # ปัจจุบัน (494 ตัว ไม่ใช่ 100 ตัวแล้ว) เปลี่ยนให้แสดงจำนวนจริงแบบไดนามิกแทน
+    status_text.text(f"กำลังดาวน์โหลดข้อมูลหุ้น {len(SET100_TICKERS)} ตัว... (กรุณารอ อาจใช้เวลาสักครู่)")
     
     # 1. เตรียม Tickers (เติม .BK ต่อท้ายทุกตัว)
     tickers_full = [f"{t}.BK" for t in SET100_TICKERS]
@@ -1319,13 +1321,16 @@ def load_and_calculate_stock_data_optimized():
     set_market = yf.download("^SET.BK", period="2y")['Close']
     
     stock_list = []
+    failed_tickers = []  # 🆕 เก็บรายชื่อหุ้นที่ดึงข้อมูลไม่สำเร็จ เพื่อรายงานให้ผู้ใช้ทราบ
     total = len(SET100_TICKERS)
     
     for i, ticker in enumerate(SET100_TICKERS):
         try:
             # ดึงเฉพาะข้อมูลของหุ้นตัวนั้นๆ จาก DataFrame ที่โหลดมา
             df = data[ticker.replace('.BK', '')]
-            if df.empty or len(df) < 200: continue
+            if df.empty or len(df) < 200:
+                failed_tickers.append(ticker)
+                continue
             
             # คำนวณ RSI
             df['RSI'] = calculate_rsi(df['Close'], period=14)
@@ -1395,9 +1400,26 @@ def load_and_calculate_stock_data_optimized():
             })
             
         except Exception:
+            failed_tickers.append(ticker)
             continue
             
     status_text.empty()
+
+    # 🆕 รายงานผลลัพธ์ให้ผู้ใช้ทราบชัดเจน แทนที่จะข้ามหุ้นที่พลาดไปเงียบๆ แบบเดิม
+    # (สำคัญเพราะการดึงข้อมูล 494 ตัวพร้อมกัน มีโอกาสที่ Yahoo Finance จะปฏิเสธคำขอบางตัว
+    # ระหว่างทาง ถ้าไม่รายงาน ผู้ใช้จะไม่รู้เลยว่าทำไมจำนวนหุ้นที่ได้ถึงน้อยกว่า 494)
+    success_count = len(stock_list)
+    if failed_tickers:
+        st.warning(
+            f"⚠️ ดึงข้อมูลสำเร็จ {success_count} จาก {total} ตัว "
+            f"({len(failed_tickers)} ตัวดึงไม่สำเร็จ — อาจเป็นเพราะ Yahoo Finance ปฏิเสธคำขอชั่วคราว "
+            f"หรือหุ้นตัวนั้นมีข้อมูลย้อนหลังไม่ครบ 200 วัน) "
+            f"ลองกดอัปเดตอีกครั้งภายหลังถ้าต้องการให้ครบทุกตัว"
+        )
+        with st.expander(f"ดูรายชื่อ {len(failed_tickers)} ตัวที่ดึงไม่สำเร็จ"):
+            st.write(", ".join(failed_tickers))
+    else:
+        st.success(f"✅ ดึงข้อมูลสำเร็จครบทั้ง {total} ตัว")
     return pd.DataFrame(stock_list)
 
 
