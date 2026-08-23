@@ -3739,22 +3739,21 @@ def main():
                 try:
                     import time
                     
-                    @st.cache_data(ttl=600, show_spinner=False) 
+                    # 🔧 แก้บั๊ก: เดิมจุดนี้มี Cache ซ้อนอีกชั้น (@st.cache_data ครอบทั้ง 7 ชีต) แยกต่างหาก
+                    # จากตัวช่วย _fetch_ws_records_safe ด้านบน ทำให้เกิดปัญหาเดียวกัน คือถ้าชีตใดชีตหนึ่งพลาด
+                    # กราฟทั้งหมดจะหายไป 10 นาที ตอนนี้เปลี่ยนมาใช้ _fetch_ws_records_safe ตัวเดียวกับแท็บภาพรวม
+                    # ซึ่งจำผลแยกเป็นรายชีตอยู่แล้ว จึงไม่ต้อง Cache ซ้อนอีกชั้น
                     def fetch_all_wealth_data():
-                        client = get_gsheet_client()
-                        def get_ws_with_retry(ws_name, max_retries=3):
-                            for i in range(max_retries):
-                                try:
-                                    return pd.DataFrame(get_cached_spreadsheet(client, 'MyStockData').worksheet(ws_name).get_all_records())
-                                except Exception:
-                                    if i == max_retries - 1: return pd.DataFrame()
-                                    time.sleep(1 + i) 
-                            return pd.DataFrame()
+                        def get_df_safe(ws_name):
+                            try:
+                                return pd.DataFrame(_fetch_ws_records_safe(ws_name))
+                            except Exception:
+                                return pd.DataFrame()
                         
-                        return (get_ws_with_retry('Provident_Fund'), get_ws_with_retry('Insurance'), 
-                                get_ws_with_retry('Coop'), get_ws_with_retry('Bank_Account'), 
-                                get_ws_with_retry('SSO'), get_ws_with_retry('Fund_History'), 
-                                get_ws_with_retry('Stock_TFEX_History'))
+                        return (get_df_safe('Provident_Fund'), get_df_safe('Insurance'), 
+                                get_df_safe('Coop'), get_df_safe('Bank_Account'), 
+                                get_df_safe('SSO'), get_df_safe('Fund_History'), 
+                                get_df_safe('Stock_TFEX_History'))
                 
                     df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist = fetch_all_wealth_data()
                             
