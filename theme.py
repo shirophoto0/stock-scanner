@@ -105,9 +105,13 @@ def render_metric_card(col, label, value, icon="", delta=None, delta_positive=No
             f'{arrow} {delta}</span>'
         )
     caption_html = f'<div style="color:#9CA3AF;font-size:0.72em;margin-top:6px;">{caption}</div>' if caption else ''
+    # 🔧 แก้บั๊ก: เดิมการ์ดสูงตามเนื้อหาข้างในเอง การ์ดที่มีแบดจ์/หมายเหตุจึงสูงกว่าการ์ดที่ไม่มี
+    # ทำให้แถวเดียวกันสูงไม่เท่ากัน (ดูไม่เรียบร้อย) ตอนนี้กำหนด min-height ให้ทุกการ์ดสูงเท่ากัน
+    # เสมอ (สูงพอสำหรับการ์ดที่มีทั้งแบดจ์และหมายเหตุ) การ์ดที่เนื้อหาน้อยกว่าจะมีที่ว่างด้านล่างแทน
     card_html = (
         '<div style="background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
-        'padding:16px 18px;box-shadow:0 2px 10px rgba(45,49,66,0.06);margin-bottom:14px;">'
+        'padding:16px 18px;box-shadow:0 2px 10px rgba(45,49,66,0.06);margin-bottom:14px;'
+        'min-height:128px;box-sizing:border-box;">'
         f'<div style="color:#6B7280;font-size:0.85em;font-family:\'Sarabun\',sans-serif;margin-bottom:6px;">{icon_html}{label}</div>'
         f'<div style="font-family:\'Prompt\',sans-serif;font-size:1.55em;font-weight:600;color:#2D3142;">{value}</div>'
         f'{delta_html}'
