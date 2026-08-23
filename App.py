@@ -218,7 +218,7 @@ def main():
             render_tab_gold(client)
         ######################## ส่วนวิเคราะห์แสกนกราฟหุ้น####################
         with tab_tech:
-            render_tab_tech(tab_risk, df_sector_map)
+            render_tab_tech(tab_risk, df_sector_map, df_all_stocks)
         with tab_stock:
                            
                 ##########################
