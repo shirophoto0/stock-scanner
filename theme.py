@@ -110,8 +110,13 @@ p, span, div, label {
     box-shadow: none !important;
     color: var(--accent-primary) !important;
 }
+/* 🔧 แก้บั๊ก (ต้นตอจริง): เดิมสั่งให้ "แถบไฮไลท์ใต้แท็บ" (tab-highlight) มีพื้นหลังสีทอง
+   โดยเข้าใจผิดว่าเป็นแค่เส้นบางๆ ใต้แท็บ แต่จริงๆ แล้วองค์ประกอบนี้ครอบคลุมพื้นที่กว้างกว่านั้น
+   (เกือบเต็มกล่องแท็บ) ทำให้กลายเป็น "กล่องสีทองทึบ" ทับตัวหนังสือแทนที่จะเป็นแค่เส้นไฮไลท์บางๆ
+   ตามที่ตั้งใจไว้ ตอนนี้เอาสีพื้นหลังออก ใช้แค่สีตัวหนังสือ (จากกฎด้านบน) บอกว่าแท็บไหนถูกเลือกแทน */
 [data-testid="stTabs"] [data-baseweb="tab-highlight"] {
-    background-color: var(--accent-primary) !important;
+    background-color: transparent !important;
+    height: 2px !important;
 }
 [data-testid="stTabs"] [data-baseweb="tab-border"] {
     background-color: var(--border-color) !important;
@@ -275,6 +280,10 @@ FINAL_OVERRIDE_CSS = """
 [data-testid="stTabs"] button[role="tab"][aria-selected="false"] p,
 [data-testid="stTabs"] button[role="tab"][aria-selected="false"] {
     color: var(--text-secondary) !important;
+}
+/* 🔧 จุดเดียวกับที่แก้ใน BASE_CSS — บังคับปิดพื้นหลังของแถบไฮไลท์ใต้แท็บอีกชั้น (ไม้ตายสุดท้าย) */
+[data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+    background-color: transparent !important;
 }
 [data-testid="stDataFrame"] thead tr th,
 [data-testid="stDataFrame"] [role="columnheader"],
