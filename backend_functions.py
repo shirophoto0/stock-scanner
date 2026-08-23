@@ -588,21 +588,32 @@ def load_data(sheet_name, active_sheet_name):
     # โดยไม่รู้ว่าผู้ใช้คนไหนเป็นคนขอ (เรียก get_active_sheet_name() ข้างในเฉยๆ) ทำให้สลับ user
     # แล้วยังเห็นข้อมูล TFEX/Cash_Flow/แผนเทรด ของคนก่อนหน้าค้างอยู่ ตอนนี้รับชื่อชีตของผู้ใช้
     # (active_sheet_name) เป็นพารามิเตอร์ตรงๆ เพื่อให้ระบบจำแยกตามผู้ใช้อัตโนมัติ
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, active_sheet_name).worksheet(sheet_name) 
-        data = sheet.get_all_records()
-        if data:
-            return pd.DataFrame(data)
-        # 🔧 แก้บั๊ก: ถ้าชีตว่างสนิท (มีแต่หัวตาราง ไม่มีแถวข้อมูล) get_all_records() จะคืนค่าว่างเปล่า
-        # ทำให้ตารางที่ได้ไม่มีแม้แต่ "ชื่อคอลัมน์" เลย (ต่างจากตารางเปล่าที่ยังมีชื่อคอลัมน์ครบ)
-        # โค้ดทุกจุดที่เช็คหาคอลัมน์ (เช่น 'Net_Profit' in df.columns) จะพังทันทีเพราะไม่เจอคอลัมน์เลยสักตัว
-        # ตอนนี้ดึงแค่แถวหัวตารางมาสร้างตารางเปล่าที่ยังมีชื่อคอลัมน์ครบแทน เพื่อให้จุดอื่นๆ ทำงานได้ปกติ
-        headers = sheet.row_values(1)
-        return pd.DataFrame(columns=headers) if headers else pd.DataFrame()
-    except Exception as e:
-        st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {e}")
-        return pd.DataFrame()
+    # 🔧 แก้บั๊กเพิ่ม: เดิมไม่มีระบบลองใหม่อัตโนมัติเลย พอเจอโควตา Google Sheets ชั่วคราว (429 -
+    # พบบ่อยตอนสลับผู้ใช้ที่มีหลายแท็บยิงขอข้อมูลพร้อมกัน) จะยอมแพ้ทันทีแล้วคืนตารางว่างสนิท
+    # (ไม่มีแม้แต่ชื่อคอลัมน์) ทำให้จุดที่อ่านคอลัมน์ตรงๆ พังต่อ ตอนนี้ลองใหม่ก่อน 3 ครั้ง
+    last_error = None
+    for attempt in range(3):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_spreadsheet(client, active_sheet_name).worksheet(sheet_name) 
+            data = sheet.get_all_records()
+            if data:
+                return pd.DataFrame(data)
+            # ถ้าชีตว่างสนิท (มีแต่หัวตาราง ไม่มีแถวข้อมูล) get_all_records() จะคืนค่าว่างเปล่า
+            # ทำให้ตารางที่ได้ไม่มีแม้แต่ "ชื่อคอลัมน์" เลย (ต่างจากตารางเปล่าที่ยังมีชื่อคอลัมน์ครบ)
+            # โค้ดทุกจุดที่เช็คหาคอลัมน์ (เช่น 'Net_Profit' in df.columns) จะพังทันทีเพราะไม่เจอคอลัมน์เลยสักตัว
+            # ตอนนี้ดึงแค่แถวหัวตารางมาสร้างตารางเปล่าที่ยังมีชื่อคอลัมน์ครบแทน เพื่อให้จุดอื่นๆ ทำงานได้ปกติ
+            headers = sheet.row_values(1)
+            return pd.DataFrame(columns=headers) if headers else pd.DataFrame()
+        except Exception as e:
+            last_error = e
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            break
+    st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {last_error}")
+    return pd.DataFrame()
+
 
 
 @st.cache_data(ttl=3600)  
