@@ -54,6 +54,29 @@ h1, h2, h3, h4, h5, h6 {
 [data-testid="stMetricValue"] {
     font-family: 'Prompt', sans-serif !important;
 }
+
+/* ---------- ปรับสำหรับจอมือถือ/จอแคบ (กว้างไม่เกิน 640px) ---------- */
+@media (max-width: 640px) {
+    /* แท็บมี 3 ชั้นซ้อนกัน ข้อความไทยยาวๆ อาจล้นจอ ลดขนาดตัวอักษร/ระยะห่างลง */
+    [data-testid="stTabs"] button[role="tab"] {
+        font-size: 13px !important;
+        padding: 8px 10px !important;
+    }
+    [data-testid="stTabs"] button[role="tab"] p {
+        font-size: 13px !important;
+    }
+    /* กล่อง Metric แคบลง ลด padding เพื่อให้ตัวเลขไม่ล้นกรอบ */
+    [data-testid="stMetric"] {
+        padding: 10px 12px;
+    }
+    [data-testid="stMetricValue"] {
+        font-size: 1.4rem !important;
+    }
+    /* หัวข้อใหญ่ (h1) ลดขนาดลงให้พอดีจอ ไม่ตัดคำแปลกๆ */
+    h1 {
+        font-size: 1.5rem !important;
+    }
+}
 </style>
 """
 
