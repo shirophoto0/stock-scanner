@@ -15,20 +15,22 @@ def check_login():
         return st.session_state.get("active_sheet_name", "MyStockData")
 
     st.markdown("## 🔐 เข้าสู่ระบบ")
-    st.caption("กรุณากรอกชื่อผู้ใช้และรหัสผ่านเพื่อเข้าใช้งานแอป")
+    st.caption("กรุณาเลือกชื่อผู้ใช้และกรอกรหัสผ่านเพื่อเข้าใช้งานแอป")
+
+    # ดึงรายชื่อผู้ใช้ทั้งหมดมาจาก Secrets เพื่อสร้างเป็น Dropdown (ไม่ต้องพิมพ์เอง พิมพ์ผิดไม่ได้)
+    try:
+        users = st.secrets["users"]
+        user_list = list(users.keys())
+    except Exception:
+        st.error("❌ ยังไม่ได้ตั้งค่าผู้ใช้งานในระบบ (Secrets) กรุณาติดต่อผู้ดูแลแอป")
+        st.stop()
 
     with st.form("login_form"):
-        username = st.text_input("ชื่อผู้ใช้ (Username)")
+        username = st.selectbox("ชื่อผู้ใช้ (Username)", options=user_list)
         password = st.text_input("รหัสผ่าน (Password)", type="password")
         submitted = st.form_submit_button("เข้าสู่ระบบ", use_container_width=True, type="primary")
 
     if submitted:
-        try:
-            users = st.secrets["users"]
-        except Exception:
-            st.error("❌ ยังไม่ได้ตั้งค่าผู้ใช้งานในระบบ (Secrets) กรุณาติดต่อผู้ดูแลแอป")
-            st.stop()
-
         user_info = users.get(username)
         if user_info is not None and password == user_info.get("password"):
             st.session_state["logged_in"] = True
@@ -36,7 +38,7 @@ def check_login():
             st.session_state["active_sheet_name"] = user_info.get("sheet_name", "MyStockData")
             st.rerun()
         else:
-            st.error("❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง")
+            st.error("❌ รหัสผ่านไม่ถูกต้อง")
 
     # ยังไม่ล็อกอินสำเร็จ ให้หยุดการทำงานของแอปไว้ตรงนี้ ไม่ให้รันโค้ดส่วนอื่นต่อ
     st.stop()
