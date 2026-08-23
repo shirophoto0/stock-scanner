@@ -16,6 +16,11 @@ def render_tab_tfex():
     # 1. โหลดข้อมูล
     tfex_df = load_data("TFEX_History") 
     cash_df = load_data("Cash_Flow")
+    # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์กำไร/ขาดทุนให้เป็น 'Net_Profit' ตั้งแต่จุดโหลดข้อมูลเลย
+    # (บางบัญชีบันทึกเป็น 'กำไรสุทธิ' แทน) เพื่อให้โค้ดทั้งหมดที่ใช้ tfex_df ต่อจากนี้ทำงานถูกต้อง
+    if not tfex_df.empty:
+        if 'Net_Profit' not in tfex_df.columns and 'กำไรสุทธิ' in tfex_df.columns:
+            tfex_df = tfex_df.rename(columns={'กำไรสุทธิ': 'Net_Profit'})
 
     # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
     if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
@@ -62,6 +67,13 @@ def render_tab_tfex():
 
     # 2. กรองข้อมูลตามช่วงเวลา
     perf_df = closed_trades.copy()
+    # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์ให้เป็น 'Net_Profit' ตั้งแต่ต้นเลย (เผื่อบางบัญชีบันทึกเป็น
+    # 'กำไรสุทธิ' แทน) เพราะโค้ดด้านล่างหลายจุดอ้างอิงชื่อ 'Net_Profit' ตรงๆ โดยไม่มีการเช็คซ้ำ
+    # เดิมมีการป้องกันไว้แค่บางจุด (บรรทัด win_trades) แต่จุดอื่นๆ ยังพังอยู่ถ้าคอลัมน์ชื่อไม่ตรง
+    if 'Net_Profit' not in perf_df.columns and 'กำไรสุทธิ' in perf_df.columns:
+        perf_df = perf_df.rename(columns={'กำไรสุทธิ': 'Net_Profit'})
+    if 'Net_Profit' not in perf_df.columns:
+        perf_df['Net_Profit'] = 0.0
     if 'Date_Close' in perf_df.columns:
         perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
     else:
@@ -103,14 +115,22 @@ def render_tab_tfex():
     avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
 
     # Max Drawdown (คำนวณจากช่วงที่กรอง)
-    temp_df = perf_df.sort_values('Date_Close')
-    temp_df['Cumulative'] = temp_df['Net_Profit'].cumsum()
-    max_drawdown = (temp_df['Cumulative'] - temp_df['Cumulative'].cummax()).min() if not temp_df.empty else 0
+    # 🔧 แก้บั๊ก: ถ้าตารางว่างสนิท (ไม่มีแม้แต่แถวเทรดเดียว) จะไม่มีคอลัมน์ Date_Close/Date_Open
+    # ให้ใช้เลย ต้องเช็คก่อนเสมอ ไม่งั้น sort_values('Date_Close') จะ error ทันที
+    if not perf_df.empty and 'Date_Close' in perf_df.columns:
+        temp_df = perf_df.sort_values('Date_Close')
+        temp_df['Cumulative'] = temp_df['Net_Profit'].cumsum()
+        max_drawdown = (temp_df['Cumulative'] - temp_df['Cumulative'].cummax()).min() if not temp_df.empty else 0
+    else:
+        max_drawdown = 0
 
     # ระยะเวลาถือครอง
-    perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
-    perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
-    avg_hold = perf_df['Hold_Days'].mean() if not perf_df.empty else 0
+    if not perf_df.empty and 'Date_Open' in perf_df.columns and 'Date_Close' in perf_df.columns:
+        perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
+        perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
+        avg_hold = perf_df['Hold_Days'].mean()
+    else:
+        avg_hold = 0
 
     # 4. แสดงผลแบบ Grid
     # แถวแรก
@@ -362,6 +382,9 @@ def render_tab_tfex():
 
         # ดึงข้อมูลจากฟังก์ชัน load_data สดๆ ใหม่ๆ
         tfex_df = load_data("TFEX_History")
+        # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์เหมือนจุดอื่น เผื่อบางบัญชีบันทึกเป็น 'กำไรสุทธิ' แทน
+        if not tfex_df.empty and 'Net_Profit' not in tfex_df.columns and 'กำไรสุทธิ' in tfex_df.columns:
+            tfex_df = tfex_df.rename(columns={'กำไรสุทธิ': 'Net_Profit'})
 
         # ตรวจสอบว่ามีข้อมูลและคอลัมน์ที่จำเป็นอยู่ครบถ้วนหรือไม่
         if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
