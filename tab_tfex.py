@@ -21,6 +21,11 @@ def render_tab_tfex():
     if not tfex_df.empty:
         if 'Net_Profit' not in tfex_df.columns and 'กำไรสุทธิ' in tfex_df.columns:
             tfex_df = tfex_df.rename(columns={'กำไรสุทธิ': 'Net_Profit'})
+        # 🔧 แก้บั๊ก: สร้างคอลัมน์ 'Close_Price_Cleaned' ไว้ตั้งแต่ต้นฟังก์ชันเลย (ครั้งเดียว)
+        # เดิมคอลัมน์นี้ถูกสร้างกระจายอยู่หลายจุดในไฟล์แบบมีเงื่อนไขไม่ตรงกัน ทำให้บางจุดที่ใช้
+        # คอลัมน์นี้ต่อ (เช่น ส่วนคำนวณ Win/Loss) ไม่มีการเช็คก่อนว่าคอลัมน์นี้ถูกสร้างไว้แล้วหรือยัง
+        if 'Close_Price' in tfex_df.columns:
+            tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
 
     # 2. กรองข้อมูลเฉพาะรายการที่ปิดสถานะแล้ว (Realized PnL)
     if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
@@ -251,7 +256,11 @@ def render_tab_tfex():
         with col_left:
             st.subheader("🎯 สถิติแพ้ / ชนะ (Win / Loss)")
             # กรองเฉพาะรายการที่ปิดสถานะแล้ว (Close_Price > 0) มาคำนวณ Win/Loss
-            closed_positions = tfex_df[tfex_df['Close_Price_Cleaned'] > 0]
+            # 🔧 แก้บั๊ก: เช็คว่ามีคอลัมน์ Close_Price_Cleaned จริงก่อนใช้ (จะไม่มีถ้าตารางว่างสนิท)
+            if not tfex_df.empty and 'Close_Price_Cleaned' in tfex_df.columns:
+                closed_positions = tfex_df[tfex_df['Close_Price_Cleaned'] > 0]
+            else:
+                closed_positions = pd.DataFrame()
 
             if not closed_positions.empty and 'Win_Lose' in closed_positions.columns:
                 win_count = len(closed_positions[closed_positions['Win_Lose'] == 'Win'])
