@@ -1098,6 +1098,9 @@ def render_tab_stock():
                     # ให้ .map() เป็นตัวเดียวที่คุมสี "color" ของตาราง ไม่มีจุดไหนมาแย่งกันอีก
                     .set_properties(**{'text-align': 'right', 'background-color': _tc['bg']})
                     .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
+                    # 🔧 แก้บั๊ก: เดิมใช้ .hide(axis='index') สั่งผ่านตัว Styler ซึ่งไม่ทำงานในจุดนี้
+                    # (คอลัมน์เลขแถวยังโผล่อยู่) เปลี่ยนมาใช้พารามิเตอร์ hide_index=True ของ
+                    # st.dataframe() โดยตรงแทน (วิธีเดียวกับจุดอื่นในไฟล์นี้ที่ซ่อนคอลัมน์ได้สำเร็จจริง)
                     .set_table_styles([
                         {'selector': 'th', 'props': [
                             ('text-align', 'right'), ('background-color', '#F1EEE8'),
@@ -1106,8 +1109,7 @@ def render_tab_stock():
                         ]},
                         {'selector': 'td', 'props': [('border-color', _tc['border'])]},
                     ])
-                    .hide(axis='index')
-                    , use_container_width=True
+                    , use_container_width=True, hide_index=True
                 )
 
                 if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
