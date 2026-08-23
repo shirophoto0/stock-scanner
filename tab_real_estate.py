@@ -17,13 +17,16 @@ def render_tab_real_estate():
     # ฟังก์ชันดึงข้อมูลชีต Real_Estate พร้อมระบบ Cache และ Retry อัตโนมัติ ป้องกันการติด Limit API
     # 🔧 แก้บั๊ก: ถ้าโหลดไม่สำเร็จหลังลองครบ 3 ครั้ง ให้ "โยน error" ออกไป แทนที่จะคืนค่า [] เงียบๆ
     # เพราะถ้าคืน [] เฉยๆ ระบบจะเข้าใจผิดว่า "โหลดสำเร็จแต่ไม่มีข้อมูล" แล้วจะไม่ยอมลองโหลดใหม่อีกเลย
+    # 🔧 แก้บั๊กเพิ่ม: เดิมฟังก์ชันนี้ "จำ" ผลลัพธ์โดยไม่รู้ว่าผู้ใช้คนไหนเป็นคนขอ ทำให้สลับ user
+    # แล้วเห็นข้อมูลอสังหาฯ ของคนก่อนหน้าค้างอยู่ ตอนนี้รับชื่อชีตของผู้ใช้เป็นพารามิเตอร์ตรงๆ
+    # เพื่อให้ระบบจำแยกตามผู้ใช้อัตโนมัติ ไม่มีทางปนกัน
     @st.cache_data(ttl=600, show_spinner=False)
-    def fetch_real_estate_data_cached():
+    def fetch_real_estate_data_cached(active_sheet_name):
         client = get_gsheet_client()
         last_error = None
         for attempt in range(3):
             try:
-                sheet_re = get_worksheet_safely(client, get_active_sheet_name(), 'Real_Estate')
+                sheet_re = get_worksheet_safely(client, active_sheet_name, 'Real_Estate')
                 if sheet_re is not None:
                     return sheet_re.get_all_records()
                 last_error = "ไม่พบชีต Real_Estate"
@@ -81,7 +84,7 @@ def render_tab_real_estate():
     # อัตโนมัติในรอบถัดไปที่หน้าเว็บรีเฟรช (เช่น สลับแท็บ, กดปุ่มอื่น) โดยไม่ต้องรอให้ผู้ใช้กดปุ่ม reload เอง
     if 'real_estate_portfolio' not in st.session_state:
         try:
-            records = fetch_real_estate_data_cached()
+            records = fetch_real_estate_data_cached(get_active_sheet_name())
             loaded_items = []
             for row in records:
                 asset_name = str(row.get("ชื่อทรัพย์สิน", "")).strip()
