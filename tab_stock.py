@@ -529,6 +529,9 @@ def render_tab_stock():
 
                             # 🔧 แก้บั๊ก: ตารางแบบ Styler นี้ CSS ของหน้าเว็บธรรมดาเข้าไม่ถึงพื้นหลัง/สีตัวอักษร
                             # ต้องกำหนดสีตรงๆ ผ่าน .set_properties() แทน โดยดึงสีตามโหมดปัจจุบันจาก theme.py
+                            # 🔧 แก้บั๊กเพิ่ม: .set_properties() ปรับสีได้แค่ "เนื้อข้อมูล" เท่านั้น ไม่ครอบคลุม
+                            # หัวตาราง/คอลัมน์เลขแถว (เป็นคนละ HTML tag) ต้องใช้ .set_table_styles() แยก
+                            # และซ่อนคอลัมน์เลขแถวซ้ายสุดไปเลยเพราะไม่มีประโยชน์กับผู้ใช้
                             _tc = get_theme_colors()
                             st.dataframe(
                                 display_sector_df.style.format({
@@ -539,7 +542,9 @@ def render_tab_stock():
                                     'text-align': 'right',
                                     'background-color': _tc['bg'],
                                     'color': _tc['text'],
-                                }), 
+                                }).set_table_styles([
+                                    {'selector': 'th', 'props': [('background-color', _tc['bg']), ('color', _tc['text']), ('border-color', _tc['border'])]}
+                                ]).hide(axis='index'), 
                                 use_container_width=True
                             )
                         else:
