@@ -17,7 +17,7 @@ from backend_functions import (
     display_performance_dashboard, get_cached_spreadsheet, get_gsheet_client,
     get_sector_from_mapping, load_data, load_data_from_file, load_total_cash_balance,
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
-    save_portfolio, save_portfolio_snapshot
+    save_portfolio, save_portfolio_snapshot, get_active_sheet_name
 )
 
 
@@ -41,7 +41,7 @@ def render_tab_stock():
         if 'journal_data' not in st.session_state or not st.session_state['journal_data']:
             try:
                 client = get_gsheet_client()
-                sheet_journal = get_cached_spreadsheet(client, 'MyStockData').worksheet('JournalData') 
+                sheet_journal = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData') 
                 raw_journal_data = sheet_journal.get_all_records()
                 if raw_journal_data:
                     st.session_state['journal_data'] = raw_journal_data
@@ -964,7 +964,7 @@ def render_tab_stock():
         if "my_portfolio" not in st.session_state or not st.session_state["my_portfolio"]:
             try:
                 client = get_gsheet_client()
-                sheet_portfolio = get_cached_spreadsheet(client, 'MyStockData').worksheet('PortfolioData')
+                sheet_portfolio = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('PortfolioData')
                 raw_portfolio_data = sheet_portfolio.get_all_records()
 
                 if raw_portfolio_data:
@@ -1395,7 +1395,7 @@ def render_tab_stock():
             try:
                 client = get_gsheet_client()
                 # ดึงข้อมูลจาก worksheet ชื่อ 'Dividend' (ปรับชื่อให้ตรงกับชีตจริงของคุณ เช่น 'Dividend' หรือ 'Dividend_History')
-                div_records = get_cached_spreadsheet(client, 'MyStockData').worksheet('Dividend').get_all_records()
+                div_records = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Dividend').get_all_records()
                 st.session_state.dividend_data = div_records
             except Exception as e:
                 # ถ้าดึงไม่สำเร็จหรือยังไม่มีชีต ให้ปล่อยเป็น list เปล่า
