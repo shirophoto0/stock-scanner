@@ -12,7 +12,7 @@ from backend_functions import get_cached_stock_info, get_sector_from_mapping, hi
 from tab_risk import render_tab_risk
 
 
-def render_tab_tech(tab_risk, df_sector_map):
+def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
 ################################
     # 1. Slidebar (ตัวกรอง)
     with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
