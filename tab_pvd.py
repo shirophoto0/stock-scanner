@@ -8,6 +8,7 @@ import time
 import plotly.graph_objects as go
 from datetime import date, datetime
 from backend_functions import extract_pvd_from_image, get_cached_spreadsheet, get_gsheet_client, get_worksheet_safely, get_active_sheet_name
+from theme import style_plotly
 
 
 def render_tab_pvd():
@@ -178,7 +179,7 @@ def render_tab_pvd():
                     margin=dict(l=20, r=20, t=20, b=20),
                     yaxis_title="YTD Net Return (%)"
                 )
-                st.plotly_chart(fig_pvd, use_container_width=True)
+                st.plotly_chart(style_plotly(fig_pvd), use_container_width=True)
             else:
                 st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
         else:
