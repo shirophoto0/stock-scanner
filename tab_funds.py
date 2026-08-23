@@ -76,10 +76,11 @@ def render_tab_funds():
             all_data = sheet.get_all_records()
 
             if all_data:
-                fund_list = sorted(list(set(row['Fund_Name'] for row in all_data if row.get('Fund_Name') and row.get('Status') == 'Holding')))
+                # 🔧 แก้บั๊ก: ใช้ .get() แทนการเข้าถึงตรงๆ เผื่อชีตของบางบัญชีไม่มีคอลัมน์นี้
+                fund_list = sorted(list(set(row.get('Fund_Name', '') for row in all_data if row.get('Fund_Name') and row.get('Status') == 'Holding')))
 
                 if not fund_list:
-                    fund_list = sorted(list(set(row['Fund_Name'] for row in all_data if row['Fund_Name'])))
+                    fund_list = sorted(list(set(row.get('Fund_Name', '') for row in all_data if row.get('Fund_Name'))))
 
                 if fund_list:
                     selected_fund = st.selectbox("เลือกกองทุนที่ต้องการจัดการ:", fund_list, key="selected_fund_update")
@@ -87,7 +88,7 @@ def render_tab_funds():
                     selected_row_data = None
                     selected_row_index = -1
                     for idx, row in enumerate(all_data):
-                        if row['Fund_Name'] == selected_fund and row.get('Status', 'Holding') == 'Holding':
+                        if row.get('Fund_Name') == selected_fund and row.get('Status', 'Holding') == 'Holding':
                             selected_row_data = row
                             selected_row_index = idx + 2 
                             break
