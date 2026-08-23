@@ -18,12 +18,18 @@ def render_tab_overview():
     # (และ Cache นี้ใช้ร่วมกันทุกคนที่เปิดแอป ไม่ใช่แค่เครื่องคุณ) ทำให้ข้อมูลหายไปเป็นช่วงๆ โดยไม่ทราบสาเหตุ
     # ตอนนี้แยก Cache เป็นรายชีต ถ้าชีตไหนพลาด จะลองใหม่แค่ชีตนั้นในรอบถัดไป ไม่กระทบชีตอื่นที่โหลดสำเร็จแล้ว
     @st.cache_data(ttl=600, show_spinner=False)
-    def _fetch_ws_records_safe(ws_name, max_retries=3):
+    def _fetch_ws_records_safe(ws_name, active_sheet_name, max_retries=3):
+        # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ "จำ" ผลลัพธ์แยกตามชื่อชีต (ws_name) เท่านั้น โดยไม่รู้ว่า
+        # ผู้ใช้คนไหนเป็นคนขอ (เรียก get_active_sheet_name() ข้างในเฉยๆ ไม่ได้รับมาเป็นพารามิเตอร์)
+        # ทำให้ถ้าแฟนขอข้อมูล Fund_History ไปก่อน แล้วคุณ login มาขอชื่อชีตเดียวกัน (แค่คนละคน)
+        # ระบบจะเข้าใจผิดว่าเป็นคำถามเดียวกัน แล้วส่งคำตอบเก่าของแฟนกลับมาให้แทนจนกว่าจะครบเวลา
+        # 10 นาที ตอนนี้รับชื่อชีตของผู้ใช้ (active_sheet_name) เป็นพารามิเตอร์ตรงๆ เพื่อให้ระบบจำ
+        # แยกตามผู้ใช้อัตโนมัติ (คนละชื่อชีต = คำถามคนละแบบ ไม่มีทางปนกัน)
         client = get_gsheet_client()
         last_error = None
         for i in range(max_retries):
             try:
-                sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet(ws_name)
+                sheet = get_cached_spreadsheet(client, active_sheet_name).worksheet(ws_name)
                 return sheet.get_all_records()
             except Exception as e:
                 last_error = str(e)
@@ -33,7 +39,7 @@ def render_tab_overview():
     def fetch_all_wealth_overview_data():
         def get_ws_records_safe(ws_name):
             try:
-                return _fetch_ws_records_safe(ws_name)
+                return _fetch_ws_records_safe(ws_name, get_active_sheet_name())
             except Exception:
                 return []
 
@@ -303,7 +309,7 @@ def render_tab_overview():
             def fetch_all_wealth_data():
                 def get_df_safe(ws_name):
                     try:
-                        return pd.DataFrame(_fetch_ws_records_safe(ws_name))
+                        return pd.DataFrame(_fetch_ws_records_safe(ws_name, get_active_sheet_name()))
                     except Exception:
                         return pd.DataFrame()
 
