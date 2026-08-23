@@ -11,6 +11,36 @@ from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_act
 from theme import style_plotly
 
 
+def _asset_card(col, icon, label, value, pct_base=None):
+    """
+    🆕 การ์ดแสดงสินทรัพย์แต่ละประเภทแบบทันสมัย (แทนที่ st.metric เดิม)
+    มีไอคอนที่ตรงกับประเภทสินทรัพย์ + แถบเปอร์เซ็นต์เทียบสัดส่วน ให้เห็นน้ำหนักของแต่ละ
+    ก้อนสินทรัพย์ได้เร็วๆ โดยไม่ต้องเลื่อนไปดูกราฟโดนัทด้านล่าง
+    """
+    pct_html = ""
+    if pct_base and pct_base > 0:
+        pct = (value / pct_base) * 100
+        pct_html = f"""
+            <div style="background:#F1EEE8; border-radius:6px; height:5px; margin-top:10px; overflow:hidden;">
+                <div style="background:#7C9885; height:100%; width:{min(pct, 100):.1f}%;"></div>
+            </div>
+            <div style="color:#9CA3AF; font-size:0.72em; margin-top:4px; font-family:'Sarabun',sans-serif;">{pct:.1f}%</div>
+        """
+    col.markdown(f"""
+        <div style="background:#FFFFFF; border:1px solid #E5E1D8; border-radius:14px;
+                    padding:16px 18px; box-shadow:0 2px 10px rgba(45,49,66,0.06); margin-bottom:14px;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span style="font-size:22px; line-height:1;">{icon}</span>
+                <span style="color:#6B7280; font-size:0.85em; font-family:'Sarabun',sans-serif;">{label}</span>
+            </div>
+            <div style="font-family:'Prompt',sans-serif; font-size:1.55em; font-weight:600; color:#2D3142;">
+                {value:,.0f} ฿
+            </div>
+            {pct_html}
+        </div>
+    """, unsafe_allow_html=True)
+
+
 def render_tab_overview():
 
     # 1. ใช้ @st.cache_data เพื่อดึงข้อมูลทุกชีตรวมกันครั้งเดียวและเก็บไว้ 10 นาที (ลดจำนวน Request มหาศาล)
@@ -210,21 +240,25 @@ def render_tab_overview():
     # --- 4. แสดงผลใน Metrics ย่อย ---
     with st.container(border=True):
         st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
+        # 🆕 ปรับปรุงหน้าตา: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดที่มีไอคอนตรงกับประเภท
+        # สินทรัพย์แต่ละแบบ พร้อมแถบเปอร์เซ็นต์เทียบกับ Net Worth รวม ให้ดูทันสมัยและเห็น
+        # สัดส่วนได้ไวขึ้น (ไอคอน: 📈 หุ้น/TFEX, 🧺 กองทุนรวม, 🏛️ PVD, 🛡️ ประกัน, 🤝 สหกรณ์,
+        # 👥 ประกันสังคม, 🏦 ธนาคาร, 🌅 บำนาญ, 🥇 ทองคำ)
         row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
-        row1_col1.metric("พอร์ตหุ้น + TFEX", f"{total_stock_and_tfex:,.0f} ฿")
-        row1_col2.metric("กองทุนรวม", f"{mutual_fund_value:,.0f} ฿")
-        row1_col3.metric("กองทุนสำรองเลี้ยงชีพ", f"{pvd_value:,.0f} ฿")
-        row1_col4.metric("ประกัน Unit Linked", f"{insurance_value:,.0f} ฿")
+        _asset_card(row1_col1, "📈", "พอร์ตหุ้น + TFEX", total_stock_and_tfex, net_worth_total)
+        _asset_card(row1_col2, "🧺", "กองทุนรวม", mutual_fund_value, net_worth_total)
+        _asset_card(row1_col3, "🏛️", "กองทุนสำรองเลี้ยงชีพ", pvd_value, net_worth_total)
+        _asset_card(row1_col4, "🛡️", "ประกัน Unit Linked", insurance_value, net_worth_total)
 
         row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-        row2_col1.metric("สหกรณ์ฯ", f"{coop_value:,.0f} ฿")
-        row2_col2.metric("ประกันสังคม", f"{sso_value:,.0f} ฿")
-        row2_col3.metric("บัญชีธนาคาร", f"{bank_balance:,.0f} ฿")
-        row2_col4.metric("ประกันบำนาญ", f"{pension_insurance_value:,.0f} ฿")
+        _asset_card(row2_col1, "🤝", "สหกรณ์ฯ", coop_value, net_worth_total)
+        _asset_card(row2_col2, "👥", "ประกันสังคม", sso_value, net_worth_total)
+        _asset_card(row2_col3, "🏦", "บัญชีธนาคาร", bank_balance, net_worth_total)
+        _asset_card(row2_col4, "🌅", "ประกันบำนาญ", pension_insurance_value, net_worth_total)
 
-        # ย้าย Note มาไว้ใน col4 ของแถวนี้ เพื่อให้อยู่ใต้ประกันบำนาญพอดี
+        # ย้าย Note มาไว้ใต้การ์ดประกันบำนาญ
         if all_data["pension"]:
-            pension_notes_html = '<div style="margin-top: -10px; margin-bottom: 5px;">'
+            pension_notes_html = '<div style="margin-top: -8px; margin-bottom: 5px;">'
             for row in all_data["pension"]:
                 age_val = row.get('Age', '-')
                 money_val = row.get('Value', 0)
@@ -243,17 +277,17 @@ def render_tab_overview():
             row2_col4.markdown(pension_notes_html, unsafe_allow_html=True)
 
         row3_col1, _, _, _ = st.columns(4)
-        row3_col1.metric("พอร์ตทองคำ", f"{total_gold_value:,.0f} ฿")
+        _asset_card(row3_col1, "🥇", "พอร์ตทองคำ", total_gold_value, net_worth_total)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         # --- 5. แสดงผลอสังหาริมทรัพย์ ---
         st.markdown("#### 🏡 อสังหาริมทรัพย์")
         row_re1, row_re2, row_re3, row_re4 = st.columns(4)
-        row_re1.metric("รวมอสังหาริมทรัพย์", f"{total_real_estate:,.0f} ฿")
-        row_re2.metric("บ้าน (ปัจจุบัน)", f"{house1_value:,.0f} ฿")
-        row_re3.metric("บ้าน (พ่อแม่อยู่)", f"{house2_value:,.0f} ฿")
-        row_re4.metric("คอนโด", f"{condo_value:,.0f} ฿")
+        _asset_card(row_re1, "🏘️", "รวมอสังหาริมทรัพย์", total_real_estate, net_worth_total)
+        _asset_card(row_re2, "🏠", "บ้าน (ปัจจุบัน)", house1_value, total_real_estate)
+        _asset_card(row_re3, "🏡", "บ้าน (พ่อแม่อยู่)", house2_value, total_real_estate)
+        _asset_card(row_re4, "🏢", "คอนโด", condo_value, total_real_estate)
 
 
     st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
