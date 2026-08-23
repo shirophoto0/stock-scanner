@@ -47,7 +47,7 @@ from tab_tfex import render_tab_tfex
 from tab_stock import render_tab_stock
 
 # 🆕 ระบบ Login แยกผู้ใช้
-from auth import check_login
+from auth import check_login, show_user_bar
 
 # --- ตั้งค่าหน้าเว็บ: ต้องอยู่เป็นคำสั่ง Streamlit คำสั่งแรกสุดของแอปเสมอ ---
 st.set_page_config(layout="wide")
@@ -55,6 +55,9 @@ st.set_page_config(layout="wide")
 # --- ต้องล็อกอินก่อนถึงจะใช้งานแอปต่อได้ ---
 # (ถ้ายังไม่ล็อกอิน check_login() จะแสดงฟอร์ม Login แล้วหยุดการทำงานไว้ตรงนี้)
 check_login()
+
+# --- แสดงชื่อผู้ใช้ที่ login อยู่ + ปุ่ม Logout ไว้ที่แถบด้านข้าง ---
+show_user_bar()
 
 # =============================================================
 # ส่วนเร่ิมต้นของ file
