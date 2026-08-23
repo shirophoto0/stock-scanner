@@ -43,6 +43,22 @@ def _asset_card(col, icon, label, value, pct_base=None):
     col.markdown(card_html, unsafe_allow_html=True)
 
 
+def _hero_card(col, icon, label, value):
+    """
+    การ์ดตัวเลข Net Worth หลัก (ใหญ่กว่าการ์ดสินทรัพย์ย่อยด้านล่าง เพราะเป็นตัวเลขสำคัญสุด)
+    ใช้สไตล์เดียวกับ _asset_card (กรอบ/เงา/ฟอนต์) ให้ไปในโทนเดียวกันทั้งหน้า จัดกึ่งกลางกล่อง
+    """
+    card_html = (
+        '<div style="background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
+        'padding:26px;box-shadow:0 2px 10px rgba(45,49,66,0.06);text-align:center;">'
+        f'<div style="font-size:34px;margin-bottom:8px;line-height:1;">{icon}</div>'
+        f'<div style="color:#6B7280;font-size:0.95em;font-family:\'Sarabun\',sans-serif;margin-bottom:8px;">{label}</div>'
+        f'<div style="font-family:\'Prompt\',sans-serif;font-size:2.2em;font-weight:700;color:#4E9A6E;">{value:,.0f} ฿</div>'
+        '</div>'
+    )
+    col.markdown(card_html, unsafe_allow_html=True)
+
+
 def render_tab_overview():
 
     # 1. ใช้ @st.cache_data เพื่อดึงข้อมูลทุกชีตรวมกันครั้งเดียวและเก็บไว้ 10 นาที (ลดจำนวน Request มหาศาล)
@@ -216,27 +232,11 @@ def render_tab_overview():
     net_worth_total = net_worth_excl_re + total_real_estate
 
     # --- 3. แสดงผล Net Worth ทั้งสองแบบ ---
-    with st.container(border=True):
-        col_nw1, col_nw2 = st.columns(2)
-
-        with col_nw1:
-            st.markdown(
-                f"""
-                <div style="text-align: left; padding: 5px;">
-                    <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth (ไม่รวมอสังหาฯ)</h4>
-                    <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_excl_re:,.0f} ฿</h1>
-                </div>
-                """, unsafe_allow_html=True
-            )
-        with col_nw2:
-            st.markdown(
-                f"""
-                <div style="text-align: left; padding: 5px;">
-                    <h4 style="color: #28a745; margin-bottom: 0px;">Net Worth รวมทั้งหมด</h4>
-                    <h1 style="color: #28a745; font-size: 2.3em; margin-top: 5px;">{net_worth_total:,.0f} ฿</h1>
-                </div>
-                """, unsafe_allow_html=True
-            )
+    # 🔧 ปรับปรุง: เปลี่ยนจากกล่องสีเขียวธรรมดา เป็นการ์ดสไตล์เดียวกับสินทรัพย์ย่อยด้านล่าง
+    # (กรอบ/เงา/ฟอนต์เหมือนกัน) พร้อมไอคอน 💰/💎 และจัดข้อความกึ่งกลางกล่อง
+    col_nw1, col_nw2 = st.columns(2)
+    _hero_card(col_nw1, "💰", "Net Worth (ไม่รวมอสังหาฯ)", net_worth_excl_re)
+    _hero_card(col_nw2, "💎", "Net Worth รวมทั้งหมด", net_worth_total)
 
 
     # --- 4. แสดงผลใน Metrics ย่อย ---
