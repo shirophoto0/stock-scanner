@@ -46,6 +46,16 @@ from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
 from tab_stock import render_tab_stock
 
+# 🆕 ระบบ Login แยกผู้ใช้
+from auth import check_login
+
+# --- ตั้งค่าหน้าเว็บ: ต้องอยู่เป็นคำสั่ง Streamlit คำสั่งแรกสุดของแอปเสมอ ---
+st.set_page_config(layout="wide")
+
+# --- ต้องล็อกอินก่อนถึงจะใช้งานแอปต่อได้ ---
+# (ถ้ายังไม่ล็อกอิน check_login() จะแสดงฟอร์ม Login แล้วหยุดการทำงานไว้ตรงนี้)
+check_login()
+
 # =============================================================
 # ส่วนเร่ิมต้นของ file
 # =============================================================
@@ -57,7 +67,7 @@ if 'journal_data' not in st.session_state or not st.session_state.journal_data:
     try:
         client = get_gsheet_client()
         # ดึงข้อมูลจากชีท JournalData ที่คุณใช้งานอยู่
-        sheet_journal = get_cached_spreadsheet(client, 'MyStockData').worksheet('JournalData') 
+        sheet_journal = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData') 
         st.session_state.journal_data = sheet_journal.get_all_records()
     except Exception as e:
         st.session_state.journal_data = []
@@ -127,9 +137,6 @@ from constants import SET100_TICKERS
 ######################################
         
 # --- Initialize Session State ---
-
-# 1. ตั้งค่าหน้าเว็บต้องอยู่บรรทัดบนสุดเสมอ
-st.set_page_config(layout="wide")
 
 def main():
     import plotly.express as px
