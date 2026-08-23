@@ -7,15 +7,15 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
-from backend_functions import IM_PER_CONTRACT, get_auto_atr_cached, load_data, save_cash_to_gsheet, save_data_to_sheet, update_trade_close
+from backend_functions import IM_PER_CONTRACT, get_auto_atr_cached, load_data, save_cash_to_gsheet, save_data_to_sheet, update_trade_close, get_active_sheet_name
 
 
 def render_tab_tfex():
     st.subheader("📝 ระบบเทรด TFEX")
 
     # 1. โหลดข้อมูล
-    tfex_df = load_data("TFEX_History") 
-    cash_df = load_data("Cash_Flow")
+    tfex_df = load_data("TFEX_History", get_active_sheet_name()) 
+    cash_df = load_data("Cash_Flow", get_active_sheet_name())
     # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์กำไร/ขาดทุนให้เป็น 'Net_Profit' ตั้งแต่จุดโหลดข้อมูลเลย
     # (บางบัญชีบันทึกเป็น 'กำไรสุทธิ' แทน) เพื่อให้โค้ดทั้งหมดที่ใช้ tfex_df ต่อจากนี้ทำงานถูกต้อง
     if not tfex_df.empty:
@@ -381,7 +381,7 @@ def render_tab_tfex():
         st.subheader("🏁 ปิดสถานะเทรด")
 
         # ดึงข้อมูลจากฟังก์ชัน load_data สดๆ ใหม่ๆ
-        tfex_df = load_data("TFEX_History")
+        tfex_df = load_data("TFEX_History", get_active_sheet_name())
         # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์เหมือนจุดอื่น เผื่อบางบัญชีบันทึกเป็น 'กำไรสุทธิ' แทน
         if not tfex_df.empty and 'Net_Profit' not in tfex_df.columns and 'กำไรสุทธิ' in tfex_df.columns:
             tfex_df = tfex_df.rename(columns={'กำไรสุทธิ': 'Net_Profit'})
