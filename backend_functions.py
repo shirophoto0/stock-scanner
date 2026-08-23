@@ -667,14 +667,24 @@ def save_journal():
 
 
 def load_journal():
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData')
-        data = sheet.get_all_records()
-        st.session_state.journal_data = data
-    except Exception as e:
-        st.error(f"ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้: {e}")
-        st.session_state.journal_data = []
+    # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ไม่มีระบบลองใหม่อัตโนมัติเลย พอเจอโควตา Google Sheets ชั่วคราว (429)
+    # จะ error ทันที ต่างจากฟังก์ชันอื่นๆ ในแอปที่มีระบบลองใหม่อยู่แล้ว ตอนนี้เพิ่มให้เหมือนกัน
+    last_error = None
+    for attempt in range(3):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData')
+            data = sheet.get_all_records()
+            st.session_state.journal_data = data
+            return
+        except Exception as e:
+            last_error = e
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            break
+    st.error(f"ไม่สามารถโหลดข้อมูลจาก Google Sheets ได้: {last_error}")
+    st.session_state.journal_data = []
 
 
 def save_portfolio():
@@ -698,15 +708,24 @@ def save_portfolio():
 
 
 def load_portfolio():
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('PortfolioData')
-        data = sheet.get_all_records()
-        
-        st.session_state.my_portfolio = data if data else []
-    except Exception as e:
-        st.error(f"โหลดพอร์ตไม่สำเร็จ: {e}")
-        st.session_state.my_portfolio = []
+    # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ไม่มีระบบลองใหม่อัตโนมัติเลย พอเจอโควตา Google Sheets ชั่วคราว (429)
+    # จะ error ทันที (โดยเฉพาะตอนสลับผู้ใช้ที่มีหลายแท็บยิงขอข้อมูลพร้อมกันจำนวนมาก)
+    last_error = None
+    for attempt in range(3):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('PortfolioData')
+            data = sheet.get_all_records()
+            st.session_state.my_portfolio = data if data else []
+            return
+        except Exception as e:
+            last_error = e
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            break
+    st.error(f"โหลดพอร์ตไม่สำเร็จ: {last_error}")
+    st.session_state.my_portfolio = []
 
 
 def log_portfolio_snapshot():
