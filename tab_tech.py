@@ -51,6 +51,28 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             key="filter_nh_option"
         )
 
+        st.divider()
+        st.markdown("**📐 เกณฑ์เพิ่มเติม (เลือกได้หลายข้อพร้อมกัน)**")
+        st.caption("⚠️ ต้องกด \"🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)\" ในหน้าหลักก่อนอย่างน้อย 1 ครั้ง เกณฑ์กลุ่มนี้ถึงจะมีข้อมูลให้กรอง")
+
+        # 🆕 เกณฑ์เพิ่มเติม 4 ข้อ (ทำเป็น checkbox แทน dropdown เพราะเลือกได้หลายข้อพร้อมกัน
+        # ต่างจาก RS Line/New High ด้านบนที่เลือกได้ทีละกลุ่ม)
+        filter_trend_template = st.checkbox(
+            "✅ ผ่าน Trend Template (ราคา > MA ทั้งหมด + MA50>MA150>MA200)", key="filter_trend_template"
+        )
+        filter_near_high = st.checkbox(
+            "🔥 ใกล้จุดสูงสุด 52 สัปดาห์ (ห่างไม่เกิน 15%)", key="filter_near_high"
+        )
+        filter_recovered = st.checkbox(
+            "💪 ฟื้นตัวจากจุดต่ำ 52 สัปดาห์ (+30% ขึ้นไป)", key="filter_recovered"
+        )
+        filter_volume_spike = st.checkbox(
+            "🚀 Volume พุ่งผิดปกติ (เกิน 2 เท่าของค่าเฉลี่ย 50 วัน)", key="filter_volume_spike"
+        )
+        filter_volatility_contract = st.checkbox(
+            "🤏 แกว่งตัวแคบก่อนวิ่ง (Volatility Contraction)", key="filter_volatility_contract"
+        )
+
         # รวมค่าที่เลือกจาก 2 dropdown เป็นตัวแปรเดียว (ไม่ให้กรองซ้อนกันทั้ง 2 กลุ่มพร้อมกัน
         # ถ้าเลือกกลุ่ม RS Line ไว้ จะกรองตามกลุ่มนั้นก่อนเสมอ)
         if rs_option != "ไม่กรองเงื่อนไขนี้":
@@ -64,7 +86,8 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
         # ลบค่าที่จำไว้ (session_state) ของแต่ละตัวกรองออก แล้วรีรัน จะกลับไปใช้ค่าเริ่มต้นของแต่ละตัว
         st.divider()
         if st.button("🔄 รีเซ็ตตัวกรองทั้งหมด", use_container_width=True):
-            for _k in ["filter_max_pe", "filter_min_dividend", "filter_rsi_range", "filter_rs_option", "filter_nh_option"]:
+            for _k in ["filter_max_pe", "filter_min_dividend", "filter_rsi_range", "filter_rs_option", "filter_nh_option",
+                       "filter_trend_template", "filter_near_high", "filter_recovered", "filter_volume_spike", "filter_volatility_contract"]:
                 if _k in st.session_state:
                     del st.session_state[_k]
             st.rerun()
@@ -130,6 +153,45 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                 filtered_df = filtered_df[filtered_df['Is_52W_High'] == True]
                 show_columns.append('New_High_52W_มาแล้ว(วัน)')
                 sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
+
+            # 🆕 กรองตามเกณฑ์เพิ่มเติม 4 ข้อ (เลือกได้หลายข้อพร้อมกัน กรองซ้อนทับกับด้านบนทั้งหมด)
+            # เช็ค "column in filtered_df.columns" ก่อนเสมอ เผื่อผู้ใช้ยังไม่เคยกด "อัปเดตข้อมูลใหม่"
+            # หลังจากที่เพิ่มฟีเจอร์นี้ ทำให้ข้อมูลเก่าที่ยังจำไว้ไม่มีคอลัมน์ใหม่พวกนี้
+            if filter_trend_template:
+                if 'Trend_Template_Pass' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Trend_Template_Pass'] == True]
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูล Trend Template กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+
+            if filter_near_high:
+                if 'Near_52W_High' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Near_52W_High'] == True]
+                    if 'Pct_From_52W_High' not in show_columns:
+                        show_columns.append('Pct_From_52W_High')
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลระยะห่างจากจุดสูงสุด กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+
+            if filter_recovered:
+                if 'Recovered_From_Low' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Recovered_From_Low'] == True]
+                    if 'Pct_Above_52W_Low' not in show_columns:
+                        show_columns.append('Pct_Above_52W_Low')
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลการฟื้นตัวจากจุดต่ำ กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+
+            if filter_volume_spike:
+                if 'Is_Volume_Spike' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Is_Volume_Spike'] == True]
+                    if 'Volume_Spike_Ratio' not in show_columns:
+                        show_columns.append('Volume_Spike_Ratio')
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูล Volume Spike กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+
+            if filter_volatility_contract:
+                if 'Is_Volatility_Contracting' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Is_Volatility_Contracting'] == True]
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูล Volatility Contraction กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
 
             # 🔧 ปรับปรุง (ข้อ 3): แสดงจำนวนหุ้นที่ผ่านตัวกรองเด่นๆ ไว้ก่อนตาราง จะได้รู้ทันที
             # ว่ากรองแล้วเหลือกี่ตัว โดยไม่ต้องเลื่อนลงไปนับในตารางเอง
