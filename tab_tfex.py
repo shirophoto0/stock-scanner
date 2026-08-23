@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from backend_functions import IM_PER_CONTRACT, get_auto_atr_cached, load_data, save_cash_to_gsheet, save_data_to_sheet, update_trade_close, get_active_sheet_name
-from theme import style_plotly
+from theme import style_plotly, render_metric_card
 
 
 def render_tab_tfex():
@@ -58,10 +58,12 @@ def render_tab_tfex():
     st.session_state['tfex_net_worth'] = net_worth
 
     # แสดง Dashboard
+    # 🔧 ปรับปรุง: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดสไตล์เดียวกับหน้าอื่นในแอป
     c1, c2, c3 = st.columns(3)
-    c1.metric("มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท")
-    c2.metric("กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท")
-    c3.metric("การเติบโต", f"{growth_pct:.2f} %")
+    render_metric_card(c1, "มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท", icon="💰")
+    render_metric_card(c2, "กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท", icon="💹")
+    render_metric_card(c3, "การเติบโต", f"{growth_pct:.2f} %", icon="🚀",
+                        delta=f"{growth_pct:.2f}%", delta_positive=(growth_pct >= 0))
     st.divider()
 
     # --- เริ่มแถวที่ 2: Performance Metrics (รวมเชิงลึก) ---
@@ -140,20 +142,21 @@ def render_tab_tfex():
 
     # 4. แสดงผลแบบ Grid
     # แถวแรก
+    # 🔧 ปรับปรุง: เปลี่ยนเป็นการ์ดสไตล์เดียวกัน พร้อมไอคอนที่ตรงกับความหมายแต่ละตัว
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Win Rate", f"{win_rate:.1f}%")
-    c2.metric("R:R Ratio", f"{rr_ratio:.2f}")
-    c3.metric("Profit Factor", f"{profit_factor:.2f}")
-    c4.metric("Expectancy", f"{expectancy:,.0f}")
+    render_metric_card(c1, "Win Rate", f"{win_rate:.1f}%", icon="🎯")
+    render_metric_card(c2, "R:R Ratio", f"{rr_ratio:.2f}", icon="📏")
+    render_metric_card(c3, "Profit Factor", f"{profit_factor:.2f}", icon="⚖️")
+    render_metric_card(c4, "Expectancy", f"{expectancy:,.0f}", icon="🧮")
 
     st.write("---") # เส้นคั่น
 
     # แถวสอง (เชิงลึก)
     e1, e2, e3, e4 = st.columns(4)
-    e1.metric("กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts")
-    e2.metric("ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts")
-    e3.metric("Max Drawdown", f"{max_drawdown:,.0f} บาท")
-    e4.metric("ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน")
+    render_metric_card(e1, "กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts", icon="📈")
+    render_metric_card(e2, "ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts", icon="📉")
+    render_metric_card(e3, "Max Drawdown", f"{max_drawdown:,.0f} บาท", icon="⚠️")
+    render_metric_card(e4, "ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน", icon="⏱️")
 
     st.divider()
 
