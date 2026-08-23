@@ -583,10 +583,14 @@ def calculate_atr(df, period=14):
 
 
 @st.cache_data(ttl=60)
-def load_data(sheet_name):
+def load_data(sheet_name, active_sheet_name):
+    # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ "จำ" ผลลัพธ์แยกตามชื่อ worksheet (เช่น TFEX_History) เท่านั้น
+    # โดยไม่รู้ว่าผู้ใช้คนไหนเป็นคนขอ (เรียก get_active_sheet_name() ข้างในเฉยๆ) ทำให้สลับ user
+    # แล้วยังเห็นข้อมูล TFEX/Cash_Flow/แผนเทรด ของคนก่อนหน้าค้างอยู่ ตอนนี้รับชื่อชีตของผู้ใช้
+    # (active_sheet_name) เป็นพารามิเตอร์ตรงๆ เพื่อให้ระบบจำแยกตามผู้ใช้อัตโนมัติ
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet(sheet_name) 
+        sheet = get_cached_spreadsheet(client, active_sheet_name).worksheet(sheet_name) 
         data = sheet.get_all_records()
         if data:
             return pd.DataFrame(data)
@@ -786,7 +790,7 @@ def calculate_total_portfolio_value():
         
 def total_invested_capital():
     # ดึงข้อมูลกระแสเงินสดมาคำนวณเงินลงทุนสุทธิ
-    cash_df = load_data("Cash_Flow")
+    cash_df = load_data("Cash_Flow", get_active_sheet_name())
     if not cash_df.empty and 'Type' in cash_df.columns and 'Amount' in cash_df.columns:
         total_deposit = cash_df[cash_df['Type'].astype(str).str.lower() == 'deposit']['Amount'].sum()
         total_withdraw = cash_df[cash_df['Type'].astype(str).str.lower() == 'withdraw']['Amount'].sum()
