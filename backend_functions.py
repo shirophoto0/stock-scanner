@@ -259,6 +259,12 @@ def update_trade_close(trade_id, close_price, date_close):
         records = sheet.get_all_records()
         df = pd.DataFrame(records)
         
+        # 🔧 กันเหนียว: ถ้าตารางว่างสนิท (ไม่มีคอลัมน์ Trade_ID เลย) ให้ถือว่าไม่เจอรายการ
+        # แทนที่จะปล่อยให้ error (แม้ในทางปฏิบัติจะไม่ค่อยเกิดเพราะต้องมีไม้เปิดอยู่ก่อนถึงจะมากดปิดได้)
+        if 'Trade_ID' not in df.columns:
+            print("Error: ไม่พบข้อมูลในตาราง TFEX_History")
+            return False
+        
         idx_list = df.index[df['Trade_ID'] == trade_id].tolist()
         if not idx_list:
             print("Error: Trade_ID not found")
@@ -553,7 +559,14 @@ def load_data(sheet_name):
         client = get_gsheet_client()
         sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet(sheet_name) 
         data = sheet.get_all_records()
-        return pd.DataFrame(data)
+        if data:
+            return pd.DataFrame(data)
+        # 🔧 แก้บั๊ก: ถ้าชีตว่างสนิท (มีแต่หัวตาราง ไม่มีแถวข้อมูล) get_all_records() จะคืนค่าว่างเปล่า
+        # ทำให้ตารางที่ได้ไม่มีแม้แต่ "ชื่อคอลัมน์" เลย (ต่างจากตารางเปล่าที่ยังมีชื่อคอลัมน์ครบ)
+        # โค้ดทุกจุดที่เช็คหาคอลัมน์ (เช่น 'Net_Profit' in df.columns) จะพังทันทีเพราะไม่เจอคอลัมน์เลยสักตัว
+        # ตอนนี้ดึงแค่แถวหัวตารางมาสร้างตารางเปล่าที่ยังมีชื่อคอลัมน์ครบแทน เพื่อให้จุดอื่นๆ ทำงานได้ปกติ
+        headers = sheet.row_values(1)
+        return pd.DataFrame(columns=headers) if headers else pd.DataFrame()
     except Exception as e:
         st.error(f"โหลดข้อมูล {sheet_name} ไม่สำเร็จ: {e}")
         return pd.DataFrame()
@@ -1166,7 +1179,10 @@ def load_from_gsheet():
         
         if not data:
             st.warning("ไม่มีข้อมูลใน Google Sheet ครับ")
-            return None
+            # 🔧 แก้บั๊ก: เดิม return None ตรงนี้ ทำให้โค้ดที่เรียกใช้ (ซึ่งคาดหวังว่าจะได้ตาราง
+            # กลับไป แล้วจะเช็ค .empty ต่อ) พังทันทีด้วย AttributeError เพราะ None ไม่มี .empty
+            # ตอนนี้คืนตารางเปล่าแทน ปลอดภัยกว่าและพฤติกรรมเหมือนกับตอนไม่มีข้อมูลทุกจุดอื่นในแอป
+            return pd.DataFrame()
             
         # ดึงข้อมูลออกมาเป็น DataFrame
         df = pd.DataFrame(data)
