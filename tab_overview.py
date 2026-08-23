@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import plotly.graph_objects as go
 import plotly.express as px
-from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name
+from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value
 
 
 def render_tab_overview():
@@ -89,6 +89,13 @@ def render_tab_overview():
                 mutual_fund_value += curr_p * units
             except (ValueError, TypeError):
                 pass
+
+    # 🆕 บันทึกยอดกองทุนรวมสิ้นเดือนอัตโนมัติ (ทำครั้งเดียวต่อเดือน) เพื่อใช้วาดกราฟแนวโน้มด้านล่าง
+    try:
+        _client_for_stamp = get_gsheet_client()
+        check_and_auto_stamp_fund_value(_client_for_stamp, mutual_fund_value)
+    except Exception:
+        pass
 
     # ทองคำ (จาก session_state)
     total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
@@ -302,7 +309,7 @@ def render_tab_overview():
 
                 return (get_df_safe('Provident_Fund'), get_df_safe('Insurance'), 
                         get_df_safe('Coop'), get_df_safe('Bank_Account'), 
-                        get_df_safe('SSO'), get_df_safe('Fund_History'), 
+                        get_df_safe('SSO'), get_df_safe('Fund_Value_History'), 
                         get_df_safe('Stock_TFEX_History'))
 
             df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist = fetch_all_wealth_data()
@@ -324,6 +331,8 @@ def render_tab_overview():
             s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
             s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
             s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
+            # 🆕 ตอนนี้ df_mf ดึงจากชีต Fund_Value_History (ยอดรวมรายเดือนที่บันทึกอัตโนมัติ)
+            # แทนที่จะเป็น Fund_History เดิม (รายการซื้อแต่ละครั้ง) จึงมีคอลัมน์ Date/Value ให้ใช้ตรงๆ ได้แล้ว
             s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund')
             s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
 
