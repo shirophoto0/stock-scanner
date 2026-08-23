@@ -49,14 +49,20 @@ from tab_stock import render_tab_stock
 # 🆕 ระบบ Login แยกผู้ใช้
 from auth import check_login, show_user_bar
 
+# 🆕 ระบบธีมสี (Dark/Light) ของแอป
+from theme import apply_theme
+
 # --- ตั้งค่าหน้าเว็บ: ต้องอยู่เป็นคำสั่ง Streamlit คำสั่งแรกสุดของแอปเสมอ ---
 st.set_page_config(layout="wide")
+
+# --- ฉีดธีมสีเข้าไปก่อนเลย (ให้หน้า Login ก็มีธีมด้วย) ---
+apply_theme()
 
 # --- ต้องล็อกอินก่อนถึงจะใช้งานแอปต่อได้ ---
 # (ถ้ายังไม่ล็อกอิน check_login() จะแสดงฟอร์ม Login แล้วหยุดการทำงานไว้ตรงนี้)
 check_login()
 
-# --- แสดงชื่อผู้ใช้ที่ login อยู่ + ปุ่ม Logout ไว้ที่แถบด้านข้าง ---
+# --- แสดงชื่อผู้ใช้ที่ login อยู่ + สวิตช์สลับโหมดสี + ปุ่ม Logout ไว้ที่แถบด้านข้าง ---
 show_user_bar()
 
 # =============================================================
@@ -88,18 +94,19 @@ if 'cash_balance' not in st.session_state:
 st.markdown("""
     <style>
     .custom-box {
-        background-color: #fafbfc; /* เปลี่ยนสีพื้นหลังเบาๆ */
-        border: 1px solid #e1e4e8; /* เส้นขอบ */
+        background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-tertiary) 100%);
+        border: 1px solid var(--border-color);
         border-radius: 16px;       /* มุมโค้งมน */
-        padding: 20px;             /* ระยะห่างขอบด้านใน */
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* เงาให้ดูลอยนูนขึ้นมา */
+        padding: 24px;             /* ระยะห่างขอบด้านใน */
+        box-shadow: 0 4px 16px var(--shadow-color);
         margin-bottom: 20px;
+        border-left: 4px solid var(--accent-primary);
     }
     </style>
 
     <div class="custom-box">
-        <h1 style="margin:0; font-size: 28px;">📈 Application NJ-Wealth</h1>
-        <p style="margin-top: 10px; margin-bottom: 0; color: #555;">📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)</p>
+        <h1 style="margin:0; font-size: 28px; font-family: 'Prompt', sans-serif; color: var(--accent-primary) !important;">📈 Application NJ-Wealth</h1>
+        <p style="margin-top: 10px; margin-bottom: 0; color: var(--text-secondary);">📊 ระบบบริหารจัดการความมั่งคั่งและพอร์ตการลงทุนอัจฉริยะ (All-in-One Wealth & Portfolio Dashboard)</p>
     </div>
 """, unsafe_allow_html=True)
 ##### Header UI Application box - Start ######
