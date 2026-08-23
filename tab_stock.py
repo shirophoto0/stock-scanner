@@ -1065,21 +1065,26 @@ def render_tab_stock():
                 # ดึงยอดเงินสดคงเหลือจาก session_state (ถ้ามี ถ้าไม่มีให้เป็น 0)
                 cash_bal = st.session_state.get('cash_balance', 0.0)
 
-                # สรุปยอดรวม Metrics ด้านบน
+                # 🔧 ปรับปรุง: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดสไตล์เดียวกับหน้าอื่นในแอป
                 col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                col_s1.metric("เงินสดคงเหลือ", f"{cash_bal:,.0f} ฿")
-                col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
-                col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
+                render_metric_card(col_s1, "เงินสดคงเหลือ", f"{cash_bal:,.0f} ฿", icon="💵")
+                render_metric_card(col_s2, "เงินลงทุนรวม", f"{total_invest:,.0f} ฿", icon="📥")
+                render_metric_card(col_s3, "มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿", icon="📈")
                 # 🔧 แก้บั๊ก: ส่งค่ามูลค่าพอร์ตหุ้นผ่าน session_state (เหมือนที่ TFEX ทำอยู่แล้ว)
                 # เพราะหลังแยกไฟล์ แท็บ "ภาพรวม Net Worth" อยู่คนละไฟล์แล้ว มองไม่เห็นตัวแปร total_value โดยตรง
                 st.session_state['stock_net_worth'] = total_value
                 diff = total_value - total_invest
-                col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
+                diff_pct = ((diff) / total_invest) * 100 if total_invest > 0 else 0.0
+                render_metric_card(col_s4, "กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", icon="💹",
+                                    delta=f"{diff_pct:.2f}%", delta_positive=(diff >= 0))
 
                 # แสดงตารางพอร์ตหลัก
                 df_p = pd.DataFrame(portfolio_list)
                 df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
 
+                # 🔧 ปรับปรุง: ตกแต่งตารางให้ทันสมัยขึ้น (สีหัวตาราง/เส้นขอบตามธีมของแอป, ซ่อนคอลัมน์
+                # เลขแถวที่ไม่มีประโยชน์) แทนที่จะปล่อยให้หน้าตาเป็นตารางดิบแบบ Excel เหมือนเดิม
+                _tc = get_theme_colors()
                 st.dataframe(
                     df_display_p.style.format({
                         "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
@@ -1087,8 +1092,16 @@ def render_tab_stock():
                         "% กำไร/ขาดทุน": "{:.2f}%"
                     })
                     .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
-                    .set_properties(**{'text-align': 'right'})
-                    .set_table_styles([{'selector': 'th', 'props': [('text-align', 'right')]}])
+                    .set_properties(**{'text-align': 'right', 'background-color': _tc['bg'], 'color': _tc['text']})
+                    .set_table_styles([
+                        {'selector': 'th', 'props': [
+                            ('text-align', 'right'), ('background-color', '#F1EEE8'),
+                            ('color', _tc['text']), ('font-family', "'Prompt',sans-serif"),
+                            ('font-weight', '600'), ('border-color', _tc['border'])
+                        ]},
+                        {'selector': 'td', 'props': [('border-color', _tc['border'])]},
+                    ])
+                    .hide(axis='index')
                     , use_container_width=True
                 )
 
