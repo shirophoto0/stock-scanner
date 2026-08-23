@@ -1091,8 +1091,13 @@ def render_tab_stock():
                         "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
                         "% กำไร/ขาดทุน": "{:.2f}%"
                     })
+                    # 🔧 แก้บั๊ก: เดิมพยายามกำหนดสีตัวหนังสือทั่วทั้งตารางผ่าน .set_properties() (color)
+                    # พร้อมกับกำหนดสีเขียว/แดงเฉพาะคอลัมน์กำไร/ขาดทุนผ่าน .map() ทำให้ 2 คำสั่งนี้
+                    # แย่งกันคุม CSS property เดียวกัน (สลับลำดับก็ยังไม่พอ) ตอนนี้ตัดสีตัวหนังสือ
+                    # ทั่วไปออกจาก .set_properties() เหลือแค่ text-align/background-color เท่านั้น
+                    # ให้ .map() เป็นตัวเดียวที่คุมสี "color" ของตาราง ไม่มีจุดไหนมาแย่งกันอีก
+                    .set_properties(**{'text-align': 'right', 'background-color': _tc['bg']})
                     .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
-                    .set_properties(**{'text-align': 'right', 'background-color': _tc['bg'], 'color': _tc['text']})
                     .set_table_styles([
                         {'selector': 'th', 'props': [
                             ('text-align', 'right'), ('background-color', '#F1EEE8'),
