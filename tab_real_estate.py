@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 import time
 from datetime import datetime
-from backend_functions import get_gsheet_client, get_worksheet_safely
+from backend_functions import get_gsheet_client, get_worksheet_safely, get_active_sheet_name
 
 
 def render_tab_real_estate():
@@ -23,7 +23,7 @@ def render_tab_real_estate():
         last_error = None
         for attempt in range(3):
             try:
-                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                sheet_re = get_worksheet_safely(client, get_active_sheet_name(), 'Real_Estate')
                 if sheet_re is not None:
                     return sheet_re.get_all_records()
                 last_error = "ไม่พบชีต Real_Estate"
@@ -37,7 +37,7 @@ def render_tab_real_estate():
         client = get_gsheet_client()
         for attempt in range(3):
             try:
-                sheet_re = get_worksheet_safely(client, 'MyStockData', 'Real_Estate')
+                sheet_re = get_worksheet_safely(client, get_active_sheet_name(), 'Real_Estate')
                 if sheet_re is not None:
                     sheet_re.clear()
                     sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
