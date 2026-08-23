@@ -216,3 +216,24 @@ def render_theme_toggle():
     if new_mode != current_mode:
         st.session_state["theme_mode"] = new_mode
         st.rerun()
+
+
+def style_plotly(fig):
+    """
+    🆕 ทำให้พื้นหลังกราฟ Plotly โปร่งใส (โชว์สีพื้นหลังของแอปทะลุออกมาแทน) และปรับสีตัวอักษร/
+    เส้นกริดให้เข้ากับโหมดสีที่เลือกอยู่ตอนนี้ ต้องเรียกฟังก์ชันนี้ครอบทุกกราฟก่อนแสดงผลด้วย
+    st.plotly_chart() เพราะกราฟ Plotly มีพื้นหลังเป็นของตัวเอง ไม่ได้ปรับตาม CSS ของหน้าเว็บอัตโนมัติ
+    """
+    mode = st.session_state.get("theme_mode", "dark")
+    text_color = "#EAE7E0" if mode == "dark" else "#2D3142"
+    grid_color = "rgba(255,255,255,0.08)" if mode == "dark" else "rgba(45,49,66,0.08)"
+
+    fig.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color=text_color, family="Sarabun, sans-serif"),
+        legend=dict(font=dict(color=text_color)),
+    )
+    fig.update_xaxes(gridcolor=grid_color, zerolinecolor=grid_color, color=text_color)
+    fig.update_yaxes(gridcolor=grid_color, zerolinecolor=grid_color, color=text_color)
+    return fig
