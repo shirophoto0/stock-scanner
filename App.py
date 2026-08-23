@@ -1782,6 +1782,9 @@ def main():
                             col_s1.metric("เงินสดคงเหลือ", f"{cash_bal:,.0f} ฿")
                             col_s2.metric("เงินลงทุนรวม", f"{total_invest:,.0f} ฿")
                             col_s3.metric("มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿")
+                            # 🔧 แก้บั๊ก: ส่งค่ามูลค่าพอร์ตหุ้นผ่าน session_state (เหมือนที่ TFEX ทำอยู่แล้ว)
+                            # เพราะหลังแยกไฟล์ แท็บ "ภาพรวม Net Worth" อยู่คนละไฟล์แล้ว มองไม่เห็นตัวแปร total_value โดยตรง
+                            st.session_state['stock_net_worth'] = total_value
                             diff = total_value - total_invest
                             col_s4.metric("กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", delta=f"{((diff)/total_invest)*100:.2f}%" if total_invest > 0 else "0%")
                     
