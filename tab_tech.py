@@ -17,24 +17,57 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
 ################################
     # 1. Slidebar (ตัวกรอง)
     with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
-        max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0)
-        min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0)
-        rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0))
+        # 🔧 ปรับปรุง (ข้อ 1): ย้าย Slider ทั้ง 3 ตัวไปไว้ใน expander ย่อย ไม่ให้แถบด้านข้างยาว
+        # เทอะทะเกินไป (ค่อยกดเปิดเมื่อต้องปรับ ปกติค่าเริ่มต้นก็ใช้งานได้เลยอยู่แล้ว)
+        with st.expander("🔧 ตัวกรองขั้นสูง (P/E, ปันผล, RSI)", expanded=False):
+            max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0, key="filter_max_pe")
+            # 🔧 ปรับปรุง (ข้อ 4): เพิ่มหน่วย % ต่อท้ายตัวเลขให้ชัดเจนขึ้น (เดิมมีแต่ตัวเลขเฉยๆ)
+            min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0, format="%.2f%%", key="filter_min_dividend")
+            rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0), key="filter_rsi_range")
 
-        strategy_option = st.selectbox(
-            "เลือกหน้าเทรด:",
+        st.divider()
+        st.markdown("**🎯 กรองตามกลยุทธ์ (เลือกได้อย่างใดอย่างหนึ่ง)**")
+
+        # 🔧 ปรับปรุง: เดิมรวม 2 กลุ่มกลยุทธ์ไว้ใน dropdown เดียวกัน (คั่นด้วยข้อความ "--- กลุ่ม ---")
+        # ทำให้รายการยาวและงงว่าอันไหนอยู่กลุ่มไหน แยกเป็น 2 dropdown อิสระของใครของมันให้ชัดเจนขึ้น
+        rs_option = st.selectbox(
+            "⭐ กลุ่ม RS Line:",
             options=[
-                "ไม่กรองเงื่อนไขนี้", 
-                "--- กลุ่ม RS Line ---",
-                "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว", 
+                "ไม่กรองเงื่อนไขนี้",
+                "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว",
                 "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)",
-                "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)", 
-                "--- กลุ่ม New High ---",
-                "3 Month High", 
-                "6 Month High", 
-                "52 Week High"
-            ]
+                "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)",
+            ],
+            key="filter_rs_option"
         )
+        nh_option = st.selectbox(
+            "🚀 กลุ่ม New High:",
+            options=[
+                "ไม่กรองเงื่อนไขนี้",
+                "3 Month High",
+                "6 Month High",
+                "52 Week High",
+            ],
+            key="filter_nh_option"
+        )
+
+        # รวมค่าที่เลือกจาก 2 dropdown เป็นตัวแปรเดียว (ไม่ให้กรองซ้อนกันทั้ง 2 กลุ่มพร้อมกัน
+        # ถ้าเลือกกลุ่ม RS Line ไว้ จะกรองตามกลุ่มนั้นก่อนเสมอ)
+        if rs_option != "ไม่กรองเงื่อนไขนี้":
+            strategy_option = rs_option
+        elif nh_option != "ไม่กรองเงื่อนไขนี้":
+            strategy_option = nh_option
+        else:
+            strategy_option = "ไม่กรองเงื่อนไขนี้"
+
+        # 🔧 ปรับปรุง (ข้อ 2): เพิ่มปุ่มรีเซ็ตตัวกรองทั้งหมด เผื่อกดตัวกรองมั่วแล้วอยากเริ่มใหม่เร็วๆ
+        # ลบค่าที่จำไว้ (session_state) ของแต่ละตัวกรองออก แล้วรีรัน จะกลับไปใช้ค่าเริ่มต้นของแต่ละตัว
+        st.divider()
+        if st.button("🔄 รีเซ็ตตัวกรองทั้งหมด", use_container_width=True):
+            for _k in ["filter_max_pe", "filter_min_dividend", "filter_rsi_range", "filter_rs_option", "filter_nh_option"]:
+                if _k in st.session_state:
+                    del st.session_state[_k]
+            st.rerun()
 
         # ตรวจสอบข้อมูลก่อนโชว์
         if df_all_stocks is not None and not df_all_stocks.empty:
@@ -97,6 +130,10 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                 filtered_df = filtered_df[filtered_df['Is_52W_High'] == True]
                 show_columns.append('New_High_52W_มาแล้ว(วัน)')
                 sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
+
+            # 🔧 ปรับปรุง (ข้อ 3): แสดงจำนวนหุ้นที่ผ่านตัวกรองเด่นๆ ไว้ก่อนตาราง จะได้รู้ทันที
+            # ว่ากรองแล้วเหลือกี่ตัว โดยไม่ต้องเลื่อนลงไปนับในตารางเอง
+            st.metric("📊 จำนวนหุ้นที่ผ่านตัวกรอง", f"{len(filtered_df)} ตัว")
 
             # 5. แสดงผล
             results_container = st.empty() 
