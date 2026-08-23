@@ -7,6 +7,7 @@ import pandas as pd
 import requests
 from datetime import datetime, timedelta
 from backend_functions import get_worksheet_safely, get_active_sheet_name
+from theme import render_metric_card
 
 
 def render_tab_gold(client):
@@ -89,9 +90,18 @@ def render_tab_gold(client):
     ref_gold_bar, ref_gold_jewelry = get_gold_price_by_scraping()
 
     # แสดงผลราคาอ้างอิง
-    col_p1, col_p2 = st.columns(2)
-    col_p1.metric("📌 ราคาทองคำแท่ง (Scraped)", f"{ref_gold_bar:,.2f} ฿ / บาททอง")
-    col_p2.metric("📌 ราคาทองรูปพรรณ (Scraped)", f"{ref_gold_jewelry:,.2f} ฿ / บาททอง")
+    # 🔧 ปรับปรุง: จัดเป็นตาราง 2x3 (2 แถว x 3 คอลัมน์) ให้กล่องขนาดเท่ากันทั้งหมด
+    # แถวแรกใส่ราคาทอง 2 กล่อง (เว้นช่องที่ 3 ว่างไว้) แถวสองจอง "ที่ว่าง" ไว้ล่วงหน้า
+    # สำหรับการ์ดสรุปยอดพอร์ต 3 อัน (ที่จริงๆ คำนวณได้ทีหลังมาก หลังประมวลผลตารางพอร์ตเสร็จแล้ว
+    # แต่อยากให้แสดงตำแหน่งนี้ จึงใช้ placeholder จองที่ไว้ก่อน แล้วค่อยเติมเนื้อหาทีหลัง)
+    row1_col1, row1_col2, row1_col3 = st.columns(3)
+    render_metric_card(row1_col1, "ราคาทองคำแท่ง (Scraped)", f"{ref_gold_bar:,.2f} ฿ / บาททอง", icon="📌")
+    render_metric_card(row1_col2, "ราคาทองรูปพรรณ (Scraped)", f"{ref_gold_jewelry:,.2f} ฿ / บาททอง", icon="📌")
+
+    row2_col1, row2_col2, row2_col3 = st.columns(3)
+    gold_summary_placeholder_1 = row2_col1.empty()
+    gold_summary_placeholder_2 = row2_col2.empty()
+    gold_summary_placeholder_3 = row2_col3.empty()
     st.markdown("---")
 
     # 🔄 โหลดข้อมูลจาก Google Sheets และคำนวณพอร์ตทองคำต่อ
@@ -393,10 +403,13 @@ def render_tab_gold(client):
 
         st.session_state['total_gold_portfolio_value'] = total_market_value
 
-        col_m1, col_m2, col_m3 = st.columns(3)
-        col_m1.metric("💰 มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿")
-        col_m2.metric("📦 มูลค่าตั้งต้นรวม", f"{total_cost_value:,.2f} ฿")
-        col_m3.metric("📈 กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿", f"{total_pl_pct:,.2f}%")
+        # 🔧 ปรับปรุง: เติมเนื้อหาลงใน placeholder ที่จองที่ไว้แล้วตั้งแต่แถวบนสุด (ใต้การ์ด
+        # ราคาทองคำแท่ง/ทองรูปพรรณ) แทนที่จะวาดการ์ดใหม่ตรงนี้ ตำแหน่งที่เห็นจริงบนจอจะอยู่
+        # แถว 2 ต่อจากราคาทองทันที ตามที่ขอ ถึงแม้โค้ดคำนวณจะอยู่ตรงนี้ก็ตาม
+        render_metric_card(gold_summary_placeholder_1, "มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿", icon="💰")
+        render_metric_card(gold_summary_placeholder_2, "มูลค่าตั้งต้นรวม", f"{total_cost_value:,.2f} ฿", icon="📦")
+        render_metric_card(gold_summary_placeholder_3, "กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿", icon="📈",
+                            delta=f"{total_pl_pct:,.2f}%", delta_positive=(total_pl >= 0))
 
         if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
             st.session_state['gold_portfolio'] = []
