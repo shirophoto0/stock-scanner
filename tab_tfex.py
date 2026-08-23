@@ -302,8 +302,12 @@ def render_tab_tfex():
                 }
             ))
 
-            fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(style_plotly(fig_gauge), use_container_width=True)
+            # 🔧 แก้บั๊ก: เดิมกราฟ Gauge นี้ขยับขนาดตามพื้นที่ว่าง (use_container_width=True)
+            # ทำให้พอเปิด/ปิดแถบตัวกรองด้านข้าง พื้นที่กว้าง-แคบเปลี่ยน สัดส่วนกราฟเปลี่ยนตาม
+            # ตัวเลขตรงกลางเลยเยื้องออกจากจุดกึ่งกลางของครึ่งวงกลม ตอนนี้กำหนดขนาดคงที่แทน
+            # เพื่อให้ตำแหน่งตัวเลขนิ่งอยู่ตรงกลางเสมอไม่ว่าจะเปิด/ปิดแถบตัวกรองก็ตาม
+            fig_gauge.update_layout(height=250, width=350, margin=dict(l=20, r=20, t=50, b=20))
+            st.plotly_chart(style_plotly(fig_gauge), use_container_width=False)
 
         st.divider()
 
