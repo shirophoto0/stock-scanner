@@ -8,6 +8,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 from backend_functions import IM_PER_CONTRACT, get_auto_atr_cached, load_data, save_cash_to_gsheet, save_data_to_sheet, update_trade_close, get_active_sheet_name
+from theme import style_plotly
 
 
 def render_tab_tfex():
@@ -276,7 +277,7 @@ def render_tab_tfex():
                 marker_colors=['#26A69A', '#EF5350']
             ))
             fig_winloss.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), showlegend=True)
-            st.plotly_chart(fig_winloss, use_container_width=True)
+            st.plotly_chart(style_plotly(fig_winloss), use_container_width=True)
 
         with col_right:
             # 2. สร้าง Gauge Chart (กราฟ Margin เดิมของคุณ)
@@ -302,7 +303,7 @@ def render_tab_tfex():
             ))
 
             fig_gauge.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(fig_gauge, use_container_width=True)
+            st.plotly_chart(style_plotly(fig_gauge), use_container_width=True)
 
         st.divider()
 
@@ -595,7 +596,7 @@ def render_tab_tfex():
                         hovermode="x unified"
                     )
 
-                    st.plotly_chart(fig_growth, use_container_width=True)
+                    st.plotly_chart(style_plotly(fig_growth), use_container_width=True)
                 else:
                     st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
             else:
@@ -682,7 +683,7 @@ def render_tab_tfex():
                     fig.update_yaxes(title_text="กำไร/ขาดทุน (บาท)", range=y1_range, secondary_y=False)
                     fig.update_yaxes(title_text="% สะสม", range=y2_range, secondary_y=True)
 
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(style_plotly(fig), use_container_width=True)
 
                     # 5. สร้างตารางสรุป
                     def color_negative_red(val):
