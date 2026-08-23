@@ -19,7 +19,7 @@ from backend_functions import (
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name
 )
-from theme import style_plotly
+from theme import style_plotly, style_altair, get_theme_colors
 
 
 def render_tab_stock():
@@ -238,7 +238,7 @@ def render_tab_stock():
 
                             rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
 
-                            st.altair_chart((chart_bar + text_labels + rule).properties(height=350), use_container_width=True)
+                            st.altair_chart(style_altair((chart_bar + text_labels + rule).properties(height=350)), use_container_width=True)
 
                     with c2:
                         with st.container(border=True):
@@ -321,7 +321,7 @@ def render_tab_stock():
                                         height=350
                                     ).interactive()
 
-                                    st.altair_chart(chart_line, use_container_width=True)
+                                    st.altair_chart(style_altair(chart_line), use_container_width=True)
                                 else:
                                     st.info("ไม่มีข้อมูลในช่วงเวลาที่เลือก")
                             else:
@@ -527,12 +527,19 @@ def render_tab_stock():
 
                             display_sector_df.columns = ['กลุ่มอุตสาหกรรม (Sector)', 'เงินลงทุนรวม (บาท)', 'กำไร/ขาดทุนสุทธิ (บาท)', '% ผลตอบแทน', 'รายชื่อหุ้นที่เกี่ยวข้อง']
 
+                            # 🔧 แก้บั๊ก: ตารางแบบ Styler นี้ CSS ของหน้าเว็บธรรมดาเข้าไม่ถึงพื้นหลัง/สีตัวอักษร
+                            # ต้องกำหนดสีตรงๆ ผ่าน .set_properties() แทน โดยดึงสีตามโหมดปัจจุบันจาก theme.py
+                            _tc = get_theme_colors()
                             st.dataframe(
                                 display_sector_df.style.format({
                                     'เงินลงทุนรวม (บาท)': '{:,.2f}',
                                     'กำไร/ขาดทุนสุทธิ (บาท)': '{:,.2f}',
                                     '% ผลตอบแทน': '{:+.2f}%'
-                                }).set_properties(**{'text-align': 'right'}), 
+                                }).set_properties(**{
+                                    'text-align': 'right',
+                                    'background-color': _tc['bg'],
+                                    'color': _tc['text'],
+                                }), 
                                 use_container_width=True
                             )
                         else:
@@ -760,7 +767,19 @@ def render_tab_stock():
                     chart_data = chart_data.ffill() 
                     chart_data = chart_data.fillna(0)
 
-                    st.line_chart(chart_data)
+                    # 🔧 แก้บั๊ก: เปลี่ยนจาก st.line_chart (กราฟพื้นฐานที่ปรับสีพื้นหลังเองไม่ได้)
+                    # มาใช้ Altair แทน เพื่อให้ปรับตามโหมด Dark/Light ของแอปได้เหมือนกราฟจุดอื่นๆ
+                    chart_data_long = chart_data.reset_index().melt(
+                        id_vars='วันที่', var_name='พอร์ต', value_name='กำไรสะสม (บาท)'
+                    )
+                    line_compare_chart = alt.Chart(chart_data_long).mark_line(strokeWidth=2.5).encode(
+                        x=alt.X('วันที่:T', title='วันที่'),
+                        y=alt.Y('กำไรสะสม (บาท):Q', title='กำไรสะสม (บาท)'),
+                        color=alt.Color('พอร์ต:N', scale=alt.Scale(range=['#C9A961', '#4ADE80']), legend=alt.Legend(title=None)),
+                        tooltip=['วันที่', 'พอร์ต', 'กำไรสะสม (บาท)']
+                    ).properties(height=350).interactive()
+
+                    st.altair_chart(style_altair(line_compare_chart), use_container_width=True)
 
     #########################            
     with tab_portfolio:
