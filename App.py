@@ -63,30 +63,15 @@ show_user_bar()
 # ส่วนเร่ิมต้นของ file
 # =============================================================
 # 📌 ตรวจสอบและดึงข้อมูลจากแท็บ JournalData มาเก็บไว้ใน session_state
-# 🔧 แก้บั๊ก: ย้ายบล็อกนี้ออกมาจากใน calculate_rsi() (เดิมเยื้องผิดจนไปติดอยู่ในฟังก์ชันนั้น
-# ทำให้โค้ดนี้ถูกเรียกซ้ำทุกครั้งที่คำนวณ RSI ของหุ้นแต่ละตัว แทนที่จะรันแค่ครั้งเดียวตอนเปิดแอป
-# ซึ่งอาจเป็นสาเหตุที่ทำให้ยิง Google Sheets ซ้ำๆ จนโควตาเกินได้)
+# 🔧 แก้บั๊ก: เดิมจุดนี้มีโค้ดโหลด JournalData ซ้ำกันหลายรอบ (ทั้งเขียนเองตรงนี้ และเรียก
+# load_journal() ซ้ำอีกทีข้างล่าง) โดยจุดที่เขียนเองไม่มีระบบลองใหม่อัตโนมัติเลย พอเจอโควตา
+# Google Sheets ชั่วคราว (429 - พบบ่อยตอนสลับผู้ใช้ที่มีหลายแท็บยิงขอข้อมูลพร้อมกัน) จะพังทันที
+# ตอนนี้เรียกใช้ load_journal()/load_portfolio() ที่มีระบบลองใหม่อัตโนมัติแล้วแทน ไม่ซ้ำซ้อนอีกต่อไป
 if 'journal_data' not in st.session_state or not st.session_state.journal_data:
-    try:
-        client = get_gsheet_client()
-        # ดึงข้อมูลจากชีท JournalData ที่คุณใช้งานอยู่
-        sheet_journal = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData') 
-        st.session_state.journal_data = sheet_journal.get_all_records()
-    except Exception as e:
-        st.session_state.journal_data = []
-            
-if "journal_data" not in st.session_state:
-    load_journal()   # <--- ใส่บรรทัดนี้ลงไปครับ! มันจะช่วยดึงข้อมูลจากไฟล์มาโชว์ตอนเปิดแอป
-
-if "my_portfolio" not in st.session_state:
-    load_portfolio()
-
-# เรียกโหลดข้อมูลทุกครั้งที่รันแอปฯ
-if "my_portfolio" not in st.session_state:
-    load_portfolio()
-
-if "journal_data" not in st.session_state:
     load_journal()
+
+if "my_portfolio" not in st.session_state:
+    load_portfolio()
 
 if 'dividend_data' not in st.session_state:
     st.session_state.dividend_data = load_dividend_data()
