@@ -2761,6 +2761,10 @@ def main():
                         # ถ้าหุ้นที่เลือกเปลี่ยนไปจากเดิม ถึงจะสั่ง Rerun
                         if st.session_state.get("selected_ticker") != clicked_ticker:
                             st.session_state.selected_ticker = clicked_ticker
+                            # 🔧 แก้บั๊ก: ต้อง sync ค่าให้ dropdown ด้านบน (key="tech_stock_selectbox")
+                            # ด้วย ไม่งั้น dropdown จะจำค่าเก่าของตัวเองและเขียนทับค่านี้กลับไป
+                            # ทำให้ Fundamental Dashboard ไม่เปลี่ยนตามตารางที่เพิ่งกด
+                            st.session_state["tech_stock_selectbox"] = clicked_ticker
                             st.rerun()
                     else:
                         # กรณีตารางถูกกรองจน Index เดิมหายไป (เช่น สลับหน้าเทรด) 
