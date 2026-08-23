@@ -19,7 +19,7 @@ from backend_functions import (
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name
 )
-from theme import style_plotly, style_altair, get_theme_colors
+from theme import style_plotly, style_altair, get_theme_colors, render_metric_card
 
 
 def render_tab_stock():
@@ -106,18 +106,14 @@ def render_tab_stock():
                 historical_profit = 77420.5
                 total_net_profit = df_filtered['กำไร/ขาดทุน (บาท)'].sum() + historical_profit
 
-                # แสดง Metric กำไร/ขาดทุนสุทธิ
-                col1.metric("กำไร/ขาดทุนสุทธิ", f"{total_net_profit:,.2f} ฿")
-
-                # ใส่ Note สีเทาอ่อนไว้ใต้ Metric ของ col1
-                col1.markdown(
-                    "<span style='color: #888888; font-size: 0.8em;'>historical profit 2018-2025 = 77,420.50</span>", 
-                    unsafe_allow_html=True
-                )
-                col2.metric("ค่าเฉลี่ยต่อไม้ (%):", f"{df_clean['% ROI'].mean():.2f} %")
-                col3.metric("Win Rate", f"{(len(wins)/len(df_filtered)*100):.1f}%" if not df_filtered.empty else "0%")
-                col4.metric("Profit Factor", f"{(wins['กำไร/ขาดทุน (บาท)'].sum() / abs(losses['กำไร/ขาดทุน (บาท)'].sum())):.2f}" if not losses.empty and losses['กำไร/ขาดทุน (บาท)'].sum() != 0 else "N/A")
-                col5.metric("Realized R:R", f"{rr_ratio_actual:.2f} : 1")
+                # 🔧 ปรับปรุง: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดสไตล์เดียวกับหน้าภาพรวม Net Worth
+                # (เรียกใช้ผ่าน theme.py เพื่อให้หน้าตาไปในทิศทางเดียวกันทั้งแอป)
+                render_metric_card(col1, "กำไร/ขาดทุนสุทธิ", f"{total_net_profit:,.2f} ฿", icon="💵",
+                                    caption="historical profit 2018-2025 = 77,420.50")
+                render_metric_card(col2, "ค่าเฉลี่ยต่อไม้ (%)", f"{df_clean['% ROI'].mean():.2f} %", icon="📊")
+                render_metric_card(col3, "Win Rate", f"{(len(wins)/len(df_filtered)*100):.1f}%" if not df_filtered.empty else "0%", icon="🎯")
+                render_metric_card(col4, "Profit Factor", f"{(wins['กำไร/ขาดทุน (บาท)'].sum() / abs(losses['กำไร/ขาดทุน (บาท)'].sum())):.2f}" if not losses.empty and losses['กำไร/ขาดทุน (บาท)'].sum() != 0 else "N/A", icon="⚖️")
+                render_metric_card(col5, "Realized R:R", f"{rr_ratio_actual:.2f} : 1", icon="📏")
 
                 st.markdown("---")
                 st.markdown("##### 🔍 สถิติการเทรดเชิงลึก")
@@ -143,9 +139,12 @@ def render_tab_stock():
                     worst_pct = df_filtered.loc[idx_worst, 'Profit_Pct']
 
                     # 4. แสดงผล 3 ช่อง
-                    col_s1.metric("Max Drawdown", f"{max_drawdown:.1f}%")
-                    col_s2.metric("กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", f"{best_pct:.1f}%")
-                    col_s3.metric("ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", f"{worst_pct:.1f}%")
+                    # 🔧 ปรับปรุง: เปลี่ยนเป็นการ์ดสไตล์เดียวกัน พร้อม badge สีเขียว/แดงบอกทิศทาง
+                    render_metric_card(col_s1, "Max Drawdown", f"{max_drawdown:.1f}%", icon="📉")
+                    render_metric_card(col_s2, "กำไรสูงสุดต่อไม้", f"{best_val:,.0f} ฿", icon="🏆",
+                                        delta=f"{best_pct:.1f}%", delta_positive=True)
+                    render_metric_card(col_s3, "ขาดทุนหนักสุดต่อไม้", f"{worst_val:,.0f} ฿", icon="⚠️",
+                                        delta=f"{worst_pct:.1f}%", delta_positive=False)
                 else:
                     st.info(f"ℹ️ ไม่มีข้อมูลการเทรดในช่วงเวลาที่เลือก")
 
