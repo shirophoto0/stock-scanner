@@ -13,32 +13,34 @@ from theme import style_plotly
 
 def _asset_card(col, icon, label, value, pct_base=None):
     """
-    🆕 การ์ดแสดงสินทรัพย์แต่ละประเภทแบบทันสมัย (แทนที่ st.metric เดิม)
+    การ์ดแสดงสินทรัพย์แต่ละประเภทแบบทันสมัย (แทนที่ st.metric เดิม)
     มีไอคอนที่ตรงกับประเภทสินทรัพย์ + แถบเปอร์เซ็นต์เทียบสัดส่วน ให้เห็นน้ำหนักของแต่ละ
     ก้อนสินทรัพย์ได้เร็วๆ โดยไม่ต้องเลื่อนไปดูกราฟโดนัทด้านล่าง
+    🔧 แก้บั๊ก: เดิมเขียน HTML แบบหลายบรรทัดมีการเว้นวรรคหน้าบรรทัด (indent) ตามสไตล์โค้ด Python
+    ทำให้ Markdown parser ของ Streamlit เข้าใจผิดว่าเป็น "โค้ดบล็อก" แล้วโชว์เป็นข้อความดิบ
+    แทนที่จะแปลงเป็น HTML จริง ตอนนี้เขียนเป็นสตริงต่อเนื่องบรรทัดเดียว ไม่มีการเว้นวรรคนำหน้าเลย
     """
     pct_html = ""
     if pct_base and pct_base > 0:
         pct = (value / pct_base) * 100
-        pct_html = f"""
-            <div style="background:#F1EEE8; border-radius:6px; height:5px; margin-top:10px; overflow:hidden;">
-                <div style="background:#7C9885; height:100%; width:{min(pct, 100):.1f}%;"></div>
-            </div>
-            <div style="color:#9CA3AF; font-size:0.72em; margin-top:4px; font-family:'Sarabun',sans-serif;">{pct:.1f}%</div>
-        """
-    col.markdown(f"""
-        <div style="background:#FFFFFF; border:1px solid #E5E1D8; border-radius:14px;
-                    padding:16px 18px; box-shadow:0 2px 10px rgba(45,49,66,0.06); margin-bottom:14px;">
-            <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-                <span style="font-size:22px; line-height:1;">{icon}</span>
-                <span style="color:#6B7280; font-size:0.85em; font-family:'Sarabun',sans-serif;">{label}</span>
-            </div>
-            <div style="font-family:'Prompt',sans-serif; font-size:1.55em; font-weight:600; color:#2D3142;">
-                {value:,.0f} ฿
-            </div>
-            {pct_html}
-        </div>
-    """, unsafe_allow_html=True)
+        pct_html = (
+            '<div style="background:#F1EEE8;border-radius:6px;height:5px;margin-top:10px;overflow:hidden;">'
+            f'<div style="background:#7C9885;height:100%;width:{min(pct, 100):.1f}%;"></div></div>'
+            f'<div style="color:#9CA3AF;font-size:0.72em;margin-top:4px;font-family:\'Sarabun\',sans-serif;">{pct:.1f}%</div>'
+        )
+    card_html = (
+        '<div style="background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
+        'padding:16px 18px;box-shadow:0 2px 10px rgba(45,49,66,0.06);margin-bottom:14px;">'
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+        f'<span style="font-size:22px;line-height:1;">{icon}</span>'
+        f'<span style="color:#6B7280;font-size:0.85em;font-family:\'Sarabun\',sans-serif;">{label}</span>'
+        '</div>'
+        '<div style="font-family:\'Prompt\',sans-serif;font-size:1.55em;font-weight:600;color:#2D3142;">'
+        f'{value:,.0f} ฿</div>'
+        f'{pct_html}'
+        '</div>'
+    )
+    col.markdown(card_html, unsafe_allow_html=True)
 
 
 def render_tab_overview():
@@ -240,23 +242,25 @@ def render_tab_overview():
     # --- 4. แสดงผลใน Metrics ย่อย ---
     with st.container(border=True):
         st.markdown("#### 💼 สินทรัพย์สภาพคล่องและการลงทุน")
-        # 🆕 ปรับปรุงหน้าตา: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดที่มีไอคอนตรงกับประเภท
-        # สินทรัพย์แต่ละแบบ พร้อมแถบเปอร์เซ็นต์เทียบกับ Net Worth รวม ให้ดูทันสมัยและเห็น
-        # สัดส่วนได้ไวขึ้น (ไอคอน: 📈 หุ้น/TFEX, 🧺 กองทุนรวม, 🏛️ PVD, 🛡️ ประกัน, 🤝 สหกรณ์,
+        # 🔧 ปรับปรุง: เปลี่ยนจากเรียง 4-4-1 เป็น 3-3-3 (มีทั้งหมด 9 รายการพอดี) ให้ดูสมมาตร
+        # สวยงามขึ้น (ไอคอน: 📈 หุ้น/TFEX, 🧺 กองทุนรวม, 🏛️ PVD, 🛡️ ประกัน, 🤝 สหกรณ์,
         # 👥 ประกันสังคม, 🏦 ธนาคาร, 🌅 บำนาญ, 🥇 ทองคำ)
-        row1_col1, row1_col2, row1_col3, row1_col4 = st.columns(4)
+        row1_col1, row1_col2, row1_col3 = st.columns(3)
         _asset_card(row1_col1, "📈", "พอร์ตหุ้น + TFEX", total_stock_and_tfex, net_worth_total)
         _asset_card(row1_col2, "🧺", "กองทุนรวม", mutual_fund_value, net_worth_total)
         _asset_card(row1_col3, "🏛️", "กองทุนสำรองเลี้ยงชีพ", pvd_value, net_worth_total)
-        _asset_card(row1_col4, "🛡️", "ประกัน Unit Linked", insurance_value, net_worth_total)
 
-        row2_col1, row2_col2, row2_col3, row2_col4 = st.columns(4)
-        _asset_card(row2_col1, "🤝", "สหกรณ์ฯ", coop_value, net_worth_total)
-        _asset_card(row2_col2, "👥", "ประกันสังคม", sso_value, net_worth_total)
-        _asset_card(row2_col3, "🏦", "บัญชีธนาคาร", bank_balance, net_worth_total)
-        _asset_card(row2_col4, "🌅", "ประกันบำนาญ", pension_insurance_value, net_worth_total)
+        row2_col1, row2_col2, row2_col3 = st.columns(3)
+        _asset_card(row2_col1, "🛡️", "ประกัน Unit Linked", insurance_value, net_worth_total)
+        _asset_card(row2_col2, "🤝", "สหกรณ์ฯ", coop_value, net_worth_total)
+        _asset_card(row2_col3, "👥", "ประกันสังคม", sso_value, net_worth_total)
 
-        # ย้าย Note มาไว้ใต้การ์ดประกันบำนาญ
+        row3_col1, row3_col2, row3_col3 = st.columns(3)
+        _asset_card(row3_col1, "🏦", "บัญชีธนาคาร", bank_balance, net_worth_total)
+        _asset_card(row3_col2, "🌅", "ประกันบำนาญ", pension_insurance_value, net_worth_total)
+        _asset_card(row3_col3, "🥇", "พอร์ตทองคำ", total_gold_value, net_worth_total)
+
+        # ย้าย Note มาไว้ใต้การ์ดประกันบำนาญ (ตอนนี้อยู่แถว 3 คอลัมน์ 2)
         if all_data["pension"]:
             pension_notes_html = '<div style="margin-top: -8px; margin-bottom: 5px;">'
             for row in all_data["pension"]:
@@ -274,10 +278,7 @@ def render_tab_overview():
             pension_notes_html += '</div>'
 
             # แสดงผลข้อความไว้ใต้ช่องประกันบำนาญโดยตรง
-            row2_col4.markdown(pension_notes_html, unsafe_allow_html=True)
-
-        row3_col1, _, _, _ = st.columns(4)
-        _asset_card(row3_col1, "🥇", "พอร์ตทองคำ", total_gold_value, net_worth_total)
+            row3_col2.markdown(pension_notes_html, unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
