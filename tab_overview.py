@@ -8,6 +8,7 @@ import time
 import plotly.graph_objects as go
 import plotly.express as px
 from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value
+from theme import style_plotly
 
 
 def render_tab_overview():
@@ -278,7 +279,7 @@ def render_tab_overview():
                 )
                 fig_donut.update_traces(textposition='inside', textinfo='percent+label')
                 fig_donut.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False)
-                st.plotly_chart(fig_donut, use_container_width=True, key="donut_main_chart")
+                st.plotly_chart(style_plotly(fig_donut), use_container_width=True, key="donut_main_chart")
             else:
                 st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟโดนัท")
 
@@ -291,7 +292,7 @@ def render_tab_overview():
                 )
                 fig_bar.update_traces(texttemplate='%{text:,.0f} ฿', textposition='outside')
                 fig_bar.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, xaxis_title="", yaxis_title="บาท")
-                st.plotly_chart(fig_bar, use_container_width=True, key="bar_main_chart")
+                st.plotly_chart(style_plotly(fig_bar), use_container_width=True, key="bar_main_chart")
             else:
                 st.info("ยังไม่มีข้อมูลสำหรับแสดงกราฟแท่ง")
 
@@ -365,7 +366,7 @@ def render_tab_overview():
                 fig.update_layout(yaxis=dict(range=[0, (df_merged['Total'].max() * 1.2) if df_merged['Total'].max() > 0 else 12000000], tickformat=",.0f"),
                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
 
-                st.plotly_chart(fig, use_container_width=True, key="net_worth_trend_chart_final")
+                st.plotly_chart(style_plotly(fig), use_container_width=True, key="net_worth_trend_chart_final")
             else:
                 st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
         except Exception as e:
