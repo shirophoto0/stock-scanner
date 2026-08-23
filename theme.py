@@ -81,6 +81,42 @@ h1, h2, h3, h4, h5, h6 {
 """
 
 
+def render_metric_card(col, label, value, icon="", delta=None, delta_positive=None, caption=None):
+    """
+    🆕 การ์ดตัวเลขสไตล์เดียวกับหน้าภาพรวม Net Worth (กรอบมน/เงา/ฟอนต์) ใช้แทน st.metric()
+    ธรรมดาได้ทุกจุดในแอป เพื่อให้หน้าตาไปในทิศทางเดียวกันทั้งหมด
+    - icon: ไอคอนหน้าป้ายชื่อ (ใส่หรือไม่ใส่ก็ได้)
+    - value: ค่าที่ต้องการโชว์ตัวใหญ่ (ใส่เป็นข้อความที่จัดรูปแบบมาแล้ว เช่น "1,234.00 ฿")
+    - delta + delta_positive: badge เล็กๆ ใต้ตัวเลข (True=เขียว, False=แดง, None=เทาเฉยๆ)
+    - caption: ข้อความหมายเหตุเล็กๆ สีเทา ต่อท้ายล่างสุด
+    """
+    icon_html = f'<span style="font-size:18px;margin-right:6px;">{icon}</span>' if icon else ''
+    delta_html = ""
+    if delta is not None:
+        if delta_positive is True:
+            color, bg, arrow = "#4E9A6E", "rgba(78,154,110,0.12)", "↑"
+        elif delta_positive is False:
+            color, bg, arrow = "#E0798A", "rgba(224,121,138,0.12)", "↓"
+        else:
+            color, bg, arrow = "#6B7280", "rgba(107,114,128,0.12)", ""
+        delta_html = (
+            f'<span style="display:inline-block;background:{bg};color:{color};'
+            f'font-size:0.78em;font-weight:600;padding:2px 9px;border-radius:12px;margin-top:8px;">'
+            f'{arrow} {delta}</span>'
+        )
+    caption_html = f'<div style="color:#9CA3AF;font-size:0.72em;margin-top:6px;">{caption}</div>' if caption else ''
+    card_html = (
+        '<div style="background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
+        'padding:16px 18px;box-shadow:0 2px 10px rgba(45,49,66,0.06);margin-bottom:14px;">'
+        f'<div style="color:#6B7280;font-size:0.85em;font-family:\'Sarabun\',sans-serif;margin-bottom:6px;">{icon_html}{label}</div>'
+        f'<div style="font-family:\'Prompt\',sans-serif;font-size:1.55em;font-weight:600;color:#2D3142;">{value}</div>'
+        f'{delta_html}'
+        f'{caption_html}'
+        '</div>'
+    )
+    col.markdown(card_html, unsafe_allow_html=True)
+
+
 def get_theme_colors():
     """
     คืนค่าสีอ้างอิงของธีม — ใช้กับจุดที่ CSS/config.toml เข้าไม่ถึง
