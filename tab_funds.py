@@ -5,7 +5,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-from backend_functions import calculate_fund_result, get_gsheet_client
+from backend_functions import calculate_fund_result, get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name
 
 
 def render_tab_funds():
@@ -34,8 +34,10 @@ def render_tab_funds():
                 else:
                     try:
                         client = get_gsheet_client()
-                        spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU' # ใช้ ID เดิมของคุณ
-                        sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
+                        # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ (ไม่ใช่ชื่อ "MyStockData")
+                        # ทำให้ไม่ว่าใคร login เข้ามาก็จะไปอ่าน/เขียนไฟล์เดียวกันเป๊ะๆ เสมอ ไม่แยกตามผู้ใช้
+                        # เปลี่ยนมาใช้ระบบเดียวกับแท็บอื่น (เปิดตามชื่อชีตของผู้ใช้ที่ login อยู่)
+                        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Fund_History')
 
                         # หา Fund_ID ถัดไป
                         existing_data = sheet.get_all_records()
@@ -68,7 +70,8 @@ def render_tab_funds():
         # 1. ดึงข้อมูลกองทุนทั้งหมดมาทำ Dropdown
         try:
             client = get_gsheet_client()
-            sheet = client.open_by_key('1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU').worksheet('Fund_History')
+            # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
+            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Fund_History')
 
             all_data = sheet.get_all_records()
 
@@ -138,8 +141,8 @@ def render_tab_funds():
         st.markdown("### สรุปมูลค่าพอร์ตลงทุน")
         try:
             client = get_gsheet_client()
-            spreadsheet_id = '1moD7gjKnnLXDvCTfwVVhBmDwo5t0c7emErGbtJtGEWU'
-            sheet = client.open_by_key(spreadsheet_id).worksheet('Fund_History')
+            # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
+            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Fund_History')
             summary_df = pd.DataFrame(sheet.get_all_records())
 
             if not summary_df.empty and 'Status' in summary_df.columns:
