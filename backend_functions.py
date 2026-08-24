@@ -229,6 +229,86 @@ def remove_from_watchlist(ticker):
         return False, f"ลบไม่สำเร็จ: {e}"
 
 
+def update_watchlist_target(ticker, target_price, direction):
+    """
+    🆕 ตั้ง/แก้ราคาเป้าหมายของหุ้นใน Watchlist (ใช้กับระบบแจ้งเตือนราคาผ่าน Telegram)
+    direction: 'below' (แจ้งเตือนตอนราคาลงมาถึง/ต่ำกว่าเป้าหมาย) หรือ 'above' (แจ้งเตือนตอนราคา
+    ขึ้นมาถึง/เกินเป้าหมาย) ทุกครั้งที่ตั้งราคาเป้าหมายใหม่ จะรีเซ็ตสถานะ "เคยแจ้งเตือนแล้ว" กลับ
+    เป็นยังไม่เคยแจ้งเสมอ (เผื่อกรณีตั้งราคาเป้าหมายใหม่ทับของเดิมที่เคยแจ้งเตือนไปแล้ว)
+    คืนค่าเป็น (สำเร็จหรือไม่: bool, ข้อความ: str) ต้องมีคอลัมน์ Target_Price, Target_Direction,
+    Alert_Sent ในชีต Watchlist ก่อน (คอลัมน์ที่ 5, 6, 7 ตามลำดับ)
+    """
+    ticker = str(ticker).strip().upper()
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        cell = sheet.find(ticker)
+        if not cell:
+            return False, f"ไม่พบ {ticker} ใน Watchlist"
+        sheet.update_cell(cell.row, 5, target_price)
+        sheet.update_cell(cell.row, 6, direction)
+        sheet.update_cell(cell.row, 7, "FALSE")
+        return True, f"ตั้งราคาเป้าหมาย {ticker} ที่ {target_price} ({'ลงมาถึง' if direction == 'below' else 'ขึ้นมาถึง'}) เรียบร้อย"
+    except Exception as e:
+        return False, f"ตั้งราคาเป้าหมายไม่สำเร็จ: {e}"
+
+
+def check_watchlist_price_alerts(spreadsheet_name, df_scan_latest):
+    """
+    🆕 เช็คหุ้นใน Watchlist ของบัญชีที่ระบุ ว่าตัวไหนราคาปัจจุบันถึงเป้าหมายที่ตั้งไว้แล้วบ้าง
+    (และยังไม่เคยแจ้งเตือนมาก่อนสำหรับเป้าหมายนี้) เทียบกับราคาล่าสุดจาก df_scan_latest (ผลสแกน
+    หุ้นวันนี้) ตัวไหนเข้าเงื่อนไข จะทำเครื่องหมายว่า "แจ้งเตือนแล้ว" ในชีตทันที (กันแจ้งซ้ำ) แล้ว
+    คืนค่าเป็น list of dict [{'ticker':..., 'target_price':..., 'direction':..., 'current_price':...}]
+    """
+    triggered = []
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('Watchlist')
+        records = sheet.get_all_records()
+    except Exception:
+        return triggered
+
+    if not records or df_scan_latest is None or df_scan_latest.empty or 'Ticker' not in df_scan_latest.columns:
+        return triggered
+
+    price_map = dict(zip(df_scan_latest['Ticker'], df_scan_latest['ราคาล่าสุด']))
+
+    for idx, row in enumerate(records):
+        ticker = str(row.get('Ticker', '')).strip().upper()
+        target_price = row.get('Target_Price')
+        direction = str(row.get('Target_Direction', '')).strip().lower()
+        already_sent = str(row.get('Alert_Sent', '')).strip().upper() == 'TRUE'
+
+        if not ticker or not target_price or already_sent or direction not in ('below', 'above'):
+            continue
+        try:
+            target_price = float(target_price)
+        except (ValueError, TypeError):
+            continue
+
+        current_price = price_map.get(ticker)
+        if current_price is None:
+            continue
+        try:
+            current_price = float(current_price)
+        except (ValueError, TypeError):
+            continue
+
+        _hit = (direction == 'below' and current_price <= target_price) or \
+               (direction == 'above' and current_price >= target_price)
+        if _hit:
+            triggered.append({
+                'ticker': ticker, 'target_price': target_price,
+                'direction': direction, 'current_price': current_price
+            })
+            try:
+                sheet.update_cell(idx + 2, 7, "TRUE")  # +2 = ชดเชยแถวหัวตาราง + index เริ่มที่ 0
+            except Exception:
+                pass
+
+    return triggered
+
+
 def extract_pvd_from_image(image_file, year_be, month_name="ธันวาคม"):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY", "")
