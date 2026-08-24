@@ -257,6 +257,12 @@ def render_tab_overview():
                          bank_balance + total_gold_value + mutual_fund_value)
     net_worth_total = net_worth_excl_re + total_real_estate
 
+    # 🆕 เก็บค่าไว้ใน session_state ให้แท็บ "🎯 เกษียณอายุ" ดึงไปใช้ต่อได้เลย (ไม่ต้องคำนวณซ้ำ /
+    # ไม่ต้องให้ผู้ใช้กรอกเอง) ปลอดภัยเพราะ Streamlit รันโค้ดของ main_tab_wealth (ที่แท็บนี้อยู่)
+    # ก่อน main_tab_retirement เสมอตามลำดับการประกาศใน App.py
+    st.session_state['net_worth_excl_re'] = net_worth_excl_re
+    st.session_state['pvd_value'] = pvd_value
+
     # --- 3. แสดงผล Net Worth ทั้งสองแบบ ---
     # 🔧 ปรับปรุง: เปลี่ยนจากกล่องสีเขียวธรรมดา เป็นการ์ดสไตล์เดียวกับสินทรัพย์ย่อยด้านล่าง
     # (กรอบ/เงา/ฟอนต์เหมือนกัน) พร้อมไอคอน 💰/💎 และจัดข้อความกึ่งกลางกล่อง
