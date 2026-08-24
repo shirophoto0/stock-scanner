@@ -5,9 +5,10 @@
 import streamlit as st
 import pandas as pd
 import time
+from datetime import date
 import plotly.graph_objects as go
 import plotly.express as px
-from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history
+from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history, generate_net_worth_pdf_report
 from theme import style_plotly
 
 
@@ -448,3 +449,38 @@ def render_tab_overview():
                 st.info("💡 ยังไม่มีข้อมูลเพียงพอสำหรับแสดงกราฟแนวโน้ม")
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลกราฟ: {e}")
+
+    # 3. ปุ่มส่งออกรายงาน Net Worth เป็น PDF
+    # 🆕 รายงานเป็นภาษาอังกฤษ (ตามที่ตกลงไว้) เพื่อไม่ต้องฝังไฟล์ฟอนต์ไทยเพิ่มเติมใน repo
+    # (ฟอนต์มาตรฐานของ reportlab ไม่รองรับภาษาไทย) ใช้ตัวเลขที่คำนวณไว้แล้วด้านบนทั้งหมด
+    # ไม่ต้องคำนวณซ้ำ
+    st.divider()
+    with st.container(border=True):
+        st.markdown("### 📄 ส่งออกรายงาน Net Worth")
+        st.caption("สร้างรายงานสรุปสินทรัพย์ทั้งหมดเป็นไฟล์ PDF ดาวน์โหลดเก็บไว้ดูนอกแอปได้ (ภาษาอังกฤษ)")
+        try:
+            _pdf_app_title = st.session_state.get("app_title", "Wealth Report")
+            _pdf_asset_breakdown = [
+                ("Stock + TFEX Portfolio", total_stock_and_tfex),
+                ("Mutual Funds", mutual_fund_value),
+                ("Provident Fund (PVD)", pvd_value),
+                ("Unit-Linked Insurance", insurance_value),
+                ("Cooperative Fund", coop_value),
+                ("Social Security Fund", sso_value),
+                ("Bank Accounts", bank_balance),
+                ("Pension Insurance", pension_insurance_value),
+                ("Gold", total_gold_value),
+                ("Real Estate", total_real_estate),
+            ]
+            _pdf_bytes = generate_net_worth_pdf_report(
+                _pdf_app_title, net_worth_excl_re, net_worth_total, _pdf_asset_breakdown
+            )
+            st.download_button(
+                "📥 ดาวน์โหลดรายงาน PDF",
+                data=_pdf_bytes,
+                file_name=f"net_worth_report_{date.today().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.warning(f"ยังไม่สามารถสร้างรายงาน PDF ได้ในขณะนี้: {e}")
