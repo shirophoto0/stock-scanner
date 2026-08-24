@@ -8,7 +8,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from constants import SET100_TICKERS
-from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet, load_and_calculate_stock_data_optimized
+from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet, load_and_calculate_stock_data_optimized, add_to_watchlist
 from theme import style_plotly
 from tab_risk import render_tab_risk
 
@@ -671,6 +671,22 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             on_select="rerun",
             key="stock_table"
         )
+
+        # 🆕 ปุ่มเพิ่มหุ้นที่เลือกอยู่ (จากการคลิกแถวในตาราง) เข้า Watchlist — แยกจากพอร์ตจริง
+        # ไม่ต้องซื้อจริงก็เก็บติดตามได้ ใช้กลไก "หุ้นที่เลือกอยู่" (selected_ticker) ตัวเดียวกับที่
+        # ใช้แสดงกราฟเทคนิคัล/ปัจจัยพื้นฐานอยู่แล้วด้านล่าง ไม่ต้องสร้างกลไกเลือกหุ้นซ้ำอีกชุด
+        _current_selected = st.session_state.get("selected_ticker")
+        if _current_selected:
+            _wl_col1, _wl_col2 = st.columns([3, 1])
+            _wl_col1.caption(f"หุ้นที่เลือกอยู่ตอนนี้: **{_current_selected}** (คลิกแถวในตารางเพื่อเลือกหุ้นตัวอื่น)")
+            if _wl_col2.button(f"⭐ เพิ่ม {_current_selected} เข้า Watchlist", use_container_width=True):
+                _selected_row = final_sorted_df[final_sorted_df['Ticker'] == _current_selected]
+                _price_now = float(_selected_row.iloc[0]['ราคาล่าสุด']) if not _selected_row.empty else 0.0
+                _success, _msg = add_to_watchlist(_current_selected, _price_now)
+                if _success:
+                    st.success(_msg)
+                else:
+                    st.warning(_msg)
 
         # 8. ดึงข้อมูลการเลือกหุ้น (สรุปรวมเหลือบล็อกเดียว)
         if event.selection and "rows" in event.selection and event.selection["rows"]:
