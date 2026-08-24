@@ -1416,6 +1416,14 @@ def load_and_calculate_stock_data_optimized():
                 print(f"⏳ ดึงข้อมูล P/E และปันผลไปแล้ว {i + 1}/{total} ตัว...")
             
             # คำนวณ RS_Line (ข้ามไปถ้าข้อมูลดัชนี SET ไม่พอ ตั้งเป็น 0 แทน)
+            # 🆕 เพิ่มการคำนวณ 3 ค่าที่ตัวกรอง "กลุ่ม RS Line" ในหน้าเว็บต้องใช้ (เดิมมีแค่ค่า
+            # RS_Line ล่าสุดวันเดียว ไม่พอสำหรับดูแนวโน้มย้อนหลัง) โดยเก็บ RS_Line ทั้งช่วงเวลา
+            # (ไม่ใช่แค่ค่าล่าสุด) มาคำนวณต่อ:
+            #   - Is_RS_Above_0: RS_Line ตอนนี้อยู่เหนือเส้น 0 ไหม
+            #   - RS_Line_50D_Max: ค่าสูงสุดของ RS_Line ใน 50 วันที่ผ่านมา (ไม่รวมวันนี้) ใช้เช็คว่า
+            #     วันนี้ทำจุดสูงสุดใหม่หรือยัง
+            #   - ตัดเส้น0ขึ้นมาแล้ว(วัน) / อยู่ใต้เส้น0มาแล้ว(วัน): นับจำนวนวันติดต่อกันล่าสุดที่
+            #     RS_Line อยู่ฝั่งเดียวกับตอนนี้ (บวกต่อเนื่องกี่วัน หรือติดลบต่อเนื่องกี่วัน)
             if set_market_usable:
                 combined = df[['Close']].join(set_market.rename('Market_Close'), how='inner')
                 base_stock = combined['Close'].iloc[0]
@@ -1423,9 +1431,29 @@ def load_and_calculate_stock_data_optimized():
                 
                 stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
                 market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
-                current_rs_val = (stock_perf - market_perf).iloc[-1]
+                rs_line_series = stock_perf - market_perf
+                current_rs_val = rs_line_series.iloc[-1]
+
+                is_rs_above_0 = bool(current_rs_val > 0)
+                rs_line_50d_max = rs_line_series.iloc[:-1].tail(50).max() if len(rs_line_series) > 1 else current_rs_val
+
+                # นับจำนวนวันติดต่อกันล่าสุดที่ RS_Line อยู่ฝั่งเดียวกับปัจจุบัน (นับย้อนจากวันล่าสุด)
+                sign_series = (rs_line_series > 0).tolist()
+                current_sign = sign_series[-1]
+                streak_days = 0
+                for val in reversed(sign_series):
+                    if val == current_sign:
+                        streak_days += 1
+                    else:
+                        break
+                days_above_0 = streak_days if current_sign else 0
+                days_below_0 = streak_days if not current_sign else 0
             else:
                 current_rs_val = 0.0
+                is_rs_above_0 = False
+                rs_line_50d_max = 0.0
+                days_above_0 = 0
+                days_below_0 = 0
             
             # คำนวณค่าทางเทคนิคอื่นๆ (ใช้ค่าจาก df ที่มีอยู่แล้ว)
             latest_price = df['Close'].iloc[-1]
@@ -1467,6 +1495,11 @@ def load_and_calculate_stock_data_optimized():
                 'RS_Line': round(float(current_rs_val), 2),
                 'PE_Ratio': pe_ratio_val,
                 'ปันผล_%': dividend_pct_val,
+                # 🆕 คอลัมน์สำหรับตัวกรอง "กลุ่ม RS Line" ทั้ง 3 แบบในหน้าเว็บ
+                'Is_RS_Above_0': is_rs_above_0,
+                'RS_Line_50D_Max': round(float(rs_line_50d_max), 2),
+                'ตัดเส้น0ขึ้นมาแล้ว(วัน)': days_above_0,
+                'อยู่ใต้เส้น0มาแล้ว(วัน)': days_below_0,
                 'Is_3M_High': latest_price >= (high_3m * 0.95),
                 'Is_6M_High': latest_price >= (high_6m * 0.95),
                 'Is_52W_High': latest_price >= (high_52w * 0.95),
