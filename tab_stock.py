@@ -1140,47 +1140,6 @@ def render_tab_stock():
                         )
                         st.warning(f"⚠️ **กระจุกตัวรายหุ้นสูง** (เกิน 20% ของพอร์ต):\n{_warn_lines}")
 
-                # 🆕 ปันผลที่คาดว่าจะได้รับต่อปี — ประเมินจากมูลค่าตลาดปัจจุบันของแต่ละหุ้น x %
-                # ปันผลล่าสุดที่ได้จาก Daily Scan (คอลัมน์ 'ปันผล_%' ในชีต StockData) เป็นตัวเลข
-                # "คาดการณ์" คร่าวๆ เท่านั้น ไม่ใช่ตัวเลขที่การันตี เพราะบริษัทอาจปรับเปลี่ยนนโยบาย
-                # จ่ายปันผลได้ตลอดเวลา
-                try:
-                    df_div_lookup = load_from_gsheet()
-                    if (
-                        df_div_lookup is not None and not df_div_lookup.empty
-                        and 'Ticker' in df_div_lookup.columns and 'ปันผล_%' in df_div_lookup.columns
-                    ):
-                        _dividend_map = dict(zip(df_div_lookup['Ticker'], df_div_lookup['ปันผล_%']))
-                        _estimated_annual_dividend = sum(
-                            p["มูลค่าตลาด"] * (float(_dividend_map.get(p["หุ้น"], 0) or 0) / 100)
-                            for p in portfolio_list
-                        )
-                        st.divider()
-                        _div_col, _, _ = st.columns(3)
-                        render_metric_card(
-                            _div_col, "ปันผลที่คาดว่าจะได้รับต่อปี", f"{_estimated_annual_dividend:,.0f} ฿",
-                            icon="💸", caption="ประเมินจากมูลค่าพอร์ตปัจจุบัน x % ปันผลล่าสุด (ไม่การันตี)"
-                        )
-
-                        # 🆕 ตารางวันขึ้น XD ล่าสุดของแต่ละหุ้นในพอร์ต (ถ้ามีข้อมูล) ให้เห็นชัดว่า
-                        # % ปันผลที่ใช้คำนวณด้านบนมาจากรอบจ่ายปันผลล่าสุดเมื่อไหร่ เผื่อบางตัวเพิ่งขึ้น
-                        # XD ไปแล้ว (แปลว่ารอบปันผลนั้นอาจไม่ได้รับแล้ว ถ้าเพิ่งซื้อทีหลัง)
-                        if 'Ex_Dividend_Date' in df_div_lookup.columns:
-                            _xd_map = dict(zip(df_div_lookup['Ticker'], df_div_lookup['Ex_Dividend_Date']))
-                            _xd_rows = [
-                                {
-                                    "หุ้น": p["หุ้น"],
-                                    "% ปันผลย้อนหลัง 12 เดือน": _dividend_map.get(p["หุ้น"], 0),
-                                    "วันขึ้น XD ล่าสุด": _xd_map.get(p["หุ้น"], "") or "ไม่มีข้อมูล"
-                                }
-                                for p in portfolio_list
-                            ]
-                            with st.expander("📅 ดูวันขึ้น XD ล่าสุดของแต่ละหุ้นในพอร์ต"):
-                                st.caption("⚠️ ข้อมูลนี้บางตัวอาจไม่มีในหุ้นไทยบางตัว (ข้อจำกัดของ Yahoo Finance)")
-                                st.dataframe(pd.DataFrame(_xd_rows), use_container_width=True, hide_index=True)
-                except Exception:
-                    pass
-
                 if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                     st.session_state.edit_mode = True
             else:
@@ -1365,6 +1324,63 @@ def render_tab_stock():
 
         st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
 
+        # 🆕 ย้ายมาจากหน้าพอร์ตโฟลิโอ: การ์ดปันผลที่คาดว่าจะได้รับต่อปี + ตารางวันขึ้น XD ล่าสุด
+        # (ย้ายมาไว้ในแท็บนี้แทน เพราะเป็นเรื่องปันผลโดยตรง เข้าธีมเดียวกับข้อมูลปันผลอื่นในแท็บนี้)
+        with st.expander("💸 ปันผลที่คาดว่าจะได้รับต่อปี (ประเมินจากพอร์ตปัจจุบัน)"):
+            if portfolio_list:
+                # ประเมินจากมูลค่าตลาดปัจจุบันของแต่ละหุ้น x % ปันผลล่าสุดที่ได้จาก Daily Scan
+                # (คอลัมน์ 'ปันผล_%' ในชีต StockData) เป็นตัวเลข "คาดการณ์" คร่าวๆ เท่านั้น
+                # ไม่ใช่ตัวเลขที่การันตี เพราะบริษัทอาจปรับเปลี่ยนนโยบายจ่ายปันผลได้ตลอดเวลา
+                try:
+                    df_div_lookup = load_from_gsheet()
+                    if (
+                        df_div_lookup is not None and not df_div_lookup.empty
+                        and 'Ticker' in df_div_lookup.columns and 'ปันผล_%' in df_div_lookup.columns
+                    ):
+                        _dividend_map = dict(zip(df_div_lookup['Ticker'], df_div_lookup['ปันผล_%']))
+                        _estimated_annual_dividend = sum(
+                            p["มูลค่าตลาด"] * (float(_dividend_map.get(p["หุ้น"], 0) or 0) / 100)
+                            for p in portfolio_list
+                        )
+                        _div_col, _, _ = st.columns(3)
+                        render_metric_card(
+                            _div_col, "ปันผลที่คาดว่าจะได้รับต่อปี", f"{_estimated_annual_dividend:,.0f} ฿",
+                            icon="💸", caption="ประเมินจากมูลค่าพอร์ตปัจจุบัน x % ปันผลล่าสุด (ไม่การันตี)"
+                        )
+                    else:
+                        st.info("ยังไม่มีข้อมูล % ปันผลในระบบ (รอข้อมูลจาก Daily Scan)")
+                except Exception:
+                    st.info("ยังไม่สามารถประเมินปันผลได้ในขณะนี้")
+            else:
+                st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตสำหรับประเมินปันผล")
+
+        with st.expander("📅 ดูวันขึ้น XD ล่าสุดของแต่ละหุ้นในพอร์ต"):
+            if portfolio_list:
+                try:
+                    df_xd_lookup = load_from_gsheet()
+                    if (
+                        df_xd_lookup is not None and not df_xd_lookup.empty
+                        and 'Ticker' in df_xd_lookup.columns and 'Ex_Dividend_Date' in df_xd_lookup.columns
+                    ):
+                        _dividend_map2 = dict(zip(df_xd_lookup['Ticker'], df_xd_lookup.get('ปันผล_%', 0)))
+                        _xd_map = dict(zip(df_xd_lookup['Ticker'], df_xd_lookup['Ex_Dividend_Date']))
+                        _xd_rows = [
+                            {
+                                "หุ้น": p["หุ้น"],
+                                "% ปันผลย้อนหลัง 12 เดือน": _dividend_map2.get(p["หุ้น"], 0),
+                                "วันขึ้น XD ล่าสุด": _xd_map.get(p["หุ้น"], "") or "ไม่มีข้อมูล"
+                            }
+                            for p in portfolio_list
+                        ]
+                        st.caption("⚠️ ข้อมูลนี้บางตัวอาจไม่มีในหุ้นไทยบางตัว (ข้อจำกัดของ Yahoo Finance)")
+                        st.dataframe(pd.DataFrame(_xd_rows), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("ยังไม่มีข้อมูลวันขึ้น XD ในระบบ (รอข้อมูลจาก Daily Scan)")
+                except Exception:
+                    st.info("ยังไม่สามารถแสดงข้อมูล XD ได้ในขณะนี้")
+            else:
+                st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตสำหรับแสดงวันขึ้น XD")
+
         # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV ---
         with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD หรือไฟล์ Excel/CSV"):
             uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
@@ -1527,8 +1543,8 @@ def render_tab_stock():
             total_tax = df_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_div.columns else 0
 
             m1, m2 = st.columns(2)
-            m1.metric("💰 เงินปันผลรับสุทธิรวมทั้งสิ้น", f"{total_received:,.2f} ฿")
-            m2.metric("🏛️ ภาษีหัก ณ ที่จ่ายรวม", f"{total_tax:,.2f} ฿")
+            render_metric_card(m1, "เงินปันผลรับสุทธิรวมทั้งสิ้น", f"{total_received:,.2f} ฿", icon="💰")
+            render_metric_card(m2, "ภาษีหัก ณ ที่จ่ายรวม", f"{total_tax:,.2f} ฿", icon="🏛️")
 
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1567,8 +1583,8 @@ def render_tab_stock():
                 total_tax_filtered = df_filtered_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_filtered_div.columns else 0
 
                 mf1, mf2 = st.columns(2)
-                mf1.metric(f"💰 เงินปันผลรับสุทธิ ({selected_period})", f"{total_received_filtered:,.2f} ฿")
-                mf2.metric(f"🏛️ ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿")
+                render_metric_card(mf1, f"เงินปันผลรับสุทธิ ({selected_period})", f"{total_received_filtered:,.2f} ฿", icon="💰")
+                render_metric_card(mf2, f"ภาษีหัก ณ ที่จ่ายรวม ({selected_period})", f"{total_tax_filtered:,.2f} ฿", icon="🏛️")
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1611,9 +1627,9 @@ def render_tab_stock():
                         avg_yield_on_cost = (total_portfolio_dividend / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
 
                         kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
-                        kpi_col1.metric(f"📊 Avg. Yield on Cost ({selected_period})", f"{avg_yield_on_cost:.2f}%")
-                        kpi_col2.metric(f"💰 ปันผลรับรวม ({selected_period})", f"{total_portfolio_dividend:,.2f} ฿")
-                        kpi_col3.metric("🏛️ ต้นทุนพอร์ตหุ้นรวม", f"{total_portfolio_cost:,.2f} ฿")
+                        render_metric_card(kpi_col1, f"Avg. Yield on Cost ({selected_period})", f"{avg_yield_on_cost:.2f}%", icon="📊")
+                        render_metric_card(kpi_col2, f"ปันผลรับรวม ({selected_period})", f"{total_portfolio_dividend:,.2f} ฿", icon="💰")
+                        render_metric_card(kpi_col3, "ต้นทุนพอร์ตหุ้นรวม", f"{total_portfolio_cost:,.2f} ฿", icon="🏛️")
 
                         st.markdown("<br>", unsafe_allow_html=True)
 
