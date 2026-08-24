@@ -117,33 +117,55 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     filtered_df[col] = filtered_df[col].astype(str).str.lower().str.strip() == 'true'
 
             # 2. กรองพื้นฐานด้วย Slider (จะกรองทับกันไปเรื่อยๆ)
-            if max_pe < 100:
+            # 🔧 แก้บั๊ก: เดิมกรองด้วย PE_Ratio/ปันผล_% แบบไม่มีเงื่อนไขตรวจสอบก่อนว่าคอลัมน์นี้
+            # มีอยู่จริงไหม ทั้งที่ข้อมูลจาก daily_scan.py/load_and_calculate_stock_data_optimized()
+            # ไม่เคยคำนวณ 2 คอลัมน์นี้เลย (ยังไม่ได้ทำฟีเจอร์นี้จริง) ทำให้ error ทันทีที่มีข้อมูลจริง
+            # เข้ามา ตอนนี้เช็คว่ามีคอลัมน์อยู่จริงก่อนกรองเสมอ เหมือนจุดอื่นๆ ในไฟล์นี้
+            if max_pe < 100 and 'PE_Ratio' in filtered_df.columns:
                 filtered_df = filtered_df[filtered_df['PE_Ratio'] <= max_pe]
-            filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
+            if min_dividend > 0 and 'ปันผล_%' in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df['ปันผล_%'] >= min_dividend]
             filtered_df = filtered_df[(filtered_df['RSI_14'] >= rsi_range[0]) & (filtered_df['RSI_14'] <= rsi_range[1])]
 
             # 3. กำหนดคอลัมน์พื้นฐานและ Sort
-            show_columns = ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%']
+            # 🔧 แก้บั๊กเพิ่ม: เลือกเฉพาะคอลัมน์ที่มีอยู่จริงในข้อมูล กัน error ตอนแสดงผลตารางด้วย
+            show_columns = [c for c in ['Ticker', 'ราคาล่าสุด', 'RSI_14', 'RS_Line', 'PE_Ratio', 'ปันผล_%'] if c in filtered_df.columns]
             sort_by_col = 'Ticker'
             ascending_sort = True
 
             # 4. กรองตามหน้าเทรด (Strategy)
+            # 🔧 แก้บั๊ก: กลุ่มกลยุทธ์ RS Line ทั้ง 3 แบบด้านล่างนี้ ใช้คอลัมน์ที่ load_and_calculate_
+            # stock_data_optimized() ยังไม่เคยคำนวณจริง (เป็นฟีเจอร์ที่ออกแบบ UI ไว้แล้วแต่ยังไม่ได้
+            # ทำส่วนคำนวณข้อมูลจริง) เดิมไม่มีการเช็คก่อนว่าคอลัมน์มีอยู่จริงไหม ทำให้ error ทันทีที่
+            # มีข้อมูลจริงเข้ามา ตอนนี้เช็คก่อนเสมอ ถ้าไม่มีคอลัมน์ จะแจ้งเตือนแทนที่จะ error
             if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
-                filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
-                show_columns.append('ตัดเส้น0ขึ้นมาแล้ว(วัน)')
-                sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
+                if 'Is_RS_Above_0' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
+                    show_columns.append('ตัดเส้น0ขึ้นมาแล้ว(วัน)')
+                    sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลสำหรับกลยุทธ์นี้ (ฟีเจอร์นี้ยังไม่ได้เพิ่มการคำนวณข้อมูลจริง)")
+                    filtered_df = filtered_df.iloc[0:0]
 
             elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
-                filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
-                sort_by_col, ascending_sort = 'RS_Line', False
+                if 'RS_Line_50D_Max' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
+                    sort_by_col, ascending_sort = 'RS_Line', False
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลสำหรับกลยุทธ์นี้ (ฟีเจอร์นี้ยังไม่ได้เพิ่มการคำนวณข้อมูลจริง)")
+                    filtered_df = filtered_df.iloc[0:0]
 
             elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
-                time_map = {"3 เดือน (60 วัน)": 60, "6 เดือน (120 วัน)": 120, "1 ปี (240 วัน)": 240}
-                time_choice = st.sidebar.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
-                min_days = time_map[time_choice]
-                filtered_df = filtered_df[(filtered_df['RS_Line'] <= 0.0) & (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days)]
-                show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
-                sort_by_col, ascending_sort = 'RS_Line', False
+                if 'อยู่ใต้เส้น0มาแล้ว(วัน)' in filtered_df.columns:
+                    time_map = {"3 เดือน (60 วัน)": 60, "6 เดือน (120 วัน)": 120, "1 ปี (240 วัน)": 240}
+                    time_choice = st.sidebar.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
+                    min_days = time_map[time_choice]
+                    filtered_df = filtered_df[(filtered_df['RS_Line'] <= 0.0) & (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days)]
+                    show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
+                    sort_by_col, ascending_sort = 'RS_Line', False
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลสำหรับกลยุทธ์นี้ (ฟีเจอร์นี้ยังไม่ได้เพิ่มการคำนวณข้อมูลจริง)")
+                    filtered_df = filtered_df.iloc[0:0]
 
             elif strategy_option == "3 Month High":
                 filtered_df = filtered_df[filtered_df['Is_3M_High'] == True]
@@ -589,6 +611,8 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             st.error(f"เกิดข้อผิดพลาดในการเตรียมตาราง: {e}")
 
         # 2. กรองตาม Strategy ที่เลือก (ถ้ามี)
+        # 🔧 แก้บั๊ก: 2 กลยุทธ์ RS Line นี้ใช้คอลัมน์ที่ยังไม่เคยคำนวณจริง (จุดเดียวกับที่แก้ไปด้านบน)
+        # เช็คก่อนเสมอว่ามีคอลัมน์จริงไหม ไม่งั้น error ทันที
         if strategy_option == "3 Month High":
             final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
         elif strategy_option == "6 Month High":
@@ -596,9 +620,15 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
         elif strategy_option == "52 Week High":
             final_sorted_df = df_scan[df_scan['Is_52W_High'] == True]
         elif strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
-            final_sorted_df = df_scan[df_scan['Is_RS_Above_0'] == True]
+            if 'Is_RS_Above_0' in df_scan.columns:
+                final_sorted_df = df_scan[df_scan['Is_RS_Above_0'] == True]
+            else:
+                final_sorted_df = df_scan.iloc[0:0]
         elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
-            final_sorted_df = df_scan[df_scan['RS_Line'] >= df_scan['RS_Line_50D_Max']]
+            if 'RS_Line_50D_Max' in df_scan.columns:
+                final_sorted_df = df_scan[df_scan['RS_Line'] >= df_scan['RS_Line_50D_Max']]
+            else:
+                final_sorted_df = df_scan.iloc[0:0]
         else:
             final_sorted_df = df_scan
 
