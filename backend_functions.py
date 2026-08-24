@@ -253,12 +253,11 @@ def update_watchlist_target(ticker, target_price, direction):
         return False, f"ตั้งราคาเป้าหมายไม่สำเร็จ: {e}"
 
 
-def check_watchlist_price_alerts(spreadsheet_name, df_scan_latest):
+def _check_watchlist_with_price_map(spreadsheet_name, price_map):
     """
-    🆕 เช็คหุ้นใน Watchlist ของบัญชีที่ระบุ ว่าตัวไหนราคาปัจจุบันถึงเป้าหมายที่ตั้งไว้แล้วบ้าง
-    (และยังไม่เคยแจ้งเตือนมาก่อนสำหรับเป้าหมายนี้) เทียบกับราคาล่าสุดจาก df_scan_latest (ผลสแกน
-    หุ้นวันนี้) ตัวไหนเข้าเงื่อนไข จะทำเครื่องหมายว่า "แจ้งเตือนแล้ว" ในชีตทันที (กันแจ้งซ้ำ) แล้ว
-    คืนค่าเป็น list of dict [{'ticker':..., 'target_price':..., 'direction':..., 'current_price':...}]
+    🔧 ฟังก์ชันกลางสำหรับเช็คราคาเป้าหมาย Watchlist โดยรับ price_map (dict {ticker: ราคา}) มาตรงๆ
+    แยกออกมาเพื่อใช้ร่วมกันได้ทั้งแบบราคาปิดรายวัน (Daily Scan) และราคาสดแบบ real-time (เช็คถี่
+    ระหว่างเวลาตลาดเปิด) ไม่ต้องเขียนตรรกะซ้ำ 2 ที่
     """
     triggered = []
     try:
@@ -268,10 +267,8 @@ def check_watchlist_price_alerts(spreadsheet_name, df_scan_latest):
     except Exception:
         return triggered
 
-    if not records or df_scan_latest is None or df_scan_latest.empty or 'Ticker' not in df_scan_latest.columns:
+    if not records or not price_map:
         return triggered
-
-    price_map = dict(zip(df_scan_latest['Ticker'], df_scan_latest['ราคาล่าสุด']))
 
     for idx, row in enumerate(records):
         ticker = str(row.get('Ticker', '')).strip().upper()
@@ -307,6 +304,199 @@ def check_watchlist_price_alerts(spreadsheet_name, df_scan_latest):
                 pass
 
     return triggered
+
+
+def check_watchlist_price_alerts(spreadsheet_name, df_scan_latest):
+    """
+    🆕 เช็คหุ้นใน Watchlist ของบัญชีที่ระบุ ว่าตัวไหนราคาปัจจุบันถึงเป้าหมายที่ตั้งไว้แล้วบ้าง —
+    เวอร์ชันนี้ใช้ "ราคาปิด" จากผลสแกนรายวัน (df_scan_latest) เหมาะกับ Daily Scan ที่รันวันละครั้ง
+    คืนค่าเป็น list of dict [{'ticker':..., 'target_price':..., 'direction':..., 'current_price':...}]
+    """
+    if df_scan_latest is None or df_scan_latest.empty or 'Ticker' not in df_scan_latest.columns:
+        return []
+    price_map = dict(zip(df_scan_latest['Ticker'], df_scan_latest['ราคาล่าสุด']))
+    return _check_watchlist_with_price_map(spreadsheet_name, price_map)
+
+
+def get_watchlist_tickers_pending_alert(spreadsheet_name):
+    """
+    🆕 ดึงรายชื่อหุ้นใน Watchlist ของบัญชีที่ระบุ ที่ตั้งราคาเป้าหมายไว้แล้วแต่ยังไม่เคยแจ้งเตือน
+    ใช้สำหรับดึงราคาสดแบบ real-time เฉพาะหุ้นที่จำเป็นเท่านั้น (ไม่ต้องดึงทั้ง Watchlist)
+    """
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('Watchlist')
+        records = sheet.get_all_records()
+    except Exception:
+        return []
+
+    tickers = set()
+    for row in records:
+        ticker = str(row.get('Ticker', '')).strip().upper()
+        target_price = row.get('Target_Price')
+        direction = str(row.get('Target_Direction', '')).strip().lower()
+        already_sent = str(row.get('Alert_Sent', '')).strip().upper() == 'TRUE'
+        if ticker and target_price and not already_sent and direction in ('below', 'above'):
+            tickers.add(ticker)
+    return list(tickers)
+
+
+def check_watchlist_price_alerts_realtime(spreadsheet_name):
+    """
+    🆕 เช็คหุ้นใน Watchlist ของบัญชีที่ระบุ ว่าตัวไหนถึงราคาเป้าหมายแล้วบ้าง — เวอร์ชันนี้ดึง
+    "ราคาสด" แบบ real-time (delay ~15 นาทีจาก Yahoo Finance) ต่อหุ้นโดยตรง เหมาะกับการเช็คถี่ๆ
+    ระหว่างเวลาตลาดเปิด (ผ่าน workflow แยกต่างหากจาก Daily Scan)
+    """
+    tickers = get_watchlist_tickers_pending_alert(spreadsheet_name)
+    if not tickers:
+        return []
+
+    price_map = {}
+    for t in tickers:
+        info = get_cached_stock_info(f"{t}.BK")
+        price = info.get('currentPrice') or info.get('regularMarketPrice')
+        if price:
+            price_map[t] = price
+
+    return _check_watchlist_with_price_map(spreadsheet_name, price_map)
+
+
+def _check_sl_tp_with_price_map(spreadsheet_name, price_map):
+    """
+    🔧 ฟังก์ชันกลางสำหรับเช็ค SL/TP โดยรับ price_map (dict {ticker: ราคา}) มาโดยตรง แยกออกมา
+    เพื่อใช้ร่วมกันได้ทั้ง 2 แบบ: เช็คจากราคาปิดของผลสแกนรายวัน (ครั้งเดียวต่อวัน) และเช็คจาก
+    ราคาสดแบบ real-time (ถี่ขึ้นระหว่างเวลาตลาดเปิด) ไม่ต้องเขียนตรรกะซ้ำ 2 ที่
+    """
+    triggered = []
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('PortfolioData')
+        records = sheet.get_all_records()
+    except Exception:
+        return triggered
+
+    if not records or not price_map:
+        return triggered
+
+    headers = sheet.row_values(1) if records else []
+
+    def _col_index(col_name):
+        return headers.index(col_name) + 1 if col_name in headers else None
+
+    for idx, row in enumerate(records):
+        ticker = str(row.get('หุ้น', '')).strip().upper()
+        avg_price = row.get('avg_price')
+        if not ticker:
+            continue
+
+        current_price = price_map.get(ticker)
+        if current_price is None:
+            continue
+        try:
+            current_price = float(current_price)
+            avg_price = float(avg_price) if avg_price else 0.0
+        except (ValueError, TypeError):
+            continue
+
+        # เช็ค Stop Loss
+        sl_price = row.get('stop_loss_price')
+        sl_sent = str(row.get('sl_alert_sent', '')).strip().upper() == 'TRUE'
+        if sl_price and not sl_sent:
+            try:
+                sl_price = float(sl_price)
+                if current_price <= sl_price:
+                    pct_change = ((current_price - avg_price) / avg_price * 100) if avg_price > 0 else 0.0
+                    triggered.append({
+                        'ticker': ticker, 'type': 'SL', 'target_price': sl_price,
+                        'current_price': current_price, 'avg_price': avg_price, 'pct_change': pct_change
+                    })
+                    _c = _col_index('sl_alert_sent')
+                    if _c:
+                        sheet.update_cell(idx + 2, _c, "TRUE")
+            except (ValueError, TypeError):
+                pass
+
+        # เช็ค Take Profit
+        tp_price = row.get('take_profit_price')
+        tp_sent = str(row.get('tp_alert_sent', '')).strip().upper() == 'TRUE'
+        if tp_price and not tp_sent:
+            try:
+                tp_price = float(tp_price)
+                if current_price >= tp_price:
+                    pct_change = ((current_price - avg_price) / avg_price * 100) if avg_price > 0 else 0.0
+                    triggered.append({
+                        'ticker': ticker, 'type': 'TP', 'target_price': tp_price,
+                        'current_price': current_price, 'avg_price': avg_price, 'pct_change': pct_change
+                    })
+                    _c = _col_index('tp_alert_sent')
+                    if _c:
+                        sheet.update_cell(idx + 2, _c, "TRUE")
+            except (ValueError, TypeError):
+                pass
+
+    return triggered
+
+
+def check_portfolio_sl_tp_alerts(spreadsheet_name, df_scan_latest):
+    """
+    🆕 เช็คหุ้นในพอร์ตจริง (ไม่ใช่ Watchlist) ของบัญชีที่ระบุ ว่าตัวไหนราคาปัจจุบันถึงจุดตัดขาดทุน
+    (Stop Loss) หรือจุดขายทำกำไร (Take Profit) ที่ตั้งไว้แล้วบ้าง — เวอร์ชันนี้ใช้ "ราคาปิด" จาก
+    ผลสแกนรายวัน (df_scan_latest) เหมาะกับ Daily Scan ที่รันวันละครั้ง
+    ต้องมีคอลัมน์ stop_loss_price, take_profit_price, sl_alert_sent, tp_alert_sent ในชีต
+    PortfolioData ก่อน (เพิ่มได้จากหน้าเว็บโดยตรง ไม่ต้องแก้หัวตารางเองใน Google Sheets เพราะชีตนี้
+    บันทึกจาก dict ทั้งก้อนอัตโนมัติอยู่แล้ว)
+    """
+    if df_scan_latest is None or df_scan_latest.empty or 'Ticker' not in df_scan_latest.columns:
+        return []
+    price_map = dict(zip(df_scan_latest['Ticker'], df_scan_latest['ราคาล่าสุด']))
+    return _check_sl_tp_with_price_map(spreadsheet_name, price_map)
+
+
+def get_portfolio_tickers_pending_sl_tp(spreadsheet_name):
+    """
+    🆕 ดึงรายชื่อหุ้นในพอร์ตของบัญชีที่ระบุ ที่ตั้ง SL หรือ TP ไว้แล้วแต่ยังไม่เคยแจ้งเตือน
+    ใช้สำหรับดึงราคาสดแบบ real-time เฉพาะหุ้นที่จำเป็นเท่านั้น (ไม่ต้องดึงทั้งพอร์ต ประหยัดเวลา
+    และลดความเสี่ยงโดน Yahoo Finance จำกัดการเรียกข้อมูล)
+    """
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('PortfolioData')
+        records = sheet.get_all_records()
+    except Exception:
+        return []
+
+    tickers = set()
+    for row in records:
+        ticker = str(row.get('หุ้น', '')).strip().upper()
+        if not ticker:
+            continue
+        sl_price = row.get('stop_loss_price')
+        sl_sent = str(row.get('sl_alert_sent', '')).strip().upper() == 'TRUE'
+        tp_price = row.get('take_profit_price')
+        tp_sent = str(row.get('tp_alert_sent', '')).strip().upper() == 'TRUE'
+        if (sl_price and not sl_sent) or (tp_price and not tp_sent):
+            tickers.add(ticker)
+    return list(tickers)
+
+
+def check_portfolio_sl_tp_alerts_realtime(spreadsheet_name):
+    """
+    🆕 เช็คหุ้นในพอร์ตของบัญชีที่ระบุ ว่าตัวไหนถึงจุด SL/TP แล้วบ้าง — เวอร์ชันนี้ดึง "ราคาสด"
+    แบบ real-time (delay ~15 นาทีจาก Yahoo Finance) ต่อหุ้นโดยตรง แทนที่จะใช้ราคาปิดจากผลสแกน
+    รายวัน เหมาะกับการเช็คถี่ๆ ระหว่างเวลาตลาดเปิด (ผ่าน workflow แยกต่างหากจาก Daily Scan)
+    """
+    tickers = get_portfolio_tickers_pending_sl_tp(spreadsheet_name)
+    if not tickers:
+        return []
+
+    price_map = {}
+    for t in tickers:
+        info = get_cached_stock_info(f"{t}.BK")
+        price = info.get('currentPrice') or info.get('regularMarketPrice')
+        if price:
+            price_map[t] = price
+
+    return _check_sl_tp_with_price_map(spreadsheet_name, price_map)
 
 
 def extract_pvd_from_image(image_file, year_be, month_name="ธันวาคม"):
