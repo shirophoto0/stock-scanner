@@ -389,6 +389,13 @@ def render_tab_overview():
             def prepare_series(df, date_col, val_col, name):
                 df = df.copy()
                 if df.empty: return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
+                # 🔧 แก้บั๊ก: เดิมถ้าชื่อคอลัมน์ที่คาดไว้ (val_col) ไม่ตรงกับที่มีอยู่จริงในชีต
+                # (เช่น ชื่อหัวตารางที่คนตั้งไว้ไม่ตรงกับที่โค้ดคาดเดา) จะ error แล้วลากทั้งกราฟทุกเส้น
+                # พังไปด้วย (เพราะครอบด้วย try/except ใหญ่อันเดียวทั้งบล็อก) ตอนนี้เช็คก่อนเสมอว่า
+                # คอลัมน์ที่ต้องการมีอยู่จริงไหม ถ้าไม่มี ข้ามแค่เส้นนี้เส้นเดียว เส้นอื่นยังแสดงได้ปกติ
+                if val_col not in df.columns or date_col not in df.columns:
+                    st.caption(f"⚠️ ไม่พบคอลัมน์ '{val_col}' หรือ '{date_col}' ในชีตของ{name} (ข้ามเส้นนี้ไปก่อน)")
+                    return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
                 if date_col == 'Month':
                     thai_months = {'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04', 'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08', 'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'}
                     df['Month_Num'] = df[date_col].map(thai_months).fillna('12')
@@ -406,8 +413,9 @@ def render_tab_overview():
             # 🆕 ตอนนี้ df_mf ดึงจากชีต Fund_Value_History (ยอดรวมรายเดือนที่บันทึกอัตโนมัติ)
             # แทนที่จะเป็น Fund_History เดิม (รายการซื้อแต่ละครั้ง) จึงมีคอลัมน์ Date/Value ให้ใช้ตรงๆ ได้แล้ว
             s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund')
-            # 🔧 แก้บั๊ก: คอลัมน์จริงในชีต Portfolio_History ชื่อ 'total_equity' ไม่ใช่ 'Total_Value'
-            s_port = prepare_series(df_portfolio_hist, 'Date', 'total_equity', 'Stock+TFEX')
+            # 🔧 แก้บั๊ก: คอลัมน์จริงในชีต Portfolio_History ชื่อ 'Market_Value' (เช็คกับผู้ใช้แล้ว
+            # ยืนยันตรงกัน ไม่ใช่ 'total_equity' หรือ 'Total_Value' ที่เดาไว้ก่อนหน้า)
+            s_port = prepare_series(df_portfolio_hist, 'Date', 'Market_Value', 'Stock+TFEX')
             # 🆕 เพิ่มเส้นทองคำและอสังหาริมทรัพย์ที่หายไปจากกราฟแนวโน้มมาตลอด
             s_gold = prepare_series(df_gold, 'Date', 'Value', 'Gold')
             s_re = prepare_series(df_re, 'Date', 'Value', 'Real_Estate')
