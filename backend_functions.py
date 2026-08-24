@@ -1735,19 +1735,33 @@ def generate_net_worth_pdf_report(app_title, net_worth_excl_re, net_worth_total,
     story.append(Spacer(1, 20))
 
     # --- กราฟวงกลมสัดส่วนสินทรัพย์ (วาดด้วย matplotlib แล้วฝังเป็นรูปภาพ) ---
+    # 🔧 แก้บั๊ก: เดิมใส่ป้ายชื่อ (labels) ติดบนกราฟโดยตรงทุกชิ้น ทำให้สัดส่วนเล็กๆ หลายชิ้นที่อยู่
+    # ใกล้กัน (เช่น สหกรณ์, ประกันสังคม, ธนาคาร) ป้ายชื่อทับกันจนอ่านไม่ออกเลย ตอนนี้เปลี่ยนมาใช้
+    # "คำอธิบายด้านข้าง" (Legend) แทน ซึ่งเรียงเป็นรายการแนวตั้งเสมอ ไม่มีทางทับกันไม่ว่าจะมีกี่ชิ้น
+    # และซ่อน % บนชิ้นที่เล็กกว่า 3% ไปเลย (มีตัวเลขแม่นยำอยู่ในตารางด้านบนแล้วอยู่แล้ว)
     try:
         _names = [n for n, v in asset_breakdown if v > 0]
         _values = [v for n, v in asset_breakdown if v > 0]
         if _values:
-            fig, ax = plt.subplots(figsize=(5, 5))
-            ax.pie(_values, labels=_names, autopct='%1.1f%%', startangle=90)
+            def _autopct_format(pct):
+                return f'{pct:.1f}%' if pct >= 3 else ''
+
+            fig, ax = plt.subplots(figsize=(8, 5))
+            wedges, _texts, _autotexts = ax.pie(
+                _values, autopct=_autopct_format, startangle=90, pctdistance=0.75,
+                textprops={'fontsize': 9, 'color': 'white', 'weight': 'bold'}
+            )
             ax.axis('equal')
+            ax.legend(
+                wedges, _names, title="Asset Category",
+                loc="center left", bbox_to_anchor=(1.0, 0.5), fontsize=9
+            )
             img_buffer = io.BytesIO()
             plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
             plt.close(fig)
             img_buffer.seek(0)
             story.append(Paragraph("Asset Allocation Chart", styles['Heading2']))
-            story.append(Image(img_buffer, width=350, height=350))
+            story.append(Image(img_buffer, width=480, height=300))
     except Exception:
         pass  # ถ้าวาดกราฟพลาด ยังคงส่งรายงานที่เหลือ (หัวข้อ+ตาราง) ออกไปได้ตามปกติ
 
