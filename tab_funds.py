@@ -4,8 +4,11 @@
 # =============================================================
 import streamlit as st
 import pandas as pd
-from datetime import date
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import date, datetime
 from backend_functions import calculate_fund_result, get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name
+from theme import style_plotly, render_metric_card, get_theme_colors
 
 
 def render_tab_funds():
@@ -43,8 +46,11 @@ def render_tab_funds():
                         existing_data = sheet.get_all_records()
                         new_id = len(existing_data)
 
-                        # ข้อมูลที่จะ append: Fund_ID, Fund_Name, Date_Buy, Date_Sell, Cost_Price, Current_Price, Units, Status
-                        row_data = [new_id, fund_name, str(date_buy), "", cost_price, cost_price, units, "Holding"]
+                        # ข้อมูลที่จะ append: Fund_ID, Fund_Name, Date_Buy, Date_Sell, Cost_Price, Current_Price, Units, Status, Price_Updated_Date
+                        # 🆕 เพิ่มคอลัมน์ Price_Updated_Date (วันที่อัปเดตราคาล่าสุด) ไว้ท้ายสุด เพื่อใช้
+                        # เตือน "ราคาเก่า" ในหน้าภาพรวมพอร์ต — ตอนซื้อใหม่ ใช้วันที่ซื้อเป็นวันแรกที่
+                        # ถือว่าราคาอัปเดตล่าสุด (เพราะ Cost_Price = Current_Price ตอนซื้อพอดี)
+                        row_data = [new_id, fund_name, str(date_buy), "", cost_price, cost_price, units, "Holding", str(date_buy)]
                         sheet.append_row(row_data)
 
                         st.cache_data.clear()
@@ -111,6 +117,9 @@ def render_tab_funds():
 
                             if st.button("💾 บันทึกราคาอัปเดต"):
                                 sheet.update_cell(selected_row_index, 6, new_price)
+                                # 🆕 บันทึกวันที่อัปเดตราคาล่าสุดไว้ที่คอลัมน์ 9 (Price_Updated_Date)
+                                # ด้วย ใช้เตือน "ราคาเก่า" ในหน้าภาพรวมพอร์ตถ้าไม่ได้อัปเดตนานเกินไป
+                                sheet.update_cell(selected_row_index, 9, str(date.today()))
                                 st.success(f"อัปเดตราคา {selected_fund} เป็น {new_price} สำเร็จ!")
                                 st.rerun()
 
@@ -137,9 +146,9 @@ def render_tab_funds():
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล: {e}")
 
-    # 3. Tab ภาพรวมพอร์ต (แสดงมูลค่าต้นทุน, มูลค่าปัจจุบัน)
+    # 3. Tab ภาพรวมพอร์ต (แสดงมูลค่าต้นทุน, มูลค่าปัจจุบัน + Dashboard ติดตามผลงาน)
     with tab_summary:
-        st.markdown("### สรุปมูลค่าพอร์ตลงทุน")
+        st.markdown("### 📊 Dashboard ติดตามผลงานกองทุนรวม")
         try:
             client = get_gsheet_client()
             # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
@@ -150,10 +159,9 @@ def render_tab_funds():
                 active_df = summary_df[summary_df['Status'] == 'Holding'].copy()
 
                 if not active_df.empty:
-                    # คำนวณค่าพอร์ตแต่ละตัว
+                    # คำนวณค่าพอร์ตแต่ละตัว (รวมกองเดียวกันที่ซื้อหลายรอบเข้าด้วยกัน)
                     total_portfolio_cost = 0
                     total_portfolio_value = 0
-
                     display_data = []
                     for _, row in active_df.iterrows():
                         cost_p = float(row['Cost_Price'])
@@ -164,6 +172,16 @@ def render_tab_funds():
                         total_portfolio_cost += res['Total_Cost']
                         total_portfolio_value += res['Current_Value']
 
+                        # 🆕 หาว่าราคาอัปเดตล่าสุดเมื่อไหร่ (คอลัมน์ Price_Updated_Date ถ้ามี)
+                        price_updated_str = str(row.get('Price_Updated_Date', '')).strip()
+                        days_since_update = None
+                        if price_updated_str:
+                            try:
+                                price_updated_date = datetime.strptime(price_updated_str, '%Y-%m-%d').date()
+                                days_since_update = (date.today() - price_updated_date).days
+                            except ValueError:
+                                pass
+
                         display_data.append({
                             "ชื่อกองทุน": row['Fund_Name'],
                             "วันที่ซื้อ": row['Date_Buy'],
@@ -173,18 +191,117 @@ def render_tab_funds():
                             "มูลค่าต้นทุน": res['Total_Cost'],
                             "มูลค่าปัจจุบัน": res['Current_Value'],
                             "กำไร/ขาดทุน": res['Profit_Loss'],
-                            "(%)": f"{res['Profit_Loss_Pct']}%"
+                            "% กำไร/ขาดทุน": res['Profit_Loss_Pct'],
+                            "_days_since_update": days_since_update,
                         })
 
-                    # แสดง Metric รวมด้านบน
+                    df_display = pd.DataFrame(display_data)
                     total_profit = total_portfolio_value - total_portfolio_cost
+                    total_profit_pct = (total_profit / total_portfolio_cost) * 100 if total_portfolio_cost > 0 else 0.0
+
+                    # 🆕 (1) การ์ดสรุปภาพรวม — ใช้การ์ดสไตล์เดียวกับหน้าอื่นในแอปแทน st.metric เดิม
                     m1, m2, m3 = st.columns(3)
-                    m1.metric("มูลค่าต้นทุนรวม", f"{total_portfolio_cost:,.2f} บาท")
-                    m2.metric("มูลค่าปัจจุบันรวม", f"{total_portfolio_value:,.2f} บาท", f"{total_profit:,.2f} บาท")
-                    m3.metric("ผลตอบแทนรวม (%)", f"{(total_profit/total_portfolio_cost)*100:.2f}%" if total_portfolio_cost > 0 else "0.00%")
+                    render_metric_card(m1, "มูลค่าต้นทุนรวม", f"{total_portfolio_cost:,.2f} บาท", icon="📥")
+                    render_metric_card(m2, "มูลค่าปัจจุบันรวม", f"{total_portfolio_value:,.2f} บาท", icon="📈")
+                    render_metric_card(
+                        m3, "กำไร/ขาดทุนรวม", f"{total_profit:,.2f} บาท", icon="💹",
+                        delta=f"{total_profit_pct:.2f}%", delta_positive=(total_profit >= 0)
+                    )
+
+                    # 🆕 (4) เตือนราคาเก่า — ถ้ากองไหนไม่ได้อัปเดตราคาเกิน 35 วัน (หรือไม่มีข้อมูลวันที่
+                    # อัปเดตเลย เพราะเป็นรายการเก่าก่อนมีฟีเจอร์นี้) จะเตือนให้ไปอัปเดตราคาก่อน เพราะ
+                    # ตัวเลขทั้งหมดในหน้านี้คำนวณจากราคาที่กรอกเองรายเดือน ถ้าลืมอัปเดต ตัวเลขจะผิดเพี้ยน
+                    _stale_funds = [
+                        d["ชื่อกองทุน"] for d in display_data
+                        if d["_days_since_update"] is None or d["_days_since_update"] > 35
+                    ]
+                    if _stale_funds:
+                        st.warning(
+                            f"⚠️ **กองทุนต่อไปนี้ยังไม่ได้อัปเดตราคานานเกิน 35 วัน (หรือไม่มีข้อมูลวันที่อัปเดต):** "
+                            f"{', '.join(_stale_funds)} — ไปที่แท็บ \"🔄 อัปเดตราคา/ขาย\" เพื่ออัปเดตให้ตัวเลขแม่นยำขึ้นครับ"
+                        )
 
                     st.divider()
-                    st.dataframe(pd.DataFrame(display_data), use_container_width=True)
+
+                    # 🆕 (2) ตารางเปรียบเทียบผลงานรายกองทุน — เรียงจากกำไรมากไปน้อย พร้อมสีเขียว/แดง
+                    st.markdown("##### 📋 เปรียบเทียบผลงานรายกองทุน")
+                    df_table = df_display.drop(columns=['_days_since_update']).sort_values('% กำไร/ขาดทุน', ascending=False)
+                    _tc = get_theme_colors()
+
+                    def _color_pl(val):
+                        if isinstance(val, (int, float)):
+                            return f"color: {'#26A69A' if val > 0 else '#EF5350' if val < 0 else _tc['text']}"
+                        return None
+
+                    st.dataframe(
+                        df_table.style.format({
+                            "ต้นทุนเฉลี่ย": "{:.4f}", "ราคาปัจจุบัน": "{:.4f}", "จำนวนหน่วย": "{:,.2f}",
+                            "มูลค่าต้นทุน": "{:,.2f}", "มูลค่าปัจจุบัน": "{:,.2f}",
+                            "กำไร/ขาดทุน": "{:,.2f}", "% กำไร/ขาดทุน": "{:+.2f}%"
+                        })
+                        .set_properties(**{'text-align': 'right', 'background-color': _tc['bg']})
+                        .map(_color_pl, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
+                        .set_table_styles([
+                            {'selector': 'th', 'props': [('background-color', '#F1EEE8'), ('color', _tc['text']),
+                                                          ('font-family', "'Prompt',sans-serif"), ('font-weight', '600'),
+                                                          ('border-color', _tc['border'])]},
+                            {'selector': 'td', 'props': [('border-color', _tc['border'])]},
+                        ]),
+                        use_container_width=True, hide_index=True
+                    )
+
+                    # กองที่ทำผลงานดีสุด/แย่สุด (สรุปให้เห็นไวๆ ไม่ต้องไล่หาในตาราง)
+                    _best = df_table.iloc[0]
+                    _worst = df_table.iloc[-1]
+                    _b1, _b2 = st.columns(2)
+                    _b1.success(f"🏆 **ผลงานดีสุด:** {_best['ชื่อกองทุน']} ({_best['% กำไร/ขาดทุน']:+.2f}%)")
+                    _b2.error(f"📉 **ผลงานแย่สุด:** {_worst['ชื่อกองทุน']} ({_worst['% กำไร/ขาดทุน']:+.2f}%)")
+
+                    st.divider()
+
+                    # 🆕 (5) กราฟเปรียบเทียบผลงานระหว่างกองทุน (% กำไร/ขาดทุน)
+                    st.markdown("##### 📊 เปรียบเทียบ % ผลตอบแทนระหว่างกองทุน")
+                    fig_compare = px.bar(
+                        df_table, x='ชื่อกองทุน', y='% กำไร/ขาดทุน',
+                        text=df_table['% กำไร/ขาดทุน'].apply(lambda x: f"{x:+.2f}%"),
+                        color='% กำไร/ขาดทุน', color_continuous_scale=['#EF5350', '#26A69A'],
+                        color_continuous_midpoint=0
+                    )
+                    fig_compare.update_traces(textposition='outside')
+                    fig_compare.update_layout(
+                        xaxis_title="", yaxis_title="% กำไร/ขาดทุน", height=380,
+                        margin=dict(l=20, r=20, t=30, b=80), coloraxis_showscale=False, xaxis=dict(tickangle=-30)
+                    )
+                    st.plotly_chart(style_plotly(fig_compare), use_container_width=True)
+
+                    st.divider()
+
+                    # 🆕 (3) กราฟแนวโน้มมูลค่ากองทุนรวมตามเวลา — ใช้ข้อมูลจากชีต Fund_Value_History
+                    # ที่ระบบบันทึกอัตโนมัติทุกเดือนอยู่แล้ว (ดูรายละเอียดใน check_and_auto_stamp_fund_value)
+                    st.markdown("##### 📉 กราฟแนวโน้มมูลค่ากองทุนรวมตามเวลา")
+                    try:
+                        sheet_hist = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Fund_Value_History')
+                        hist_data = sheet_hist.get_all_records()
+                        if hist_data:
+                            df_hist = pd.DataFrame(hist_data)
+                            df_hist['Date'] = pd.to_datetime(df_hist['Date'], errors='coerce')
+                            df_hist['Value'] = pd.to_numeric(df_hist['Value'], errors='coerce')
+                            df_hist = df_hist.dropna(subset=['Date', 'Value']).sort_values('Date')
+                            if not df_hist.empty:
+                                fig_trend = go.Figure()
+                                fig_trend.add_trace(go.Scatter(
+                                    x=df_hist['Date'], y=df_hist['Value'], mode='lines+markers',
+                                    name='มูลค่ากองทุนรวม', line=dict(width=3, color='#7C9885')
+                                ))
+                                fig_trend.update_layout(height=350, margin=dict(l=20, r=20, t=20, b=20), yaxis_tickformat=",.0f")
+                                st.plotly_chart(style_plotly(fig_trend), use_container_width=True)
+                            else:
+                                st.info("ยังไม่มีข้อมูลย้อนหลังเพียงพอสำหรับวาดกราฟแนวโน้ม")
+                        else:
+                            st.info("ยังไม่มีข้อมูลในชีต Fund_Value_History (ระบบจะบันทึกให้อัตโนมัติทุกเดือนที่เข้าแท็บภาพรวม Net Worth)")
+                    except Exception:
+                        st.info("ยังไม่พบชีต Fund_Value_History — ข้อมูลจะเริ่มบันทึกอัตโนมัติเมื่อเข้าแท็บภาพรวม Net Worth ครั้งถัดไป")
+
                 else:
                     st.info("ไม่มีกองทุนในพอร์ตที่กำลังถืออยู่")
             else:
