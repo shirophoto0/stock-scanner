@@ -1330,7 +1330,15 @@ def load_and_calculate_stock_data_optimized():
     # ทันที — และเพราะ set_market ใช้ร่วมกันทุกหุ้น พอพังตัวเดียว หุ้นทั้งหมดเลยพังตามไปด้วย
     # .squeeze() ช่วยแปลง "ตาราง 1 คอลัมน์" ให้กลายเป็น "คอลัมน์เดี่ยว" ให้เสมอ (ถ้าเป็นคอลัมน์เดี่ยว
     # อยู่แล้วก็ไม่มีผลอะไร ปลอดภัยทั้ง 2 กรณี)
+    # 🔧 แก้บั๊กเพิ่ม (สำคัญ): Yahoo Finance บางครั้งให้ข้อมูลย้อนหลังของดัชนี SET ไม่ครบตามที่ขอ
+    # (บางรอบได้แค่ 1 แถว) ซึ่งเป็นข้อจำกัดของ Yahoo เอง ไม่ใช่บั๊กที่แก้จากโค้ดได้ตรงๆ ตอนนี้เช็ค
+    # ก่อนว่าข้อมูลพอสำหรับคำนวณ RS_Line ไหม (อย่างน้อย 30 วัน) ถ้าไม่พอ จะข้ามแค่ RS_Line ไป
+    # (ตั้งเป็น 0 ให้ทุกตัว) แต่ยังคงคำนวณ/บันทึกข้อมูลอื่นๆ ของหุ้นทั้งหมดได้ตามปกติ ไม่ให้ปัญหา
+    # แค่จุดเดียวลากทั้งการสแกน 494 ตัวพังไปด้วยอีกต่อไป
     set_market = yf.download("^SET.BK", period="2y")['Close'].squeeze()
+    set_market_usable = isinstance(set_market, pd.Series) and len(set_market) >= 30
+    if not set_market_usable:
+        print(f"⚠️ ข้อมูลดัชนี SET Index ไม่พอสำหรับคำนวณ RS_Line (ได้ {len(set_market) if hasattr(set_market, '__len__') else 'N/A'} แถว) จะข้ามการคำนวณ RS_Line ไปก่อน แต่ยังคงบันทึกข้อมูลอื่นๆ ตามปกติ")
     
     stock_list = []
     failed_tickers = []  # 🆕 เก็บรายชื่อหุ้นที่ดึงข้อมูลไม่สำเร็จ เพื่อรายงานให้ผู้ใช้ทราบ
@@ -1352,14 +1360,17 @@ def load_and_calculate_stock_data_optimized():
             # คำนวณ RSI
             df['RSI'] = calculate_rsi(df['Close'], period=14)
             
-            # คำนวณ RS_Line
-            combined = df[['Close']].join(set_market.rename('Market_Close'), how='inner')
-            base_stock = combined['Close'].iloc[0]
-            base_market = combined['Market_Close'].iloc[0]
-            
-            stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
-            market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
-            current_rs_val = (stock_perf - market_perf).iloc[-1]
+            # คำนวณ RS_Line (ข้ามไปถ้าข้อมูลดัชนี SET ไม่พอ ตั้งเป็น 0 แทน)
+            if set_market_usable:
+                combined = df[['Close']].join(set_market.rename('Market_Close'), how='inner')
+                base_stock = combined['Close'].iloc[0]
+                base_market = combined['Market_Close'].iloc[0]
+                
+                stock_perf = ((combined['Close'] - base_stock) / base_stock) * 100
+                market_perf = ((combined['Market_Close'] - base_market) / base_market) * 100
+                current_rs_val = (stock_perf - market_perf).iloc[-1]
+            else:
+                current_rs_val = 0.0
             
             # คำนวณค่าทางเทคนิคอื่นๆ (ใช้ค่าจาก df ที่มีอยู่แล้ว)
             latest_price = df['Close'].iloc[-1]
