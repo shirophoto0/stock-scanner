@@ -1334,7 +1334,9 @@ def load_and_calculate_stock_data_optimized():
             # 🔧 แก้บั๊ก: เดิมพยายามค้นหาด้วยชื่อที่ตัด ".BK" ออก (เช่น "A5") แต่ข้อมูลที่ดาวน์โหลด
             # มาจริงถูกเก็บด้วยชื่อเต็ม "A5.BK" (ตรงกับที่ใช้ตอนดาวน์โหลด) ค้นหาไม่เจอเลยสักตัว
             # ตอนนี้ใช้ ticker ตรงๆ (มี .BK อยู่แล้ว) ให้ตรงกับชื่อที่ดาวน์โหลดมาจริง
-            df = data[ticker]
+            # 🔧 แก้บั๊กเพิ่ม: เพิ่ม .copy() ตรงนี้ เพื่อตัดขาดจาก DataFrame ใหญ่ที่โหลดมาทั้งก้อน
+            # (data) อย่างชัดเจน ป้องกัน pandas เตือน SettingWithCopyWarning ตอนแก้ไขคอลัมน์ข้างล่าง
+            df = data[ticker].copy()
             if df.empty or len(df) < 200:
                 failed_tickers.append(ticker)
                 continue
@@ -1406,8 +1408,13 @@ def load_and_calculate_stock_data_optimized():
                 'Is_Volatility_Contracting': is_volatility_contracting,
             })
             
-        except Exception:
+        except Exception as e:
             failed_tickers.append(ticker)
+            # 🔧 แก้บั๊ก: เดิมกลืน error ไปเงียบๆ ไม่บอกสาเหตุเลยว่าทำไมแต่ละตัวถึงพลาด
+            # ทำให้แก้ปัญหาไม่ได้เพราะไม่รู้สาเหตุจริง ตอนนี้ print ข้อความ error ของ 3 ตัวแรก
+            # ที่พลาดออกมาให้เห็นใน log (ทั้งตอนรันในแอปและตอนรันแบบ headless ผ่าน GitHub Actions)
+            if len(failed_tickers) <= 3:
+                print(f"⚠️ {ticker} พลาดเพราะ: {type(e).__name__}: {e}")
             continue
             
     status_text.empty()
@@ -1415,17 +1422,22 @@ def load_and_calculate_stock_data_optimized():
     # 🆕 รายงานผลลัพธ์ให้ผู้ใช้ทราบชัดเจน แทนที่จะข้ามหุ้นที่พลาดไปเงียบๆ แบบเดิม
     # (สำคัญเพราะการดึงข้อมูล 494 ตัวพร้อมกัน มีโอกาสที่ Yahoo Finance จะปฏิเสธคำขอบางตัว
     # ระหว่างทาง ถ้าไม่รายงาน ผู้ใช้จะไม่รู้เลยว่าทำไมจำนวนหุ้นที่ได้ถึงน้อยกว่า 494)
+    # 🔧 แก้บั๊กเพิ่ม: st.warning/st.success ใช้ไม่ได้เลยตอนรันแบบ headless (เช่น daily_scan.py
+    # ผ่าน GitHub Actions) เพิ่ม print() คู่กันไปด้วย จะได้เห็นสรุปผลใน log เสมอไม่ว่าจะรันแบบไหน
     success_count = len(stock_list)
     if failed_tickers:
-        st.warning(
+        summary_msg = (
             f"⚠️ ดึงข้อมูลสำเร็จ {success_count} จาก {total} ตัว "
             f"({len(failed_tickers)} ตัวดึงไม่สำเร็จ — อาจเป็นเพราะ Yahoo Finance ปฏิเสธคำขอชั่วคราว "
             f"หรือหุ้นตัวนั้นมีข้อมูลย้อนหลังไม่ครบ 200 วัน) "
             f"ลองกดอัปเดตอีกครั้งภายหลังถ้าต้องการให้ครบทุกตัว"
         )
+        print(summary_msg)
+        st.warning(summary_msg)
         with st.expander(f"ดูรายชื่อ {len(failed_tickers)} ตัวที่ดึงไม่สำเร็จ"):
             st.write(", ".join(failed_tickers))
     else:
+        print(f"✅ ดึงข้อมูลสำเร็จครบทั้ง {total} ตัว")
         st.success(f"✅ ดึงข้อมูลสำเร็จครบทั้ง {total} ตัว")
     return pd.DataFrame(stock_list)
 
