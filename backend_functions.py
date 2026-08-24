@@ -1323,7 +1323,14 @@ def load_and_calculate_stock_data_optimized():
     data = yf.download(tickers_full, period="2y", group_by='ticker', threads=True)
     
     # ดึงข้อมูล SET Index
-    set_market = yf.download("^SET.BK", period="2y")['Close']
+    # 🔧 แก้บั๊ก: เดิม yf.download(...)['Close'] คาดว่าจะได้ "คอลัมน์เดี่ยว" (Series) แต่ yfinance
+    # เวอร์ชันที่ใช้งานจริงคืนตารางหัวข้อซ้อน 2 ชั้นแม้ขอแค่หุ้นตัวเดียว ทำให้ได้ "ตาราง 1 คอลัมน์"
+    # (DataFrame) แทน พอเอาไปสั่ง .rename('Market_Close') ต่อ pandas เข้าใจผิดว่าจะเปลี่ยนชื่อแถว
+    # แทนชื่อคอลัมน์ แล้วพยายามเรียก 'Market_Close' เป็นฟังก์ชัน (ทั้งที่เป็นแค่ข้อความ) จน error
+    # ทันที — และเพราะ set_market ใช้ร่วมกันทุกหุ้น พอพังตัวเดียว หุ้นทั้งหมดเลยพังตามไปด้วย
+    # .squeeze() ช่วยแปลง "ตาราง 1 คอลัมน์" ให้กลายเป็น "คอลัมน์เดี่ยว" ให้เสมอ (ถ้าเป็นคอลัมน์เดี่ยว
+    # อยู่แล้วก็ไม่มีผลอะไร ปลอดภัยทั้ง 2 กรณี)
+    set_market = yf.download("^SET.BK", period="2y")['Close'].squeeze()
     
     stock_list = []
     failed_tickers = []  # 🆕 เก็บรายชื่อหุ้นที่ดึงข้อมูลไม่สำเร็จ เพื่อรายงานให้ผู้ใช้ทราบ
