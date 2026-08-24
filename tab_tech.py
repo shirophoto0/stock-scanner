@@ -105,7 +105,11 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             filtered_df.columns = filtered_df.columns.str.strip()
 
             # แปลงคอลัมน์ตัวเลข
-            numeric_cols = ['PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line']
+            # 🔧 แก้บั๊ก: เดิมไม่ได้รวมคอลัมน์ใหม่ (RS_Line_50D_Max และเพื่อนๆ) ไว้ในนี้ ทำให้ยังเป็น
+            # ข้อความอยู่ (ข้อมูลจาก Google Sheets เป็นข้อความทั้งหมดโดยเริ่มต้น) พอเอาไปเทียบกับ
+            # RS_Line ที่แปลงเป็นตัวเลขแล้ว จึง error ทันที เพิ่มคอลัมน์ที่ขาดไปให้ครบ
+            numeric_cols = ['PE_Ratio', 'ปันผล_%', 'RSI_14', 'RS_Line', 'RS_Line_50D_Max',
+                             'ตัดเส้น0ขึ้นมาแล้ว(วัน)', 'อยู่ใต้เส้น0มาแล้ว(วัน)']
             for col in numeric_cols:
                 if col in filtered_df.columns:
                     filtered_df[col] = pd.to_numeric(filtered_df[col], errors='coerce').fillna(0)
