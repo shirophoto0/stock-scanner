@@ -173,8 +173,11 @@ def check_and_auto_stamp_value_history(client, sheet_name, current_total_value, 
             sheet_history.append_row([target_date_str, current_total_value])
             st.toast(f"📊 ระบบบันทึกยอด{toast_label}สิ้นเดือนอัตโนมัติเรียบร้อย: {target_month_str}", icon="✅")
 
-    except Exception:
-        pass
+    except Exception as e:
+        # 🔧 แก้บั๊ก: เดิมกลืน error ไปเงียบๆ ทั้งหมด ทำให้ถ้าชื่อชีตสะกดไม่ตรง (พิมพ์ผิด/เว้นวรรค
+        # ผิด) หรือมีปัญหาอื่นใด จะไม่มีทางรู้เลยว่าทำไมข้อมูลไม่เข้า Google Sheets ตอนนี้แจ้งเตือน
+        # แบบเบาๆ (ไม่รบกวนจนเกินไป) ให้เห็นสาเหตุจริง ผ่าน st.toast
+        st.toast(f"⚠️ บันทึกยอด{toast_label}อัตโนมัติไม่สำเร็จ: {e}", icon="⚠️")
 
 
 def extract_pvd_from_image(image_file, year_be, month_name="ธันวาคม"):
