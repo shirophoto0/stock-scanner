@@ -18,7 +18,7 @@ from backend_functions import (
     get_sector_from_mapping, load_data, load_data_from_file, load_total_cash_balance,
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet,
-    load_watchlist, remove_from_watchlist, fetch_set_index_history
+    load_watchlist, remove_from_watchlist, fetch_set_index_history, update_watchlist_target
 )
 from theme import style_plotly, style_altair, get_theme_colors, render_metric_card
 
@@ -1515,6 +1515,37 @@ def render_tab_stock():
                             st.rerun()
                         else:
                             st.warning(_msg)
+
+                    # 🆕 ตั้งราคาเป้าหมาย + ทิศทาง สำหรับระบบแจ้งเตือนอัตโนมัติผ่าน Telegram
+                    # (เช็คทุกวันตอน Daily Scan ทำงาน) แสดงสถานะเป้าหมายปัจจุบันไว้ด้วยถ้ามีการตั้งไว้
+                    _target_price = item.get('Target_Price')
+                    _target_dir = str(item.get('Target_Direction', '')).strip().lower()
+                    _alert_sent = str(item.get('Alert_Sent', '')).strip().upper() == 'TRUE'
+                    if _target_price:
+                        _dir_label = "ลงมาถึง" if _target_dir == 'below' else "ขึ้นมาถึง"
+                        _status_label = " (แจ้งเตือนไปแล้ว)" if _alert_sent else " (รอเช็คทุกวัน)"
+                        st.caption(f"🎯 ราคาเป้าหมายปัจจุบัน: {_dir_label} {float(_target_price):,.2f} ฿{_status_label}")
+
+                    with st.expander(f"🎯 ตั้ง/แก้ราคาเป้าหมายแจ้งเตือน — {_ticker}"):
+                        _tp_col1, _tp_col2, _tp_col3 = st.columns([1, 1, 1])
+                        _new_target = _tp_col1.number_input(
+                            "ราคาเป้าหมาย", min_value=0.0, step=0.01, format="%.2f", key=f"target_price_{_ticker}"
+                        )
+                        _new_dir = _tp_col2.selectbox(
+                            "เงื่อนไข", ["below", "above"],
+                            format_func=lambda x: "ราคาลงมาถึง/ต่ำกว่า (ซื้อตอนถูก)" if x == "below" else "ราคาขึ้นมาถึง/เกิน (ขายทำกำไร)",
+                            key=f"target_dir_{_ticker}"
+                        )
+                        if _tp_col3.button("💾 บันทึกเป้าหมาย", key=f"save_target_{_ticker}"):
+                            if _new_target <= 0:
+                                st.warning("กรุณาระบุราคาเป้าหมายมากกว่า 0")
+                            else:
+                                _success, _msg = update_watchlist_target(_ticker, _new_target, _new_dir)
+                                if _success:
+                                    st.success(_msg)
+                                    st.rerun()
+                                else:
+                                    st.warning(_msg)
 
     #########################
     with tab_dividend:
