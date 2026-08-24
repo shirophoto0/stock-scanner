@@ -1440,9 +1440,24 @@ def load_and_calculate_stock_data_optimized():
                 # หมายถึง 2.78% เลย) พอเอาไปคูณ 100 ซ้ำ เลยกลายเป็นเลขหลักร้อยที่ผิดเพี้ยน (เช่น 278)
                 # ตอนนี้ใช้ค่าที่ได้มาตรงๆ โดยไม่คูณซ้ำ
                 dividend_pct_val = round(float(dividend_yield_raw), 2) if dividend_yield_raw is not None else 0.0
+
+                # 🆕 ดึงวันขึ้น XD (Ex-Dividend Date) ล่าสุดที่ Yahoo มีบันทึกไว้ ช่วยให้รู้ว่า
+                # % ปันผลที่คำนวณไว้ (เป็นค่าย้อนหลัง 12 เดือน ไม่ได้บอกว่าขึ้น XD ไปหรือยัง) มาจาก
+                # รอบจ่ายปันผลล่าสุดเมื่อไหร่ ค่านี้เป็น Unix timestamp ต้องแปลงเป็นวันที่อ่านง่ายก่อน
+                # หมายเหตุ: ข้อมูลนี้ของหุ้นไทยบางตัวอาจไม่มี/ไม่ครบใน Yahoo Finance (ข้อจำกัดของ
+                # แหล่งข้อมูล ไม่ใช่บั๊กของโค้ด) ถ้าไม่มีจะปล่อยว่างไว้แทน
+                ex_div_raw = stock_info.get('exDividendDate')
+                if ex_div_raw:
+                    try:
+                        ex_dividend_date_str = datetime.fromtimestamp(ex_div_raw).strftime('%Y-%m-%d')
+                    except Exception:
+                        ex_dividend_date_str = ""
+                else:
+                    ex_dividend_date_str = ""
             except Exception:
                 pe_ratio_val = 0.0
                 dividend_pct_val = 0.0
+                ex_dividend_date_str = ""
 
             # 🆕 แจ้งความคืบหน้าเป็นระยะ (ทุก 50 ตัว) เพราะขั้นตอนนี้ดึงข้อมูลทีละหุ้น ใช้เวลานาน
             # กว่าจุดอื่น ถ้าไม่แจ้งความคืบหน้า จะดูเหมือนค้างไม่ทำงาน โดยเฉพาะตอนรันแบบ headless
@@ -1529,6 +1544,7 @@ def load_and_calculate_stock_data_optimized():
                 'RS_Line': round(float(current_rs_val), 2),
                 'PE_Ratio': pe_ratio_val,
                 'ปันผล_%': dividend_pct_val,
+                'Ex_Dividend_Date': ex_dividend_date_str,
                 # 🆕 คอลัมน์สำหรับตัวกรอง "กลุ่ม RS Line" ทั้ง 3 แบบในหน้าเว็บ
                 'Is_RS_Above_0': is_rs_above_0,
                 'RS_Line_50D_Max': round(float(rs_line_50d_max), 2),
