@@ -1300,9 +1300,27 @@ def render_tab_stock():
                 # ตามที่ขอ) แทนที่จะแสดงตรงนี้เหมือนเดิม — คำนวณข้อมูลตรงนี้เหมือนเดิมทุกประการ
                 # เปลี่ยนแค่ "ตำแหน่งที่แสดงผลจริงบนจอ" เท่านั้น
                 with sl_tp_placeholder.container():
-                    with st.expander("🛡️ ตั้งจุดตัดขาดทุน / ทำกำไร (Stop Loss / Take Profit)"):
+                    # 🔧 แก้บั๊ก: เดิมกล่องนี้ปิดกลับทุกครั้งที่โต้ตอบกับตัวควบคุมข้างใน (เลือกหุ้น,
+                    # พิมพ์ตัวเลข) เพราะ Streamlit รีเซ็ตสถานะเปิด/ปิดกลับเป็นค่าเริ่มต้นทุกครั้งที่
+                    # หน้าเว็บรันซ้ำ แก้รอบแรกด้วย expanded=True ตรงๆ ทำให้เปิดค้างตลอดเวลา (ไม่ตรง
+                    # ตามต้องการ อยากให้ปิดโดยเริ่มต้น แต่ไม่กระพริบปิดๆ เปิดๆ ระหว่างใช้งาน) ตอนนี้
+                    # ใช้ session_state จดจำว่า "ผู้ใช้กำลังใช้งานอยู่จริง" (ผ่าน on_change ของตัว
+                    # ควบคุมข้างใน ซึ่งจะทำงานเฉพาะตอนผู้ใช้เปลี่ยนค่าจริงๆ ไม่ใช่แค่โหลดหน้าครั้งแรก)
+                    # เริ่มต้นปิดไว้ตามปกติ แต่พอเริ่มโต้ตอบแล้วจะเปิดค้างจนกว่าจะบันทึกสำเร็จ
+                    if 'sl_tp_expander_open' not in st.session_state:
+                        st.session_state['sl_tp_expander_open'] = False
+
+                    def _mark_sltp_open():
+                        st.session_state['sl_tp_expander_open'] = True
+
+                    with st.expander(
+                        "🛡️ ตั้งจุดตัดขาดทุน / ทำกำไร (Stop Loss / Take Profit)",
+                        expanded=st.session_state['sl_tp_expander_open']
+                    ):
                         _sltp_tickers = [p["หุ้น"] for p in portfolio_list]
-                        _sltp_selected = st.selectbox("เลือกหุ้น", _sltp_tickers, key="sltp_select_ticker")
+                        _sltp_selected = st.selectbox(
+                            "เลือกหุ้น", _sltp_tickers, key="sltp_select_ticker", on_change=_mark_sltp_open
+                        )
 
                         _current_holding = next((p for p in st.session_state.my_portfolio if p.get('หุ้น') == _sltp_selected), None)
                         if _current_holding:
@@ -1316,8 +1334,14 @@ def render_tab_stock():
                                 )
 
                         _sltp_col1, _sltp_col2, _sltp_col3 = st.columns([1, 1, 1])
-                        _new_sl = _sltp_col1.number_input("Stop Loss (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_sl_price")
-                        _new_tp = _sltp_col2.number_input("Take Profit (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_tp_price")
+                        _new_sl = _sltp_col1.number_input(
+                            "Stop Loss (ราคา)", min_value=0.0, step=0.01, format="%.2f",
+                            key="new_sl_price", on_change=_mark_sltp_open
+                        )
+                        _new_tp = _sltp_col2.number_input(
+                            "Take Profit (ราคา)", min_value=0.0, step=0.01, format="%.2f",
+                            key="new_tp_price", on_change=_mark_sltp_open
+                        )
                         if _sltp_col3.button("💾 บันทึกจุด SL/TP", key="save_sl_tp"):
                             if _new_sl <= 0 and _new_tp <= 0:
                                 st.warning("กรุณาระบุอย่างน้อย Stop Loss หรือ Take Profit อย่างใดอย่างหนึ่ง")
@@ -1332,6 +1356,7 @@ def render_tab_stock():
                                             p['tp_alert_sent'] = "FALSE"
                                         break
                                 save_portfolio()
+                                st.session_state['sl_tp_expander_open'] = False  # บันทึกสำเร็จแล้ว ปิดกลับให้เรียบร้อย
                                 st.success(f"บันทึกจุด SL/TP ของ {_sltp_selected} เรียบร้อย")
                                 st.rerun()
 
