@@ -1,0 +1,28 @@
+name: Realtime SL/TP Check
+on:
+  schedule:
+    # ทุก 15 นาที ระหว่าง 03:00-09:45 UTC = 10:00-16:45 เวลาไทย (ครอบคลุมเวลาตลาดหุ้นไทยเปิด
+    # 10:00-16:30 น. พอดี) เฉพาะวันจันทร์-ศุกร์ (วันทำการของตลาดหุ้น)
+    - cron: '*/15 3-9 * * 1-5'
+  workflow_dispatch:        # ให้กดรันเองได้ด้วย เพื่อทดสอบ
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run Realtime SL/TP Check
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python realtime_sl_tp_check.py
