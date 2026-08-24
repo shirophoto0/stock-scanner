@@ -1359,6 +1359,14 @@ def load_and_calculate_stock_data_optimized():
         if set_market_source is not None:
             break
 
+    # 🔧 แก้บั๊ก: yf.Ticker().history() คืนวันที่แบบมี "เขตเวลา" ติดมาด้วย (tz-aware) ในขณะที่
+    # ข้อมูลราคาหุ้นแต่ละตัว (จาก yf.download() แบบดึงเป็นชุดใหญ่ด้านบน) ไม่มีเขตเวลาติดมา
+    # (tz-naive) พอเอามาต่อกัน (.join()) ในขั้นตอนคำนวณ RS_Line เลย error ทันทีทุกตัว เพราะ
+    # pandas เทียบวันที่แบบมี/ไม่มีเขตเวลาด้วยกันไม่ได้ ตอนนี้ตัดเขตเวลาออกจาก set_market ให้
+    # เป็นแบบเดียวกับข้อมูลหุ้น (tz-naive) เสมอ ก่อนนำไปใช้งานต่อ
+    if isinstance(set_market, pd.Series) and set_market.index.tz is not None:
+        set_market.index = set_market.index.tz_localize(None)
+
     set_market_usable = isinstance(set_market, pd.Series) and len(set_market) >= 30
     if set_market_usable:
         print(f"✅ ดึงข้อมูลดัชนี SET Index สำเร็จผ่าน {set_market_source} ({len(set_market)} แถว) ใช้คำนวณ RS_Line ได้ตามปกติ")
