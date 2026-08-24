@@ -46,7 +46,8 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                 "ไม่กรองเงื่อนไขนี้",
                 "3 Month High",
                 "6 Month High",
-                "52 Week High",
+                "ใกล้จุดสูงสุด 52 สัปดาห์ (ห่างไม่เกิน 5%)",
+                "🆕 ทำจุดสูงสุดใหม่ 52 สัปดาห์วันนี้จริง",
             ],
             key="filter_nh_option"
         )
@@ -179,10 +180,18 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                 show_columns.append('New_High_6M_มาแล้ว(วัน)')
                 sort_by_col, ascending_sort = 'New_High_6M_มาแล้ว(วัน)', True
 
-            elif strategy_option == "52 Week High":
+            elif strategy_option == "ใกล้จุดสูงสุด 52 สัปดาห์ (ห่างไม่เกิน 5%)":
                 filtered_df = filtered_df[filtered_df['Is_52W_High'] == True]
                 show_columns.append('New_High_52W_มาแล้ว(วัน)')
                 sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
+
+            elif strategy_option == "🆕 ทำจุดสูงสุดใหม่ 52 สัปดาห์วันนี้จริง":
+                if 'Is_New_52W_High_Today' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Is_New_52W_High_Today'] == True]
+                    sort_by_col, ascending_sort = 'RS_Line', False
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลกลุ่มนี้ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
+                    filtered_df = filtered_df.iloc[0:0]
 
             # 🆕 กรองตามเกณฑ์เพิ่มเติม 4 ข้อ (เลือกได้หลายข้อพร้อมกัน กรองซ้อนทับกับด้านบนทั้งหมด)
             # เช็ค "column in filtered_df.columns" ก่อนเสมอ เผื่อรอบ Daily Scan ล่าสุดยังไม่เสร็จ
@@ -619,8 +628,13 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             final_sorted_df = df_scan[df_scan['Is_3M_High'] == True]
         elif strategy_option == "6 Month High":
             final_sorted_df = df_scan[df_scan['Is_6M_High'] == True]
-        elif strategy_option == "52 Week High":
+        elif strategy_option == "ใกล้จุดสูงสุด 52 สัปดาห์ (ห่างไม่เกิน 5%)":
             final_sorted_df = df_scan[df_scan['Is_52W_High'] == True]
+        elif strategy_option == "🆕 ทำจุดสูงสุดใหม่ 52 สัปดาห์วันนี้จริง":
+            if 'Is_New_52W_High_Today' in df_scan.columns:
+                final_sorted_df = df_scan[df_scan['Is_New_52W_High_Today'] == True]
+            else:
+                final_sorted_df = df_scan.iloc[0:0]
         elif strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
             if 'Is_RS_Above_0' in df_scan.columns:
                 final_sorted_df = df_scan[df_scan['Is_RS_Above_0'] == True]
@@ -642,7 +656,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
         strategy_cols_map = {
             "3 Month High": ['New_High_3M_มาแล้ว(วัน)'], 
             "6 Month High": ['New_High_6M_มาแล้ว(วัน)'],
-            "52 Week High": ['New_High_52W_มาแล้ว(วัน)'],
+            "ใกล้จุดสูงสุด 52 สัปดาห์ (ห่างไม่เกิน 5%)": ['New_High_52W_มาแล้ว(วัน)'],
             "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว": ['ตัดเส้น0ขึ้นมาแล้ว(วัน)'],
             "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)": ['อยู่ใต้เส้น0มาแล้ว(วัน)']
         }
