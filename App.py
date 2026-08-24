@@ -41,6 +41,7 @@ from tab_risk import render_tab_risk
 from tab_funds import render_tab_funds
 from tab_real_estate import render_tab_real_estate
 from tab_overview import render_tab_overview
+from tab_retirement import render_tab_retirement
 from tab_pvd import render_tab_pvd
 from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
@@ -207,9 +208,11 @@ def main():
     # 🔧 ปรับปรุง: สลับลำดับแท็บใหญ่ ให้ "ภาพรวมความมั่งคั่ง" อยู่ซ้ายสุด ตามด้วย "ระบบเทรด & สแกนหุ้น"
     # (สลับแค่ลำดับตอนประกาศตรงนี้ ไม่ต้องย้ายเนื้อหาข้างในแท็บทั้ง 2 ก้อนด้านล่างเลย เพราะโค้ด
     # อ้างอิงผ่านชื่อตัวแปรอยู่แล้ว ไม่ขึ้นกับตำแหน่งที่ประกาศ)
-    main_tab_wealth, main_tab_system = st.tabs([
+    # 🆕 เพิ่มแท็บใหญ่ที่ 3 "🎯 เกษียณอายุ" ต่อจาก "ระบบเทรด & สแกนหุ้น" ตามที่ขอ
+    main_tab_wealth, main_tab_system, main_tab_retirement = st.tabs([
         "🌐 ภาพรวมความมั่งคั่ง (Total Wealth)",
-        "📊 ระบบเทรด & สแกนหุ้น (Trading System)"
+        "📊 ระบบเทรด & สแกนหุ้น (Trading System)",
+        "🎯 เกษียณอายุ"
     ])
 
     # ==========================================================
@@ -275,6 +278,12 @@ def main():
             render_tab_pvd()
         with wealth_tab_real_estate:
             render_tab_real_estate()
+
+    # ==========================================================
+    # TAB ที่ 3: 🎯 เกษียณอายุ (เพิ่มใหม่)
+    # ==========================================================
+    with main_tab_retirement:
+        render_tab_retirement()
 
 # ------------------------------
 if __name__ == "__main__":
