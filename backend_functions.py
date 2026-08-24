@@ -180,6 +180,55 @@ def check_and_auto_stamp_value_history(client, sheet_name, current_total_value, 
         st.toast(f"⚠️ บันทึกยอด{toast_label}อัตโนมัติไม่สำเร็จ: {e}", icon="⚠️")
 
 
+# =============================================================
+# 🆕 ระบบ Watchlist (เก็บติดตามหุ้นที่สนใจ แยกจากพอร์ตจริง ไม่ต้องซื้อจริงก็เก็บได้)
+# ต้องมีชีตชื่อ 'Watchlist' (คอลัมน์ Ticker, Date_Added, Price_When_Added, Note)
+# อยู่ใน Google Sheet ของผู้ใช้ก่อนถึงจะใช้งานได้
+# =============================================================
+def load_watchlist():
+    """โหลดรายชื่อหุ้นทั้งหมดใน Watchlist คืนค่าเป็น list of dict (ว่างเปล่าถ้ายังไม่มีชีต/ข้อมูล)"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        return sheet.get_all_records()
+    except Exception:
+        return []
+
+
+def add_to_watchlist(ticker, current_price, note=""):
+    """
+    เพิ่มหุ้นเข้า Watchlist (กันเพิ่มซ้ำ ถ้ามีอยู่แล้วจะแจ้งเตือนแทนที่จะเพิ่มซ้ำ)
+    คืนค่าเป็น (สำเร็จหรือไม่: bool, ข้อความ: str)
+    """
+    ticker = str(ticker).strip().upper()
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        existing = sheet.get_all_records()
+        existing_tickers = [str(r.get('Ticker', '')).strip().upper() for r in existing]
+        if ticker in existing_tickers:
+            return False, f"{ticker} อยู่ใน Watchlist อยู่แล้ว"
+        sheet.append_row([ticker, str(date.today()), current_price, note])
+        return True, f"เพิ่ม {ticker} เข้า Watchlist สำเร็จ"
+    except Exception as e:
+        return False, f"เพิ่มไม่สำเร็จ: {e}"
+
+
+def remove_from_watchlist(ticker):
+    """ลบหุ้นออกจาก Watchlist ด้วยชื่อ Ticker คืนค่าเป็น (สำเร็จหรือไม่: bool, ข้อความ: str)"""
+    ticker = str(ticker).strip().upper()
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        cell = sheet.find(ticker)
+        if cell:
+            sheet.delete_rows(cell.row)
+            return True, f"ลบ {ticker} ออกจาก Watchlist แล้ว"
+        return False, f"ไม่พบ {ticker} ใน Watchlist"
+    except Exception as e:
+        return False, f"ลบไม่สำเร็จ: {e}"
+
+
 def extract_pvd_from_image(image_file, year_be, month_name="ธันวาคม"):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY", "")
