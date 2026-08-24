@@ -13,6 +13,7 @@ import os
 import google.generativeai as genai
 import io
 import json
+import traceback
 import requests
 import gspread
 import seaborn as sns
@@ -1410,11 +1411,12 @@ def load_and_calculate_stock_data_optimized():
             
         except Exception as e:
             failed_tickers.append(ticker)
-            # 🔧 แก้บั๊ก: เดิมกลืน error ไปเงียบๆ ไม่บอกสาเหตุเลยว่าทำไมแต่ละตัวถึงพลาด
-            # ทำให้แก้ปัญหาไม่ได้เพราะไม่รู้สาเหตุจริง ตอนนี้ print ข้อความ error ของ 3 ตัวแรก
-            # ที่พลาดออกมาให้เห็นใน log (ทั้งตอนรันในแอปและตอนรันแบบ headless ผ่าน GitHub Actions)
-            if len(failed_tickers) <= 3:
-                print(f"⚠️ {ticker} พลาดเพราะ: {type(e).__name__}: {e}")
+            # 🔧 แก้บั๊ก: เดิม print แค่ประเภท+ข้อความ error สั้นๆ ยังไม่พอจะรู้ว่า "บรรทัดไหน"
+            # ในโค้ดที่พังจริง ตอนนี้ print traceback แบบเต็มของ 2 ตัวแรกที่พลาด จะได้เห็น
+            # เลขบรรทัดที่แท้จริงในโค้ดที่ทำให้เกิด error
+            if len(failed_tickers) <= 2:
+                print(f"⚠️ {ticker} พลาดเพราะ (traceback เต็ม):")
+                traceback.print_exc()
             continue
             
     status_text.empty()
