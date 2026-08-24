@@ -550,6 +550,21 @@ def render_tab_stock():
                                 ]).hide(axis='index'), 
                                 use_container_width=True
                             )
+
+                            # 🆕 เตือนความเสี่ยงกระจุกตัวตาม Sector (ถือกลุ่มอุตสาหกรรมเดียวหนักเกินไป)
+                            # ใช้มูลค่าตลาดปัจจุบัน (ต้นทุน + กำไร/ขาดทุน) ไม่ใช่แค่ต้นทุน เพราะสัดส่วน
+                            # จริงตอนนี้อาจเปลี่ยนไปมากถ้าหุ้นกลุ่มไหนกลุ่มหนึ่งราคาวิ่งขึ้น/ลงแรง
+                            df_sector_summary['Market_Value_Now'] = df_sector_summary['Invested_Cost'] + df_sector_summary['Net_Profit']
+                            _sector_total = df_sector_summary['Market_Value_Now'].sum()
+                            if _sector_total > 0:
+                                df_sector_summary['Concentration_Pct'] = (df_sector_summary['Market_Value_Now'] / _sector_total) * 100
+                                _heavy_sectors = df_sector_summary[df_sector_summary['Concentration_Pct'] >= 40].sort_values('Concentration_Pct', ascending=False)
+                                if not _heavy_sectors.empty:
+                                    _warn_lines = "\n".join(
+                                        f"- **{r['Sector']}**: {r['Concentration_Pct']:.1f}% ของพอร์ต ({r['Ticker']})"
+                                        for _, r in _heavy_sectors.iterrows()
+                                    )
+                                    st.warning(f"⚠️ **กระจุกตัวตาม Sector สูง** (เกิน 40% ของพอร์ต):\n{_warn_lines}")
                         else:
                             st.info("ยังไม่มีข้อมูลเพียงพอสำหรับการวิเคราะห์ Sector")
                     else:
@@ -1111,6 +1126,19 @@ def render_tab_stock():
                     ])
                     , use_container_width=True, hide_index=True
                 )
+
+                # 🆕 เตือนความเสี่ยงกระจุกตัวรายหุ้น (ถือหุ้นตัวเดียวหนักเกินไป)
+                if total_value > 0:
+                    _heavy_stocks = [
+                        p for p in portfolio_list
+                        if (p["มูลค่าตลาด"] / total_value * 100) >= 20
+                    ]
+                    if _heavy_stocks:
+                        _warn_lines = "\n".join(
+                            f"- **{p['หุ้น']}**: {(p['มูลค่าตลาด'] / total_value * 100):.1f}% ของพอร์ต"
+                            for p in sorted(_heavy_stocks, key=lambda x: x["มูลค่าตลาด"], reverse=True)
+                        )
+                        st.warning(f"⚠️ **กระจุกตัวรายหุ้นสูง** (เกิน 20% ของพอร์ต):\n{_warn_lines}")
 
                 if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                     st.session_state.edit_mode = True
