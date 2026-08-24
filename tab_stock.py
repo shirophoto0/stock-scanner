@@ -17,7 +17,7 @@ from backend_functions import (
     display_performance_dashboard, get_cached_spreadsheet, get_gsheet_client,
     get_sector_from_mapping, load_data, load_data_from_file, load_total_cash_balance,
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
-    save_portfolio, save_portfolio_snapshot, get_active_sheet_name
+    save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet
 )
 from theme import style_plotly, style_altair, get_theme_colors, render_metric_card
 
@@ -1139,6 +1139,30 @@ def render_tab_stock():
                             for p in sorted(_heavy_stocks, key=lambda x: x["มูลค่าตลาด"], reverse=True)
                         )
                         st.warning(f"⚠️ **กระจุกตัวรายหุ้นสูง** (เกิน 20% ของพอร์ต):\n{_warn_lines}")
+
+                # 🆕 ปันผลที่คาดว่าจะได้รับต่อปี — ประเมินจากมูลค่าตลาดปัจจุบันของแต่ละหุ้น x %
+                # ปันผลล่าสุดที่ได้จาก Daily Scan (คอลัมน์ 'ปันผล_%' ในชีต StockData) เป็นตัวเลข
+                # "คาดการณ์" คร่าวๆ เท่านั้น ไม่ใช่ตัวเลขที่การันตี เพราะบริษัทอาจปรับเปลี่ยนนโยบาย
+                # จ่ายปันผลได้ตลอดเวลา
+                try:
+                    df_div_lookup = load_from_gsheet()
+                    if (
+                        df_div_lookup is not None and not df_div_lookup.empty
+                        and 'Ticker' in df_div_lookup.columns and 'ปันผล_%' in df_div_lookup.columns
+                    ):
+                        _dividend_map = dict(zip(df_div_lookup['Ticker'], df_div_lookup['ปันผล_%']))
+                        _estimated_annual_dividend = sum(
+                            p["มูลค่าตลาด"] * (float(_dividend_map.get(p["หุ้น"], 0) or 0) / 100)
+                            for p in portfolio_list
+                        )
+                        st.divider()
+                        _div_col, _, _ = st.columns(3)
+                        render_metric_card(
+                            _div_col, "ปันผลที่คาดว่าจะได้รับต่อปี", f"{_estimated_annual_dividend:,.0f} ฿",
+                            icon="💸", caption="ประเมินจากมูลค่าพอร์ตปัจจุบัน x % ปันผลล่าสุด (ไม่การันตี)"
+                        )
+                except Exception:
+                    pass
 
                 if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                     st.session_state.edit_mode = True
