@@ -3,6 +3,7 @@
 # แท็บจัดการพอร์ตอสังหาริมทรัพย์ (Phase 2 ของการแยกไฟล์)
 # =============================================================
 import streamlit as st
+from theme import render_metric_card
 import pandas as pd
 import time
 from datetime import datetime
@@ -207,7 +208,7 @@ def render_tab_real_estate():
         st.session_state['total_real_estate_value'] = total_re_value
 
         col_m1, col_m2 = st.columns([2, 1])
-        col_m1.metric("🏡 มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{total_re_value:,.2f} ฿")
+        render_metric_card(col_m1, "มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{total_re_value:,.2f} ฿", icon="🏡")
 
         existing_names = [item["ชื่อทรัพย์สิน"] for item in st.session_state['real_estate_portfolio']]
         with col_m2:
