@@ -1324,35 +1324,25 @@ def render_tab_stock():
 
         st.markdown("#### 💰 บันทึกและจัดการข้อมูลเงินปันผล (Dividend Tracker)")
 
-        # 🆕 ย้ายมาจากหน้าพอร์ตโฟลิโอ: การ์ดปันผลที่คาดว่าจะได้รับต่อปี + ตารางวันขึ้น XD ล่าสุด
-        # (ย้ายมาไว้ในแท็บนี้แทน เพราะเป็นเรื่องปันผลโดยตรง เข้าธีมเดียวกับข้อมูลปันผลอื่นในแท็บนี้)
-        with st.expander("💸 ปันผลที่คาดว่าจะได้รับต่อปี (ประเมินจากพอร์ตปัจจุบัน)"):
-            if portfolio_list:
-                # ประเมินจากมูลค่าตลาดปัจจุบันของแต่ละหุ้น x % ปันผลล่าสุดที่ได้จาก Daily Scan
-                # (คอลัมน์ 'ปันผล_%' ในชีต StockData) เป็นตัวเลข "คาดการณ์" คร่าวๆ เท่านั้น
-                # ไม่ใช่ตัวเลขที่การันตี เพราะบริษัทอาจปรับเปลี่ยนนโยบายจ่ายปันผลได้ตลอดเวลา
-                try:
-                    df_div_lookup = load_from_gsheet()
-                    if (
-                        df_div_lookup is not None and not df_div_lookup.empty
-                        and 'Ticker' in df_div_lookup.columns and 'ปันผล_%' in df_div_lookup.columns
-                    ):
-                        _dividend_map = dict(zip(df_div_lookup['Ticker'], df_div_lookup['ปันผล_%']))
-                        _estimated_annual_dividend = sum(
-                            p["มูลค่าตลาด"] * (float(_dividend_map.get(p["หุ้น"], 0) or 0) / 100)
-                            for p in portfolio_list
-                        )
-                        _div_col, _, _ = st.columns(3)
-                        render_metric_card(
-                            _div_col, "ปันผลที่คาดว่าจะได้รับต่อปี", f"{_estimated_annual_dividend:,.0f} ฿",
-                            icon="💸", caption="ประเมินจากมูลค่าพอร์ตปัจจุบัน x % ปันผลล่าสุด (ไม่การันตี)"
-                        )
-                    else:
-                        st.info("ยังไม่มีข้อมูล % ปันผลในระบบ (รอข้อมูลจาก Daily Scan)")
-                except Exception:
-                    st.info("ยังไม่สามารถประเมินปันผลได้ในขณะนี้")
-            else:
-                st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตสำหรับประเมินปันผล")
+        # 🔧 ปรับปรุง: คำนวณปันผลที่คาดว่าจะได้รับต่อปีไว้ล่วงหน้าตรงนี้ (ไม่แสดงผลตรงนี้แล้ว)
+        # แล้วเอาไปโชว์รวมแถวเดียวกับการ์ดสรุปภาพรวมปันผลด้านล่าง (ตามที่ขอ ไม่ต้องซ่อนไว้ในกล่องพับ
+        # เก็บแยกต่างหากอีกต่อไป)
+        _estimated_annual_dividend = None
+        if portfolio_list:
+            try:
+                df_div_lookup = load_from_gsheet()
+                if (
+                    df_div_lookup is not None and not df_div_lookup.empty
+                    and 'Ticker' in df_div_lookup.columns and 'ปันผล_%' in df_div_lookup.columns
+                ):
+                    _dividend_map = dict(zip(df_div_lookup['Ticker'], df_div_lookup['ปันผล_%']))
+                    _estimated_annual_dividend = sum(
+                        p["มูลค่าตลาด"] * (float(_dividend_map.get(p["หุ้น"], 0) or 0) / 100)
+                        for p in portfolio_list
+                    )
+            except Exception:
+                pass
+
 
         with st.expander("📅 ดูวันขึ้น XD ล่าสุดของแต่ละหุ้นในพอร์ต"):
             if portfolio_list:
@@ -1542,9 +1532,14 @@ def render_tab_stock():
             total_received = df_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_div.columns else 0
             total_tax = df_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_div.columns else 0
 
-            m1, m2 = st.columns(2)
-            render_metric_card(m1, "เงินปันผลรับสุทธิรวมทั้งสิ้น", f"{total_received:,.2f} ฿", icon="💰")
-            render_metric_card(m2, "ภาษีหัก ณ ที่จ่ายรวม", f"{total_tax:,.2f} ฿", icon="🏛️")
+            m1, m2, m3 = st.columns(3)
+            render_metric_card(
+                m1, "ปันผลที่คาดว่าจะได้รับต่อปี",
+                f"{_estimated_annual_dividend:,.0f} ฿" if _estimated_annual_dividend is not None else "N/A",
+                icon="💸", caption="ประเมินจากมูลค่าพอร์ตปัจจุบัน x % ปันผลล่าสุด (ไม่การันตี)"
+            )
+            render_metric_card(m2, "เงินปันผลรับสุทธิรวมทั้งสิ้น", f"{total_received:,.2f} ฿", icon="💰")
+            render_metric_card(m3, "ภาษีหัก ณ ที่จ่ายรวม", f"{total_tax:,.2f} ฿", icon="🏛️")
 
             st.markdown("<br>", unsafe_allow_html=True)
 
