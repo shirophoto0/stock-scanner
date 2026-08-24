@@ -1327,18 +1327,43 @@ def load_and_calculate_stock_data_optimized():
     # เวอร์ชันที่ใช้งานจริงคืนตารางหัวข้อซ้อน 2 ชั้นแม้ขอแค่หุ้นตัวเดียว ทำให้ได้ "ตาราง 1 คอลัมน์"
     # (DataFrame) แทน พอเอาไปสั่ง .rename('Market_Close') ต่อ pandas เข้าใจผิดว่าจะเปลี่ยนชื่อแถว
     # แทนชื่อคอลัมน์ แล้วพยายามเรียก 'Market_Close' เป็นฟังก์ชัน (ทั้งที่เป็นแค่ข้อความ) จน error
-    # ทันที — และเพราะ set_market ใช้ร่วมกันทุกหุ้น พอพังตัวเดียว หุ้นทั้งหมดเลยพังตามไปด้วย
-    # .squeeze() ช่วยแปลง "ตาราง 1 คอลัมน์" ให้กลายเป็น "คอลัมน์เดี่ยว" ให้เสมอ (ถ้าเป็นคอลัมน์เดี่ยว
-    # อยู่แล้วก็ไม่มีผลอะไร ปลอดภัยทั้ง 2 กรณี)
-    # 🔧 แก้บั๊กเพิ่ม (สำคัญ): Yahoo Finance บางครั้งให้ข้อมูลย้อนหลังของดัชนี SET ไม่ครบตามที่ขอ
-    # (บางรอบได้แค่ 1 แถว) ซึ่งเป็นข้อจำกัดของ Yahoo เอง ไม่ใช่บั๊กที่แก้จากโค้ดได้ตรงๆ ตอนนี้เช็ค
-    # ก่อนว่าข้อมูลพอสำหรับคำนวณ RS_Line ไหม (อย่างน้อย 30 วัน) ถ้าไม่พอ จะข้ามแค่ RS_Line ไป
-    # (ตั้งเป็น 0 ให้ทุกตัว) แต่ยังคงคำนวณ/บันทึกข้อมูลอื่นๆ ของหุ้นทั้งหมดได้ตามปกติ ไม่ให้ปัญหา
-    # แค่จุดเดียวลากทั้งการสแกน 494 ตัวพังไปด้วยอีกต่อไป
-    set_market = yf.download("^SET.BK", period="2y")['Close'].squeeze()
+    # ทันที
+    # 🔧 แก้บั๊กเพิ่ม (สำคัญ): Yahoo Finance บางครั้งให้ข้อมูลย้อนหลังของดัชนี SET ผ่าน yf.download()
+    # ไม่ครบตามที่ขอ (บางรอบได้แค่ 1 แถว) เป็นข้อจำกัดของ Yahoo/yfinance เฉพาะฟังก์ชัน download()
+    # กับสัญลักษณ์ประเภทดัชนีบางตัว ตอนนี้ลองหลายวิธีเรียงกัน (วิธีไหนได้ข้อมูลพอก่อน ใช้วิธีนั้นเลย)
+    # แทนที่จะพึ่งพาแค่วิธีเดียวและเสี่ยงต้องมาแก้ทีละรอบ:
+    #   1. yf.Ticker().history() — ดึงแบบเจาะจงสัญลักษณ์เดียว มักได้ข้อมูลย้อนหลังครบกว่า download()
+    #      แบบเป็นชุดใหญ่ (โครงสร้างข้อมูลก็ไม่มีปัญหาหัวข้อซ้อน 2 ชั้นแบบ download() ด้วย)
+    #   2. yf.download() แบบเดิม (เผื่อกรณีที่ 1 ใช้ไม่ได้ด้วยเหตุผลอื่น)
+    #   3. ลองสัญลักษณ์สำรอง "SET.BK" (ไม่มี ^ นำหน้า) ด้วยทั้ง 2 วิธีข้างต้น
+    def _try_fetch_set_index(symbol):
+        """พยายามดึงข้อมูลดัชนี SET Index ด้วย 2 วิธี คืนค่า Series ว่างเปล่าถ้าล้มเหลวทั้งคู่"""
+        try:
+            s = yf.Ticker(symbol).history(period="2y")['Close']
+            if isinstance(s, pd.Series) and len(s) >= 30:
+                return s, f"yf.Ticker('{symbol}').history()"
+        except Exception:
+            pass
+        try:
+            s = yf.download(symbol, period="2y")['Close'].squeeze()
+            if isinstance(s, pd.Series) and len(s) >= 30:
+                return s, f"yf.download('{symbol}')"
+        except Exception:
+            pass
+        return pd.Series(dtype=float), None
+
+    set_market = pd.Series(dtype=float)
+    set_market_source = None
+    for _sym in ["^SET.BK", "SET.BK"]:
+        set_market, set_market_source = _try_fetch_set_index(_sym)
+        if set_market_source is not None:
+            break
+
     set_market_usable = isinstance(set_market, pd.Series) and len(set_market) >= 30
-    if not set_market_usable:
-        print(f"⚠️ ข้อมูลดัชนี SET Index ไม่พอสำหรับคำนวณ RS_Line (ได้ {len(set_market) if hasattr(set_market, '__len__') else 'N/A'} แถว) จะข้ามการคำนวณ RS_Line ไปก่อน แต่ยังคงบันทึกข้อมูลอื่นๆ ตามปกติ")
+    if set_market_usable:
+        print(f"✅ ดึงข้อมูลดัชนี SET Index สำเร็จผ่าน {set_market_source} ({len(set_market)} แถว) ใช้คำนวณ RS_Line ได้ตามปกติ")
+    else:
+        print("⚠️ ข้อมูลดัชนี SET Index ไม่พอสำหรับคำนวณ RS_Line (ลองครบทุกวิธีแล้ว) จะข้ามการคำนวณ RS_Line ไปก่อน แต่ยังคงบันทึกข้อมูลอื่นๆ ตามปกติ")
     
     stock_list = []
     failed_tickers = []  # 🆕 เก็บรายชื่อหุ้นที่ดึงข้อมูลไม่สำเร็จ เพื่อรายงานให้ผู้ใช้ทราบ
@@ -1368,7 +1393,11 @@ def load_and_calculate_stock_data_optimized():
                 pe_ratio_raw = stock_info.get('trailingPE')
                 dividend_yield_raw = stock_info.get('dividendYield')
                 pe_ratio_val = round(float(pe_ratio_raw), 2) if pe_ratio_raw is not None else 0.0
-                dividend_pct_val = round(float(dividend_yield_raw) * 100, 2) if dividend_yield_raw is not None else 0.0
+                # 🔧 แก้บั๊ก: เดิมคูณ 100 เพิ่ม โดยเข้าใจว่า yfinance คืนค่าเป็นเลขทศนิยม (เช่น 0.0278 = 2.78%)
+                # แต่ yfinance เวอร์ชันที่ใช้งานจริงคืนค่าเป็น "เปอร์เซ็นต์" มาให้ตรงๆ อยู่แล้ว (เช่น 2.78
+                # หมายถึง 2.78% เลย) พอเอาไปคูณ 100 ซ้ำ เลยกลายเป็นเลขหลักร้อยที่ผิดเพี้ยน (เช่น 278)
+                # ตอนนี้ใช้ค่าที่ได้มาตรงๆ โดยไม่คูณซ้ำ
+                dividend_pct_val = round(float(dividend_yield_raw), 2) if dividend_yield_raw is not None else 0.0
             except Exception:
                 pe_ratio_val = 0.0
                 dividend_pct_val = 0.0
