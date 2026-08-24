@@ -146,6 +146,37 @@ def check_and_auto_stamp_fund_value(client, current_total_value):
         # ถ้ายังไม่มีชีต Fund_Value_History หรือเกิดปัญหาใดๆ ให้ข้ามไปเงียบๆ ไม่ให้แอปพัง
         pass
 
+
+def check_and_auto_stamp_value_history(client, sheet_name, current_total_value, toast_label):
+    """
+    🆕 เวอร์ชันทั่วไปของ check_and_auto_stamp_fund_value() ใช้บันทึกยอดสินทรัพย์ประเภทไหนก็ได้
+    (ไม่จำกัดแค่กองทุนรวม) ลงชีตประวัติรายเดือนโดยอัตโนมัติ ทำงานแบบเดียวกันทุกประการ แค่รับชื่อ
+    ชีตและข้อความแจ้งเตือนเป็นพารามิเตอร์แทน จะได้ใช้ซ้ำกับทองคำ/อสังหาริมทรัพย์/ฯลฯ ได้โดยไม่ต้อง
+    เขียนฟังก์ชันซ้ำหลายตัว ต้องมีชีตชื่อตามที่ระบุ (คอลัมน์ Date, Value) อยู่ใน Google Sheet ก่อน
+    """
+    try:
+        sheet_history = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet(sheet_name)
+        data = sheet_history.get_all_records()
+
+        last_recorded_month = ""
+        if data:
+            last_date_str = str(data[-1].get('Date', ''))
+            if last_date_str:
+                last_recorded_month = last_date_str[:7]
+
+        today = datetime.today()
+        prev_month_date = today.replace(day=1) - timedelta(days=5)
+        target_month_str = prev_month_date.strftime('%Y-%m')
+        target_date_str = prev_month_date.strftime('%Y-%m-%d')
+
+        if last_recorded_month != target_month_str:
+            sheet_history.append_row([target_date_str, current_total_value])
+            st.toast(f"📊 ระบบบันทึกยอด{toast_label}สิ้นเดือนอัตโนมัติเรียบร้อย: {target_month_str}", icon="✅")
+
+    except Exception:
+        pass
+
+
 def extract_pvd_from_image(image_file, year_be, month_name="ธันวาคม"):
     try:
         api_key = st.secrets.get("GOOGLE_API_KEY", "")
