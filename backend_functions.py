@@ -1310,8 +1310,12 @@ def load_and_calculate_stock_data_optimized():
     # ปัจจุบัน (494 ตัว ไม่ใช่ 100 ตัวแล้ว) เปลี่ยนให้แสดงจำนวนจริงแบบไดนามิกแทน
     status_text.text(f"กำลังดาวน์โหลดข้อมูลหุ้น {len(SET100_TICKERS)} ตัว... (กรุณารอ อาจใช้เวลาสักครู่)")
     
-    # 1. เตรียม Tickers (เติม .BK ต่อท้ายทุกตัว)
-    tickers_full = [f"{t}.BK" for t in SET100_TICKERS]
+    # 1. เตรียม Tickers
+    # 🔧 แก้บั๊ก: เดิมเติม ".BK" ต่อท้ายซ้ำ ทั้งที่ชื่อหุ้นใน constants.py มี ".BK" อยู่แล้วทุกตัว
+    # (เช่น "A5.BK") ทำให้กลายเป็น "A5.BK.BK" ซึ่งไม่มีอยู่จริงบน Yahoo Finance ดึงข้อมูลไม่สำเร็จ
+    # เลยสักตัวเดียว (Yahoo แจ้ง "possibly delisted" ทุกตัว) ตอนนี้ใช้ชื่อจาก SET100_TICKERS ตรงๆ
+    # โดยไม่เติมอะไรเพิ่ม
+    tickers_full = SET100_TICKERS
     
     # 2. ดึงข้อมูลทั้งหมดในคราวเดียว (Batch Download)
     # ใช้ threads=True ช่วยให้ดึงข้อมูลเร็วขึ้นหลายเท่า
@@ -1327,7 +1331,10 @@ def load_and_calculate_stock_data_optimized():
     for i, ticker in enumerate(SET100_TICKERS):
         try:
             # ดึงเฉพาะข้อมูลของหุ้นตัวนั้นๆ จาก DataFrame ที่โหลดมา
-            df = data[ticker.replace('.BK', '')]
+            # 🔧 แก้บั๊ก: เดิมพยายามค้นหาด้วยชื่อที่ตัด ".BK" ออก (เช่น "A5") แต่ข้อมูลที่ดาวน์โหลด
+            # มาจริงถูกเก็บด้วยชื่อเต็ม "A5.BK" (ตรงกับที่ใช้ตอนดาวน์โหลด) ค้นหาไม่เจอเลยสักตัว
+            # ตอนนี้ใช้ ticker ตรงๆ (มี .BK อยู่แล้ว) ให้ตรงกับชื่อที่ดาวน์โหลดมาจริง
+            df = data[ticker]
             if df.empty or len(df) < 200:
                 failed_tickers.append(ticker)
                 continue
