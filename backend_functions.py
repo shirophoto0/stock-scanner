@@ -1668,3 +1668,89 @@ def calculate_rsi(series, period=14):
     rs = gain / loss
     rsi = 100 - (100 / (1 + rs))
     return rsi
+
+
+# =============================================================
+# 🆕 ระบบส่งออกรายงาน Net Worth เป็น PDF (ภาษาอังกฤษ เพื่อไม่ต้องฝังฟอนต์ไทยเพิ่มเติม —
+# ฟอนต์มาตรฐานของ reportlab ไม่รองรับภาษาไทย ถ้าจะทำเป็นไทยต้องฝังไฟล์ฟอนต์เองก่อน)
+# =============================================================
+def generate_net_worth_pdf_report(app_title, net_worth_excl_re, net_worth_total, asset_breakdown):
+    """
+    สร้างรายงานสรุปสินทรัพย์เป็นไฟล์ PDF คืนค่าเป็น bytes (ใช้กับ st.download_button ได้ตรงๆ)
+    asset_breakdown: list of (ชื่อสินทรัพย์: str, มูลค่า: float) เรียงตามลำดับที่จะแสดงในตาราง
+    """
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+    from reportlab.lib.units import cm
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2 * cm, bottomMargin=2 * cm)
+    styles = getSampleStyleSheet()
+    story = []
+
+    # --- หัวรายงาน ---
+    story.append(Paragraph(f"{app_title} - Net Worth Report", styles['Title']))
+    story.append(Paragraph(f"Generated on {datetime.today().strftime('%d %B %Y')}", styles['Normal']))
+    story.append(Spacer(1, 20))
+
+    # --- สรุป Net Worth ---
+    story.append(Paragraph("Net Worth Summary", styles['Heading2']))
+    summary_table = Table([
+        ["Net Worth (excl. Real Estate)", f"{net_worth_excl_re:,.2f} THB"],
+        ["Net Worth (Total, incl. Real Estate)", f"{net_worth_total:,.2f} THB"],
+    ], colWidths=[320, 180])
+    summary_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 12),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#F1EEE8')),
+        ('ALIGN', (1, 0), (1, -1), 'RIGHT'),
+    ]))
+    story.append(summary_table)
+    story.append(Spacer(1, 20))
+
+    # --- ตารางสัดส่วนสินทรัพย์ ---
+    story.append(Paragraph("Asset Allocation", styles['Heading2']))
+    _total_for_pct = sum(v for _, v in asset_breakdown) or 1
+    table_data = [["Asset Category", "Value (THB)", "% of Total"]]
+    for name, value in asset_breakdown:
+        pct = (value / _total_for_pct) * 100
+        table_data.append([name, f"{value:,.2f}", f"{pct:.1f}%"])
+
+    asset_table = Table(table_data, colWidths=[220, 150, 100])
+    asset_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7C9885')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ALIGN', (1, 0), (-1, -1), 'RIGHT'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(asset_table)
+    story.append(Spacer(1, 20))
+
+    # --- กราฟวงกลมสัดส่วนสินทรัพย์ (วาดด้วย matplotlib แล้วฝังเป็นรูปภาพ) ---
+    try:
+        _names = [n for n, v in asset_breakdown if v > 0]
+        _values = [v for n, v in asset_breakdown if v > 0]
+        if _values:
+            fig, ax = plt.subplots(figsize=(5, 5))
+            ax.pie(_values, labels=_names, autopct='%1.1f%%', startangle=90)
+            ax.axis('equal')
+            img_buffer = io.BytesIO()
+            plt.savefig(img_buffer, format='png', dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            img_buffer.seek(0)
+            story.append(Paragraph("Asset Allocation Chart", styles['Heading2']))
+            story.append(Image(img_buffer, width=350, height=350))
+    except Exception:
+        pass  # ถ้าวาดกราฟพลาด ยังคงส่งรายงานที่เหลือ (หัวข้อ+ตาราง) ออกไปได้ตามปกติ
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
