@@ -109,6 +109,15 @@ def render_tab_real_estate():
         except Exception as e:
             st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้ กำลังจะลองใหม่อัตโนมัติ: {e}")
 
+    # 🆕 ย้ายการ์ดสรุปมูลค่าสุทธิรวมมาไว้บนสุด (เห็นเป็น Dashboard ทันที ไม่ต้องเลื่อนหาด้านล่าง)
+    # คำนวณจากข้อมูลที่โหลดเข้า session_state แล้วโดยตรง ไม่ต้องรอให้ตาราง/ฟอร์มด้านล่างแสดงก่อน
+    _total_re_value_top = sum(
+        item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
+        for item in st.session_state.get('real_estate_portfolio', [])
+    )
+    st.session_state['total_real_estate_value'] = _total_re_value_top
+    render_metric_card(st, "มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{_total_re_value_top:,.2f} ฿", icon="🏡")
+
     st.markdown("---")
     st.markdown("#### 📝 เพิ่ม / แก้ไขข้อมูลอสังหาริมทรัพย์")
     st.info("💡 **วิธีแก้ไข:** คลิกเลือกแถวที่ต้องการในตารางด้านล่าง ข้อมูลจะวิ่งขึ้นมาที่ฟอร์มนี้ให้อัตโนมัติ")
@@ -207,10 +216,8 @@ def render_tab_real_estate():
         total_re_value = df_re["มูลค่าสุทธิ (บาท)"].sum()
         st.session_state['total_real_estate_value'] = total_re_value
 
-        col_m1, col_m2 = st.columns([2, 1])
-        render_metric_card(col_m1, "มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{total_re_value:,.2f} ฿", icon="🏡")
-
         existing_names = [item["ชื่อทรัพย์สิน"] for item in st.session_state['real_estate_portfolio']]
+        col_m2 = st.container()
         with col_m2:
             if existing_names:
                 del_target = st.selectbox("เลือกรายการที่จะลบ", existing_names, key="re_del_select")
