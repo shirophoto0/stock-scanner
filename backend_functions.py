@@ -1398,7 +1398,11 @@ def load_and_calculate_stock_data_optimized():
     # (tz-naive) พอเอามาต่อกัน (.join()) ในขั้นตอนคำนวณ RS_Line เลย error ทันทีทุกตัว เพราะ
     # pandas เทียบวันที่แบบมี/ไม่มีเขตเวลาด้วยกันไม่ได้ ตอนนี้ตัดเขตเวลาออกจาก set_market ให้
     # เป็นแบบเดียวกับข้อมูลหุ้น (tz-naive) เสมอ ก่อนนำไปใช้งานต่อ
-    if isinstance(set_market, pd.Series) and set_market.index.tz is not None:
+    # 🔧 แก้บั๊กเพิ่ม: เดิมเข้าถึง set_market.index.tz ตรงๆ ถ้าทุกวิธีดึงข้อมูลล้มเหลวหมด (ได้
+    # ตารางว่างเปล่ากลับมา) ตัวชี้แถว (index) ของตารางว่างจะเป็นคนละชนิดกับตารางที่มีข้อมูลจริง
+    # (ไม่มี .tz ให้เข้าถึงเลย) ทำให้ error ซ้อนขึ้นมาอีกชั้น ตอนนี้ใช้ getattr() แทน ปลอดภัยกว่า
+    # เพราะจะได้ None กลับมาเฉยๆ ถ้าตัวชี้แถวไม่มี .tz ให้เข้าถึง แทนที่จะ error
+    if isinstance(set_market, pd.Series) and getattr(set_market.index, 'tz', None) is not None:
         set_market.index = set_market.index.tz_localize(None)
 
     set_market_usable = isinstance(set_market, pd.Series) and len(set_market) >= 30
