@@ -1288,6 +1288,44 @@ def render_tab_stock():
                         )
                         st.warning(f"⚠️ **กระจุกตัวรายหุ้นสูง** (เกิน 20% ของพอร์ต):\n{_warn_lines}")
 
+                # 🆕 ตั้งจุดตัดขาดทุน (Stop Loss) / จุดขายทำกำไร (Take Profit) ต่อหุ้น สำหรับระบบ
+                # แจ้งเตือนอัตโนมัติผ่าน Telegram (เช็คทุกวันตอน Daily Scan ทำงาน คล้ายกับระบบ
+                # ราคาเป้าหมายใน Watchlist แต่แยกกันคนละระบบ เพราะเป็นหุ้นที่ถืออยู่จริงในพอร์ต)
+                with st.expander("🛡️ ตั้งจุดตัดขาดทุน / ทำกำไร (Stop Loss / Take Profit)"):
+                    _sltp_tickers = [p["หุ้น"] for p in portfolio_list]
+                    _sltp_selected = st.selectbox("เลือกหุ้น", _sltp_tickers, key="sltp_select_ticker")
+
+                    _current_holding = next((p for p in st.session_state.my_portfolio if p.get('หุ้น') == _sltp_selected), None)
+                    if _current_holding:
+                        _cur_sl = _current_holding.get('stop_loss_price')
+                        _cur_tp = _current_holding.get('take_profit_price')
+                        if _cur_sl or _cur_tp:
+                            st.caption(
+                                f"🎯 ปัจจุบัน: "
+                                + (f"Stop Loss {float(_cur_sl):,.2f} ฿ " if _cur_sl else "")
+                                + (f"| Take Profit {float(_cur_tp):,.2f} ฿" if _cur_tp else "")
+                            )
+
+                    _sltp_col1, _sltp_col2, _sltp_col3 = st.columns([1, 1, 1])
+                    _new_sl = _sltp_col1.number_input("Stop Loss (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_sl_price")
+                    _new_tp = _sltp_col2.number_input("Take Profit (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_tp_price")
+                    if _sltp_col3.button("💾 บันทึกจุด SL/TP", key="save_sl_tp"):
+                        if _new_sl <= 0 and _new_tp <= 0:
+                            st.warning("กรุณาระบุอย่างน้อย Stop Loss หรือ Take Profit อย่างใดอย่างหนึ่ง")
+                        else:
+                            for p in st.session_state.my_portfolio:
+                                if p.get('หุ้น') == _sltp_selected:
+                                    if _new_sl > 0:
+                                        p['stop_loss_price'] = _new_sl
+                                        p['sl_alert_sent'] = "FALSE"
+                                    if _new_tp > 0:
+                                        p['take_profit_price'] = _new_tp
+                                        p['tp_alert_sent'] = "FALSE"
+                                    break
+                            save_portfolio()
+                            st.success(f"บันทึกจุด SL/TP ของ {_sltp_selected} เรียบร้อย")
+                            st.rerun()
+
                 if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                     st.session_state.edit_mode = True
             else:
