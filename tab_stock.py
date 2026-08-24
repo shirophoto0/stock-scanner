@@ -76,9 +76,53 @@ def _render_market_comparison():
         st.info("ช่วงเวลาของข้อมูลพอร์ตกับข้อมูล SET Index ไม่ตรงกันพอที่จะเปรียบเทียบได้ในตอนนี้")
         return
 
-    base_port = df_port['Market_Value'].iloc[0]
+    # 🔧 แก้บั๊ก (สำคัญ): เดิมคำนวณ % ผลตอบแทนพอร์ตแบบง่ายๆ จาก (มูลค่าปัจจุบัน - มูลค่าเริ่มต้น)
+    # ซึ่ง "มูลค่าพอร์ต" รวมเงินสดด้วย ทำให้ถ้าเติมเงินสดเข้าไปเพิ่ม (ไม่เกี่ยวกับผลตอบแทนการลงทุน
+    # เลย) ยอด % จะพุ่งขึ้นผิดเพี้ยน เทียบกับตลาดได้ไม่ยุติธรรม ตอนนี้เปลี่ยนมาใช้ Time-Weighted
+    # Return (TWR) — มาตรฐานที่กองทุน/โบรกเกอร์ใช้จริง คำนวณผลตอบแทนแยกเป็นช่วงๆ ทุกครั้งที่มีการ
+    # เติม/ถอนเงินสดจริง (ไม่นับรายการซื้อ-ขายหุ้น เพราะแค่ย้ายเงินจากเงินสดไปหุ้นในพอร์ตเดียวกัน
+    # ไม่ใช่เงินไหลเข้า-ออกจากภายนอก) แล้วนำผลตอบแทนแต่ละช่วงมาต่อกัน (Chain-linking) เพื่อตัด
+    # ผลกระทบจากจังหวะเติม-ถอนเงินออกไปทั้งหมด
+    try:
+        _cf_client = get_gsheet_client()
+        _cf_sheet = get_cached_spreadsheet(_cf_client, get_active_sheet_name()).worksheet('CashFlow')
+        _cf_data = _cf_sheet.get_all_records()
+        df_cashflow = pd.DataFrame(_cf_data)
+        if not df_cashflow.empty and 'Date' in df_cashflow.columns and 'Type' in df_cashflow.columns:
+            df_cashflow['Date'] = pd.to_datetime(df_cashflow['Date'], errors='coerce')
+            df_cashflow['Amount'] = pd.to_numeric(df_cashflow['Amount'], errors='coerce').fillna(0)
+            # นับเฉพาะรายการเติม/ถอนเงินสดจริงเท่านั้น (ไม่นับ "ซื้อหุ้น"/"ขายหุ้น" ที่แค่ย้ายเงิน
+            # ภายในพอร์ตเดียวกัน และไม่นับปันผล/รายได้อื่นๆ เพราะถือเป็นผลตอบแทนการลงทุน ไม่ใช่
+            # เงินทุนใหม่จากภายนอก)
+            df_cashflow = df_cashflow[df_cashflow['Type'].isin(['เติมเงินสด', 'ถอนเงินสด'])]
+            df_cashflow = df_cashflow.dropna(subset=['Date'])
+        else:
+            df_cashflow = pd.DataFrame(columns=['Date', 'Amount'])
+    except Exception:
+        df_cashflow = pd.DataFrame(columns=['Date', 'Amount'])
+
+    df_port = df_port.reset_index(drop=True)
+    twr_pct = [0.0]
+    _cum_factor = 1.0
+    for i in range(1, len(df_port)):
+        _prev_date = df_port['Date'].iloc[i - 1]
+        _curr_date = df_port['Date'].iloc[i]
+        _prev_value = df_port['Market_Value'].iloc[i - 1]
+        _curr_value = df_port['Market_Value'].iloc[i]
+
+        if not df_cashflow.empty:
+            _mask = (df_cashflow['Date'] > _prev_date) & (df_cashflow['Date'] <= _curr_date)
+            _period_cash_flow = df_cashflow.loc[_mask, 'Amount'].sum()
+        else:
+            _period_cash_flow = 0.0
+
+        _hpr = ((_curr_value - _period_cash_flow - _prev_value) / _prev_value) if _prev_value > 0 else 0.0
+        _cum_factor *= (1 + _hpr)
+        twr_pct.append((_cum_factor - 1) * 100)
+
+    df_port['พอร์ตของคุณ (%)'] = twr_pct
+
     base_set = df_port['SET_Value'].iloc[0]
-    df_port['พอร์ตของคุณ (%)'] = ((df_port['Market_Value'] - base_port) / base_port) * 100
     df_port['SET Index (%)'] = ((df_port['SET_Value'] - base_set) / base_set) * 100
 
     port_return = df_port['พอร์ตของคุณ (%)'].iloc[-1]
@@ -86,11 +130,15 @@ def _render_market_comparison():
     alpha = port_return - set_return
 
     c1, c2, c3 = st.columns(3)
-    render_metric_card(c1, "ผลตอบแทนพอร์ตคุณ", f"{port_return:+.2f}%", icon="💼")
+    render_metric_card(c1, "ผลตอบแทนพอร์ตคุณ (TWR)", f"{port_return:+.2f}%", icon="💼")
     render_metric_card(c2, "ผลตอบแทน SET Index", f"{set_return:+.2f}%", icon="🌐")
     render_metric_card(
         c3, "ส่วนต่าง (Alpha)", f"{alpha:+.2f}%", icon="⚡",
         delta="เหนือตลาด" if alpha >= 0 else "ตามหลังตลาด", delta_positive=(alpha >= 0)
+    )
+    st.caption(
+        "💡 ผลตอบแทนพอร์ตคำนวณแบบ Time-Weighted Return (TWR) — ตัดผลกระทบจากจังหวะเติม/ถอนเงินสด"
+        " ออกแล้ว จึงเทียบกับ SET Index ได้อย่างยุติธรรม ไม่ว่าจะเติม/ถอนเงินเมื่อไหร่ก็ตาม"
     )
 
     if alpha >= 0:
