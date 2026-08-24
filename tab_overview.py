@@ -7,7 +7,7 @@ import pandas as pd
 import time
 import plotly.graph_objects as go
 import plotly.express as px
-from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value
+from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history
 from theme import style_plotly
 
 
@@ -155,6 +155,14 @@ def render_tab_overview():
     # ทองคำ (จาก session_state)
     total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
 
+    # 🆕 บันทึกยอดทองคำสิ้นเดือนอัตโนมัติ (ทำครั้งเดียวต่อเดือน) เพื่อใช้วาดกราฟแนวโน้มด้านล่าง
+    # (จุดนี้เดิมไม่มีการบันทึกประวัติเลย ทำให้กราฟแนวโน้มไม่มีเส้นทองคำแสดงมาตลอด)
+    try:
+        _client_for_stamp = get_gsheet_client()
+        check_and_auto_stamp_value_history(_client_for_stamp, 'Gold_Value_History', total_gold_value, "ทองคำ")
+    except Exception:
+        pass
+
     # ประกันสังคม
     sso_value = 0.0
     if all_data["sso"]:
@@ -218,12 +226,29 @@ def render_tab_overview():
 
     total_real_estate = house1_value + house2_value + condo_value
 
+    # 🆕 บันทึกยอดอสังหาริมทรัพย์สิ้นเดือนอัตโนมัติ (ทำครั้งเดียวต่อเดือน) เพื่อใช้วาดกราฟแนวโน้ม
+    # ด้านล่าง (จุดนี้เดิมไม่มีการบันทึกประวัติเลย ทำให้กราฟแนวโน้มไม่มีเส้นอสังหาฯ แสดงมาตลอด)
+    try:
+        _client_for_stamp = get_gsheet_client()
+        check_and_auto_stamp_value_history(_client_for_stamp, 'Real_Estate_Value_History', total_real_estate, "อสังหาริมทรัพย์")
+    except Exception:
+        pass
+
     # พอร์ตหุ้นรวม + พอร์ต TFEX
     # 🔧 แก้บั๊ก: เดิมใช้ 'total_value' in locals() ซึ่งใช้ได้ตอนแท็บนี้ยังอยู่ไฟล์เดียวกับแท็บหุ้น
     # แต่หลังแยกไฟล์แล้ว ต้องอ่านค่าผ่าน session_state แทน (แท็บหุ้นตั้งค่านี้ไว้ให้แล้ว)
     base_stock_value = st.session_state.get('stock_net_worth', 0.0)
     tfex_portfolio_value = st.session_state.get('tfex_net_worth', 0.0)
     total_stock_and_tfex = base_stock_value + tfex_portfolio_value
+
+    # 🆕 บันทึกยอดพอร์ตหุ้น+TFEX สิ้นเดือนอัตโนมัติ เผื่อไว้กรณีเดือนนั้นไม่มีการซื้อขายเลย
+    # (ปกติมีการบันทึกอยู่แล้วทุกครั้งที่ซื้อ-ขาย ผ่าน save_portfolio_snapshot() แต่ถ้าเดือนไหน
+    # ไม่มีการเทรดเลย จะไม่มีจุดข้อมูลของเดือนนั้น จุดนี้ช่วยให้มีข้อมูลครบทุกเดือนแน่นอน)
+    try:
+        _client_for_stamp = get_gsheet_client()
+        check_and_auto_stamp_value_history(_client_for_stamp, 'Portfolio_History', total_stock_and_tfex, "พอร์ตหุ้น+TFEX")
+    except Exception:
+        pass
 
     # คำนวณ Net Worth
     net_worth_excl_re = (total_stock_and_tfex + pvd_value + insurance_value + 
@@ -349,12 +374,17 @@ def render_tab_overview():
                     except Exception:
                         return pd.DataFrame()
 
+                # 🔧 แก้บั๊ก: เดิมดึงชื่อชีต 'Stock_TFEX_History' ซึ่งไม่มีอยู่จริง (ชีตที่บันทึกจริง
+                # ชื่อ 'Portfolio_History' ต่างหาก) ทำให้เส้น Stock+TFEX ในกราฟไม่เคยมีข้อมูลเลย
+                # ตั้งแต่ต้น ตอนนี้แก้ให้ตรงกับชื่อชีตจริง พร้อมเพิ่มทองคำ/อสังหาริมทรัพย์ที่หายไป
+                # จากกราฟมาตลอด (เพิ่งเพิ่มการบันทึกประวัติให้ 2 ประเภทนี้ด้านบน)
                 return (get_df_safe('Provident_Fund'), get_df_safe('Insurance'), 
                         get_df_safe('Coop'), get_df_safe('Bank_Account'), 
                         get_df_safe('SSO'), get_df_safe('Fund_Value_History'), 
-                        get_df_safe('Stock_TFEX_History'))
+                        get_df_safe('Portfolio_History'), get_df_safe('Gold_Value_History'),
+                        get_df_safe('Real_Estate_Value_History'))
 
-            df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist = fetch_all_wealth_data()
+            df_pvd, df_ins, df_coop, df_bank, df_sso, df_mf, df_portfolio_hist, df_gold, df_re = fetch_all_wealth_data()
 
             def prepare_series(df, date_col, val_col, name):
                 df = df.copy()
@@ -376,7 +406,11 @@ def render_tab_overview():
             # 🆕 ตอนนี้ df_mf ดึงจากชีต Fund_Value_History (ยอดรวมรายเดือนที่บันทึกอัตโนมัติ)
             # แทนที่จะเป็น Fund_History เดิม (รายการซื้อแต่ละครั้ง) จึงมีคอลัมน์ Date/Value ให้ใช้ตรงๆ ได้แล้ว
             s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund')
-            s_port = prepare_series(df_portfolio_hist, 'Date', 'Total_Value', 'Stock+TFEX')
+            # 🔧 แก้บั๊ก: คอลัมน์จริงในชีต Portfolio_History ชื่อ 'total_equity' ไม่ใช่ 'Total_Value'
+            s_port = prepare_series(df_portfolio_hist, 'Date', 'total_equity', 'Stock+TFEX')
+            # 🆕 เพิ่มเส้นทองคำและอสังหาริมทรัพย์ที่หายไปจากกราฟแนวโน้มมาตลอด
+            s_gold = prepare_series(df_gold, 'Date', 'Value', 'Gold')
+            s_re = prepare_series(df_re, 'Date', 'Value', 'Real_Estate')
 
             if not s_ins.empty and not s_sso.empty:
                 s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
@@ -385,7 +419,7 @@ def render_tab_overview():
             elif s_ins.empty and not s_sso.empty:
                 s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
 
-            series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port] if not s.empty]
+            series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port, s_gold, s_re] if not s.empty]
 
             if series_list:
                 df_merged = series_list[0]
