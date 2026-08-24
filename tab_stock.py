@@ -1463,7 +1463,7 @@ def render_tab_stock():
                         st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
 
         # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
-        with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=True):
+        with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=False):
             with st.form("dividend_form", clear_on_submit=True):
                 col1, col2 = st.columns(2)
                 with col1:
