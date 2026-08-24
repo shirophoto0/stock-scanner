@@ -16,16 +16,16 @@ from tab_risk import render_tab_risk
 def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
 ################################
     # 1. Slidebar (ตัวกรอง)
-    with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
-        # 🔧 ปรับปรุง (ข้อ 1): ย้าย Slider ทั้ง 3 ตัวไปไว้ใน expander ย่อย ไม่ให้แถบด้านข้างยาว
-        # เทอะทะเกินไป (ค่อยกดเปิดเมื่อต้องปรับ ปกติค่าเริ่มต้นก็ใช้งานได้เลยอยู่แล้ว)
-        with st.expander("🔧 ตัวกรองขั้นสูง (P/E, ปันผล, RSI)", expanded=False):
-            max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0, key="filter_max_pe")
-            # 🔧 ปรับปรุง (ข้อ 4): เพิ่มหน่วย % ต่อท้ายตัวเลขให้ชัดเจนขึ้น (เดิมมีแต่ตัวเลขเฉยๆ)
-            min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0, format="%.2f%%", key="filter_min_dividend")
-            rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0), key="filter_rsi_range")
+    # 🔧 ปรับปรุง: ย้าย "ตัวกรองขั้นสูง (P/E, ปันผล, RSI)" ออกมาเป็น expander อิสระ แยกจาก
+    # "เมนูตัวกรองหุ้น" (เดิมซ้อนอยู่ข้างในกัน) ตอนนี้วางไว้ด้านบนสุด ให้เห็นเป็น 2 dropdown
+    # แยกกันชัดเจน ไม่ต้องกดเปิด "เมนูตัวกรองหุ้น" ก่อนถึงจะเจอ
+    with st.sidebar.expander("🔧 ตัวกรองขั้นสูง (P/E, ปันผล, RSI)", expanded=False):
+        max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0, key="filter_max_pe")
+        # 🔧 ปรับปรุง (ข้อ 4): เพิ่มหน่วย % ต่อท้ายตัวเลขให้ชัดเจนขึ้น (เดิมมีแต่ตัวเลขเฉยๆ)
+        min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0, format="%.2f%%", key="filter_min_dividend")
+        rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0), key="filter_rsi_range")
 
-        st.divider()
+    with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
         st.markdown("**🎯 กรองตามกลยุทธ์ (เลือกได้อย่างใดอย่างหนึ่ง)**")
 
         # 🔧 ปรับปรุง: เดิมรวม 2 กลุ่มกลยุทธ์ไว้ใน dropdown เดียวกัน (คั่นด้วยข้อความ "--- กลุ่ม ---")
@@ -53,7 +53,6 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
 
         st.divider()
         st.markdown("**📐 เกณฑ์เพิ่มเติม (เลือกได้หลายข้อพร้อมกัน)**")
-        st.caption("⚠️ ต้องกด \"🔄 อัปเดตข้อมูลใหม่ (ดึงจาก Yahoo)\" ในหน้าหลักก่อนอย่างน้อย 1 ครั้ง เกณฑ์กลุ่มนี้ถึงจะมีข้อมูลให้กรอง")
 
         # 🆕 เกณฑ์เพิ่มเติม 4 ข้อ (ทำเป็น checkbox แทน dropdown เพราะเลือกได้หลายข้อพร้อมกัน
         # ต่างจาก RS Line/New High ด้านบนที่เลือกได้ทีละกลุ่ม)
@@ -138,17 +137,16 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             ascending_sort = True
 
             # 4. กรองตามหน้าเทรด (Strategy)
-            # 🔧 แก้บั๊ก: กลุ่มกลยุทธ์ RS Line ทั้ง 3 แบบด้านล่างนี้ ใช้คอลัมน์ที่ load_and_calculate_
-            # stock_data_optimized() ยังไม่เคยคำนวณจริง (เป็นฟีเจอร์ที่ออกแบบ UI ไว้แล้วแต่ยังไม่ได้
-            # ทำส่วนคำนวณข้อมูลจริง) เดิมไม่มีการเช็คก่อนว่าคอลัมน์มีอยู่จริงไหม ทำให้ error ทันทีที่
-            # มีข้อมูลจริงเข้ามา ตอนนี้เช็คก่อนเสมอ ถ้าไม่มีคอลัมน์ จะแจ้งเตือนแทนที่จะ error
+            # 🔧 ปรับปรุง: อัปเดตข้อความแจ้งเตือนให้ตรงกับความเป็นจริงมากขึ้น เพราะตอนนี้มีการ
+            # คำนวณข้อมูลกลุ่ม RS Line จริงแล้ว (ไม่ใช่ "ยังไม่ได้ทำ" เหมือนก่อนหน้านี้) ถ้าเห็น
+            # ข้อความนี้ แปลว่ารอบ Daily Scan ล่าสุดน่าจะยังไม่เสร็จหรือสแกนไม่สำเร็จ
             if strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
                 if 'Is_RS_Above_0' in filtered_df.columns:
                     filtered_df = filtered_df[filtered_df['Is_RS_Above_0'] == True]
                     show_columns.append('ตัดเส้น0ขึ้นมาแล้ว(วัน)')
                     sort_by_col, ascending_sort = 'ตัดเส้น0ขึ้นมาแล้ว(วัน)', True
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูลสำหรับกลยุทธ์นี้ (ฟีเจอร์นี้ยังไม่ได้เพิ่มการคำนวณข้อมูลจริง)")
+                    st.warning("⚠️ ยังไม่มีข้อมูลกลุ่ม RS Line ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
                     filtered_df = filtered_df.iloc[0:0]
 
             elif strategy_option == "📈 RS Line ทำจุดสูงสุดใหม่ (RS New High)":
@@ -156,7 +154,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     filtered_df = filtered_df[filtered_df['RS_Line'] >= filtered_df['RS_Line_50D_Max']]
                     sort_by_col, ascending_sort = 'RS_Line', False
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูลสำหรับกลยุทธ์นี้ (ฟีเจอร์นี้ยังไม่ได้เพิ่มการคำนวณข้อมูลจริง)")
+                    st.warning("⚠️ ยังไม่มีข้อมูลกลุ่ม RS Line ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
                     filtered_df = filtered_df.iloc[0:0]
 
             elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
@@ -168,7 +166,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
                     sort_by_col, ascending_sort = 'RS_Line', False
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูลสำหรับกลยุทธ์นี้ (ฟีเจอร์นี้ยังไม่ได้เพิ่มการคำนวณข้อมูลจริง)")
+                    st.warning("⚠️ ยังไม่มีข้อมูลกลุ่ม RS Line ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
                     filtered_df = filtered_df.iloc[0:0]
 
             elif strategy_option == "3 Month High":
@@ -187,13 +185,13 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                 sort_by_col, ascending_sort = 'New_High_52W_มาแล้ว(วัน)', True
 
             # 🆕 กรองตามเกณฑ์เพิ่มเติม 4 ข้อ (เลือกได้หลายข้อพร้อมกัน กรองซ้อนทับกับด้านบนทั้งหมด)
-            # เช็ค "column in filtered_df.columns" ก่อนเสมอ เผื่อผู้ใช้ยังไม่เคยกด "อัปเดตข้อมูลใหม่"
-            # หลังจากที่เพิ่มฟีเจอร์นี้ ทำให้ข้อมูลเก่าที่ยังจำไว้ไม่มีคอลัมน์ใหม่พวกนี้
+            # เช็ค "column in filtered_df.columns" ก่อนเสมอ เผื่อรอบ Daily Scan ล่าสุดยังไม่เสร็จ
+            # หรือสแกนไม่สำเร็จ ทำให้ข้อมูลที่จำไว้ไม่มีคอลัมน์เหล่านี้ครบ
             if filter_trend_template:
                 if 'Trend_Template_Pass' in filtered_df.columns:
                     filtered_df = filtered_df[filtered_df['Trend_Template_Pass'] == True]
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูล Trend Template กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+                    st.warning("⚠️ ยังไม่มีข้อมูล Trend Template ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
 
             if filter_near_high:
                 if 'Near_52W_High' in filtered_df.columns:
@@ -201,7 +199,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     if 'Pct_From_52W_High' not in show_columns:
                         show_columns.append('Pct_From_52W_High')
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูลระยะห่างจากจุดสูงสุด กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+                    st.warning("⚠️ ยังไม่มีข้อมูลระยะห่างจากจุดสูงสุดในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
 
             if filter_recovered:
                 if 'Recovered_From_Low' in filtered_df.columns:
@@ -209,7 +207,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     if 'Pct_Above_52W_Low' not in show_columns:
                         show_columns.append('Pct_Above_52W_Low')
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูลการฟื้นตัวจากจุดต่ำ กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+                    st.warning("⚠️ ยังไม่มีข้อมูลการฟื้นตัวจากจุดต่ำในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
 
             if filter_volume_spike:
                 if 'Is_Volume_Spike' in filtered_df.columns:
@@ -217,13 +215,13 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     if 'Volume_Spike_Ratio' not in show_columns:
                         show_columns.append('Volume_Spike_Ratio')
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูล Volume Spike กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+                    st.warning("⚠️ ยังไม่มีข้อมูล Volume Spike ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
 
             if filter_volatility_contract:
                 if 'Is_Volatility_Contracting' in filtered_df.columns:
                     filtered_df = filtered_df[filtered_df['Is_Volatility_Contracting'] == True]
                 else:
-                    st.warning("⚠️ ยังไม่มีข้อมูล Volatility Contraction กรุณากด \"🔄 อัปเดตข้อมูลใหม่\" ก่อน")
+                    st.warning("⚠️ ยังไม่มีข้อมูล Volatility Contraction ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
 
             # 🔧 ปรับปรุง (ข้อ 3): แสดงจำนวนหุ้นที่ผ่านตัวกรองเด่นๆ ไว้ก่อนตาราง จะได้รู้ทันที
             # ว่ากรองแล้วเหลือกี่ตัว โดยไม่ต้องเลื่อนลงไปนับในตารางเอง
