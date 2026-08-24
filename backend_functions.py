@@ -1387,6 +1387,47 @@ def get_sector_from_mapping(ticker, df_mapping=None):
             
     return sector_dict.get(ticker, "General / Unspecified")
     
+@st.cache_data(ttl=3600)
+def fetch_set_index_history():
+    """
+    🆕 ดึงข้อมูลราคาย้อนหลังของดัชนี SET Index (2 ปี) แบบทนทาน — แยกออกมาจากฟังก์ชันสแกนหุ้น
+    เพื่อให้ใช้ซ้ำได้ทั้งตอนคำนวณ RS_Line และตอนเทียบผลงานพอร์ตกับตลาด (ไม่ต้องเขียนตรรกะเดิมซ้ำ)
+    ลองหลายวิธีเรียงกัน (วิธีไหนได้ข้อมูลพอก่อน ใช้วิธีนั้นเลย) เพราะ Yahoo Finance บางครั้งให้
+    ข้อมูลย้อนหลังของดัชนี SET ไม่ครบผ่านบางฟังก์ชัน/บางสัญลักษณ์ (ดูรายละเอียดในคอมเมนต์ย่อยแต่ละ
+    วิธี) คืนค่าเป็น (pd.Series ราคาปิดรายวัน เรียงตามวันที่ ไม่มีเขตเวลาติด, ชื่อวิธีที่ใช้ได้ผล หรือ
+    None ถ้าล้มเหลวทั้งหมด)
+    """
+    def _try_fetch(symbol):
+        try:
+            s = yf.Ticker(symbol).history(period="2y")['Close']
+            if isinstance(s, pd.Series) and len(s) >= 30:
+                return s, f"yf.Ticker('{symbol}').history()"
+        except Exception:
+            pass
+        try:
+            s = yf.download(symbol, period="2y")['Close'].squeeze()
+            if isinstance(s, pd.Series) and len(s) >= 30:
+                return s, f"yf.download('{symbol}')"
+        except Exception:
+            pass
+        return pd.Series(dtype=float), None
+
+    set_market = pd.Series(dtype=float)
+    set_market_source = None
+    for _sym in ["^SET.BK", "SET.BK"]:
+        set_market, set_market_source = _try_fetch(_sym)
+        if set_market_source is not None:
+            break
+
+    # ตัดเขตเวลาออกเสมอ (ถ้ามี) ให้ใช้งานร่วมกับข้อมูลอื่นที่ไม่มีเขตเวลาได้อย่างปลอดภัย
+    if isinstance(set_market, pd.Series) and getattr(set_market.index, 'tz', None) is not None:
+        set_market.index = set_market.index.tz_localize(None)
+
+    if isinstance(set_market, pd.Series) and len(set_market) >= 30:
+        return set_market, set_market_source
+    return pd.Series(dtype=float), None
+
+
 @st.cache_data(ttl=86400) # เก็บข้อมูลไว้วันละครั้งเพื่อความเร็ว
 def load_and_calculate_stock_data_optimized():
     status_text = st.empty()
@@ -1405,55 +1446,9 @@ def load_and_calculate_stock_data_optimized():
     # ใช้ threads=True ช่วยให้ดึงข้อมูลเร็วขึ้นหลายเท่า
     data = yf.download(tickers_full, period="2y", group_by='ticker', threads=True)
     
-    # ดึงข้อมูล SET Index
-    # 🔧 แก้บั๊ก: เดิม yf.download(...)['Close'] คาดว่าจะได้ "คอลัมน์เดี่ยว" (Series) แต่ yfinance
-    # เวอร์ชันที่ใช้งานจริงคืนตารางหัวข้อซ้อน 2 ชั้นแม้ขอแค่หุ้นตัวเดียว ทำให้ได้ "ตาราง 1 คอลัมน์"
-    # (DataFrame) แทน พอเอาไปสั่ง .rename('Market_Close') ต่อ pandas เข้าใจผิดว่าจะเปลี่ยนชื่อแถว
-    # แทนชื่อคอลัมน์ แล้วพยายามเรียก 'Market_Close' เป็นฟังก์ชัน (ทั้งที่เป็นแค่ข้อความ) จน error
-    # ทันที
-    # 🔧 แก้บั๊กเพิ่ม (สำคัญ): Yahoo Finance บางครั้งให้ข้อมูลย้อนหลังของดัชนี SET ผ่าน yf.download()
-    # ไม่ครบตามที่ขอ (บางรอบได้แค่ 1 แถว) เป็นข้อจำกัดของ Yahoo/yfinance เฉพาะฟังก์ชัน download()
-    # กับสัญลักษณ์ประเภทดัชนีบางตัว ตอนนี้ลองหลายวิธีเรียงกัน (วิธีไหนได้ข้อมูลพอก่อน ใช้วิธีนั้นเลย)
-    # แทนที่จะพึ่งพาแค่วิธีเดียวและเสี่ยงต้องมาแก้ทีละรอบ:
-    #   1. yf.Ticker().history() — ดึงแบบเจาะจงสัญลักษณ์เดียว มักได้ข้อมูลย้อนหลังครบกว่า download()
-    #      แบบเป็นชุดใหญ่ (โครงสร้างข้อมูลก็ไม่มีปัญหาหัวข้อซ้อน 2 ชั้นแบบ download() ด้วย)
-    #   2. yf.download() แบบเดิม (เผื่อกรณีที่ 1 ใช้ไม่ได้ด้วยเหตุผลอื่น)
-    #   3. ลองสัญลักษณ์สำรอง "SET.BK" (ไม่มี ^ นำหน้า) ด้วยทั้ง 2 วิธีข้างต้น
-    def _try_fetch_set_index(symbol):
-        """พยายามดึงข้อมูลดัชนี SET Index ด้วย 2 วิธี คืนค่า Series ว่างเปล่าถ้าล้มเหลวทั้งคู่"""
-        try:
-            s = yf.Ticker(symbol).history(period="2y")['Close']
-            if isinstance(s, pd.Series) and len(s) >= 30:
-                return s, f"yf.Ticker('{symbol}').history()"
-        except Exception:
-            pass
-        try:
-            s = yf.download(symbol, period="2y")['Close'].squeeze()
-            if isinstance(s, pd.Series) and len(s) >= 30:
-                return s, f"yf.download('{symbol}')"
-        except Exception:
-            pass
-        return pd.Series(dtype=float), None
-
-    set_market = pd.Series(dtype=float)
-    set_market_source = None
-    for _sym in ["^SET.BK", "SET.BK"]:
-        set_market, set_market_source = _try_fetch_set_index(_sym)
-        if set_market_source is not None:
-            break
-
-    # 🔧 แก้บั๊ก: yf.Ticker().history() คืนวันที่แบบมี "เขตเวลา" ติดมาด้วย (tz-aware) ในขณะที่
-    # ข้อมูลราคาหุ้นแต่ละตัว (จาก yf.download() แบบดึงเป็นชุดใหญ่ด้านบน) ไม่มีเขตเวลาติดมา
-    # (tz-naive) พอเอามาต่อกัน (.join()) ในขั้นตอนคำนวณ RS_Line เลย error ทันทีทุกตัว เพราะ
-    # pandas เทียบวันที่แบบมี/ไม่มีเขตเวลาด้วยกันไม่ได้ ตอนนี้ตัดเขตเวลาออกจาก set_market ให้
-    # เป็นแบบเดียวกับข้อมูลหุ้น (tz-naive) เสมอ ก่อนนำไปใช้งานต่อ
-    # 🔧 แก้บั๊กเพิ่ม: เดิมเข้าถึง set_market.index.tz ตรงๆ ถ้าทุกวิธีดึงข้อมูลล้มเหลวหมด (ได้
-    # ตารางว่างเปล่ากลับมา) ตัวชี้แถว (index) ของตารางว่างจะเป็นคนละชนิดกับตารางที่มีข้อมูลจริง
-    # (ไม่มี .tz ให้เข้าถึงเลย) ทำให้ error ซ้อนขึ้นมาอีกชั้น ตอนนี้ใช้ getattr() แทน ปลอดภัยกว่า
-    # เพราะจะได้ None กลับมาเฉยๆ ถ้าตัวชี้แถวไม่มี .tz ให้เข้าถึง แทนที่จะ error
-    if isinstance(set_market, pd.Series) and getattr(set_market.index, 'tz', None) is not None:
-        set_market.index = set_market.index.tz_localize(None)
-
+    # 🔧 ปรับปรุง: ย้ายตรรกะดึงข้อมูลดัชนี SET Index ไปเป็นฟังก์ชันกลาง fetch_set_index_history()
+    # ด้านบน (ใช้ซ้ำกับฟีเจอร์เทียบผลงานพอร์ตกับตลาดได้ด้วย ไม่ต้องเขียนตรรกะเดิมซ้ำอีก)
+    set_market, set_market_source = fetch_set_index_history()
     set_market_usable = isinstance(set_market, pd.Series) and len(set_market) >= 30
     if set_market_usable:
         print(f"✅ ดึงข้อมูลดัชนี SET Index สำเร็จผ่าน {set_market_source} ({len(set_market)} แถว) ใช้คำนวณ RS_Line ได้ตามปกติ")
