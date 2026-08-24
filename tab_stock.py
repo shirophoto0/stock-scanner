@@ -18,7 +18,7 @@ from backend_functions import (
     get_sector_from_mapping, load_data, load_data_from_file, load_total_cash_balance,
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet,
-    load_watchlist, remove_from_watchlist, fetch_set_index_history, update_watchlist_target
+    load_watchlist, remove_from_watchlist, fetch_set_index_history, update_watchlist_target, add_to_watchlist
 )
 from theme import style_plotly, style_altair, get_theme_colors, render_metric_card
 
@@ -164,10 +164,11 @@ def render_tab_stock():
     st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
     st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
 
-    # 1. สร้าง Tabs (จัดรวม แผนและ Alert ไว้ใน tab เดียวกัน)
+    # 1. สร้าง Tabs
     # 🆕 เพิ่มแท็บ Watchlist สำหรับเก็บติดตามหุ้นที่สนใจ แยกจากพอร์ตจริง
-    tab_dashboard, tab_portfolio, tab_watchlist, tab_dividend, tab_journal, tab_plan = st.tabs([
-        "📈 Dashboard", "📊 พอร์ตโฟลิโอ", "⭐ Watchlist", "💰 ข้อมูลปันผล", "📖 สมุดบันทึก", "📝 แผนและ Alert"
+    # 🔧 ลบแท็บ "แผนและ Alert" ออกแล้ว (ไม่ได้ใช้งาน ใช้แท็บ Watchlist แทนทั้งหมด)
+    tab_dashboard, tab_portfolio, tab_watchlist, tab_dividend, tab_journal = st.tabs([
+        "📈 Dashboard", "📊 พอร์ตโฟลิโอ", "⭐ Watchlist", "💰 ข้อมูลปันผล", "📖 สมุดบันทึก"
     ])
 
     ##############################
@@ -1531,24 +1532,47 @@ def render_tab_stock():
         st.markdown("### ⭐ หุ้นที่สนใจ (Watchlist)")
         st.caption("เก็บติดตามหุ้นที่สนใจไว้ดูเฉยๆ ไม่ต้องซื้อจริง แยกออกจากพอร์ตจริงโดยสิ้นเชิง")
 
+        # ดึงราคา/RSI/RS_Line ปัจจุบันจากข้อมูลสแกนล่าสุด — ย้ายมาโหลดก่อนตรงนี้ (เดิมโหลดทีหลัง
+        # เฉพาะตอนมีรายการอยู่แล้ว) เพราะตอนนี้ต้องใช้ตั้งแต่ช่องพิมพ์ชื่อหุ้นเองด้านล่างด้วย
+        try:
+            df_scan_latest = load_from_gsheet()
+        except Exception:
+            df_scan_latest = None
+
+        _scan_map = {}
+        if df_scan_latest is not None and not df_scan_latest.empty and 'Ticker' in df_scan_latest.columns:
+            _scan_map = df_scan_latest.set_index('Ticker').to_dict('index')
+
+        # 🆕 เพิ่มหุ้นเข้า Watchlist ด้วยการพิมพ์ชื่อเองได้โดยตรง (นอกจากกดปุ่ม "⭐ เพิ่มเข้า Watchlist"
+        # จากตารางผลการสแกนในแท็บวิเคราะห์กราฟเทคนิคัล) ทำงานแบบเดียวกันทุกประการ แค่ไม่ต้องไปคลิก
+        # เลือกจากตารางก่อน
+        with st.expander("➕ พิมพ์ชื่อหุ้นเพิ่มเข้า Watchlist เอง", expanded=False):
+            _wc_add_col1, _wc_add_col2 = st.columns([3, 1])
+            _manual_ticker = _wc_add_col1.text_input(
+                "ชื่อหุ้น (Ticker)", placeholder="เช่น PTT, AOT, CPALL", key="manual_watchlist_ticker"
+            ).strip().upper()
+            if _wc_add_col2.button("⭐ เพิ่มเข้า Watchlist", key="manual_add_watchlist_btn", use_container_width=True):
+                if not _manual_ticker:
+                    st.warning("กรุณาพิมพ์ชื่อหุ้นก่อนครับ")
+                else:
+                    _scan_info_manual = _scan_map.get(_manual_ticker, {})
+                    _price_manual = float(_scan_info_manual.get('ราคาล่าสุด', 0) or 0)
+                    _success, _msg = add_to_watchlist(_manual_ticker, _price_manual)
+                    if _success:
+                        st.success(_msg)
+                        st.rerun()
+                    else:
+                        st.warning(_msg)
+
         watchlist_data = load_watchlist()
 
         if not watchlist_data:
             st.info(
-                "ยังไม่มีหุ้นใน Watchlist ครับ — ไปที่แท็บ \"วิเคราะห์กราฟเทคนิคัล\" คลิกเลือกหุ้นที่สนใจ"
-                " จากตารางผลการสแกน แล้วกดปุ่ม \"⭐ เพิ่มเข้า Watchlist\" ได้เลย"
+                "ยังไม่มีหุ้นใน Watchlist ครับ — พิมพ์ชื่อหุ้นเพิ่มเองด้านบนได้เลย หรือไปที่แท็บ "
+                "\"วิเคราะห์กราฟเทคนิคัล\" คลิกเลือกหุ้นที่สนใจจากตารางผลการสแกน แล้วกดปุ่ม "
+                "\"⭐ เพิ่มเข้า Watchlist\""
             )
         else:
-            # ดึงราคา/RSI/RS_Line ปัจจุบันจากข้อมูลสแกนล่าสุด มาเทียบกับตอนที่เพิ่มเข้า Watchlist
-            try:
-                df_scan_latest = load_from_gsheet()
-            except Exception:
-                df_scan_latest = None
-
-            _scan_map = {}
-            if df_scan_latest is not None and not df_scan_latest.empty and 'Ticker' in df_scan_latest.columns:
-                _scan_map = df_scan_latest.set_index('Ticker').to_dict('index')
-
             _tc = get_theme_colors()
             for item in watchlist_data:
                 _ticker = str(item.get('Ticker', '')).strip().upper()
@@ -1564,7 +1588,7 @@ def render_tab_stock():
                 _pct_change = ((_price_now - _price_added) / _price_added * 100) if _price_added > 0 and _price_now > 0 else None
 
                 with st.container(border=True):
-                    _wc1, _wc2, _wc3, _wc4, _wc5 = st.columns([1.5, 1, 1, 1, 0.8])
+                    _wc1, _wc2, _wc3, _wc4, _wc5, _wc6 = st.columns([1.5, 1, 1, 1, 0.5, 0.5])
                     _wc1.markdown(f"**⭐ {_ticker}**")
                     _wc1.caption(f"เพิ่มเมื่อ {_date_added}" + (f" • {_note}" if _note else ""))
 
@@ -1580,7 +1604,15 @@ def render_tab_stock():
 
                     _wc4.metric("RSI_14", f"{float(_rsi_now):.1f}" if _rsi_now not in (None, "") else "-")
 
-                    if _wc5.button("🗑️", key=f"del_wl_{_ticker}", help=f"ลบ {_ticker} ออกจาก Watchlist"):
+                    # 🆕 ไอคอนลิงก์ไปดูกราฟเต็มรูปแบบที่ TradingView (เปิดแท็บใหม่)
+                    with _wc5:
+                        st.markdown(
+                            f'<a href="https://www.tradingview.com/symbols/SET-{_ticker}/" target="_blank" '
+                            f'style="text-decoration:none;font-size:1.5em;" title="ดูกราฟ {_ticker} ที่ TradingView">📈</a>',
+                            unsafe_allow_html=True
+                        )
+
+                    if _wc6.button("🗑️", key=f"del_wl_{_ticker}", help=f"ลบ {_ticker} ออกจาก Watchlist"):
                         _success, _msg = remove_from_watchlist(_ticker)
                         if _success:
                             st.success(_msg)
@@ -2360,134 +2392,3 @@ def render_tab_stock():
                 st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv", key="export_journal_csv")
         else:
             st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
-
-
-        #################################################
-        # --- ตารางแสดงแผนการเทรด ---
-        with tab_plan:
-            st.subheader("📝 แผนการเทรดและตั้งค่า Alert")
-
-            # 1. ส่วนฟอร์มเพิ่มหุ้นใหม่
-            with st.form("trading_plan_form", clear_on_submit=True):
-                col1, col2 = st.columns(2)
-                with col1:
-                    ticker = st.text_input("ชื่อหุ้น:", value=st.session_state.get("selected_ticker", ""))
-                    entry = st.number_input("ราคาเข้าซื้อ:", min_value=0.0, format="%.2f", value=0.0)
-                    stop_loss = st.number_input("จุดตัดขาดทุน:", value=float(entry * 0.95) if entry > 0 else 0.0, format="%.2f")
-                    support = st.number_input("แนวรับ:", min_value=0.0, format="%.2f", value=0.0)
-                with col2:
-                    resistance = st.number_input("แนวต้าน:", min_value=0.0, format="%.2f", value=0.0)
-                    take_profit = st.number_input("จุดขายทำกำไร:", min_value=0.0, format="%.2f", value=0.0)
-                    image_url = st.text_input("วาง Link รูปภาพ (URL):")
-
-                submit_button = st.form_submit_button("บันทึกแผนลงตาราง")
-
-            if submit_button:
-                if not ticker:
-                    st.error("กรุณาระบุชื่อหุ้นครับ!")
-                else:
-                    from datetime import datetime
-
-                    # 1. สร้าง Dictionary ของหุ้นใหม่
-                    new_data = {
-                        'Ticker': ticker, 'Entry_Price': entry, 'ราคาตลาด': 0.0,
-                        'Stop_Loss': stop_loss, 'แนวรับ': support, 'แนวต้าน': resistance, 
-                        'ห่างจาก_SL(%)': 0.0, 'Take_Profit': take_profit,
-                        'สถานะ': 'ปกติ', 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'Image_URL': image_url, 'Alert_Date': ''
-                    }
-
-                    # 2. โหลดข้อมูลปัจจุบันจาก Google Sheet ออกมาก่อน
-                    current_df = load_data("TradingPlan", get_active_sheet_name())
-
-                    # ถ้าตารางว่าง ให้สร้าง DataFrame ใหม่ขึ้นมาเลย
-                    if current_df is None or current_df.empty:
-                        final_df = pd.DataFrame([new_data])
-                    else:
-                        # รวมหุ้นเดิมกับหุ้นใหม่เข้าด้วยกัน
-                        new_df = pd.DataFrame([new_data])
-                        final_df = pd.concat([current_df, new_df], ignore_index=True)
-
-                    # 3. บันทึกข้อมูลที่รวมแล้วด้วยฟังก์ชัน clear_and_save_data
-                    # (เพราะฟังก์ชันนี้ลบของเก่าแล้วเขียนทับใหม่ เราจึงต้องส่ง 'ข้อมูลก้อนใหม่' ที่รวมตัวเก่าไปให้)
-                    if clear_and_save_data(final_df, "TradingPlan"):
-                        st.success("บันทึกแผนเรียบร้อย!")
-                        st.cache_data.clear()
-                        st.rerun()
-                    else:
-                        st.error("เกิดข้อผิดพลาดในการบันทึกข้อมูลครับ")
-
-            # 2. ส่วนตารางแสดงผล
-            st.divider()
-            st.subheader("📊 ตารางแผนการเทรดของฉัน")
-            plan_df = load_data("TradingPlan", get_active_sheet_name())
-
-            # กำหนดคอลัมน์มาตรฐาน (ลบ 'Alert_Date' ออกแล้ว)
-            cols = ['Ticker', 'Entry_Price', 'แนวรับ', 'แนวต้าน', 'ราคาตลาด', 'Stop_Loss', 'Take_Profit', 'ห่างจาก_SL(%)', 'สถานะ', 'Timestamp', 'Image_URL']
-
-            if plan_df.empty or 'Ticker' not in plan_df.columns:
-                plan_df = pd.DataFrame(columns=cols)
-            else:
-                plan_df.columns = plan_df.columns.str.strip()
-
-            # คำนวณข้อมูล
-            if not plan_df.empty and 'Ticker' in plan_df.columns:
-                plan_df.columns = plan_df.columns.str.strip()
-
-                # แปลงคอลัมน์ตัวเลข
-                target_cols = ['Entry_Price', 'Stop_Loss', 'Take_Profit']
-                for c in target_cols:
-                    if c in plan_df.columns:
-                        plan_df[c] = pd.to_numeric(plan_df[c], errors='coerce').fillna(0.0)
-                    else:
-                        plan_df[c] = 0.0
-
-                # ดึงราคาตลาด (Batch)
-                tickers = [f"{t}.BK" for t in plan_df['Ticker'].unique()]
-                try:
-                    price_data = yf.download(tickers, period="1d", group_by='ticker', progress=False)['Close']
-                    def get_price(t):
-                        symbol = f"{t}.BK"
-                        try:
-                            if isinstance(price_data, pd.DataFrame): return float(price_data[symbol].iloc[-1])
-                            return float(price_data.iloc[-1])
-                        except: return 0.0
-                    plan_df['ราคาตลาด'] = plan_df['Ticker'].apply(get_price)
-                except:
-                    plan_df['ราคาตลาด'] = 0.0
-
-                # คำนวณห่างจาก SL และสถานะ
-                plan_df['ห่างจาก_SL(%)'] = np.where(plan_df['ราคาตลาด'] > 0, ((plan_df['ราคาตลาด'] - plan_df['Stop_Loss']) / plan_df['ราคาตลาด'] * 100), 0.0).round(2)
-                plan_df['สถานะ'] = plan_df.apply(check_alerts, axis=1)
-
-            # แสดงตาราง (ลบ Alert_Date ออกจาก column_config แล้ว)
-            edited_df = st.data_editor(
-                plan_df[cols],
-                column_config={
-                    "Ticker": st.column_config.TextColumn("หุ้น", disabled=True, width="small"),
-                    "Entry_Price": st.column_config.NumberColumn("ราคาซื้อ", format="%.2f", width="small"),
-                    "แนวรับ": st.column_config.NumberColumn("แนวรับ", format="%.2f", width="small"),
-                    "แนวต้าน": st.column_config.NumberColumn("แนวต้าน", format="%.2f", width="small"),
-                    "ราคาตลาด": st.column_config.NumberColumn("ราคาตลาด", format="%.2f", disabled=True, width="small"),
-                    "Stop_Loss": st.column_config.NumberColumn("จุดตัดขาดทุน", format="%.2f", width="small"),
-                    "Take_Profit": st.column_config.NumberColumn("จุดขายทำกำไร", format="%.2f", width="small"),
-                    "ห่างจาก_SL(%)": st.column_config.NumberColumn("ห่างจาก SL (%)", format="%.2f%%", disabled=True, width="small"),
-                    "สถานะ": st.column_config.TextColumn("สถานะ", disabled=True, width="medium"),
-                    "Image_URL": st.column_config.LinkColumn("Plan trade", display_text="ดูรูปแผนเทรด", disabled=True, width="medium"),
-                },
-                use_container_width=True, 
-                key="fixed_plan_editor_v2", 
-                num_rows="dynamic"
-            )
-
-            if st.button("💾 บันทึกการแก้ไข"):
-                final_df = edited_df.copy()
-                final_df['สถานะ'] = "" # ล้างค่าให้ระบบคำนวณใหม่
-
-                for c in cols:
-                    if c not in final_df.columns: final_df[c] = ""
-
-                if clear_and_save_data(final_df[cols], "TradingPlan"):
-                    st.success("บันทึกและอัปเดตตารางเรียบร้อย!")
-                    st.cache_data.clear()
-                    st.rerun()
