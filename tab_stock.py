@@ -17,7 +17,8 @@ from backend_functions import (
     display_performance_dashboard, get_cached_spreadsheet, get_gsheet_client,
     get_sector_from_mapping, load_data, load_data_from_file, load_total_cash_balance,
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
-    save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet
+    save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet,
+    load_watchlist, remove_from_watchlist
 )
 from theme import style_plotly, style_altair, get_theme_colors, render_metric_card
 
@@ -30,8 +31,9 @@ def render_tab_stock():
     st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
 
     # 1. สร้าง Tabs (จัดรวม แผนและ Alert ไว้ใน tab เดียวกัน)
-    tab_dashboard, tab_portfolio, tab_dividend, tab_journal, tab_plan = st.tabs([
-        "📈 Dashboard", "📊 พอร์ตโฟลิโอ", "💰 ข้อมูลปันผล", "📖 สมุดบันทึก", "📝 แผนและ Alert"
+    # 🆕 เพิ่มแท็บ Watchlist สำหรับเก็บติดตามหุ้นที่สนใจ แยกจากพอร์ตจริง
+    tab_dashboard, tab_portfolio, tab_watchlist, tab_dividend, tab_journal, tab_plan = st.tabs([
+        "📈 Dashboard", "📊 พอร์ตโฟลิโอ", "⭐ Watchlist", "💰 ข้อมูลปันผล", "📖 สมุดบันทึก", "📝 แผนและ Alert"
     ])
 
     ##############################
@@ -1303,6 +1305,70 @@ def render_tab_stock():
 
         else:
             st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตปัจจุบันครับ")
+
+    #########################
+    # 🆕 แท็บ Watchlist — เก็บติดตามหุ้นที่สนใจ แยกจากพอร์ตจริง (เพิ่มเข้ามาจากตารางผลการสแกน
+    # ในแท็บ "วิเคราะห์กราฟเทคนิคัล" กดปุ่ม "⭐ เพิ่มเข้า Watchlist" ตอนเลือกหุ้นตัวที่สนใจ)
+    with tab_watchlist:
+        st.markdown("### ⭐ หุ้นที่สนใจ (Watchlist)")
+        st.caption("เก็บติดตามหุ้นที่สนใจไว้ดูเฉยๆ ไม่ต้องซื้อจริง แยกออกจากพอร์ตจริงโดยสิ้นเชิง")
+
+        watchlist_data = load_watchlist()
+
+        if not watchlist_data:
+            st.info(
+                "ยังไม่มีหุ้นใน Watchlist ครับ — ไปที่แท็บ \"วิเคราะห์กราฟเทคนิคัล\" คลิกเลือกหุ้นที่สนใจ"
+                " จากตารางผลการสแกน แล้วกดปุ่ม \"⭐ เพิ่มเข้า Watchlist\" ได้เลย"
+            )
+        else:
+            # ดึงราคา/RSI/RS_Line ปัจจุบันจากข้อมูลสแกนล่าสุด มาเทียบกับตอนที่เพิ่มเข้า Watchlist
+            try:
+                df_scan_latest = load_from_gsheet()
+            except Exception:
+                df_scan_latest = None
+
+            _scan_map = {}
+            if df_scan_latest is not None and not df_scan_latest.empty and 'Ticker' in df_scan_latest.columns:
+                _scan_map = df_scan_latest.set_index('Ticker').to_dict('index')
+
+            _tc = get_theme_colors()
+            for item in watchlist_data:
+                _ticker = str(item.get('Ticker', '')).strip().upper()
+                _price_added = float(item.get('Price_When_Added', 0) or 0)
+                _date_added = item.get('Date_Added', '-')
+                _note = item.get('Note', '')
+
+                _scan_info = _scan_map.get(_ticker, {})
+                _price_now = float(_scan_info.get('ราคาล่าสุด', 0) or 0)
+                _rsi_now = _scan_info.get('RSI_14', None)
+                _rs_line_now = _scan_info.get('RS_Line', None)
+
+                _pct_change = ((_price_now - _price_added) / _price_added * 100) if _price_added > 0 and _price_now > 0 else None
+
+                with st.container(border=True):
+                    _wc1, _wc2, _wc3, _wc4, _wc5 = st.columns([1.5, 1, 1, 1, 0.8])
+                    _wc1.markdown(f"**⭐ {_ticker}**")
+                    _wc1.caption(f"เพิ่มเมื่อ {_date_added}" + (f" • {_note}" if _note else ""))
+
+                    _wc2.metric("ราคาตอนเพิ่ม", f"{_price_added:,.2f} ฿" if _price_added > 0 else "N/A")
+
+                    if _price_now > 0:
+                        _wc3.metric(
+                            "ราคาปัจจุบัน", f"{_price_now:,.2f} ฿",
+                            f"{_pct_change:+.2f}%" if _pct_change is not None else None
+                        )
+                    else:
+                        _wc3.metric("ราคาปัจจุบัน", "รอข้อมูล Daily Scan")
+
+                    _wc4.metric("RSI_14", f"{float(_rsi_now):.1f}" if _rsi_now not in (None, "") else "-")
+
+                    if _wc5.button("🗑️", key=f"del_wl_{_ticker}", help=f"ลบ {_ticker} ออกจาก Watchlist"):
+                        _success, _msg = remove_from_watchlist(_ticker)
+                        if _success:
+                            st.success(_msg)
+                            st.rerun()
+                        else:
+                            st.warning(_msg)
 
     #########################
     with tab_dividend:
