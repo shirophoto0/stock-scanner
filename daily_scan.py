@@ -56,9 +56,9 @@ def load_previous_scan(spreadsheet_name):
 def find_notable_stocks(df_old, df_new):
     """
     เทียบผลสแกนเก่า-ใหม่ หาหุ้นที่ "เพิ่งผ่านเกณฑ์เด่น" วันนี้พอดี (ไม่ใช่ผ่านมาหลายวันแล้ว)
-    คืนค่าเป็น dict {'trend_template': [...], 'rs_cross_up': [...]}
+    คืนค่าเป็น dict {'trend_template': [...], 'rs_cross_up': [...], 'new_52w_high': [...]}
     """
-    result = {'trend_template': [], 'rs_cross_up': []}
+    result = {'trend_template': [], 'rs_cross_up': [], 'new_52w_high': []}
 
     # 1. Trend Template ผ่านใหม่วันนี้ (เทียบกับเมื่อวาน — ต้องมีข้อมูลเก่าถึงจะเทียบได้)
     if not df_old.empty and 'Ticker' in df_old.columns and 'Trend_Template_Pass' in df_old.columns:
@@ -79,6 +79,12 @@ def find_notable_stocks(df_old, df_new):
         ]
         result['rs_cross_up'] = cross_today['Ticker'].tolist()
 
+    # 3. เพิ่งทำจุดสูงสุดใหม่ 52 สัปดาห์วันนี้พอดี (คำนวณมาให้พร้อมแล้วว่าราคาวันนี้สูงกว่าจุดสูงสุด
+    # เดิมของ 250 วันก่อนหน้าจริงไหม ไม่ต้องเทียบกับเมื่อวานเพิ่ม)
+    if 'Is_New_52W_High_Today' in df_new.columns:
+        new_high_today = df_new[df_new['Is_New_52W_High_Today'] == True]
+        result['new_52w_high'] = new_high_today['Ticker'].tolist()
+
     return result
 
 
@@ -94,6 +100,10 @@ def build_telegram_message(notable, watchlist_alerts):
         lines.append(f"\n⭐ <b>RS Line เพิ่งตัดเส้น 0 ขึ้นวันนี้ ({len(notable['rs_cross_up'])} ตัว):</b>")
         lines.append(", ".join(notable['rs_cross_up']))
 
+    if notable['new_52w_high']:
+        lines.append(f"\n🚀 <b>ทำจุดสูงสุดใหม่ 52 สัปดาห์วันนี้ ({len(notable['new_52w_high'])} ตัว):</b>")
+        lines.append(", ".join(notable['new_52w_high']))
+
     # 🆕 แจ้งเตือนราคาเป้าหมายใน Watchlist ที่ถึงแล้ว (แยกตามบัญชี เพราะ Watchlist เป็นข้อมูล
     # ส่วนตัวของแต่ละคน ไม่เหมือนผลสแกนหุ้นที่ใช้ร่วมกัน)
     for spreadsheet_name, alerts in watchlist_alerts.items():
@@ -108,7 +118,7 @@ def build_telegram_message(notable, watchlist_alerts):
 
     if (
         not notable['trend_template'] and not notable['rs_cross_up']
-        and not any(watchlist_alerts.values())
+        and not notable['new_52w_high'] and not any(watchlist_alerts.values())
     ):
         lines.append("\nวันนี้ไม่มีหุ้นตัวใหม่ที่ผ่านเกณฑ์เด่น หรือถึงราคาเป้าหมายเป็นพิเศษครับ")
 
