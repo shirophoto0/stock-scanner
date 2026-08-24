@@ -1653,6 +1653,12 @@ def load_and_calculate_stock_data_optimized():
             near_52w_high = bool(pct_from_52w_high >= -15)  # ห่างจากจุดสูงสุดไม่เกิน 15%
             recovered_from_low = bool(pct_above_52w_low >= 30)  # ฟื้นตัวจากจุดต่ำอย่างน้อย 30%
 
+            # 🆕 5. เพิ่งทำจุดสูงสุดใหม่ 52 สัปดาห์ "วันนี้พอดี" (ต่างจาก Is_52W_High ที่แค่บอกว่า
+            # ราคาใกล้จุดสูงสุด ไม่เกิน 5% เท่านั้น) ใช้สำหรับระบบแจ้งเตือน Telegram โดยเฉพาะ — เทียบ
+            # ราคาล่าสุดกับจุดสูงสุดของ 250 วันก่อนหน้า (ไม่รวมวันนี้ เพราะ high_52w คำนวณแบบตัดวันนี้
+            # ออกไปแล้ว) ถ้าราคาวันนี้สูงกว่าจุดสูงสุดเดิมจริงๆ แปลว่าทำจุดสูงสุดใหม่วันนี้พอดี
+            is_new_52w_high_today = bool(latest_price > high_52w)
+
             # 🆕 3. ปริมาณการซื้อขายพุ่งผิดปกติ (Volume Spike): เทียบ Volume ล่าสุดกับค่าเฉลี่ย 50 วัน
             avg_vol_50 = df['Volume'].iloc[:-1].tail(50).mean()
             latest_vol = df['Volume'].iloc[-1]
@@ -1689,6 +1695,7 @@ def load_and_calculate_stock_data_optimized():
                 'Pct_From_52W_High': round(float(pct_from_52w_high), 2),
                 'Pct_Above_52W_Low': round(float(pct_above_52w_low), 2),
                 'Near_52W_High': near_52w_high,
+                'Is_New_52W_High_Today': is_new_52w_high_today,
                 'Recovered_From_Low': recovered_from_low,
                 'Volume_Spike_Ratio': round(float(volume_spike_ratio), 2),
                 'Is_Volume_Spike': is_volume_spike,
