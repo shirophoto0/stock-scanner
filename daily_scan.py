@@ -13,8 +13,9 @@
 # ไฟล์นี้จึงเรียกเฉพาะฟังก์ชันสแกน+บันทึกข้อมูลตรงๆ โดยไม่ผ่านหน้าเว็บ/ปุ่ม/Login เลย
 #
 # 🆕 เพิ่มระบบแจ้งเตือนอัตโนมัติผ่าน Telegram หลังสแกนเสร็จ — สรุปหุ้นที่ผ่านเกณฑ์เด่นใหม่วันนี้
-# (Trend Template ผ่านใหม่, RS Line เพิ่งตัดเส้น 0 ขึ้นวันนี้พอดี) ต้องตั้งค่า Environment Variables
-# TELEGRAM_BOT_TOKEN และ TELEGRAM_CHAT_ID ก่อน (ผ่าน GitHub Secrets) ไม่งั้นจะข้ามขั้นตอนนี้ไปเงียบๆ
+# (Trend Template ผ่านใหม่, RS Line เพิ่งตัดเส้น 0 ขึ้นวันนี้พอดี) + แจ้งเตือนหุ้นใน Watchlist ที่
+# ราคาถึงเป้าหมายที่ตั้งไว้แล้ว ต้องตั้งค่า Environment Variables TELEGRAM_BOT_TOKEN และ
+# TELEGRAM_CHAT_ID ก่อน (ผ่าน GitHub Secrets) ไม่งั้นจะข้ามขั้นตอนนี้ไปเงียบๆ
 # (ยังคงสแกน+บันทึกข้อมูลได้ตามปกติ แค่ไม่ส่งแจ้งเตือน)
 # =============================================================
 import os
@@ -25,6 +26,7 @@ from backend_functions import (
     get_gsheet_client,
     get_cached_spreadsheet,
     send_telegram_message,
+    check_watchlist_price_alerts,
 )
 
 # รายชื่อ Google Sheet (ของแต่ละคน) ที่ต้องการบันทึกผลสแกนลงไป
@@ -80,8 +82,8 @@ def find_notable_stocks(df_old, df_new):
     return result
 
 
-def build_telegram_message(notable):
-    """สร้างข้อความสรุปหุ้นที่ผ่านเกณฑ์เด่นใหม่วันนี้ สำหรับส่งผ่าน Telegram"""
+def build_telegram_message(notable, watchlist_alerts):
+    """สร้างข้อความสรุปหุ้นที่ผ่านเกณฑ์เด่นใหม่วันนี้ + แจ้งเตือนราคาเป้าหมายที่ถึงแล้ว สำหรับส่งผ่าน Telegram"""
     lines = ["📊 <b>สรุปผลสแกนหุ้นวันนี้</b>"]
 
     if notable['trend_template']:
@@ -92,8 +94,23 @@ def build_telegram_message(notable):
         lines.append(f"\n⭐ <b>RS Line เพิ่งตัดเส้น 0 ขึ้นวันนี้ ({len(notable['rs_cross_up'])} ตัว):</b>")
         lines.append(", ".join(notable['rs_cross_up']))
 
-    if not notable['trend_template'] and not notable['rs_cross_up']:
-        lines.append("\nวันนี้ไม่มีหุ้นตัวใหม่ที่ผ่านเกณฑ์เด่นเป็นพิเศษครับ")
+    # 🆕 แจ้งเตือนราคาเป้าหมายใน Watchlist ที่ถึงแล้ว (แยกตามบัญชี เพราะ Watchlist เป็นข้อมูล
+    # ส่วนตัวของแต่ละคน ไม่เหมือนผลสแกนหุ้นที่ใช้ร่วมกัน)
+    for spreadsheet_name, alerts in watchlist_alerts.items():
+        if alerts:
+            lines.append(f"\n🎯 <b>ราคาเป้าหมายถึงแล้ว ({spreadsheet_name}):</b>")
+            for a in alerts:
+                _dir_label = "ลงมาถึง" if a['direction'] == 'below' else "ขึ้นมาถึง"
+                lines.append(
+                    f"• {a['ticker']}: ราคาปัจจุบัน {a['current_price']:,.2f} ฿ "
+                    f"({_dir_label}เป้าหมาย {a['target_price']:,.2f} ฿)"
+                )
+
+    if (
+        not notable['trend_template'] and not notable['rs_cross_up']
+        and not any(watchlist_alerts.values())
+    ):
+        lines.append("\nวันนี้ไม่มีหุ้นตัวใหม่ที่ผ่านเกณฑ์เด่น หรือถึงราคาเป้าหมายเป็นพิเศษครับ")
 
     return "\n".join(lines)
 
@@ -114,8 +131,9 @@ def save_scan_result(df, spreadsheet_name):
 
 def send_daily_alert(df_result):
     """
-    ส่งแจ้งเตือนสรุปหุ้นเด่นวันนี้ผ่าน Telegram ถ้าตั้งค่า TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID
-    ไว้แล้ว (ผ่าน Environment Variables / GitHub Secrets) ถ้ายังไม่ตั้งค่า จะข้ามขั้นตอนนี้ไปเงียบๆ
+    ส่งแจ้งเตือนสรุปหุ้นเด่นวันนี้ + ราคาเป้าหมายใน Watchlist ที่ถึงแล้ว ผ่าน Telegram ถ้าตั้งค่า
+    TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID ไว้แล้ว (ผ่าน Environment Variables / GitHub Secrets)
+    ถ้ายังไม่ตั้งค่า จะข้ามขั้นตอนนี้ไปเงียบๆ
     """
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
@@ -127,7 +145,15 @@ def send_daily_alert(df_result):
     print("🔍 กำลังเทียบหาหุ้นที่ผ่านเกณฑ์เด่นใหม่วันนี้...")
     df_old = load_previous_scan(REFERENCE_SPREADSHEET)
     notable = find_notable_stocks(df_old, df_result)
-    message = build_telegram_message(notable)
+
+    # 🆕 เช็คราคาเป้าหมายใน Watchlist ของทุกบัญชี (Watchlist เป็นข้อมูลส่วนตัวของแต่ละคน
+    # ต่างจากผลสแกนหุ้นที่ใช้ร่วมกัน จึงต้องเช็คแยกทีละบัญชี)
+    print("🎯 กำลังเช็คราคาเป้าหมายใน Watchlist ของทุกบัญชี...")
+    watchlist_alerts = {}
+    for spreadsheet_name in TARGET_SPREADSHEETS:
+        watchlist_alerts[spreadsheet_name] = check_watchlist_price_alerts(spreadsheet_name, df_result)
+
+    message = build_telegram_message(notable, watchlist_alerts)
 
     success, msg = send_telegram_message(bot_token, chat_id, message)
     print(f"{'✅' if success else '⚠️'} {msg}")
