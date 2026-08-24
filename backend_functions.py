@@ -69,14 +69,23 @@ def get_cached_spreadsheet(_client, spreadsheet_name):
     return _client.open(spreadsheet_name)
 
 
-# =============================================================
-# 2. ฟังก์ชันจัดการ Google Sheets & ข้อมูลทรัพย์สิน (Wealth & Google Sheets)
-# =============================================================
+# 🔧 แก้บั๊ก (สำคัญ): เดิม "จำ" แค่ตัวไฟล์สเปรดชีตทั้งไฟล์ไว้เท่านั้น (get_cached_spreadsheet ด้านบน)
+# แต่การเปิด "ชีตย่อย" แต่ละแผ่น (.worksheet(name) เช่น Watchlist, Real_Estate, PortfolioData)
+# ยังไม่ได้ถูกจำไว้เลย ทุกครั้งที่แท็บไหนก็ตามเรียกใช้ จะยิง API ใหม่เสมอ — ปัญหาคือ Streamlit
+# รันโค้ดทุกแท็บพร้อมกันทุกครั้งที่มีการโต้ตอบอะไรก็ตามในแอป (ไม่ใช่แค่แท็บที่เปิดดูอยู่) พอมีหลาย
+# แท็บเรียกเปิดชีตย่อยพร้อมกันในจังหวะเดียว โควตาต่อนาทีจึงหมดเร็วผิดปกติ ตอนนี้จำชีตย่อยที่เปิด
+# ไว้แล้วด้วย (5 นาที เหมือนกับตัวสเปรดชีต) ช่วยลดจำนวนครั้งที่ยิง API ลงได้อีกมาก ทุกแท็บที่ใช้
+# get_worksheet_safely() จะได้ประโยชน์นี้โดยอัตโนมัติ ไม่ต้องแก้ทีละแท็บ
+@st.cache_resource(ttl=300, show_spinner=False)
+def get_cached_worksheet(_client, spreadsheet_name, worksheet_name):
+    return get_cached_spreadsheet(_client, spreadsheet_name).worksheet(worksheet_name)
+
+
 def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, delay=2):
     """ฟังก์ชันเปิด Google Sheet พร้อมระบบป้องกันและลองใหม่เมื่อติดปัญหา Quota Exceeded (429)"""
     for attempt in range(retries):
         try:
-            sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet(worksheet_name)
+            sheet = get_cached_worksheet(client, spreadsheet_name, worksheet_name)
             return sheet
         except APIError as e:
             if "429" in str(e) or "Quota exceeded" in str(e):
@@ -96,7 +105,7 @@ def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, de
     
 def check_and_auto_stamp_portfolio(client, current_total_value):
     try:
-        sheet_history = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Stock_TFEX_History')
+        sheet_history = get_cached_worksheet(client, get_active_sheet_name(), 'Stock_TFEX_History')
         data = sheet_history.get_all_records()
         
         last_recorded_month = ""
@@ -124,7 +133,7 @@ def check_and_auto_stamp_fund_value(client, current_total_value):
     ต้องมีชีตชื่อ 'Fund_Value_History' (คอลัมน์ Date, Value) อยู่ใน Google Sheet ของผู้ใช้แล้ว
     """
     try:
-        sheet_history = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Fund_Value_History')
+        sheet_history = get_cached_worksheet(client, get_active_sheet_name(), 'Fund_Value_History')
         data = sheet_history.get_all_records()
 
         last_recorded_month = ""
@@ -155,7 +164,7 @@ def check_and_auto_stamp_value_history(client, sheet_name, current_total_value, 
     เขียนฟังก์ชันซ้ำหลายตัว ต้องมีชีตชื่อตามที่ระบุ (คอลัมน์ Date, Value) อยู่ใน Google Sheet ก่อน
     """
     try:
-        sheet_history = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet(sheet_name)
+        sheet_history = get_cached_worksheet(client, get_active_sheet_name(), sheet_name)
         data = sheet_history.get_all_records()
 
         last_recorded_month = ""
@@ -189,7 +198,7 @@ def load_watchlist():
     """โหลดรายชื่อหุ้นทั้งหมดใน Watchlist คืนค่าเป็น list of dict (ว่างเปล่าถ้ายังไม่มีชีต/ข้อมูล)"""
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Watchlist')
         return sheet.get_all_records()
     except Exception:
         return []
@@ -203,7 +212,7 @@ def add_to_watchlist(ticker, current_price, note=""):
     ticker = str(ticker).strip().upper()
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Watchlist')
         existing = sheet.get_all_records()
         existing_tickers = [str(r.get('Ticker', '')).strip().upper() for r in existing]
         if ticker in existing_tickers:
@@ -219,7 +228,7 @@ def remove_from_watchlist(ticker):
     ticker = str(ticker).strip().upper()
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Watchlist')
         cell = sheet.find(ticker)
         if cell:
             sheet.delete_rows(cell.row)
@@ -241,7 +250,7 @@ def update_watchlist_target(ticker, target_price, direction):
     ticker = str(ticker).strip().upper()
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Watchlist')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Watchlist')
         cell = sheet.find(ticker)
         if not cell:
             return False, f"ไม่พบ {ticker} ใน Watchlist"
@@ -262,7 +271,7 @@ def _check_watchlist_with_price_map(spreadsheet_name, price_map):
     triggered = []
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('Watchlist')
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Watchlist')
         records = sheet.get_all_records()
     except Exception:
         return triggered
@@ -325,7 +334,7 @@ def get_watchlist_tickers_pending_alert(spreadsheet_name):
     """
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('Watchlist')
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Watchlist')
         records = sheet.get_all_records()
     except Exception:
         return []
@@ -370,7 +379,7 @@ def _check_sl_tp_with_price_map(spreadsheet_name, price_map):
     triggered = []
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('PortfolioData')
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'PortfolioData')
         records = sheet.get_all_records()
     except Exception:
         return triggered
@@ -460,7 +469,7 @@ def get_portfolio_tickers_pending_sl_tp(spreadsheet_name):
     """
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('PortfolioData')
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'PortfolioData')
         records = sheet.get_all_records()
     except Exception:
         return []
@@ -573,7 +582,7 @@ def st_neumorphic_container():
 def get_latest_pvd_value():
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Provident_Fund')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Provident_Fund')
         data = sheet.get_all_records()
         if data:
             df = pd.DataFrame(data)
@@ -585,7 +594,7 @@ def get_latest_pvd_value():
 
 def get_pension_sheet(client):
     try:
-        sheet_pen = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Pension')
+        sheet_pen = get_cached_worksheet(client, get_active_sheet_name(), 'Pension')
         return sheet_pen
     except Exception:
         return None
@@ -593,7 +602,7 @@ def get_pension_sheet(client):
 def get_latest_insurance_value():
     try:
         client = get_gsheet_client()
-        sheet_ins = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Insurance')
+        sheet_ins = get_cached_worksheet(client, get_active_sheet_name(), 'Insurance')
         data = sheet_ins.get_all_records()
         if data:
             df_ins = pd.DataFrame(data)
@@ -606,7 +615,7 @@ def get_latest_insurance_value():
 def get_latest_coop_value():
     try:
         client = get_gsheet_client()
-        sheet_coop = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Coop')
+        sheet_coop = get_cached_worksheet(client, get_active_sheet_name(), 'Coop')
         data = sheet_coop.get_all_records()
         if data:
             df_coop = pd.DataFrame(data)
@@ -638,7 +647,7 @@ def update_trade_close(trade_id, close_price, date_close):
         client = get_gsheet_client()
         # 🔧 แก้บั๊ก: เดิมรับ spreadsheet_id ตายตัวจากภายนอก (ผู้เรียกใช้ส่ง ID ตายตัวมา)
         # ตอนนี้เปิดตามชื่อชีตของผู้ใช้ที่ login อยู่แทน สอดคล้องกับฟังก์ชันอื่นในระบบ
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('TFEX_History')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'TFEX_History')
         
         records = sheet.get_all_records()
         df = pd.DataFrame(records)
@@ -756,7 +765,7 @@ def load_total_cash_balance():
         spreadsheet_name = get_active_sheet_name()
         
         # 1. ดึงยอดรวมจากชีต Cash_Flow ทั้งหมด
-        sheet_cash = get_cached_spreadsheet(client, spreadsheet_name).worksheet('CashFlow')
+        sheet_cash = get_cached_worksheet(client, spreadsheet_name, 'CashFlow')
         records_cash = sheet_cash.get_all_records()
         
         total_cash_flow = 0.0
@@ -767,7 +776,7 @@ def load_total_cash_balance():
                 total_cash_flow = float(df_cash['Amount'].sum())
                 
         # 2. บังคับคำนวณต้นทุนหุ้นทั้งหมดจาก shares * avg_price โดยตรง
-        sheet_portfolio = get_cached_spreadsheet(client, spreadsheet_name).worksheet('PortfolioData')
+        sheet_portfolio = get_cached_worksheet(client, spreadsheet_name, 'PortfolioData')
         records_portfolio = sheet_portfolio.get_all_records()
         
         total_stock_cost = 0.0
@@ -830,7 +839,7 @@ def save_cash_to_gsheet(df):
         
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet("Cash_Flow")
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), "Cash_Flow")
         sheet.append_rows(df.values.tolist())
         return True
     except Exception as e:
@@ -842,7 +851,7 @@ def save_data_to_sheet(new_df, sheet_name):
     try:
         client = get_gsheet_client()
         # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('TFEX_History')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'TFEX_History')
         
         cols = ["Trade_ID", "Date_Open", "Date_Close", "Series", "Status", "Size", "Open_Price", 
                 "Close_Price", "Realized", "Comm", "Net_Profit", "Win_Lose", "Reason"]
@@ -897,7 +906,7 @@ def save_dividend_data(df_div=None):
         # 3. บันทึกลง Google Sheets แบบปลอดภัย
         try:
             client = get_gsheet_client()
-            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Dividend')
+            sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Dividend')
             
             df_clean = df_div.fillna("")
             data_to_write = [df_clean.columns.tolist()] + df_clean.astype(str).values.tolist()
@@ -950,7 +959,7 @@ def load_data(sheet_name, active_sheet_name):
     for attempt in range(3):
         try:
             client = get_gsheet_client()
-            sheet = get_cached_spreadsheet(client, active_sheet_name).worksheet(sheet_name) 
+            sheet = get_cached_worksheet(client, active_sheet_name, sheet_name)
             data = sheet.get_all_records()
             if data:
                 return pd.DataFrame(data)
@@ -990,7 +999,7 @@ def get_cached_stock_info(ticker):
 def clear_and_save_data(df, sheet_name):
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('TradingPlan')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'TradingPlan')
         
         sheet.clear()
         
@@ -1008,7 +1017,7 @@ def clear_and_save_data(df, sheet_name):
 def save_to_gsheet(df, sheet_name='StockData'):
     client = get_gsheet_client()
     # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
-    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('StockData')
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'StockData')
     
     df = df.replace([np.inf, -np.inf], 0).fillna("")
     data_to_write = [df.columns.tolist()] + df.values.tolist()
@@ -1026,7 +1035,7 @@ def save_journal():
             df_temp[col] = pd.to_datetime(df_temp[col], errors='coerce').dt.strftime('%Y-%m-%d')
             
     client = get_gsheet_client()
-    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData')
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'JournalData')
     
     sheet.clear()
     sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
@@ -1039,7 +1048,7 @@ def load_journal():
     for attempt in range(3):
         try:
             client = get_gsheet_client()
-            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData')
+            sheet = get_cached_worksheet(client, get_active_sheet_name(), 'JournalData')
             data = sheet.get_all_records()
             st.session_state.journal_data = data
             return
@@ -1059,7 +1068,7 @@ def save_portfolio():
             st.session_state.my_portfolio = []
             
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('PortfolioData')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'PortfolioData')
         
         sheet.clear() 
         if st.session_state.my_portfolio:
@@ -1080,7 +1089,7 @@ def load_portfolio():
     for attempt in range(3):
         try:
             client = get_gsheet_client()
-            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('PortfolioData')
+            sheet = get_cached_worksheet(client, get_active_sheet_name(), 'PortfolioData')
             data = sheet.get_all_records()
             st.session_state.my_portfolio = data if data else []
             return
@@ -1097,7 +1106,7 @@ def load_portfolio():
 def log_portfolio_snapshot():
     """บันทึกยอดพอร์ตรายวันลงตาราง Portfolio_History"""
     client = get_gsheet_client()
-    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Portfolio_History')
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Portfolio_History')
     
     current_date = datetime.now().strftime('%Y-%m-%d')
     market_val = calculate_total_portfolio_value() 
@@ -1204,7 +1213,7 @@ def save_portfolio_snapshot():
 def display_performance_dashboard():
     # 1. โหลดข้อมูล
     client = get_gsheet_client()
-    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Portfolio_History')
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Portfolio_History')
     data = sheet.get_all_records()
     df = pd.DataFrame(data)
     
@@ -1254,7 +1263,7 @@ def backfill_portfolio_history():
     # โหลดข้อมูล CashFlow เผื่อไว้คำนวณเงินลงทุนจริง (ถ้ามี)
     try:
         client = get_gsheet_client()
-        sheet_cash = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('CashFlow')
+        sheet_cash = get_cached_worksheet(client, get_active_sheet_name(), 'CashFlow')
         cash_data = sheet_cash.get_all_records()
         df_cash = pd.DataFrame(cash_data) if cash_data else pd.DataFrame()
         if not df_cash.empty:
@@ -1308,7 +1317,7 @@ def backfill_portfolio_history():
     
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Portfolio_History')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Portfolio_History')
         
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
@@ -1343,7 +1352,7 @@ def get_current_portfolio_value():
 def update_stock_data(df):
     client = get_gsheet_client()
     # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ ตอนนี้เปลี่ยนตามผู้ใช้ที่ login แล้ว
-    sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('StockData')
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'StockData')
     
     # 1. เตรียมข้อมูล: แปลง Header และข้อมูลเป็น list
     data_to_update = [df.columns.values.tolist()] + df.values.tolist()
@@ -1359,7 +1368,7 @@ def update_stock_data(df):
 def log_cash_transaction(date, trans_type, amount, note):
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('CashFlow')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'CashFlow')
         
         # เตรียมข้อมูลที่จะบันทึก (Date, Type, Amount, Note)
         row_data = [str(date), trans_type, amount, note]
@@ -1393,7 +1402,7 @@ def get_equity_curve_data():
         # ลองโหลดจาก Google Sheets ดูก่อนถ้า session ว่าง
         try:
             client = get_gsheet_client()
-            sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData')
+            sheet = get_cached_worksheet(client, get_active_sheet_name(), 'JournalData')
             data = sheet.get_all_records()
             if not data:
                 return pd.DataFrame()
@@ -1431,7 +1440,7 @@ def get_equity_curve_data():
     # 2. เตรียมข้อมูล CashFlow (ป้องกันกรณีชีท CashFlow Error)
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('CashFlow')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'CashFlow')
         cash_data = sheet.get_all_records()
         df_cash = pd.DataFrame(cash_data) if cash_data else pd.DataFrame()
     except:
@@ -1592,7 +1601,7 @@ def check_alerts(row):
 def load_from_gsheet():
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('StockData')
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), 'StockData')
         data = sheet.get_all_records()
         
         if not data:
@@ -1624,7 +1633,7 @@ def log_to_sheet(sheet_name, row_data):
     """ฟังก์ชันอเนกประสงค์สำหรับ append แถวข้อมูลใหม่ลงใน Google Sheets"""
     try:
         client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet(sheet_name)
+        sheet = get_cached_worksheet(client, get_active_sheet_name(), sheet_name)
         sheet.append_row(row_data)
     except Exception as e:
         print(f"DEBUG: Error ใน log_to_sheet ({sheet_name}): {e}")
