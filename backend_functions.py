@@ -1768,3 +1768,24 @@ def generate_net_worth_pdf_report(app_title, net_worth_excl_re, net_worth_total,
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
+
+
+# =============================================================
+# 🆕 ระบบแจ้งเตือนอัตโนมัติผ่าน Telegram (ต่อท้าย Daily Scan)
+# ใช้ Telegram Bot API ตรงๆ ผ่าน requests ไม่ต้องติดตั้ง library เพิ่ม (LINE Notify ปิดให้บริการ
+# ไปแล้วตั้งแต่ 31 มี.ค. 2025 จึงเลือกใช้ Telegram แทน — ตั้งค่าง่ายกว่าและยังใช้งานได้จริง)
+# =============================================================
+def send_telegram_message(bot_token, chat_id, message):
+    """
+    ส่งข้อความแจ้งเตือนผ่าน Telegram Bot คืนค่าเป็น (สำเร็จหรือไม่: bool, ข้อความ: str)
+    ต้องมี bot_token (จาก @BotFather) และ chat_id (ไอดีแชทที่จะส่งไปหา) ก่อน
+    """
+    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+    try:
+        resp = requests.post(url, data=payload, timeout=10)
+        if resp.status_code == 200:
+            return True, "ส่งข้อความ Telegram สำเร็จ"
+        return False, f"ส่งไม่สำเร็จ (HTTP {resp.status_code}): {resp.text}"
+    except Exception as e:
+        return False, f"ส่งไม่สำเร็จ: {e}"
