@@ -1161,6 +1161,23 @@ def render_tab_stock():
                             _div_col, "ปันผลที่คาดว่าจะได้รับต่อปี", f"{_estimated_annual_dividend:,.0f} ฿",
                             icon="💸", caption="ประเมินจากมูลค่าพอร์ตปัจจุบัน x % ปันผลล่าสุด (ไม่การันตี)"
                         )
+
+                        # 🆕 ตารางวันขึ้น XD ล่าสุดของแต่ละหุ้นในพอร์ต (ถ้ามีข้อมูล) ให้เห็นชัดว่า
+                        # % ปันผลที่ใช้คำนวณด้านบนมาจากรอบจ่ายปันผลล่าสุดเมื่อไหร่ เผื่อบางตัวเพิ่งขึ้น
+                        # XD ไปแล้ว (แปลว่ารอบปันผลนั้นอาจไม่ได้รับแล้ว ถ้าเพิ่งซื้อทีหลัง)
+                        if 'Ex_Dividend_Date' in df_div_lookup.columns:
+                            _xd_map = dict(zip(df_div_lookup['Ticker'], df_div_lookup['Ex_Dividend_Date']))
+                            _xd_rows = [
+                                {
+                                    "หุ้น": p["หุ้น"],
+                                    "% ปันผลย้อนหลัง 12 เดือน": _dividend_map.get(p["หุ้น"], 0),
+                                    "วันขึ้น XD ล่าสุด": _xd_map.get(p["หุ้น"], "") or "ไม่มีข้อมูล"
+                                }
+                                for p in portfolio_list
+                            ]
+                            with st.expander("📅 ดูวันขึ้น XD ล่าสุดของแต่ละหุ้นในพอร์ต"):
+                                st.caption("⚠️ ข้อมูลนี้บางตัวอาจไม่มีในหุ้นไทยบางตัว (ข้อจำกัดของ Yahoo Finance)")
+                                st.dataframe(pd.DataFrame(_xd_rows), use_container_width=True, hide_index=True)
                 except Exception:
                     pass
 
