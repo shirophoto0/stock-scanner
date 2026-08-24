@@ -32,19 +32,16 @@ def _render_market_comparison():
     st.markdown("### 📈 เทียบผลงานพอร์ตหุ้นกับ SET Index")
     st.caption("เทียบเฉพาะพอร์ตหุ้น (ไม่รวม TFEX) เพราะ SET Index เป็นดัชนีตลาดหุ้นโดยเฉพาะ")
 
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Portfolio_History')
-        port_data = sheet.get_all_records()
-    except Exception:
-        st.info("ยังไม่พบชีต Portfolio_History หรือยังไม่มีข้อมูลประวัติพอร์ตเพียงพอสำหรับเปรียบเทียบ")
-        return
+    # 🔧 แก้บั๊ก: เดิมดึงข้อมูลตรงๆ ครั้งเดียว ไม่มีระบบลองใหม่เลย พอเจอโควตา Google Sheets ชั่วคราว
+    # (429 - พบได้บ่อยเวลามีหลายแท็บ/หลายคนยิงขอข้อมูลพร้อมกัน) จะขึ้นข้อความ "ยังไม่พบชีต..."
+    # ทำให้เข้าใจผิดว่าปัญหาคือไม่มีชีต ทั้งที่จริงๆ แค่โควตาชั่วคราว ตอนนี้เปลี่ยนมาใช้ load_data()
+    # ซึ่งมีระบบลองใหม่อัตโนมัติ 3 ครั้งอยู่แล้ว (ฟังก์ชันเดียวกับที่จุดอื่นในแอปใช้กันมานาน)
+    df_port = load_data('Portfolio_History', get_active_sheet_name())
 
-    if not port_data:
+    if df_port.empty:
         st.info("ยังไม่มีข้อมูลประวัติพอร์ต — ข้อมูลจะเริ่มสะสมทุกครั้งที่บันทึกการซื้อ-ขาย หรือเข้าแท็บภาพรวม Net Worth")
         return
 
-    df_port = pd.DataFrame(port_data)
     if 'Date' not in df_port.columns or 'Market_Value' not in df_port.columns:
         st.warning("โครงสร้างชีต Portfolio_History ไม่ตรงตามที่คาดไว้ (ต้องมีคอลัมน์ Date, Market_Value)")
         return
@@ -83,22 +80,18 @@ def _render_market_comparison():
     # เติม/ถอนเงินสดจริง (ไม่นับรายการซื้อ-ขายหุ้น เพราะแค่ย้ายเงินจากเงินสดไปหุ้นในพอร์ตเดียวกัน
     # ไม่ใช่เงินไหลเข้า-ออกจากภายนอก) แล้วนำผลตอบแทนแต่ละช่วงมาต่อกัน (Chain-linking) เพื่อตัด
     # ผลกระทบจากจังหวะเติม-ถอนเงินออกไปทั้งหมด
-    try:
-        _cf_client = get_gsheet_client()
-        _cf_sheet = get_cached_spreadsheet(_cf_client, get_active_sheet_name()).worksheet('CashFlow')
-        _cf_data = _cf_sheet.get_all_records()
-        df_cashflow = pd.DataFrame(_cf_data)
-        if not df_cashflow.empty and 'Date' in df_cashflow.columns and 'Type' in df_cashflow.columns:
-            df_cashflow['Date'] = pd.to_datetime(df_cashflow['Date'], errors='coerce')
-            df_cashflow['Amount'] = pd.to_numeric(df_cashflow['Amount'], errors='coerce').fillna(0)
-            # นับเฉพาะรายการเติม/ถอนเงินสดจริงเท่านั้น (ไม่นับ "ซื้อหุ้น"/"ขายหุ้น" ที่แค่ย้ายเงิน
-            # ภายในพอร์ตเดียวกัน และไม่นับปันผล/รายได้อื่นๆ เพราะถือเป็นผลตอบแทนการลงทุน ไม่ใช่
-            # เงินทุนใหม่จากภายนอก)
-            df_cashflow = df_cashflow[df_cashflow['Type'].isin(['เติมเงินสด', 'ถอนเงินสด'])]
-            df_cashflow = df_cashflow.dropna(subset=['Date'])
-        else:
-            df_cashflow = pd.DataFrame(columns=['Date', 'Amount'])
-    except Exception:
+    # 🔧 แก้บั๊ก: เปลี่ยนมาใช้ load_data() เหมือนกัน (มีระบบลองใหม่อัตโนมัติในตัว) แทนการดึงตรงๆ
+    # ครั้งเดียวแบบเดิม กันปัญหาโควตา Google Sheets ชั่วคราวแบบเดียวกับจุดด้านบน
+    df_cashflow = load_data('CashFlow', get_active_sheet_name())
+    if not df_cashflow.empty and 'Date' in df_cashflow.columns and 'Type' in df_cashflow.columns:
+        df_cashflow['Date'] = pd.to_datetime(df_cashflow['Date'], errors='coerce')
+        df_cashflow['Amount'] = pd.to_numeric(df_cashflow['Amount'], errors='coerce').fillna(0)
+        # นับเฉพาะรายการเติม/ถอนเงินสดจริงเท่านั้น (ไม่นับ "ซื้อหุ้น"/"ขายหุ้น" ที่แค่ย้ายเงิน
+        # ภายในพอร์ตเดียวกัน และไม่นับปันผล/รายได้อื่นๆ เพราะถือเป็นผลตอบแทนการลงทุน ไม่ใช่
+        # เงินทุนใหม่จากภายนอก)
+        df_cashflow = df_cashflow[df_cashflow['Type'].isin(['เติมเงินสด', 'ถอนเงินสด'])]
+        df_cashflow = df_cashflow.dropna(subset=['Date'])
+    else:
         df_cashflow = pd.DataFrame(columns=['Date', 'Amount'])
 
     df_port = df_port.reset_index(drop=True)
