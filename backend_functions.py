@@ -1359,6 +1359,24 @@ def load_and_calculate_stock_data_optimized():
             
             # คำนวณ RSI
             df['RSI'] = calculate_rsi(df['Close'], period=14)
+
+            # 🆕 ดึงข้อมูล P/E Ratio และเงินปันผล (%) จริงจาก Yahoo (ต้องดึงทีละหุ้น ช้ากว่าราคา
+            # ที่ดึงเป็นชุดใหญ่ทีเดียวด้านบน) ครอบด้วย try/except แยกต่างหาก เพื่อไม่ให้ถ้าจุดนี้
+            # พลาด ไปทำให้ข้อมูลราคา/RSI/Trend Template ที่คำนวณสำเร็จแล้วของหุ้นตัวนี้เสียไปด้วย
+            try:
+                stock_info = yf.Ticker(ticker).info
+                pe_ratio_raw = stock_info.get('trailingPE')
+                dividend_yield_raw = stock_info.get('dividendYield')
+                pe_ratio_val = round(float(pe_ratio_raw), 2) if pe_ratio_raw is not None else 0.0
+                dividend_pct_val = round(float(dividend_yield_raw) * 100, 2) if dividend_yield_raw is not None else 0.0
+            except Exception:
+                pe_ratio_val = 0.0
+                dividend_pct_val = 0.0
+
+            # 🆕 แจ้งความคืบหน้าเป็นระยะ (ทุก 50 ตัว) เพราะขั้นตอนนี้ดึงข้อมูลทีละหุ้น ใช้เวลานาน
+            # กว่าจุดอื่น ถ้าไม่แจ้งความคืบหน้า จะดูเหมือนค้างไม่ทำงาน โดยเฉพาะตอนรันแบบ headless
+            if (i + 1) % 50 == 0:
+                print(f"⏳ ดึงข้อมูล P/E และปันผลไปแล้ว {i + 1}/{total} ตัว...")
             
             # คำนวณ RS_Line (ข้ามไปถ้าข้อมูลดัชนี SET ไม่พอ ตั้งเป็น 0 แทน)
             if set_market_usable:
@@ -1410,6 +1428,8 @@ def load_and_calculate_stock_data_optimized():
                 'ราคาล่าสุด': round(float(latest_price), 2),
                 'RSI_14': round(float(df['RSI'].iloc[-1]), 2),
                 'RS_Line': round(float(current_rs_val), 2),
+                'PE_Ratio': pe_ratio_val,
+                'ปันผล_%': dividend_pct_val,
                 'Is_3M_High': latest_price >= (high_3m * 0.95),
                 'Is_6M_High': latest_price >= (high_6m * 0.95),
                 'Is_52W_High': latest_price >= (high_52w * 0.95),
