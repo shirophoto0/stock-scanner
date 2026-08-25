@@ -161,11 +161,17 @@ def save_scan_result(df, spreadsheet_name):
     บันทึกผลสแกนลงชีต StockData ของ Google Sheet ที่ระบุ
     เขียนแบบไม่พึ่งพา st.session_state เลย (ต่างจาก save_to_gsheet() ในหน้าเว็บที่อ่านชื่อชีต
     จาก session_state ของผู้ใช้ที่ login อยู่ ซึ่งไม่มีค่าในการรันแบบอัตโนมัตินี้)
+    🔧 แก้บั๊ก: เดิมเขียนทับด้วย sheet.update() ตั้งแต่ A1 ลงไปเฉยๆ โดยไม่ได้ล้างชีตก่อน ทำให้ถ้า
+    รอบนี้มีจำนวนแถวน้อยกว่ารอบก่อน (เช่น ตอนลดจำนวนหุ้นจาก 494 เหลือ 472 ตัว) แถวเก่าที่เกินมา
+    จะค้างอยู่ในชีตต่อไปเฉยๆ กลายเป็นข้อมูลซ้ำซ้อนกับแถวใหม่ (Ticker ซ้ำกัน) จนทำให้หน้าเว็บที่
+    แปลงข้อมูลเป็น dict โดยอิงจาก Ticker พังทันที (ValueError: index must be unique) ตอนนี้ล้าง
+    ชีตทั้งหมดก่อนเขียนข้อมูลใหม่ทุกครั้ง รับประกันว่าไม่มีแถวเก่าตกค้างอีกต่อไป
     """
     client = get_gsheet_client()
     sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('StockData')
     df_clean = df.replace([np.inf, -np.inf], 0).fillna("")
     data_to_write = [df_clean.columns.tolist()] + df_clean.values.tolist()
+    sheet.clear()
     sheet.update(range_name='A1', values=data_to_write)
     print(f"✅ บันทึกข้อมูลลง {spreadsheet_name} สำเร็จ ({len(df_clean)} แถว)")
 
