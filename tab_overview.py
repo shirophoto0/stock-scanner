@@ -8,7 +8,7 @@ import time
 from datetime import date
 import plotly.graph_objects as go
 import plotly.express as px
-from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history, generate_net_worth_pdf_report
+from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history, generate_net_worth_pdf_report, get_net_worth_trend_data
 from theme import style_plotly
 
 
@@ -478,8 +478,12 @@ def render_tab_overview():
                 ("Gold", total_gold_value),
                 ("Real Estate", total_real_estate),
             ]
+            # 🆕 ดึงข้อมูลแนวโน้มมาใส่กราฟเส้นในรายงานด้วย (ใช้ฟังก์ชันกลางเดียวกับที่วาดกราฟ
+            # แนวโน้มด้านบนของหน้านี้ และเดียวกับที่สคริปต์รายงานอัตโนมัติรายเดือนใช้)
+            _trend_df_for_pdf = get_net_worth_trend_data(get_active_sheet_name())
             _pdf_bytes = generate_net_worth_pdf_report(
-                _pdf_app_title, net_worth_excl_re, net_worth_total, _pdf_asset_breakdown
+                _pdf_app_title, net_worth_excl_re, net_worth_total, _pdf_asset_breakdown,
+                trend_df=_trend_df_for_pdf
             )
             st.download_button(
                 "📥 ดาวน์โหลดรายงาน PDF",
