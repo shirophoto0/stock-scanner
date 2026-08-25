@@ -21,6 +21,10 @@ SIGNAL_TYPE_LABELS = {
     "Trend_Template": "✅ Trend Template ผ่านใหม่",
     "RS_Cross_Up": "⭐ RS Line ตัดเส้น 0 ขึ้น",
     "New_52W_High": "🚀 ทำจุดสูงสุดใหม่ 52 สัปดาห์",
+    "Volume_Spike": "📢 Volume พุ่งผิดปกติ",
+    "Golden_Cross": "🌟 Golden Cross",
+    "RSI_Oversold_Bounce": "🔄 RSI ดีดกลับจาก Oversold",
+    "VCP_Breakout": "🎯 VCP Breakout",
 }
 
 
