@@ -1541,6 +1541,11 @@ def render_tab_stock():
 
         _scan_map = {}
         if df_scan_latest is not None and not df_scan_latest.empty and 'Ticker' in df_scan_latest.columns:
+            # 🔧 แก้บั๊ก: เดิม set_index('Ticker') แล้วแปลงเป็น dict ตรงๆ พังทันทีถ้ามีหุ้นชื่อซ้ำกัน
+            # มากกว่า 1 แถวในชีต StockData (ValueError: DataFrame index must be unique) ซึ่งอาจ
+            # เกิดจากการสแกนบางรอบที่ไม่สมบูรณ์ ตอนนี้ตัดแถวที่ซ้ำออกก่อนเสมอ (เก็บแถวสุดท้ายไว้
+            # เพราะเป็นข้อมูลล่าสุด) กันไม่ให้แอปพังจากข้อมูลซ้ำแบบนี้อีก
+            df_scan_latest = df_scan_latest.drop_duplicates(subset='Ticker', keep='last')
             _scan_map = df_scan_latest.set_index('Ticker').to_dict('index')
 
         # 🆕 เพิ่มหุ้นเข้า Watchlist ด้วยการพิมพ์ชื่อเองได้โดยตรง (นอกจากกดปุ่ม "⭐ เพิ่มเข้า Watchlist"
