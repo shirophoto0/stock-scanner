@@ -188,7 +188,16 @@ def render_tab_retirement():
 
         submitted = st.form_submit_button("🧮 คำนวณ", use_container_width=True)
 
-    if not submitted:
+    # 🔧 แก้บั๊ก: เดิมเช็คแค่ "submitted" เฉยๆ ซึ่งเป็น True แค่รอบเดียวตอนกดปุ่มจริงๆ พอไปเลื่อน
+    # slider หุ้นปันผล (อยู่นอกฟอร์ม) ด้านล่าง หน้าเว็บจะรันใหม่ทั้งหมด แต่รอบนั้น submitted จะ
+    # กลับเป็น False เพราะไม่ได้เพิ่งกดปุ่ม ทำให้ระบบเข้าใจผิดว่า "ยังไม่เคยคำนวณ" แล้วเด้งกลับไป
+    # หน้าแรกทันที ตอนนี้ใช้ session_state จดจำว่า "เคยกดคำนวณไปแล้วอย่างน้อย 1 ครั้ง" แบบถาวร
+    # แทน (ค่าตัวแปรจากฟอร์ม เช่น current_age, target_net_worth ฯลฯ ยังคงค่าถูกต้องข้ามการรันซ้ำ
+    # อยู่แล้วโดยธรรมชาติของ Streamlit ไม่ต้องเก็บซ้ำเพิ่มเติม)
+    if submitted:
+        st.session_state['retirement_calculated'] = True
+
+    if not st.session_state.get('retirement_calculated', False):
         return
 
     if retirement_age <= current_age:
