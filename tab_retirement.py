@@ -93,6 +93,28 @@ def _project_growth(current_age, retirement_age, other_current, pvd_current,
     return ages, totals, totals[-1] if totals else 0.0
 
 
+def _solve_required_return_rate(current_age, retirement_age, other_current, pvd_current,
+                                  monthly_savings, annual_savings_increase_pct, pvd_annual_growth_pct,
+                                  target_wealth, rate_min=0.0, rate_max=30.0, max_iter=60):
+    """
+    🆕 ใช้ Binary Search หาอัตราผลตอบแทนพอร์ตทั่วไปขั้นต่ำที่ต้องการ (คงเงินออมต่อเดือนเดิมไว้)
+    ถึงจะได้ Net Worth ตามเป้าหมายพอดีตอนเกษียณ — ใช้ได้เพราะยิ่งอัตราผลตอบแทนสูงขึ้น Net Worth
+    ที่โปรเจกชันได้ก็ยิ่งสูงขึ้นตามเสมอ (เป็นฟังก์ชันทางเดียว จึงใช้ Binary Search หาคำตอบได้แน่นอน)
+    """
+    lo, hi = rate_min, rate_max
+    for _ in range(max_iter):
+        mid = (lo + hi) / 2
+        _, _, projected = _project_growth(
+            current_age, retirement_age, other_current, pvd_current,
+            monthly_savings, annual_savings_increase_pct, mid, pvd_annual_growth_pct
+        )
+        if projected < target_wealth:
+            lo = mid
+        else:
+            hi = mid
+    return hi
+
+
 def _required_monthly_savings(target_shortfall, years_to_go, annual_return_pct):
     """คำนวณเงินออมเพิ่มต่อเดือนที่ต้องใช้ ถึงจะปิดช่องว่างให้ถึงเป้าหมายพอดี (สูตร Future Value of Annuity)"""
     if target_shortfall <= 0 or years_to_go <= 0:
@@ -266,8 +288,17 @@ def _render_assessment_tab():
     )
 
     # 🆕 เก็บผลลัพธ์ไว้ให้แท็บย่อย "Life After Retirement" ดึงไปใช้เป็นค่าเริ่มต้นได้เลย
+    # (เพิ่มพารามิเตอร์ที่ใช้คำนวณช่วงสะสมเงิน ให้ Concept 3 เอาไปคำนวณย้อนกลับต่อได้ เช่น
+    # "ต้องออมเพิ่มเท่าไหร่" หรือ "ต้องได้ผลตอบแทนกี่% ถึงจะพอ")
     st.session_state['retirement_projected_wealth'] = projected_at_retirement
     st.session_state['retirement_age_selected'] = retirement_age
+    st.session_state['retirement_current_age'] = current_age
+    st.session_state['retirement_monthly_savings'] = monthly_savings
+    st.session_state['retirement_annual_savings_increase_pct'] = annual_savings_increase_pct
+    st.session_state['retirement_annual_return_pct'] = annual_return_pct
+    st.session_state['retirement_pvd_growth_pct'] = pvd_annual_growth_pct
+    st.session_state['retirement_current_wealth'] = _current_net_worth
+    st.session_state['retirement_current_pvd'] = _current_pvd
 
     shortfall = target_net_worth - projected_at_retirement
     on_track = shortfall <= 0
@@ -340,14 +371,20 @@ def _render_life_after_retirement_tab():
     st.divider()
     concept_choice = st.radio(
         "เลือกแนวทางวางแผน:",
-        ["🧩 Concept 1: กำหนดสัดส่วนลงทุนเอง", "🎯 Concept 2: ให้ระบบออกแบบให้"],
+        [
+            "🧩 Concept 1: กำหนดสัดส่วนลงทุนเอง",
+            "🎯 Concept 2: ให้ระบบออกแบบให้",
+            "🩺 Concept 3: วางแผนค่าใช้จ่ายละเอียด",
+        ],
         horizontal=True, key="life_after_retirement_concept"
     )
 
     if concept_choice.startswith("🧩"):
         _render_concept1(total_wealth, _default_retirement_age)
-    else:
+    elif concept_choice.startswith("🎯"):
         _render_concept2(total_wealth, _default_retirement_age)
+    else:
+        _render_concept3(_default_retirement_age)
 
 
 def _render_concept1(total_wealth, retirement_age):
@@ -563,6 +600,132 @@ def _render_concept2(total_wealth, default_retirement_age):
                 f"⚠️ ด้วยเงินก้อนที่คาดว่าจะมีจริง ({total_wealth:,.0f} ฿) ถอนใช้ {target_income:,.0f} ฿/เดือน "
                 f"ที่ผลตอบแทน 4%/ปี จะอยู่ได้ถึงอายุประมาณ {_end_age:,.0f} ปีเท่านั้น (ก่อนอายุ {death_age} ปีที่ตั้งไว้)"
             )
+
+
+def _render_concept3(default_retirement_age):
+    """
+    Concept 3: วางแผนค่าใช้จ่ายหลังเกษียณอย่างละเอียด (เงินใช้รายเดือน, รักษาพยาบาล, ท่องเที่ยว,
+    ซื้อรถ, บำรุงบ้าน, อื่นๆ) แล้วเทียบกับเงินที่คาดว่าจะเก็บได้ ถ้าขาด จะบอกว่าต้องออมเพิ่มเท่าไหร่
+    (คงผลตอบแทนเดิม) หรือต้องได้ผลตอบแทนอย่างน้อยกี่% (คงเงินออมเดิม) ถึงจะพอ
+    """
+    st.markdown("#### 🩺 Concept 3: วางแผนค่าใช้จ่ายละเอียดหลังเกษียณ")
+    st.caption("ระบุค่าใช้จ่ายแต่ละประเภทอย่างละเอียด ระบบจะเทียบกับเงินที่คาดว่าจะมี แล้วบอกว่าขาดเท่าไหร่ ต้องทำยังไงถึงจะพอ")
+
+    # ดึงพารามิเตอร์จากแท็บ "ประเมินเงินเกษียณ" ที่คำนวณไว้แล้ว (ต้องกดคำนวณที่แท็บนั้นก่อน)
+    _current_age = st.session_state.get('retirement_current_age')
+    _retirement_age = st.session_state.get('retirement_age_selected', default_retirement_age)
+    _monthly_savings = st.session_state.get('retirement_monthly_savings')
+    _annual_savings_increase_pct = st.session_state.get('retirement_annual_savings_increase_pct')
+    _annual_return_pct = st.session_state.get('retirement_annual_return_pct')
+    _pvd_growth_pct = st.session_state.get('retirement_pvd_growth_pct')
+    _current_wealth = st.session_state.get('retirement_current_wealth')
+    _current_pvd = st.session_state.get('retirement_current_pvd')
+    _projected_wealth = st.session_state.get('retirement_projected_wealth')
+
+    if _current_age is None or _projected_wealth is None:
+        st.warning(
+            "⚠️ กรุณาไปกดปุ่ม \"🧮 คำนวณ\" ในแท็บ \"📊 ประเมินเงินเกษียณ\" ก่อนสักครั้ง "
+            "ระบบจะดึงข้อมูลมาใช้คำนวณต่อที่นี่อัตโนมัติ"
+        )
+        return
+
+    st.info(f"💰 เงินที่คาดว่าจะมีตอนเกษียณ (จากแท็บประเมินเงินเกษียณ): **{_projected_wealth:,.0f} ฿**")
+
+    st.markdown("##### 🎚️ ระบุค่าใช้จ่ายหลังเกษียณ")
+
+    death_age = st.slider(
+        "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=_retirement_age + 1, max_value=110,
+        value=min(85, 110), step=1, key="c3_death_age"
+    )
+
+    with st.container(border=True):
+        monthly_living = st.slider("💵 เงินใช้ต่อเดือน", 50000, 200000, 100000, step=5000, key="c3_monthly_living")
+
+    with st.container(border=True):
+        healthcare_cost = st.slider(
+            "🏥 เงินรักษาพยาบาล (รวมตลอดช่วงหลังเกษียณ)", 500000, 3000000, 1000000, step=100000, key="c3_healthcare"
+        )
+
+    with st.container(border=True):
+        annual_travel = st.slider("✈️ เงินท่องเที่ยวต่อปี", 100000, 1000000, 200000, step=50000, key="c3_travel")
+
+    with st.container(border=True):
+        car_cost = st.slider("🚗 เงินซื้อรถหลังเกษียณ (ก้อนเดียว)", 0, 3000000, 1000000, step=100000, key="c3_car")
+
+    with st.container(border=True):
+        annual_home_maint = st.slider("🏠 เงินบำรุงรักษาบ้านต่อปี", 0, 200000, 50000, step=10000, key="c3_home_maint")
+
+    with st.container(border=True):
+        other_cost = st.slider("📦 อื่นๆ (ก้อนเดียว)", 0, 2000000, 500000, step=100000, key="c3_others")
+
+    years_to_live = max(death_age - _retirement_age, 0)
+    if years_to_live <= 0:
+        st.error("อายุที่คาดว่าจะมีชีวิตอยู่ต้องมากกว่าอายุเกษียณครับ")
+        return
+
+    # รวมค่าใช้จ่ายรายเดือน/รายปีต่อเนื่อง (เงินใช้ต่อเดือน + ท่องเที่ยว/12 + บำรุงบ้าน/12) เป็น
+    # ยอดต่อเดือนเดียว แล้วใช้สูตร Annuity หาเงินก้อนที่ต้องมี ณ วันเกษียณ ให้พอใช้จ่ายต่อเนื่องจน
+    # ถึงวันตายพอดี (residual_pct=0 คือใช้หมดพอดี ไม่ต้องเหลือ) ส่วนค่าใช้จ่ายก้อนเดียว (รักษา
+    # พยาบาล+รถ+อื่นๆ) บวกเพิ่มเข้าไปตรงๆ
+    total_monthly_recurring = monthly_living + (annual_travel / 12) + (annual_home_maint / 12)
+    _assumed_retirement_return = _annual_return_pct if _annual_return_pct else 5.0
+    required_for_recurring = _required_wealth_with_residual(
+        total_monthly_recurring, years_to_live, _assumed_retirement_return, residual_pct=0.0
+    )
+
+    total_lump_sum = healthcare_cost + car_cost + other_cost
+    total_required_wealth = required_for_recurring + total_lump_sum
+
+    st.divider()
+    st.markdown("##### 📊 สรุปเงินที่ต้องมี ณ วันเกษียณ")
+    r1, r2, r3 = st.columns(3)
+    render_metric_card(r1, "เงินสำหรับใช้จ่ายต่อเนื่อง", f"{required_for_recurring:,.0f} ฿", icon="📅")
+    render_metric_card(r2, "เงินก้อนเดียว (รักษาพยาบาล+รถ+อื่นๆ)", f"{total_lump_sum:,.0f} ฿", icon="📦")
+    render_metric_card(r3, "รวมทั้งหมดที่ต้องมี", f"{total_required_wealth:,.0f} ฿", icon="🎯")
+
+    shortfall = total_required_wealth - _projected_wealth
+
+    st.divider()
+    if shortfall <= 0:
+        st.success(
+            f"🎉 เงินที่คาดว่าจะมีตอนเกษียณ ({_projected_wealth:,.0f} ฿) **เพียงพอ** กับแผนค่าใช้จ่ายนี้แล้วครับ! "
+            f"เหลือเผื่ออีก {abs(shortfall):,.0f} ฿"
+        )
+    else:
+        st.warning(
+            f"⚠️ ยังขาดอยู่ **{shortfall:,.0f} ฿** — เทียบเงินที่คาดว่าจะมี ({_projected_wealth:,.0f} ฿) "
+            f"กับที่ต้องใช้ตามแผนนี้ ({total_required_wealth:,.0f} ฿)"
+        )
+
+        st.markdown("##### 🛠️ จะปิดช่องว่างนี้ได้ยังไง (เลือกทำอย่างใดอย่างหนึ่งก็พอ)")
+        years_to_go = max(_retirement_age - _current_age, 0)
+        other_current = max(_current_wealth - _current_pvd, 0.0)
+
+        # ทางเลือก A: ออมเพิ่มต่อเดือน (คงอัตราผลตอบแทนเดิมไว้)
+        _extra_monthly = _required_monthly_savings(shortfall, years_to_go, _assumed_retirement_return)
+
+        # ทางเลือก B: หาอัตราผลตอบแทนขั้นต่ำที่ต้องการ (คงเงินออมเดิมไว้) ด้วย Binary Search
+        _required_rate = _solve_required_return_rate(
+            _current_age, _retirement_age, other_current, _current_pvd,
+            _monthly_savings, _annual_savings_increase_pct, _pvd_growth_pct,
+            total_required_wealth
+        )
+
+        opt1, opt2 = st.columns(2)
+        render_metric_card(
+            opt1, "ทางเลือก A: ออมเพิ่มต่อเดือน", f"+{_extra_monthly:,.0f} ฿/เดือน",
+            icon="💰", caption=(
+                f"รวมเป็น {_monthly_savings + _extra_monthly:,.0f} ฿/เดือน "
+                f"(คงผลตอบแทนเดิม {_assumed_retirement_return:.1f}%/ปี)"
+            )
+        )
+        render_metric_card(
+            opt2, "ทางเลือก B: เพิ่มผลตอบแทนการลงทุน", f"{_required_rate:.2f}%/ปี",
+            icon="📈", caption=(
+                f"ต้องลงทุนในหุ้น/กองทุนที่ให้ผลตอบแทนอย่างน้อยเท่านี้ "
+                f"(จากเดิม {_assumed_retirement_return:.1f}%/ปี, คงเงินออมเดิม {_monthly_savings:,.0f} ฿/เดือน)"
+            )
+        )
 
 
 # =============================================================
