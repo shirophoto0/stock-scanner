@@ -1705,7 +1705,7 @@ def fetch_set_index_history():
 
     set_market = pd.Series(dtype=float)
     set_market_source = None
-    # 🆕 เพิ่มสัญลักษณ์สำรองอีก 2 แบบ (^SET กับ SET เฉยๆ ไม่มี .BK) เผื่อ Yahoo Finance เปลี่ยน
+    # เพิ่มสัญลักษณ์สำรองอีก 2 แบบ (^SET กับ SET เฉยๆ ไม่มี .BK) เผื่อ Yahoo Finance เปลี่ยน
     # รูปแบบสัญลักษณ์ที่รองรับสำหรับดัชนี SET Index ไปแล้ว
     for _sym in ["^SET.BK", "SET.BK", "^SET", "SET"]:
         set_market, set_market_source = _try_fetch(_sym)
@@ -1717,8 +1717,55 @@ def fetch_set_index_history():
         set_market.index = set_market.index.tz_localize(None)
 
     if isinstance(set_market, pd.Series) and len(set_market) >= 30:
+        _save_set_index_cache(set_market)  # ดึงสดสำเร็จ บันทึกสำรองไว้ทันที เผื่อวันหลังดึงสดไม่ได้
         return set_market, set_market_source
+
+    # 🆕 ดึงสดจาก Yahoo Finance ไม่สำเร็จเลยสักวิธี (Yahoo บางวันมีข้อมูลดัชนี SET Index ให้ไม่ครบ
+    # เป็นข้อจำกัดฝั่ง Yahoo เอง ควบคุมไม่ได้โดยตรง) ลองดึงจาก "ข้อมูลสำรอง" ที่เคยบันทึกไว้ล่าสุด
+    # แทน (อาจเก่าไปหนึ่งวันสองวัน แต่ยังดีกว่าไม่มีข้อมูลเลย หรือตั้ง RS_Line เป็น 0 ทั้งหมด)
+    print("⚠️ ดึงข้อมูล SET Index สดจาก Yahoo Finance ไม่สำเร็จทุกวิธี กำลังลองใช้ข้อมูลสำรองที่เคยบันทึกไว้ล่าสุดแทน...")
+    cached_market = _load_cached_set_index()
+    if len(cached_market) >= 30:
+        print(f"✅ ใช้ข้อมูลสำรอง SET Index ที่เคยบันทึกไว้ล่าสุดแทน ({len(cached_market)} แถว, ข้อมูลล่าสุดถึงวันที่ {cached_market.index[-1].strftime('%Y-%m-%d')})")
+        return cached_market, "ข้อมูลสำรองที่เคยบันทึกไว้ล่าสุด (ดึงสดไม่สำเร็จวันนี้)"
+
     return pd.Series(dtype=float), None
+
+
+def _save_set_index_cache(set_market, spreadsheet_name="MyStockData"):
+    """
+    🆕 บันทึกข้อมูลดัชนี SET Index ที่เพิ่งดึงสดสำเร็จ ไว้เป็นข้อมูลสำรองในชีต 'SET_Index_Cache'
+    (ต้องมีชีตนี้อยู่ใน Google Sheet ของ MyStockData ก่อน — คอลัมน์ Date, Close) เผื่อวันไหน
+    Yahoo Finance มีปัญหา ดึงสดไม่สำเร็จ จะได้มีข้อมูลสำรองมาใช้แทนได้ (ไม่ต้องตั้ง RS_Line เป็น 0)
+    """
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'SET_Index_Cache')
+        df_to_save = set_market.reset_index()
+        df_to_save.columns = ['Date', 'Close']
+        df_to_save['Date'] = df_to_save['Date'].astype(str)
+        data_to_write = [df_to_save.columns.tolist()] + df_to_save.values.tolist()
+        sheet.update(range_name='A1', values=data_to_write)
+    except Exception as e:
+        print(f"⚠️ บันทึกข้อมูลสำรอง SET Index ไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+
+
+def _load_cached_set_index(spreadsheet_name="MyStockData"):
+    """โหลดข้อมูลดัชนี SET Index ที่เคยบันทึกสำรองไว้ล่าสุด (ใช้ตอนดึงสดจาก Yahoo Finance ไม่สำเร็จ)"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'SET_Index_Cache')
+        records = sheet.get_all_records()
+        if not records:
+            return pd.Series(dtype=float)
+        df = pd.DataFrame(records)
+        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+        df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+        df = df.dropna(subset=['Date', 'Close']).set_index('Date').sort_index()
+        return df['Close']
+    except Exception as e:
+        print(f"⚠️ โหลดข้อมูลสำรอง SET Index ไม่สำเร็จ: {e}")
+        return pd.Series(dtype=float)
 
 
 @st.cache_data(ttl=86400) # เก็บข้อมูลไว้วันละครั้งเพื่อความเร็ว
