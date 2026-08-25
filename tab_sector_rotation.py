@@ -41,10 +41,16 @@ def render_tab_sector_rotation(df_sector_map=None):
         return
 
     # 1. คำนวณค่าเฉลี่ย RS_Line ต่อ Sector แล้วจัดอันดับจากแข็งแกร่งสุดไปอ่อนแอสุด
+    # 🔧 แก้บั๊ก: เดิมใช้ชื่อคอลัมน์ภาษาไทยเป็น keyword argument ตรงๆ ใน .agg() ซึ่งบาง
+    # เวอร์ชันของ Python/pandas (เช่น Python 3.14 บน Streamlit Cloud) จัดการ keyword argument
+    # ที่เป็นภาษาไทยได้ไม่แน่นอน ทำให้คอลัมน์ผลลัพธ์ไม่ได้ชื่อตามที่ตั้งไว้ พอไปเรียกใช้
+    # row['จำนวนหุ้น'] ทีหลังเลย error ว่าหาคอลัมน์นี้ไม่เจอ ตอนนี้เปลี่ยนมาใช้ชื่อภาษาอังกฤษ
+    # (mean, count) ก่อน แล้วค่อยเปลี่ยนชื่อเป็นไทยด้วย .rename() ทีหลัง ปลอดภัยกว่าแน่นอน
     sector_summary = (
-        df_work.groupby('Sector')
-        .agg(RS_Line_เฉลี่ย=('RS_Line', 'mean'), จำนวนหุ้น=('Ticker', 'count'))
+        df_work.groupby('Sector')['RS_Line']
+        .agg(['mean', 'count'])
         .reset_index()
+        .rename(columns={'mean': 'RS_Line_เฉลี่ย', 'count': 'จำนวนหุ้น'})
         .sort_values('RS_Line_เฉลี่ย', ascending=False)
     )
 
