@@ -71,9 +71,13 @@ def load_previous_scan(spreadsheet_name):
 def find_notable_stocks(df_old, df_new):
     """
     เทียบผลสแกนเก่า-ใหม่ หาหุ้นที่ "เพิ่งผ่านเกณฑ์เด่น" วันนี้พอดี (ไม่ใช่ผ่านมาหลายวันแล้ว)
-    คืนค่าเป็น dict {'trend_template': [...], 'rs_cross_up': [...], 'new_52w_high': [...]}
+    คืนค่าเป็น dict {'trend_template': [...], 'rs_cross_up': [...], 'new_52w_high': [...],
+    'volume_spike': [...], 'golden_cross': [...], 'rsi_oversold_bounce': [...], 'vcp_breakout': [...]}
     """
-    result = {'trend_template': [], 'rs_cross_up': [], 'new_52w_high': []}
+    result = {
+        'trend_template': [], 'rs_cross_up': [], 'new_52w_high': [],
+        'volume_spike': [], 'golden_cross': [], 'rsi_oversold_bounce': [], 'vcp_breakout': [],
+    }
 
     # 1. Trend Template ผ่านใหม่วันนี้ (เทียบกับเมื่อวาน — ต้องมีข้อมูลเก่าถึงจะเทียบได้)
     if not df_old.empty and 'Ticker' in df_old.columns and 'Trend_Template_Pass' in df_old.columns:
@@ -100,6 +104,22 @@ def find_notable_stocks(df_old, df_new):
         new_high_today = df_new[df_new['Is_New_52W_High_Today'] == True]
         result['new_52w_high'] = new_high_today['Ticker'].tolist()
 
+    # 🆕 4. Volume พุ่งผิดปกติวันนี้ (Is_Volume_Spike เป็นค่ารายวันอยู่แล้ว ไม่ใช่สถานะสะสมหลายวัน
+    # แบบ Trend Template จึงไม่ต้องเทียบกับเมื่อวานเพิ่ม เช็คแค่ค่าวันนี้ก็ถือว่า "เพิ่งเกิด" แล้ว)
+    if 'Is_Volume_Spike' in df_new.columns:
+        volume_spike_today = df_new[df_new['Is_Volume_Spike'] == True]
+        result['volume_spike'] = volume_spike_today['Ticker'].tolist()
+
+    # 🆕 5-7. Golden Cross / RSI ดีดกลับจาก Oversold / VCP Breakout — คำนวณเทียบ "เมื่อวาน vs วันนี้"
+    # มาให้พร้อมแล้วตั้งแต่ขั้นตอนสแกน (ใช้ข้อมูลราคาย้อนหลังชุดเดียวกัน ไม่ต้องพึ่งข้อมูลสแกนเก่า
+    # จากภายนอกเหมือน Trend Template) เช็คแค่ค่าวันนี้ก็พอ
+    if 'Is_Golden_Cross_Today' in df_new.columns:
+        result['golden_cross'] = df_new[df_new['Is_Golden_Cross_Today'] == True]['Ticker'].tolist()
+    if 'Is_RSI_Oversold_Bounce_Today' in df_new.columns:
+        result['rsi_oversold_bounce'] = df_new[df_new['Is_RSI_Oversold_Bounce_Today'] == True]['Ticker'].tolist()
+    if 'Is_VCP_Breakout_Today' in df_new.columns:
+        result['vcp_breakout'] = df_new[df_new['Is_VCP_Breakout_Today'] == True]['Ticker'].tolist()
+
     return result
 
 
@@ -122,7 +142,23 @@ def build_shared_notable_message(notable):
         lines.append(f"\n🚀 <b>ทำจุดสูงสุดใหม่ 52 สัปดาห์วันนี้ ({len(notable['new_52w_high'])} ตัว):</b>")
         lines.append(", ".join(notable['new_52w_high']))
 
-    if not notable['trend_template'] and not notable['rs_cross_up'] and not notable['new_52w_high']:
+    if notable['volume_spike']:
+        lines.append(f"\n📢 <b>Volume พุ่งผิดปกติวันนี้ ({len(notable['volume_spike'])} ตัว):</b>")
+        lines.append(", ".join(notable['volume_spike']))
+
+    if notable['golden_cross']:
+        lines.append(f"\n🌟 <b>Golden Cross วันนี้ ({len(notable['golden_cross'])} ตัว):</b>")
+        lines.append(", ".join(notable['golden_cross']))
+
+    if notable['rsi_oversold_bounce']:
+        lines.append(f"\n🔄 <b>RSI ดีดกลับจาก Oversold วันนี้ ({len(notable['rsi_oversold_bounce'])} ตัว):</b>")
+        lines.append(", ".join(notable['rsi_oversold_bounce']))
+
+    if notable['vcp_breakout']:
+        lines.append(f"\n🎯 <b>VCP Breakout วันนี้ ({len(notable['vcp_breakout'])} ตัว):</b>")
+        lines.append(", ".join(notable['vcp_breakout']))
+
+    if not any(notable.values()):
         lines.append("\nวันนี้ไม่มีหุ้นตัวใหม่ที่ผ่านเกณฑ์เด่นเป็นพิเศษครับ")
 
     return "\n".join(lines)
