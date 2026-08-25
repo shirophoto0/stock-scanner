@@ -2136,3 +2136,168 @@ def send_telegram_message(bot_token, chat_id, message):
         return False, f"ส่งไม่สำเร็จ (HTTP {resp.status_code}): {resp.text}"
     except Exception as e:
         return False, f"ส่งไม่สำเร็จ: {e}"
+
+
+# =============================================================
+# 🆕 ระบบ Backtest กลยุทธ์การสแกน — บันทึกหุ้นที่ผ่านเกณฑ์เด่นแต่ละวัน (Trend Template ผ่านใหม่,
+# RS Line ตัดเส้น 0 ขึ้น, ทำจุดสูงสุดใหม่ 52 สัปดาห์) แล้วย้อนกลับมาเช็คว่าราคาไปทางไหนต่อจริงๆ ใน
+# 30/60/90 วันถัดมา เก็บเฉพาะหุ้นที่มีสัญญาณเด่นเท่านั้น (ไม่ใช่ทั้ง 472 ตัว) ทั้งเพราะประหยัดพื้นที่
+# และเพราะตรงกับขอบเขตคำถามที่ต้องการตอบพอดี (สนใจแค่ "หลังสัญญาณเกิด ราคาไปทางไหน" ไม่ใช่ราคา
+# ของหุ้นที่ไม่มีสัญญาณ) เก็บย้อนหลังสูงสุด 5 ปี เก่ากว่านั้นลบทิ้งอัตโนมัติ
+# =============================================================
+def log_signal_history(spreadsheet_name, notable, price_map):
+    """
+    บันทึกหุ้นที่ผ่านเกณฑ์เด่นวันนี้ลงชีต 'Signal_History' (ต้องมีชีตนี้อยู่ก่อน คอลัมน์ตามลำดับ:
+    Date, Ticker, Signal_Type, Price_At_Signal, Return_30D, Return_60D, Return_90D)
+    คืนค่าเป็นจำนวนแถวที่บันทึกสำเร็จ
+    """
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+        today_str = str(date.today())
+        rows_to_add = []
+        for signal_type, tickers in [
+            ('Trend_Template', notable.get('trend_template', [])),
+            ('RS_Cross_Up', notable.get('rs_cross_up', [])),
+            ('New_52W_High', notable.get('new_52w_high', [])),
+        ]:
+            for t in tickers:
+                price = price_map.get(t, '')
+                if price:
+                    rows_to_add.append([today_str, t, signal_type, price, '', '', ''])
+        if rows_to_add:
+            sheet.append_rows(rows_to_add)
+        return len(rows_to_add)
+    except Exception as e:
+        print(f"⚠️ บันทึกประวัติสัญญาณไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+        return 0
+
+
+def resolve_pending_signals(spreadsheet_name):
+    """
+    เช็คสัญญาณเก่าที่ครบกำหนด 30/60/90 วันแล้ว แต่ยังไม่มีผลตอบแทนบันทึกไว้ ดึงราคาย้อนหลังของ
+    เฉพาะหุ้นที่จำเป็นต้องใช้ (ไม่ใช่ทั้ง 472 ตัว ประหยัด API มาก) มาคำนวณ % เปลี่ยนแปลงจากวันที่
+    สัญญาณเกิด แล้วอัปเดตกลับเข้าไปในชีต คืนค่าเป็นจำนวนช่องที่อัปเดตสำเร็จ
+    """
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+        records = sheet.get_all_records()
+        if not records:
+            return 0
+
+        today = date.today()
+        pending_tickers = set()
+        rows_needing_update = []
+
+        for idx, row in enumerate(records):
+            try:
+                signal_date = datetime.strptime(str(row.get('Date', '')), '%Y-%m-%d').date()
+            except ValueError:
+                continue
+            days_elapsed = (today - signal_date).days
+            needs = []
+            if days_elapsed >= 30 and not str(row.get('Return_30D', '')).strip():
+                needs.append(30)
+            if days_elapsed >= 60 and not str(row.get('Return_60D', '')).strip():
+                needs.append(60)
+            if days_elapsed >= 90 and not str(row.get('Return_90D', '')).strip():
+                needs.append(90)
+            if needs:
+                pending_tickers.add(str(row.get('Ticker', '')).strip())
+                rows_needing_update.append((idx, row, signal_date, needs))
+
+        if not rows_needing_update:
+            return 0
+
+        tickers_list = [t for t in pending_tickers if t]
+        if not tickers_list:
+            return 0
+
+        # ดึงราคาย้อนหลังเฉพาะหุ้นที่จำเป็นต้องใช้เท่านั้น (คนละก้อนกับการสแกนหลักทั้ง 472 ตัว)
+        raw_data = yf.download(tickers_list, period="1y", group_by='ticker', threads=True)
+
+        updated_count = 0
+        col_index_map = {30: 5, 60: 6, 90: 7}  # ตำแหน่งคอลัมน์ Return_30D/60D/90D (นับจาก 1)
+
+        for idx, row, signal_date, needs in rows_needing_update:
+            ticker = str(row.get('Ticker', '')).strip()
+            try:
+                price_at_signal = float(row.get('Price_At_Signal', 0) or 0)
+            except (ValueError, TypeError):
+                continue
+            if price_at_signal <= 0:
+                continue
+
+            try:
+                ticker_hist = raw_data['Close'] if len(tickers_list) == 1 else raw_data[ticker]['Close']
+            except (KeyError, TypeError):
+                continue
+            ticker_hist = ticker_hist.dropna()
+            if ticker_hist.empty:
+                continue
+
+            for days in needs:
+                target_date = signal_date + timedelta(days=days)
+                future_prices = ticker_hist[ticker_hist.index.date >= target_date]
+                if future_prices.empty:
+                    continue  # ยังไม่ถึงวันซื้อขายที่มีราคาหลังจากวันเป้าหมาย รอรอบถัดไป
+                price_at_target = float(future_prices.iloc[0])
+                pct_return = ((price_at_target - price_at_signal) / price_at_signal) * 100
+                try:
+                    sheet.update_cell(idx + 2, col_index_map[days], round(pct_return, 2))
+                    updated_count += 1
+                except Exception:
+                    pass
+
+        return updated_count
+    except Exception as e:
+        print(f"⚠️ อัปเดตผลตอบแทนสัญญาณเก่าไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+        return 0
+
+
+def cleanup_old_signals(spreadsheet_name, retention_years=5):
+    """ลบสัญญาณที่เก่าเกินระยะเวลาที่กำหนด (ค่าเริ่มต้น 5 ปี) ออกจากชีต Signal_History เพื่อไม่ให้ข้อมูลสะสมมากเกินไป"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+        records = sheet.get_all_records()
+        if not records:
+            return 0
+
+        cutoff_date = date.today() - timedelta(days=retention_years * 365)
+        headers = sheet.row_values(1)
+        rows_to_keep = [headers]
+        removed_count = 0
+
+        for row in records:
+            try:
+                signal_date = datetime.strptime(str(row.get('Date', '')), '%Y-%m-%d').date()
+            except ValueError:
+                rows_to_keep.append([row.get(h, '') for h in headers])
+                continue
+            if signal_date >= cutoff_date:
+                rows_to_keep.append([row.get(h, '') for h in headers])
+            else:
+                removed_count += 1
+
+        if removed_count > 0:
+            sheet.clear()
+            sheet.update(range_name='A1', values=rows_to_keep)
+
+        return removed_count
+    except Exception as e:
+        print(f"⚠️ ล้างข้อมูลสัญญาณเก่าไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+        return 0
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_signal_history(spreadsheet_name):
+    """โหลดประวัติสัญญาณทั้งหมดจากชีต Signal_History มาเป็น DataFrame (จำผลลัพธ์ไว้ 10 นาที กันยิง API ซ้ำ)"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+        records = sheet.get_all_records()
+        return pd.DataFrame(records) if records else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
