@@ -392,30 +392,42 @@ def _render_concept1(total_wealth, retirement_age):
     st.markdown("#### 🧩 Concept 1: กำหนดสัดส่วนการลงทุนเอง")
     st.caption("แบ่งเงินก้อนทั้งหมดไปลงทุนแต่ละประเภท (รวมกันควรเป็น 100%) แล้วดูว่าจะมีเงินใช้ต่อเดือนเท่าไหร่")
 
-    # 🆕 จับคู่ slider แต่ละกลุ่มไว้ในกรอบสีจาง (st.container(border=True)) ให้เห็นชัดว่าอันไหน
-    # คู่กับอันไหน (เช่น % หุ้น คู่กับ % ปันผลหุ้น) แทนที่จะปล่อยเรียงกันเฉยๆ แบบเดิม
-    a1, a2 = st.columns(2)
-    with a1:
-        with st.container(border=True):
-            cash_pct = st.slider("💵 % เงินสด (สภาพคล่อง ไม่ลงทุน)", 0, 100, 10, key="c1_cash_pct")
-        with st.container(border=True):
-            stock_pct = st.slider("📈 % หุ้น", 0, 100, 40, key="c1_stock_pct")
-            stock_yield_pct = st.slider("　└ % ปันผลหุ้นเฉลี่ยต่อปี", 0.0, 15.0, 5.0, step=0.5, key="c1_stock_yield")
-    with a2:
-        # 🆕 slide bar อายุที่คาดว่าจะมีชีวิตอยู่ วางคู่กับ % เงินสด (อยู่ด้านขวาของมันพอดี)
-        with st.container(border=True):
-            death_age = st.slider(
-                "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=retirement_age + 1, max_value=110,
-                value=min(85, 110), step=1, key="c1_death_age",
-                help="ใช้คำนวณว่าเงินจะพอใช้ไปตลอดกี่ปี ถ้าเลือกแตะเงินต้นด้วย"
-            )
-        with st.container(border=True):
-            fund_pct = st.slider("🧺 % กองทุน", 0, 100, 30, key="c1_fund_pct")
-            fund_yield_pct = st.slider("　└ % ผลตอบแทนกองทุนเฉลี่ยต่อปี", 0.0, 15.0, 4.0, step=0.5, key="c1_fund_yield")
+    # 🔧 ปรับปรุง: เดิมทุก slider คำนวณผลลัพธ์ใหม่ทันทีที่ขยับแม้แต่ตัวเดียว ทำให้หน้าเว็บวนคำนวณ
+    # (spinner หมุน) ทุกครั้งที่ปรับ กว่าจะตั้งครบทุก slider ก็ช้ามาก ตอนนี้ครอบด้วย st.form() ให้
+    # ปรับ slider ให้ครบทุกตัวก่อน แล้วค่อยกดปุ่ม "คำนวณ" ทีเดียว เหมือนกับแท็บ "ประเมินเงินเกษียณ"
+    with st.form("concept1_form"):
+        # จับคู่ slider แต่ละกลุ่มไว้ในกรอบสีจาง (st.container(border=True)) ให้เห็นชัดว่าอันไหน
+        # คู่กับอันไหน (เช่น % หุ้น คู่กับ % ปันผลหุ้น)
+        a1, a2 = st.columns(2)
+        with a1:
+            with st.container(border=True):
+                cash_pct = st.slider("💵 % เงินสด (สภาพคล่อง ไม่ลงทุน)", 0, 100, 10, key="c1_cash_pct")
+            with st.container(border=True):
+                stock_pct = st.slider("📈 % หุ้น", 0, 100, 40, key="c1_stock_pct")
+                stock_yield_pct = st.slider("　└ % ปันผลหุ้นเฉลี่ยต่อปี", 0.0, 15.0, 5.0, step=0.5, key="c1_stock_yield")
+        with a2:
+            # slide bar อายุที่คาดว่าจะมีชีวิตอยู่ วางคู่กับ % เงินสด (อยู่ด้านขวาของมันพอดี)
+            with st.container(border=True):
+                death_age = st.slider(
+                    "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=retirement_age + 1, max_value=110,
+                    value=min(85, 110), step=1, key="c1_death_age",
+                    help="ใช้คำนวณว่าเงินจะพอใช้ไปตลอดกี่ปี ถ้าเลือกแตะเงินต้นด้วย"
+                )
+            with st.container(border=True):
+                fund_pct = st.slider("🧺 % กองทุน", 0, 100, 30, key="c1_fund_pct")
+                fund_yield_pct = st.slider("　└ % ผลตอบแทนกองทุนเฉลี่ยต่อปี", 0.0, 15.0, 4.0, step=0.5, key="c1_fund_yield")
 
-    with st.container(border=True):
-        other_pct = st.slider("🏦 % อื่นๆ (ตราสารหนี้ / REITs / ฝากประจำ ฯลฯ)", 0, 100, 20, key="c1_other_pct")
-        other_yield_pct = st.slider("　└ % ผลตอบแทนอื่นๆ เฉลี่ยต่อปี", 0.0, 15.0, 3.0, step=0.5, key="c1_other_yield")
+        with st.container(border=True):
+            other_pct = st.slider("🏦 % อื่นๆ (ตราสารหนี้ / REITs / ฝากประจำ ฯลฯ)", 0, 100, 20, key="c1_other_pct")
+            other_yield_pct = st.slider("　└ % ผลตอบแทนอื่นๆ เฉลี่ยต่อปี", 0.0, 15.0, 3.0, step=0.5, key="c1_other_yield")
+
+        c1_submitted = st.form_submit_button("🧮 คำนวณ", use_container_width=True)
+
+    if c1_submitted:
+        st.session_state['c1_calculated'] = True
+
+    if not st.session_state.get('c1_calculated', False):
+        return
 
     total_pct = cash_pct + stock_pct + fund_pct + other_pct
     if total_pct != 100:
@@ -445,7 +457,7 @@ def _render_concept1(total_wealth, retirement_age):
         icon="💰", caption="รวมปันผล/ผลตอบแทนจากหุ้น กองทุน และอื่นๆ (เงินสดไม่สร้างรายได้)"
     )
 
-    # 🆕 การ์ดเพิ่มเติม: แบบแตะเงินต้น ถอนใช้จนกว่าจะตาย โดยยังเหลือเงิน 20% ก่อนตาย (ใช้สูตร
+    # การ์ดเพิ่มเติม: แบบแตะเงินต้น ถอนใช้จนกว่าจะตาย โดยยังเหลือเงิน 20% ก่อนตาย (ใช้สูตร
     # Annuity ที่มีมูลค่าคงเหลือปลายทาง) ใช้ผลตอบแทนถัวเฉลี่ยของทั้งพอร์ต (ไม่รวมเงินสดที่ไม่โต)
     # เป็นอัตราการเติบโตระหว่างถอนใช้ — ให้เห็นว่าถ้าใช้แบบเต็มที่ (ไม่ต้องเก็บเงินต้นไว้ทั้งหมด)
     # จะมีเงินใช้ต่อเดือนได้มากขึ้นแค่ไหน
@@ -475,42 +487,56 @@ def _render_concept2(total_wealth, default_retirement_age):
     st.markdown("#### 🎯 Concept 2: ให้ระบบออกแบบให้")
     st.caption("บอกว่าอยากมีเงินใช้ต่อเดือนเท่าไหร่ ระบบจะคำนวณย้อนกลับให้ว่าต้องมีเงินก้อนเท่าไหร่ และควรแบ่งสัดส่วนลงทุนยังไง")
 
-    target_income = st.number_input(
-        "💭 อยากมีเงินใช้ต่อเดือนเท่าไหร่ (บาท)", min_value=0.0, value=100000.0, step=5000.0, format="%.0f"
-    )
+    # 🔧 ปรับปรุง: ครอบด้วย st.form() ให้ปรับ slider/ตัวเลขให้ครบก่อน แล้วค่อยกดปุ่ม "คำนวณ"
+    # ทีเดียว (เหมือนที่ปรับ Concept 1 ไปแล้ว) แทนที่จะคำนวณใหม่ทันทีทุกครั้งที่ขยับแม้แต่ตัวเดียว
+    with st.form("concept2_form"):
+        target_income = st.number_input(
+            "💭 อยากมีเงินใช้ต่อเดือนเท่าไหร่ (บาท)", min_value=0.0, value=100000.0, step=5000.0, format="%.0f"
+        )
 
-    st.markdown("##### ⚙️ สมมติฐาน")
-    # 🆕 จับคู่ slider ไว้ในกรอบสีจางเหมือน Concept 1 + เพิ่ม slide bar อายุที่จะตาย คู่กับ
-    # เงินสดสำรอง (ใช้คำนวณผลลัพธ์แบบแตะเงินต้น 4% ด้านล่าง)
-    e1, e2 = st.columns(2)
-    with e1:
-        with st.container(border=True):
-            cash_buffer_pct = st.slider(
-                "💵 % เงินสดสำรอง (กันไว้ ไม่เอาไปลงทุน)", 0, 50, 10, key="c2_cash_buffer_pct"
-            )
-    with e2:
-        with st.container(border=True):
-            death_age = st.slider(
-                "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=default_retirement_age + 1, max_value=110,
-                value=min(85, 110), step=1, key="c2_death_age",
-                help="ใช้คำนวณผลลัพธ์แบบแตะเงินต้น 4% ด้านล่าง"
-            )
+        st.markdown("##### ⚙️ สมมติฐาน")
+        # จับคู่ slider ไว้ในกรอบสีจางเหมือน Concept 1 + slide bar อายุที่จะตาย คู่กับเงินสดสำรอง
+        # (ใช้คำนวณผลลัพธ์แบบแตะเงินต้น 4% ด้านล่าง)
+        e1, e2 = st.columns(2)
+        with e1:
+            with st.container(border=True):
+                cash_buffer_pct = st.slider(
+                    "💵 % เงินสดสำรอง (กันไว้ ไม่เอาไปลงทุน)", 0, 50, 10, key="c2_cash_buffer_pct"
+                )
+        with e2:
+            with st.container(border=True):
+                death_age = st.slider(
+                    "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=default_retirement_age + 1, max_value=110,
+                    value=min(85, 110), step=1, key="c2_death_age",
+                    help="ใช้คำนวณผลลัพธ์แบบแตะเงินต้น 4% ด้านล่าง"
+                )
 
-    st.caption("สัดส่วนของเงินที่ **นำไปลงทุนจริง** (ไม่รวมเงินสดสำรอง) แบ่งเป็น 3 ประเภท ปรับได้ตามต้องการ")
-    f1, f2, f3 = st.columns(3)
-    with f1:
-        with st.container(border=True):
-            invest_stock_pct = st.slider("📈 % หุ้น (ของเงินลงทุน)", 0, 100, 50, key="c2_invest_stock_pct")
-            stock_yield_pct2 = st.slider("% ปันผลหุ้น/ปี", 0.0, 15.0, 5.0, step=0.5, key="c2_stock_yield")
-    with f2:
-        with st.container(border=True):
-            invest_fund_pct = st.slider("🧺 % กองทุน (ของเงินลงทุน)", 0, 100, 30, key="c2_invest_fund_pct")
-            fund_yield_pct2 = st.slider("% ผลตอบแทนกองทุน/ปี", 0.0, 15.0, 4.0, step=0.5, key="c2_fund_yield")
-    with f3:
-        with st.container(border=True):
-            invest_other_pct = max(100 - invest_stock_pct - invest_fund_pct, 0)
-            st.metric("🏦 % อื่นๆ (ส่วนที่เหลือ)", f"{invest_other_pct}%")
-            other_yield_pct2 = st.slider("% ผลตอบแทนอื่นๆ/ปี", 0.0, 15.0, 3.0, step=0.5, key="c2_other_yield")
+        st.caption("สัดส่วนของเงินที่ **นำไปลงทุนจริง** (ไม่รวมเงินสดสำรอง) แบ่งเป็น 3 ประเภท ปรับได้ตามต้องการ")
+        f1, f2, f3 = st.columns(3)
+        with f1:
+            with st.container(border=True):
+                invest_stock_pct = st.slider("📈 % หุ้น (ของเงินลงทุน)", 0, 100, 50, key="c2_invest_stock_pct")
+                stock_yield_pct2 = st.slider("% ปันผลหุ้น/ปี", 0.0, 15.0, 5.0, step=0.5, key="c2_stock_yield")
+        with f2:
+            with st.container(border=True):
+                invest_fund_pct = st.slider("🧺 % กองทุน (ของเงินลงทุน)", 0, 100, 30, key="c2_invest_fund_pct")
+                fund_yield_pct2 = st.slider("% ผลตอบแทนกองทุน/ปี", 0.0, 15.0, 4.0, step=0.5, key="c2_fund_yield")
+        with f3:
+            with st.container(border=True):
+                # หมายเหตุ: ค่า invest_other_pct นี้จะอัปเดตก็ต่อเมื่อกดปุ่มคำนวณแล้วเท่านั้น
+                # (เพราะอยู่ในฟอร์ม) ไม่ได้อัปเดตสดทันทีที่ขยับ slider ข้างบนแล้ว เป็นผลข้างเคียง
+                # ปกติของการเปลี่ยนมาใช้ฟอร์ม ไม่ใช่บั๊ก
+                invest_other_pct = max(100 - invest_stock_pct - invest_fund_pct, 0)
+                st.metric("🏦 % อื่นๆ (ส่วนที่เหลือ)", f"{invest_other_pct}%")
+                other_yield_pct2 = st.slider("% ผลตอบแทนอื่นๆ/ปี", 0.0, 15.0, 3.0, step=0.5, key="c2_other_yield")
+
+        c2_submitted = st.form_submit_button("🧮 คำนวณ", use_container_width=True)
+
+    if c2_submitted:
+        st.session_state['c2_calculated'] = True
+
+    if not st.session_state.get('c2_calculated', False):
+        return
 
     if invest_stock_pct + invest_fund_pct > 100:
         st.warning("⚠️ % หุ้น + % กองทุน รวมกันเกิน 100% แล้วครับ ลองปรับลดลงหน่อย")
@@ -564,7 +590,7 @@ def _render_concept2(total_wealth, default_retirement_age):
             f"หรือลดเงินที่อยากใช้ต่อเดือนดูครับ"
         )
 
-    # 🆕 ผลการออกแบบ แบบที่ 2: แตะเงินต้น 4% (ใช้สูตรมาตรฐานสากล Safe Withdrawal Rate 4%)
+    # ผลการออกแบบ แบบที่ 2: แตะเงินต้น 4% (ใช้สูตรมาตรฐานสากล Safe Withdrawal Rate 4%)
     # ต้องการเงินก้อนน้อยกว่าแบบไม่แตะเงินต้นเสมอ เพราะยอมให้เงินต้นค่อยๆ ลดลงไปตามเวลาได้บ้าง
     st.divider()
     st.markdown("##### 📐 ผลการออกแบบ (แบบที่ 2: แตะเงินต้น 4% ตามกฎมาตรฐานสากล)")
@@ -631,32 +657,43 @@ def _render_concept3(default_retirement_age):
 
     st.info(f"💰 เงินที่คาดว่าจะมีตอนเกษียณ (จากแท็บประเมินเงินเกษียณ): **{_projected_wealth:,.0f} ฿**")
 
-    st.markdown("##### 🎚️ ระบุค่าใช้จ่ายหลังเกษียณ")
+    # 🔧 ปรับปรุง: ครอบด้วย st.form() ให้ปรับ slider ทั้ง 7 ตัวให้ครบก่อน แล้วค่อยกดปุ่ม "คำนวณ"
+    # ทีเดียว (เหมือนที่ปรับ Concept 1/2 ไปแล้ว) แทนที่จะคำนวณใหม่ทันทีทุกครั้งที่ขยับแม้แต่ตัวเดียว
+    with st.form("concept3_form"):
+        st.markdown("##### 🎚️ ระบุค่าใช้จ่ายหลังเกษียณ")
 
-    death_age = st.slider(
-        "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=_retirement_age + 1, max_value=110,
-        value=min(85, 110), step=1, key="c3_death_age"
-    )
-
-    with st.container(border=True):
-        monthly_living = st.slider("💵 เงินใช้ต่อเดือน", 50000, 200000, 100000, step=5000, key="c3_monthly_living")
-
-    with st.container(border=True):
-        healthcare_cost = st.slider(
-            "🏥 เงินรักษาพยาบาล (รวมตลอดช่วงหลังเกษียณ)", 500000, 3000000, 1000000, step=100000, key="c3_healthcare"
+        death_age = st.slider(
+            "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=_retirement_age + 1, max_value=110,
+            value=min(85, 110), step=1, key="c3_death_age"
         )
 
-    with st.container(border=True):
-        annual_travel = st.slider("✈️ เงินท่องเที่ยวต่อปี", 100000, 1000000, 200000, step=50000, key="c3_travel")
+        with st.container(border=True):
+            monthly_living = st.slider("💵 เงินใช้ต่อเดือน", 50000, 200000, 100000, step=5000, key="c3_monthly_living")
 
-    with st.container(border=True):
-        car_cost = st.slider("🚗 เงินซื้อรถหลังเกษียณ (ก้อนเดียว)", 0, 3000000, 1000000, step=100000, key="c3_car")
+        with st.container(border=True):
+            healthcare_cost = st.slider(
+                "🏥 เงินรักษาพยาบาล (รวมตลอดช่วงหลังเกษียณ)", 500000, 3000000, 1000000, step=100000, key="c3_healthcare"
+            )
 
-    with st.container(border=True):
-        annual_home_maint = st.slider("🏠 เงินบำรุงรักษาบ้านต่อปี", 0, 200000, 50000, step=10000, key="c3_home_maint")
+        with st.container(border=True):
+            annual_travel = st.slider("✈️ เงินท่องเที่ยวต่อปี", 100000, 1000000, 200000, step=50000, key="c3_travel")
 
-    with st.container(border=True):
-        other_cost = st.slider("📦 อื่นๆ (ก้อนเดียว)", 0, 2000000, 500000, step=100000, key="c3_others")
+        with st.container(border=True):
+            car_cost = st.slider("🚗 เงินซื้อรถหลังเกษียณ (ก้อนเดียว)", 0, 3000000, 1000000, step=100000, key="c3_car")
+
+        with st.container(border=True):
+            annual_home_maint = st.slider("🏠 เงินบำรุงรักษาบ้านต่อปี", 0, 200000, 50000, step=10000, key="c3_home_maint")
+
+        with st.container(border=True):
+            other_cost = st.slider("📦 อื่นๆ (ก้อนเดียว)", 0, 2000000, 500000, step=100000, key="c3_others")
+
+        c3_submitted = st.form_submit_button("🧮 คำนวณ", use_container_width=True)
+
+    if c3_submitted:
+        st.session_state['c3_calculated'] = True
+
+    if not st.session_state.get('c3_calculated', False):
+        return
 
     years_to_live = max(death_age - _retirement_age, 0)
     if years_to_live <= 0:
