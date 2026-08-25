@@ -1931,6 +1931,41 @@ def load_and_calculate_stock_data_optimized():
             baseline_volatility = daily_range_pct.tail(50).mean()
             is_volatility_contracting = bool(baseline_volatility > 0 and recent_volatility <= (baseline_volatility * 0.7))
 
+            # 🆕 6. Golden Cross "วันนี้พอดี" — MA50 เพิ่งตัดขึ้นเหนือ MA150 (เมื่อวานยังไม่ตัด วันนี้
+            # ตัดแล้ว) เทียบจากข้อมูลราคาย้อนหลังชุดเดียวกันที่มีอยู่แล้ว ใช้ .iloc[-2] แทน .iloc[-1]
+            # เพื่อดูค่า MA ของ "เมื่อวาน" โดยไม่ต้องพึ่งข้อมูลสแกนเก่าจากภายนอกเลย
+            ma50_series = df['Close'].rolling(window=50).mean()
+            ma150_series = df['Close'].rolling(window=150).mean()
+            ma50_yesterday = ma50_series.iloc[-2] if len(ma50_series) >= 2 else None
+            ma150_yesterday = ma150_series.iloc[-2] if len(ma150_series) >= 2 else None
+            is_golden_cross_today = bool(
+                pd.notna(ma50_yesterday) and pd.notna(ma150_yesterday) and pd.notna(ma50) and pd.notna(ma150)
+                and ma50_yesterday <= ma150_yesterday and ma50 > ma150
+            )
+
+            # 🆕 7. RSI ดีดกลับจากโซน Oversold "วันนี้พอดี" — เมื่อวาน RSI ยังต่ำกว่า 30 (ขายมากเกินไป)
+            # วันนี้ดีดกลับขึ้นมาเหนือ 30 แล้ว เป็นสไตล์ Mean Reversion ต่างจาก Momentum ทั้งหมดที่มีอยู่
+            rsi_yesterday = df['RSI'].iloc[-2] if len(df['RSI']) >= 2 else None
+            rsi_today_val = df['RSI'].iloc[-1]
+            is_rsi_oversold_bounce_today = bool(
+                pd.notna(rsi_yesterday) and rsi_yesterday < 30 and pd.notna(rsi_today_val) and rsi_today_val >= 30
+            )
+
+            # 🆕 8. VCP Breakout "วันนี้พอดี" (สไตล์ Mark Minervini) — เมื่อวานยังอยู่ในสถานะแกว่งตัว
+            # แคบ (Volatility Contraction) แล้ววันนี้ทะลุกรอบขึ้นมาพร้อม Volume พุ่งผิดปกติ และราคาปิด
+            # สูงกว่าเมื่อวาน คำนวณสถานะ "แกว่งแคบของเมื่อวาน" โดยตัดวันนี้ออกจากข้อมูลก่อน (.iloc[:-1])
+            # แล้วเลื่อนหน้าต่างไปอีก 1 วัน เหมือนย้อนเวลากลับไปมองเมื่อวานจริงๆ
+            daily_range_pct_excl_today = daily_range_pct.iloc[:-1]
+            recent_vol_yesterday = daily_range_pct_excl_today.tail(10).mean()
+            baseline_vol_yesterday = daily_range_pct_excl_today.tail(50).mean()
+            was_volatility_contracting_yesterday = bool(
+                baseline_vol_yesterday > 0 and recent_vol_yesterday <= (baseline_vol_yesterday * 0.7)
+            )
+            price_up_today = bool(len(df['Close']) >= 2 and latest_price > df['Close'].iloc[-2])
+            is_vcp_breakout_today = bool(
+                was_volatility_contracting_yesterday and is_volume_spike and price_up_today
+            )
+
             stock_list.append({
                 'Ticker': ticker.replace('.BK', ''),
                 'ราคาล่าสุด': round(float(latest_price), 2),
@@ -1960,6 +1995,10 @@ def load_and_calculate_stock_data_optimized():
                 'Volume_Spike_Ratio': round(float(volume_spike_ratio), 2),
                 'Is_Volume_Spike': is_volume_spike,
                 'Is_Volatility_Contracting': is_volatility_contracting,
+                # 🆕 3 สัญญาณใหม่สำหรับ Backtest + ตัวกรองในแท็บวิเคราะห์กราฟเทคนิคัล
+                'Is_Golden_Cross_Today': is_golden_cross_today,
+                'Is_RSI_Oversold_Bounce_Today': is_rsi_oversold_bounce_today,
+                'Is_VCP_Breakout_Today': is_vcp_breakout_today,
             })
             
         except Exception as e:
@@ -2160,6 +2199,10 @@ def log_signal_history(spreadsheet_name, notable, price_map):
             ('Trend_Template', notable.get('trend_template', [])),
             ('RS_Cross_Up', notable.get('rs_cross_up', [])),
             ('New_52W_High', notable.get('new_52w_high', [])),
+            ('Volume_Spike', notable.get('volume_spike', [])),
+            ('Golden_Cross', notable.get('golden_cross', [])),
+            ('RSI_Oversold_Bounce', notable.get('rsi_oversold_bounce', [])),
+            ('VCP_Breakout', notable.get('vcp_breakout', [])),
         ]:
             for t in tickers:
                 price = price_map.get(t, '')
