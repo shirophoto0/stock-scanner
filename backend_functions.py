@@ -27,6 +27,7 @@ from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
 from PIL import Image
 import time
+import random
 from gspread.exceptions import APIError
 from constants import SET100_TICKERS
 from theme import style_plotly
@@ -81,7 +82,7 @@ def get_cached_worksheet(_client, spreadsheet_name, worksheet_name):
     return get_cached_spreadsheet(_client, spreadsheet_name).worksheet(worksheet_name)
 
 
-def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, delay=2):
+def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=4, delay=2):
     """ฟังก์ชันเปิด Google Sheet พร้อมระบบป้องกันและลองใหม่เมื่อติดปัญหา Quota Exceeded (429)"""
     for attempt in range(retries):
         try:
@@ -90,7 +91,12 @@ def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=3, de
         except APIError as e:
             if "429" in str(e) or "Quota exceeded" in str(e):
                 if attempt < retries - 1:
-                    time.sleep(delay * (attempt + 1))
+                    # 🔧 แก้บั๊ก: เดิมรอ "เท่ากันเป๊ะ" ทุกครั้ง (2, 4, 6 วินาที) ทำให้ถ้าหลายแท็บติด 429
+                    # พร้อมกัน (เช่น ตอนโหลดครั้งแรกหลัง reboot แคชยังว่างเปล่า) จะลองใหม่พร้อมกันอีก
+                    # รอบ แล้วชนโควตากันซ้ำเหมือนเดิม ตอนนี้เพิ่ม "สุ่มเวลารอ" เข้าไปเล็กน้อยในแต่ละ
+                    # รอบ ช่วยกระจายจังหวะการลองใหม่ของแต่ละแท็บให้ไม่ตรงกันเป๊ะ ลดโอกาสชนกันซ้ำ
+                    wait_time = delay * (attempt + 1) + random.uniform(0.5, 2.5)
+                    time.sleep(wait_time)
                     continue
                 else:
                     st.error("❌ Google Sheets API เกินโควตาชั่วคราว (Rate Limit 429) กรุณารอสักครู่แล้วลองรีเฟรชหน้าจอใหม่อีกครั้งครับ")
