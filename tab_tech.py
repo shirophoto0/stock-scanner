@@ -51,6 +51,20 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             ],
             key="filter_nh_option"
         )
+        # 🆕 กลุ่มสัญญาณเทคนิคอลอื่นๆ — เพิ่ม 3 สัญญาณใหม่ (Golden Cross, RSI ดีดกลับจาก Oversold,
+        # VCP Breakout) ทั้งหมดเป็นสัญญาณ "เกิดวันนี้พอดี" คำนวณเทียบเมื่อวาน-วันนี้ไว้ให้พร้อมแล้ว
+        # ตั้งแต่ขั้นตอนสแกน (ไม่ต้องเทียบข้อมูลเก่าเองในหน้านี้) ส่วน Volume Spike มี checkbox กรอง
+        # อยู่แล้วด้านล่าง ไม่ต้องเพิ่มซ้ำในนี้
+        other_signal_option = st.selectbox(
+            "🔬 กลุ่มสัญญาณอื่นๆ:",
+            options=[
+                "ไม่กรองเงื่อนไขนี้",
+                "🌟 Golden Cross (MA50 ตัดขึ้นเหนือ MA150 วันนี้)",
+                "🔄 RSI ดีดกลับจาก Oversold วันนี้",
+                "🎯 VCP Breakout (ทะลุกรอบแคบวันนี้)",
+            ],
+            key="filter_other_signal_option"
+        )
 
         st.divider()
         st.markdown("**📐 เกณฑ์เพิ่มเติม (เลือกได้หลายข้อพร้อมกัน)**")
@@ -73,12 +87,14 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             "🤏 แกว่งตัวแคบก่อนวิ่ง (Volatility Contraction)", key="filter_volatility_contract"
         )
 
-        # รวมค่าที่เลือกจาก 2 dropdown เป็นตัวแปรเดียว (ไม่ให้กรองซ้อนกันทั้ง 2 กลุ่มพร้อมกัน
-        # ถ้าเลือกกลุ่ม RS Line ไว้ จะกรองตามกลุ่มนั้นก่อนเสมอ)
+        # รวมค่าที่เลือกจาก 3 dropdown เป็นตัวแปรเดียว (ไม่ให้กรองซ้อนกันหลายกลุ่มพร้อมกัน
+        # ถ้าเลือกกลุ่ม RS Line ไว้ จะกรองตามกลุ่มนั้นก่อนเสมอ ตามด้วย New High แล้วค่อยกลุ่มอื่นๆ)
         if rs_option != "ไม่กรองเงื่อนไขนี้":
             strategy_option = rs_option
         elif nh_option != "ไม่กรองเงื่อนไขนี้":
             strategy_option = nh_option
+        elif other_signal_option != "ไม่กรองเงื่อนไขนี้":
+            strategy_option = other_signal_option
         else:
             strategy_option = "ไม่กรองเงื่อนไขนี้"
 
@@ -86,7 +102,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
         # ลบค่าที่จำไว้ (session_state) ของแต่ละตัวกรองออก แล้วรีรัน จะกลับไปใช้ค่าเริ่มต้นของแต่ละตัว
         st.divider()
         if st.button("🔄 รีเซ็ตตัวกรองทั้งหมด", use_container_width=True):
-            for _k in ["filter_max_pe", "filter_min_dividend", "filter_rsi_range", "filter_rs_option", "filter_nh_option",
+            for _k in ["filter_max_pe", "filter_min_dividend", "filter_rsi_range", "filter_rs_option", "filter_nh_option", "filter_other_signal_option",
                        "filter_trend_template", "filter_near_high", "filter_recovered", "filter_volume_spike", "filter_volatility_contract"]:
                 if _k in st.session_state:
                     del st.session_state[_k]
@@ -189,6 +205,30 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                 if 'Is_New_52W_High_Today' in filtered_df.columns:
                     filtered_df = filtered_df[filtered_df['Is_New_52W_High_Today'] == True]
                     sort_by_col, ascending_sort = 'RS_Line', False
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลกลุ่มนี้ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
+                    filtered_df = filtered_df.iloc[0:0]
+
+            elif strategy_option == "🌟 Golden Cross (MA50 ตัดขึ้นเหนือ MA150 วันนี้)":
+                if 'Is_Golden_Cross_Today' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Is_Golden_Cross_Today'] == True]
+                    sort_by_col, ascending_sort = 'RS_Line', False
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลกลุ่มนี้ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
+                    filtered_df = filtered_df.iloc[0:0]
+
+            elif strategy_option == "🔄 RSI ดีดกลับจาก Oversold วันนี้":
+                if 'Is_RSI_Oversold_Bounce_Today' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Is_RSI_Oversold_Bounce_Today'] == True]
+                    sort_by_col, ascending_sort = 'RSI_14', False
+                else:
+                    st.warning("⚠️ ยังไม่มีข้อมูลกลุ่มนี้ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
+                    filtered_df = filtered_df.iloc[0:0]
+
+            elif strategy_option == "🎯 VCP Breakout (ทะลุกรอบแคบวันนี้)":
+                if 'Is_VCP_Breakout_Today' in filtered_df.columns:
+                    filtered_df = filtered_df[filtered_df['Is_VCP_Breakout_Today'] == True]
+                    sort_by_col, ascending_sort = 'Volume_Spike_Ratio', False
                 else:
                     st.warning("⚠️ ยังไม่มีข้อมูลกลุ่มนี้ในระบบตอนนี้ — รอข้อมูลจาก Daily Scan รอบถัดไป หรือรอบล่าสุดอาจสแกนไม่สำเร็จ")
                     filtered_df = filtered_df.iloc[0:0]
@@ -633,6 +673,21 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
         elif strategy_option == "🆕 ทำจุดสูงสุดใหม่ 52 สัปดาห์วันนี้จริง":
             if 'Is_New_52W_High_Today' in df_scan.columns:
                 final_sorted_df = df_scan[df_scan['Is_New_52W_High_Today'] == True]
+            else:
+                final_sorted_df = df_scan.iloc[0:0]
+        elif strategy_option == "🌟 Golden Cross (MA50 ตัดขึ้นเหนือ MA150 วันนี้)":
+            if 'Is_Golden_Cross_Today' in df_scan.columns:
+                final_sorted_df = df_scan[df_scan['Is_Golden_Cross_Today'] == True]
+            else:
+                final_sorted_df = df_scan.iloc[0:0]
+        elif strategy_option == "🔄 RSI ดีดกลับจาก Oversold วันนี้":
+            if 'Is_RSI_Oversold_Bounce_Today' in df_scan.columns:
+                final_sorted_df = df_scan[df_scan['Is_RSI_Oversold_Bounce_Today'] == True]
+            else:
+                final_sorted_df = df_scan.iloc[0:0]
+        elif strategy_option == "🎯 VCP Breakout (ทะลุกรอบแคบวันนี้)":
+            if 'Is_VCP_Breakout_Today' in df_scan.columns:
+                final_sorted_df = df_scan[df_scan['Is_VCP_Breakout_Today'] == True]
             else:
                 final_sorted_df = df_scan.iloc[0:0]
         elif strategy_option == "⭐ RS Line ตัดเส้น 0 ขึ้นมาแล้ว":
