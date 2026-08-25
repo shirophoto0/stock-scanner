@@ -31,6 +31,9 @@ from backend_functions import (
     send_telegram_message,
     check_watchlist_price_alerts,
     check_portfolio_sl_tp_alerts,
+    log_signal_history,
+    resolve_pending_signals,
+    cleanup_old_signals,
 )
 
 # รายชื่อ Google Sheet (ของแต่ละคน) ที่ต้องการบันทึกผลสแกนลงไป
@@ -167,21 +170,20 @@ def save_scan_result(df, spreadsheet_name):
     print(f"✅ บันทึกข้อมูลลง {spreadsheet_name} สำเร็จ ({len(df_clean)} แถว)")
 
 
-def send_daily_alert(df_result):
+def send_daily_alert(df_result, notable):
     """
     ส่งแจ้งเตือนสรุปหุ้นเด่นวันนี้ (ส่วนกลาง ส่งให้ทุกบัญชีเหมือนกัน) + ราคาเป้าหมาย Watchlist/
     Stop Loss/Take Profit (ส่วนตัว ส่งเฉพาะเจ้าของบัญชีนั้นๆ) ผ่าน Telegram — วนส่งทีละบัญชีตาม
     SPREADSHEET_TELEGRAM_CHAT_IDS ถ้าบัญชีไหนยังไม่ได้ตั้งค่า Chat ID จะข้ามการแจ้งเตือนเฉพาะ
     บัญชีนั้นไปเงียบๆ (บัญชีอื่นยังได้รับตามปกติ)
+    🔧 ปรับปรุง: รับ notable เป็นพารามิเตอร์แทนการคำนวณเองข้างใน เพราะตอนนี้ main() ต้องใช้ notable
+    ตัวเดียวกันนี้ต่อสำหรับบันทึกประวัติสัญญาณ (Backtest) ด้วย ไม่ต้องคำนวณซ้ำ 2 ที่
     """
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not bot_token:
         print("ℹ️ ยังไม่ได้ตั้งค่า TELEGRAM_BOT_TOKEN ข้ามการส่งแจ้งเตือนวันนี้ทั้งหมด")
         return
 
-    print("🔍 กำลังเทียบหาหุ้นที่ผ่านเกณฑ์เด่นใหม่วันนี้...")
-    df_old = load_previous_scan(REFERENCE_SPREADSHEET)
-    notable = find_notable_stocks(df_old, df_result)
     shared_message = build_shared_notable_message(notable)
 
     for spreadsheet_name in TARGET_SPREADSHEETS:
@@ -211,9 +213,31 @@ def main():
     print(f"📊 สแกนสำเร็จ {len(df_result)} ตัว กำลังบันทึกลง {len(TARGET_SPREADSHEETS)} ชีต...")
 
     # 🔧 สำคัญ: ต้องหาหุ้นเด่นใหม่ "ก่อน" ที่จะเขียนทับข้อมูลเก่าเท่านั้น เพราะหลังบันทึกลงชีตแล้ว
-    # ข้อมูล "เมื่อวาน" จะหายไปเลย (บันทึกด้วยการเขียนทับทั้งหมด ไม่ใช่ต่อท้าย) จึงต้องเรียก
-    # send_daily_alert() ก่อน save_scan_result() เสมอ
-    send_daily_alert(df_result)
+    # ข้อมูล "เมื่อวาน" จะหายไปเลย (บันทึกด้วยการเขียนทับทั้งหมด ไม่ใช่ต่อท้าย) จึงต้องคำนวณ notable
+    # ก่อน save_scan_result() เสมอ
+    print("🔍 กำลังเทียบหาหุ้นที่ผ่านเกณฑ์เด่นใหม่วันนี้...")
+    df_old = load_previous_scan(REFERENCE_SPREADSHEET)
+    notable = find_notable_stocks(df_old, df_result)
+
+    send_daily_alert(df_result, notable)
+
+    # 🆕 ระบบ Backtest — บันทึกหุ้นที่มีสัญญาณเด่นวันนี้ไว้เป็นประวัติ + เช็คผลตอบแทนของสัญญาณเก่า
+    # ที่ครบกำหนด 30/60/90 วันแล้ว + ล้างข้อมูลเก่าเกิน 5 ปีทิ้ง (ใช้ REFERENCE_SPREADSHEET เป็น
+    # ที่เก็บกลางเพียงที่เดียว เพราะเป็นข้อมูลตลาดหุ้นทั่วไป ไม่ใช่ข้อมูลส่วนตัวของใครคนใดคนหนึ่ง
+    # เหมือนกับ StockData)
+    print("📝 กำลังบันทึกประวัติสัญญาณสำหรับ Backtest...")
+    price_map = dict(zip(df_result['Ticker'], df_result['ราคาล่าสุด']))
+    _logged = log_signal_history(REFERENCE_SPREADSHEET, notable, price_map)
+    print(f"✅ บันทึกสัญญาณใหม่ {_logged} รายการ")
+
+    print("🔄 กำลังเช็คผลตอบแทนของสัญญาณเก่าที่ครบกำหนด 30/60/90 วันแล้ว...")
+    _resolved = resolve_pending_signals(REFERENCE_SPREADSHEET)
+    print(f"✅ อัปเดตผลตอบแทน {_resolved} ช่อง")
+
+    print("🧹 กำลังล้างข้อมูลสัญญาณเก่าเกิน 5 ปีทิ้ง...")
+    _cleaned = cleanup_old_signals(REFERENCE_SPREADSHEET, retention_years=5)
+    if _cleaned > 0:
+        print(f"✅ ลบข้อมูลเก่าเกิน 5 ปีทิ้งแล้ว {_cleaned} รายการ")
 
     for spreadsheet_name in TARGET_SPREADSHEETS:
         try:
