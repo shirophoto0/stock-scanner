@@ -1683,23 +1683,31 @@ def fetch_set_index_history():
     None ถ้าล้มเหลวทั้งหมด)
     """
     def _try_fetch(symbol):
+        # 🔧 แก้บั๊ก: เดิมกลืน error message ทั้งหมดไปเงียบๆ (except Exception: pass) พอทุกวิธี
+        # ล้มเหลวติดต่อกันหลายวัน ไม่มีทางรู้เลยว่าสาเหตุจริงคืออะไร (Yahoo บล็อก IP ของ GitHub
+        # Actions? เปลี่ยนสัญลักษณ์? โดน rate limit?) ตอนนี้พิมพ์ข้อความ error จริงออกมาให้เห็นใน
+        # log ทุกครั้งที่ลองแล้วไม่สำเร็จ จะได้วินิจฉัยสาเหตุที่แท้จริงได้จาก log ของ GitHub Actions
         try:
             s = yf.Ticker(symbol).history(period="2y")['Close']
             if isinstance(s, pd.Series) and len(s) >= 30:
                 return s, f"yf.Ticker('{symbol}').history()"
-        except Exception:
-            pass
+            print(f"⚠️ yf.Ticker('{symbol}').history() ได้ข้อมูลไม่พอ ({len(s) if isinstance(s, pd.Series) else 0} แถว)")
+        except Exception as e:
+            print(f"⚠️ yf.Ticker('{symbol}').history() ล้มเหลว: {type(e).__name__}: {e}")
         try:
             s = yf.download(symbol, period="2y")['Close'].squeeze()
             if isinstance(s, pd.Series) and len(s) >= 30:
                 return s, f"yf.download('{symbol}')"
-        except Exception:
-            pass
+            print(f"⚠️ yf.download('{symbol}') ได้ข้อมูลไม่พอ ({len(s) if isinstance(s, pd.Series) else 0} แถว)")
+        except Exception as e:
+            print(f"⚠️ yf.download('{symbol}') ล้มเหลว: {type(e).__name__}: {e}")
         return pd.Series(dtype=float), None
 
     set_market = pd.Series(dtype=float)
     set_market_source = None
-    for _sym in ["^SET.BK", "SET.BK"]:
+    # 🆕 เพิ่มสัญลักษณ์สำรองอีก 2 แบบ (^SET กับ SET เฉยๆ ไม่มี .BK) เผื่อ Yahoo Finance เปลี่ยน
+    # รูปแบบสัญลักษณ์ที่รองรับสำหรับดัชนี SET Index ไปแล้ว
+    for _sym in ["^SET.BK", "SET.BK", "^SET", "SET"]:
         set_market, set_market_source = _try_fetch(_sym)
         if set_market_source is not None:
             break
