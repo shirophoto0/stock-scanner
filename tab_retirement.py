@@ -16,14 +16,20 @@ from theme import style_plotly, render_metric_card, get_theme_colors
 # =============================================================
 # ฟังก์ชันคำนวณกลาง (ใช้ร่วมกันได้ทั้ง 2 แท็บย่อย)
 # =============================================================
-def _fetch_pvd_history_and_cagr():
+@st.cache_data(ttl=600, show_spinner=False)
+def _fetch_pvd_history_and_cagr(active_sheet_name):
     """
     ดึงประวัติ PVD ทั้งหมด (ไม่ใช่แค่แถวล่าสุด) แล้วคำนวณ CAGR (อัตราเติบโตทบต้นเฉลี่ยต่อปี)
     จากข้อมูลจริงย้อนหลัง แทนการให้ผู้ใช้เดาอัตราเติบโตเอง คืนค่าเป็น (มูลค่าล่าสุด, CAGR %, จำนวนปีที่มีข้อมูล)
+    🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ไม่มีการจำผลลัพธ์ (cache) เลย ในขณะที่แท็บ "Life After Retirement"
+    ข้างๆ กันมี slider เยอะมาก ทุกครั้งที่เลื่อน slider ไหนก็ตาม หน้าเว็บจะรันใหม่ทั้งหมด รวมถึง
+    แท็บย่อยนี้ด้วย (ทุกแท็บย่อยรันพร้อมกันเสมอ) ทำให้ยิง API ไปขอข้อมูล PVD ซ้ำๆ ทุกครั้งที่ขยับ
+    slider แม้แต่ครั้งเดียว จนชนโควตา 429 ได้ง่าย ตอนนี้จำผลลัพธ์ไว้ 10 นาที (เหมือนจุดอื่นในแอป
+    เช่น อสังหาริมทรัพย์) พร้อมรับชื่อชีตของผู้ใช้เป็นพารามิเตอร์ตรงๆ กันข้อมูลปนกันข้ามผู้ใช้ด้วย
     """
     try:
         client = get_gsheet_client()
-        sheet_pvd = get_worksheet_safely(client, get_active_sheet_name(), 'Provident_Fund')
+        sheet_pvd = get_worksheet_safely(client, active_sheet_name, 'Provident_Fund')
         if sheet_pvd is None:
             return 0.0, 0.0, 0
         records = sheet_pvd.get_all_records()
@@ -113,6 +119,43 @@ def _years_money_lasts(principal, monthly_withdrawal, annual_return_pct, cap_yea
     return months / 12
 
 
+def _max_monthly_withdrawal_with_residual(principal, years, annual_return_pct, residual_pct=0.20):
+    """
+    🆕 คำนวณเงินถอนใช้ต่อเดือนสูงสุด ที่ทำให้เงินต้นค่อยๆ ลดลงจนเหลือพอดีตามสัดส่วนที่กำหนด
+    (เช่น residual_pct=0.20 คือให้เหลือเงิน 20% ของเงินต้นเริ่มต้นตอนสิ้นสุดช่วงเวลา ไม่ใช่หมดเกลี้ยง
+    หรือไม่แตะเลย) ใช้สูตร Annuity ที่มีมูลค่าคงเหลือปลายทาง (Annuity with Residual Value)
+    """
+    if principal <= 0 or years <= 0:
+        return 0.0
+    months = years * 12
+    monthly_rate = (1 + annual_return_pct / 100) ** (1 / 12) - 1
+    residual = principal * residual_pct
+    if monthly_rate > 0:
+        growth_factor = (1 + monthly_rate) ** months
+        return (principal * growth_factor - residual) * monthly_rate / (growth_factor - 1)
+    return (principal - residual) / months
+
+
+def _required_wealth_with_residual(target_monthly, years, annual_return_pct, residual_pct=0.20):
+    """
+    🆕 ฟังก์ชันย้อนกลับของ _max_monthly_withdrawal_with_residual — หาว่าต้องมีเงินต้นเท่าไหร่
+    ถึงจะถอนใช้ตามยอดที่ต้องการต่อเดือนได้ตลอดจำนวนปีที่กำหนด แล้วยังเหลือเงินตามสัดส่วนที่ตั้งไว้
+    (เทียบเป็น % ของเงินต้นที่หาได้เอง) ตอนสิ้นสุดช่วงเวลาพอดี
+    """
+    if target_monthly <= 0 or years <= 0:
+        return 0.0
+    months = years * 12
+    monthly_rate = (1 + annual_return_pct / 100) ** (1 / 12) - 1
+    if monthly_rate > 0:
+        growth_factor = (1 + monthly_rate) ** months
+        denominator = monthly_rate * (growth_factor - residual_pct)
+        if denominator <= 0:
+            return float('inf')
+        return target_monthly * (growth_factor - 1) / denominator
+    return target_monthly * months / (1 - residual_pct)
+    return months / 12
+
+
 # =============================================================
 # แท็บย่อยที่ 1: 📊 ประเมินเงินเกษียณ
 # =============================================================
@@ -136,7 +179,7 @@ def _render_assessment_tab():
         )
         return
 
-    _pvd_last_value, _pvd_cagr, _pvd_years_span = _fetch_pvd_history_and_cagr()
+    _pvd_last_value, _pvd_cagr, _pvd_years_span = _fetch_pvd_history_and_cagr(get_active_sheet_name())
 
     st.info(
         f"💰 Net Worth ปัจจุบัน (ไม่รวมอสังหาฯ, รวม PVD แล้ว): **{_current_net_worth:,.0f} ฿** "
@@ -302,24 +345,38 @@ def _render_life_after_retirement_tab():
     )
 
     if concept_choice.startswith("🧩"):
-        _render_concept1(total_wealth)
+        _render_concept1(total_wealth, _default_retirement_age)
     else:
         _render_concept2(total_wealth, _default_retirement_age)
 
 
-def _render_concept1(total_wealth):
+def _render_concept1(total_wealth, retirement_age):
     """Concept 1: ผู้ใช้กำหนดสัดส่วนการลงทุนเอง แล้วระบบคำนวณเงินใช้ได้ต่อเดือนให้"""
     st.markdown("#### 🧩 Concept 1: กำหนดสัดส่วนการลงทุนเอง")
     st.caption("แบ่งเงินก้อนทั้งหมดไปลงทุนแต่ละประเภท (รวมกันควรเป็น 100%) แล้วดูว่าจะมีเงินใช้ต่อเดือนเท่าไหร่")
 
+    # 🆕 จับคู่ slider แต่ละกลุ่มไว้ในกรอบสีจาง (st.container(border=True)) ให้เห็นชัดว่าอันไหน
+    # คู่กับอันไหน (เช่น % หุ้น คู่กับ % ปันผลหุ้น) แทนที่จะปล่อยเรียงกันเฉยๆ แบบเดิม
     a1, a2 = st.columns(2)
     with a1:
-        cash_pct = st.slider("💵 % เงินสด (สภาพคล่อง ไม่ลงทุน)", 0, 100, 10, key="c1_cash_pct")
-        stock_pct = st.slider("📈 % หุ้น", 0, 100, 40, key="c1_stock_pct")
-        stock_yield_pct = st.slider("　└ % ปันผลหุ้นเฉลี่ยต่อปี", 0.0, 15.0, 5.0, step=0.5, key="c1_stock_yield")
+        with st.container(border=True):
+            cash_pct = st.slider("💵 % เงินสด (สภาพคล่อง ไม่ลงทุน)", 0, 100, 10, key="c1_cash_pct")
+        with st.container(border=True):
+            stock_pct = st.slider("📈 % หุ้น", 0, 100, 40, key="c1_stock_pct")
+            stock_yield_pct = st.slider("　└ % ปันผลหุ้นเฉลี่ยต่อปี", 0.0, 15.0, 5.0, step=0.5, key="c1_stock_yield")
     with a2:
-        fund_pct = st.slider("🧺 % กองทุน", 0, 100, 30, key="c1_fund_pct")
-        fund_yield_pct = st.slider("　└ % ผลตอบแทนกองทุนเฉลี่ยต่อปี", 0.0, 15.0, 4.0, step=0.5, key="c1_fund_yield")
+        # 🆕 slide bar อายุที่คาดว่าจะมีชีวิตอยู่ วางคู่กับ % เงินสด (อยู่ด้านขวาของมันพอดี)
+        with st.container(border=True):
+            death_age = st.slider(
+                "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=retirement_age + 1, max_value=110,
+                value=min(85, 110), step=1, key="c1_death_age",
+                help="ใช้คำนวณว่าเงินจะพอใช้ไปตลอดกี่ปี ถ้าเลือกแตะเงินต้นด้วย"
+            )
+        with st.container(border=True):
+            fund_pct = st.slider("🧺 % กองทุน", 0, 100, 30, key="c1_fund_pct")
+            fund_yield_pct = st.slider("　└ % ผลตอบแทนกองทุนเฉลี่ยต่อปี", 0.0, 15.0, 4.0, step=0.5, key="c1_fund_yield")
+
+    with st.container(border=True):
         other_pct = st.slider("🏦 % อื่นๆ (ตราสารหนี้ / REITs / ฝากประจำ ฯลฯ)", 0, 100, 20, key="c1_other_pct")
         other_yield_pct = st.slider("　└ % ผลตอบแทนอื่นๆ เฉลี่ยต่อปี", 0.0, 15.0, 3.0, step=0.5, key="c1_other_yield")
 
@@ -351,6 +408,30 @@ def _render_concept1(total_wealth):
         icon="💰", caption="รวมปันผล/ผลตอบแทนจากหุ้น กองทุน และอื่นๆ (เงินสดไม่สร้างรายได้)"
     )
 
+    # 🆕 การ์ดเพิ่มเติม: แบบแตะเงินต้น ถอนใช้จนกว่าจะตาย โดยยังเหลือเงิน 20% ก่อนตาย (ใช้สูตร
+    # Annuity ที่มีมูลค่าคงเหลือปลายทาง) ใช้ผลตอบแทนถัวเฉลี่ยของทั้งพอร์ต (ไม่รวมเงินสดที่ไม่โต)
+    # เป็นอัตราการเติบโตระหว่างถอนใช้ — ให้เห็นว่าถ้าใช้แบบเต็มที่ (ไม่ต้องเก็บเงินต้นไว้ทั้งหมด)
+    # จะมีเงินใช้ต่อเดือนได้มากขึ้นแค่ไหน
+    st.divider()
+    st.markdown("##### 🎉 แบบใช้เงินเต็มที่ (แตะเงินต้น เหลือ 20% ก่อนตาย)")
+    years_to_live = max(death_age - retirement_age, 0)
+    blended_yield_all = (
+        (stock_amount * stock_yield_pct + fund_amount * fund_yield_pct + other_amount * other_yield_pct)
+        / total_wealth
+    ) if total_wealth > 0 else 0.0
+
+    if years_to_live <= 0:
+        st.info("กรุณาตั้งอายุที่คาดว่าจะมีชีวิตอยู่ให้มากกว่าอายุเกษียณก่อนครับ")
+    else:
+        max_monthly_spend = _max_monthly_withdrawal_with_residual(
+            total_wealth, years_to_live, blended_yield_all, residual_pct=0.20
+        )
+        render_metric_card(
+            st, f"💸 เงินใช้ได้เต็มที่ต่อเดือน (แตะเงินต้น, ใช้ {years_to_live} ปี)",
+            f"{max_monthly_spend:,.0f} ฿/เดือน", icon="🥳",
+            caption=f"คำนวณให้เหลือเงิน 20% ของเงินต้น ({total_wealth * 0.20:,.0f} ฿) ไว้ตอนอายุ {death_age} ปีพอดี"
+        )
+
 
 def _render_concept2(total_wealth, default_retirement_age):
     """Concept 2: ผู้ใช้กำหนดเงินที่อยากใช้ต่อเดือน แล้วระบบคำนวณย้อนกลับว่าต้องมีเงินก้อน/แบ่งสัดส่วนยังไง"""
@@ -362,25 +443,37 @@ def _render_concept2(total_wealth, default_retirement_age):
     )
 
     st.markdown("##### ⚙️ สมมติฐาน")
+    # 🆕 จับคู่ slider ไว้ในกรอบสีจางเหมือน Concept 1 + เพิ่ม slide bar อายุที่จะตาย คู่กับ
+    # เงินสดสำรอง (ใช้คำนวณผลลัพธ์แบบแตะเงินต้น 4% ด้านล่าง)
     e1, e2 = st.columns(2)
     with e1:
-        cash_buffer_pct = st.slider(
-            "💵 % เงินสดสำรอง (กันไว้ ไม่เอาไปลงทุน)", 0, 50, 10, key="c2_cash_buffer_pct"
-        )
+        with st.container(border=True):
+            cash_buffer_pct = st.slider(
+                "💵 % เงินสดสำรอง (กันไว้ ไม่เอาไปลงทุน)", 0, 50, 10, key="c2_cash_buffer_pct"
+            )
     with e2:
-        st.caption("สัดส่วนของเงินที่ **นำไปลงทุนจริง** (ไม่รวมเงินสดสำรอง) แบ่งเป็น 3 ประเภท ปรับได้ตามต้องการ")
+        with st.container(border=True):
+            death_age = st.slider(
+                "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=default_retirement_age + 1, max_value=110,
+                value=min(85, 110), step=1, key="c2_death_age",
+                help="ใช้คำนวณผลลัพธ์แบบแตะเงินต้น 4% ด้านล่าง"
+            )
 
+    st.caption("สัดส่วนของเงินที่ **นำไปลงทุนจริง** (ไม่รวมเงินสดสำรอง) แบ่งเป็น 3 ประเภท ปรับได้ตามต้องการ")
     f1, f2, f3 = st.columns(3)
     with f1:
-        invest_stock_pct = st.slider("📈 % หุ้น (ของเงินลงทุน)", 0, 100, 50, key="c2_invest_stock_pct")
-        stock_yield_pct2 = st.slider("% ปันผลหุ้น/ปี", 0.0, 15.0, 5.0, step=0.5, key="c2_stock_yield")
+        with st.container(border=True):
+            invest_stock_pct = st.slider("📈 % หุ้น (ของเงินลงทุน)", 0, 100, 50, key="c2_invest_stock_pct")
+            stock_yield_pct2 = st.slider("% ปันผลหุ้น/ปี", 0.0, 15.0, 5.0, step=0.5, key="c2_stock_yield")
     with f2:
-        invest_fund_pct = st.slider("🧺 % กองทุน (ของเงินลงทุน)", 0, 100, 30, key="c2_invest_fund_pct")
-        fund_yield_pct2 = st.slider("% ผลตอบแทนกองทุน/ปี", 0.0, 15.0, 4.0, step=0.5, key="c2_fund_yield")
+        with st.container(border=True):
+            invest_fund_pct = st.slider("🧺 % กองทุน (ของเงินลงทุน)", 0, 100, 30, key="c2_invest_fund_pct")
+            fund_yield_pct2 = st.slider("% ผลตอบแทนกองทุน/ปี", 0.0, 15.0, 4.0, step=0.5, key="c2_fund_yield")
     with f3:
-        invest_other_pct = max(100 - invest_stock_pct - invest_fund_pct, 0)
-        st.metric("🏦 % อื่นๆ (ส่วนที่เหลือ)", f"{invest_other_pct}%")
-        other_yield_pct2 = st.slider("% ผลตอบแทนอื่นๆ/ปี", 0.0, 15.0, 3.0, step=0.5, key="c2_other_yield")
+        with st.container(border=True):
+            invest_other_pct = max(100 - invest_stock_pct - invest_fund_pct, 0)
+            st.metric("🏦 % อื่นๆ (ส่วนที่เหลือ)", f"{invest_other_pct}%")
+            other_yield_pct2 = st.slider("% ผลตอบแทนอื่นๆ/ปี", 0.0, 15.0, 3.0, step=0.5, key="c2_other_yield")
 
     if invest_stock_pct + invest_fund_pct > 100:
         st.warning("⚠️ % หุ้น + % กองทุน รวมกันเกิน 100% แล้วครับ ลองปรับลดลงหน่อย")
@@ -392,7 +485,8 @@ def _render_concept2(total_wealth, default_retirement_age):
     ) / 100
 
     st.divider()
-    st.markdown("##### 📐 ผลการออกแบบ")
+    st.markdown("##### 📐 ผลการออกแบบ (แบบที่ 1: ไม่แตะเงินต้นเลย)")
+    st.caption("ใช้แค่ปันผล/ผลตอบแทนที่ได้จากเงินลงทุน เงินต้นทั้งหมดยังอยู่ครบตลอดไป")
 
     if blended_yield_pct <= 0:
         st.error("อัตราผลตอบแทนเฉลี่ยรวมเป็น 0% ครับ กรุณาปรับสัดส่วน/อัตราผลตอบแทนก่อน")
@@ -415,7 +509,7 @@ def _render_concept2(total_wealth, default_retirement_age):
     render_metric_card(g4, "อื่นๆ", f"{required_other:,.0f} ฿", icon="🏦")
 
     render_metric_card(
-        st, "🎯 เงินก้อนที่ต้องมีทั้งหมด", f"{required_total_wealth:,.0f} ฿",
+        st, "🎯 เงินก้อนที่ต้องมีทั้งหมด (ไม่แตะเงินต้น)", f"{required_total_wealth:,.0f} ฿",
         icon="💰", caption=f"อัตราผลตอบแทนเฉลี่ยรวม {blended_yield_pct:.2f}%/ปี ตามสัดส่วนที่เลือก"
     )
 
@@ -432,6 +526,43 @@ def _render_concept2(total_wealth, default_retirement_age):
             f"({required_total_wealth:,.0f} ฿) — ขาดอยู่ {abs(diff):,.0f} ฿ ลองปรับสัดส่วน/อัตราผลตอบแทน "
             f"หรือลดเงินที่อยากใช้ต่อเดือนดูครับ"
         )
+
+    # 🆕 ผลการออกแบบ แบบที่ 2: แตะเงินต้น 4% (ใช้สูตรมาตรฐานสากล Safe Withdrawal Rate 4%)
+    # ต้องการเงินก้อนน้อยกว่าแบบไม่แตะเงินต้นเสมอ เพราะยอมให้เงินต้นค่อยๆ ลดลงไปตามเวลาได้บ้าง
+    st.divider()
+    st.markdown("##### 📐 ผลการออกแบบ (แบบที่ 2: แตะเงินต้น 4% ตามกฎมาตรฐานสากล)")
+    st.caption("ยอมให้ถอนเงินต้นออกมาใช้ด้วย 4% ของเงินก้อนต่อปี (กฎ Safe Withdrawal Rate ที่ใช้กันแพร่หลาย) ต้องการเงินก้อนน้อยกว่าแบบแรก")
+
+    required_total_wealth_4pct = (target_income * 12) / 0.04
+
+    h1, h2 = st.columns(2)
+    render_metric_card(
+        h1, "🎯 เงินก้อนที่ต้องมีทั้งหมด (แตะเงินต้น 4%)", f"{required_total_wealth_4pct:,.0f} ฿",
+        icon="💸", caption="คำนวณจากกฎ 4% มาตรฐาน (เงินที่ต้องใช้ต่อปี ÷ 4%)"
+    )
+    _diff_4pct = total_wealth - required_total_wealth_4pct
+    render_metric_card(
+        h2, "เทียบกับเงินก้อนที่คาดว่าจะมี", f"{abs(_diff_4pct):,.0f} ฿",
+        icon="✅" if _diff_4pct >= 0 else "⚠️",
+        delta="เหลือเผื่อ" if _diff_4pct >= 0 else "ยังขาดอยู่", delta_positive=(_diff_4pct >= 0)
+    )
+
+    # เช็คว่าเงินก้อนที่มีจริง (ตามแบบที่ 2) จะพอใช้ไปถึงอายุที่ตั้งไว้ไหม โดยใช้สูตรถอนแบบไล่ลำดับ
+    # เดียวกับที่ใช้ใน Concept 1 (ให้เหลือ 0% ก็ได้ในกรณีนี้ เพราะกฎ 4% ออกแบบมาให้ใช้เกือบหมดพอดี)
+    years_available = max(death_age - default_retirement_age, 0)
+    if years_available > 0 and total_wealth > 0:
+        _actual_years_last = _years_money_lasts(total_wealth, target_income, 4.0)
+        if _actual_years_last >= years_available or _actual_years_last >= 100:
+            st.success(
+                f"🎉 ด้วยเงินก้อนที่คาดว่าจะมีจริง ({total_wealth:,.0f} ฿) ถอนใช้ {target_income:,.0f} ฿/เดือน "
+                f"ที่ผลตอบแทน 4%/ปี จะอยู่ได้เกินอายุ {death_age} ปีที่ตั้งไว้แน่นอนครับ"
+            )
+        else:
+            _end_age = default_retirement_age + _actual_years_last
+            st.warning(
+                f"⚠️ ด้วยเงินก้อนที่คาดว่าจะมีจริง ({total_wealth:,.0f} ฿) ถอนใช้ {target_income:,.0f} ฿/เดือน "
+                f"ที่ผลตอบแทน 4%/ปี จะอยู่ได้ถึงอายุประมาณ {_end_age:,.0f} ปีเท่านั้น (ก่อนอายุ {death_age} ปีที่ตั้งไว้)"
+            )
 
 
 # =============================================================
