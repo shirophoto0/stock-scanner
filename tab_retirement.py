@@ -377,3 +377,39 @@ def render_tab_retirement():
             f"(ช่วงที่ 1: {_phase1_years:,.0f} ปี + ช่วงที่ 2: {_phase2_years:,.0f} ปี) — ถ้าอยากให้อยู่ได้นานกว่านี้ "
             f"ลองปรับสัดส่วน/อัตราปันผล ลดค่าใช้จ่าย หรือเพิ่มเป้าหมาย Net Worth ดูครับ"
         )
+
+    # 🆕 แบบที่ 3: เลือกยอดใช้จ่ายต่อเดือนเองผ่าน slide bar (50,000-200,000 บาท) แล้วคำนวณด้วย
+    # ตรรกะไล่ลำดับเดียวกับแบบที่ 2 (ดึงจากส่วนที่เหลือก่อน พอหมดค่อยแตะก้อนปันผล) ให้เห็นว่าถ้าใช้
+    # เงินเดือนละเท่านี้ จะอยู่ได้ถึงอายุเท่าไหร่ — ช่วยให้ปรับเทียบหลายๆ ระดับการใช้จ่ายได้เองสด ๆ
+    # โดยไม่ต้องกลับไปแก้ "ค่าใช้จ่ายที่คาดหวัง" ในฟอร์มด้านบนแล้วกดคำนวณใหม่ทุกครั้ง
+    st.divider()
+    st.markdown("##### 🎚️ แบบที่ 3: ลองเลือกยอดใช้จ่ายเองดูว่าอยู่ได้ถึงอายุเท่าไหร่")
+    custom_monthly_spend = st.slider(
+        "เลือกเงินที่จะใช้ต่อเดือน (บาท)", min_value=50000, max_value=200000,
+        value=int(min(max(monthly_expense_after, 50000), 200000)), step=5000, key="custom_monthly_spend_slider"
+    )
+
+    _custom_shortfall = max(custom_monthly_spend - monthly_dividend_income, 0)
+    if _custom_shortfall <= 0:
+        st.success(
+            f"🎉 ที่ยอดใช้จ่าย {custom_monthly_spend:,.0f} ฿/เดือน ปันผลอย่างเดียวก็พอแล้วครับ "
+            f"ไม่ต้องแตะเงินต้นเลย ใช้ได้ตลอดชีวิต"
+        )
+    else:
+        _custom_phase1 = _years_money_lasts(remaining_amount, _custom_shortfall, annual_return_pct)
+        _custom_phase2 = _years_money_lasts(dividend_invested_amount, _custom_shortfall, dividend_yield_pct)
+        _custom_total_years = _custom_phase1 + _custom_phase2
+        _custom_end_age = retirement_age + _custom_total_years
+
+        cv1, cv2, cv3 = st.columns(3)
+        render_metric_card(
+            cv1, "ต้องดึงเพิ่มจากปันผลอีก", f"{_custom_shortfall:,.0f} ฿/เดือน", icon="📉"
+        )
+        render_metric_card(
+            cv2, "เงินจะอยู่ได้นาน", f"{_custom_total_years:,.0f} ปี" if _custom_total_years < 100 else "100+ ปี",
+            icon="⏳", caption="นับจากวันเกษียณ (ไล่ลำดับแบบเดียวกับแบบที่ 2)"
+        )
+        render_metric_card(
+            cv3, "จะหมดตอนอายุประมาณ", f"{_custom_end_age:,.0f} ปี" if _custom_total_years < 100 else "100+ ปี ไม่มีวันหมด",
+            icon="🎂", caption=f"เริ่มเกษียณตอนอายุ {retirement_age} ปี"
+        )
