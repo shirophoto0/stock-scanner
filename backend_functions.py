@@ -2060,10 +2060,12 @@ def calculate_rsi(series, period=14):
 # 🆕 ระบบส่งออกรายงาน Net Worth เป็น PDF (ภาษาอังกฤษ เพื่อไม่ต้องฝังฟอนต์ไทยเพิ่มเติม —
 # ฟอนต์มาตรฐานของ reportlab ไม่รองรับภาษาไทย ถ้าจะทำเป็นไทยต้องฝังไฟล์ฟอนต์เองก่อน)
 # =============================================================
-def generate_net_worth_pdf_report(app_title, net_worth_excl_re, net_worth_total, asset_breakdown):
+def generate_net_worth_pdf_report(app_title, net_worth_excl_re, net_worth_total, asset_breakdown, trend_df=None):
     """
     สร้างรายงานสรุปสินทรัพย์เป็นไฟล์ PDF คืนค่าเป็น bytes (ใช้กับ st.download_button ได้ตรงๆ)
     asset_breakdown: list of (ชื่อสินทรัพย์: str, มูลค่า: float) เรียงตามลำดับที่จะแสดงในตาราง
+    trend_df: (ไม่บังคับ) DataFrame จาก get_net_worth_trend_data() ที่มีคอลัมน์ 'Total_Excl_RE'
+    ถ้าใส่มา จะเพิ่มกราฟเส้นแนวโน้ม Net Worth รวม (ไม่รวมอสังหาฯ) ต่อท้ายกราฟวงกลมให้ด้วย
     """
     from reportlab.lib.pagesizes import A4
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
@@ -2150,6 +2152,25 @@ def generate_net_worth_pdf_report(app_title, net_worth_excl_re, net_worth_total,
             story.append(Image(img_buffer, width=480, height=300))
     except Exception:
         pass  # ถ้าวาดกราฟพลาด ยังคงส่งรายงานที่เหลือ (หัวข้อ+ตาราง) ออกไปได้ตามปกติ
+
+    # 🆕 กราฟเส้นแนวโน้ม Net Worth รวม (ไม่รวมอสังหาริมทรัพย์) — แสดงก็ต่อเมื่อมีข้อมูลส่งเข้ามา
+    # (trend_df ไม่ใช่ None และมีข้อมูลจริง) ถ้าไม่ส่งมาเลย (เช่น เรียกจากปุ่มดาวน์โหลดเดิมในหน้าเว็บ
+    # ที่ยังไม่ได้แก้ให้ส่งมา) จะข้ามส่วนนี้ไปเงียบๆ รายงานที่เหลือยังคงออกมาได้ตามปกติ
+    if trend_df is not None and not trend_df.empty and 'Total_Excl_RE' in trend_df.columns:
+        try:
+            fig2, ax2 = plt.subplots(figsize=(8, 4))
+            ax2.plot(trend_df.index, trend_df['Total_Excl_RE'], color='#7C9885', linewidth=2.5, marker='o', markersize=4)
+            ax2.set_ylabel('Net Worth excl. Real Estate (THB)')
+            ax2.yaxis.set_major_formatter(plt.FuncFormatter(lambda x, _: f'{x:,.0f}'))
+            fig2.autofmt_xdate()
+            img_buffer2 = io.BytesIO()
+            plt.savefig(img_buffer2, format='png', dpi=150, bbox_inches='tight')
+            plt.close(fig2)
+            img_buffer2.seek(0)
+            story.append(Paragraph("Net Worth Trend (excl. Real Estate)", styles['Heading2']))
+            story.append(Image(img_buffer2, width=480, height=240))
+        except Exception:
+            pass  # ถ้าวาดกราฟแนวโน้มพลาด ยังคงส่งรายงานที่เหลือออกไปได้ตามปกติ
 
     doc.build(story)
     buffer.seek(0)
@@ -2344,3 +2365,98 @@ def load_signal_history(spreadsheet_name):
         return pd.DataFrame(records) if records else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
+
+
+# =============================================================
+# 🆕 ระบบรายงานสรุปอัตโนมัติผ่าน Telegram — ดึงตรรกะกราฟแนวโน้ม Net Worth ที่มีอยู่แล้วในหน้าเว็บ
+# (แท็บภาพรวม Net Worth) มาเป็นฟังก์ชันกลาง ใช้ได้ทั้งหน้าเว็บและสคริปต์รายงานอัตโนมัติรายเดือน
+# =============================================================
+def get_net_worth_trend_data(spreadsheet_name):
+    """
+    ดึงข้อมูลแนวโน้ม Net Worth ทุกหมวด (PVD, ประกัน, สหกรณ์, ธนาคาร, ประกันสังคม, กองทุนรวม,
+    หุ้น+TFEX, ทองคำ, อสังหาริมทรัพย์) มารวมเป็นตารางเดียว (Total = รวมทุกหมวด รวมอสังหาฯ ด้วย,
+    Total_Excl_RE = รวมทุกหมวดยกเว้นอสังหาฯ) คืนค่าเป็น DataFrame ว่างเปล่าถ้าไม่มีข้อมูลเลย
+    ตรรกะเดียวกับกราฟแนวโน้มที่แสดงในแท็บ "ภาพรวม Net Worth" บนหน้าเว็บทุกประการ
+    """
+    try:
+        client = get_gsheet_client()
+
+        def get_df_safe(ws_name):
+            try:
+                sheet = get_cached_worksheet(client, spreadsheet_name, ws_name)
+                records = sheet.get_all_records()
+                return pd.DataFrame(records) if records else pd.DataFrame()
+            except Exception:
+                return pd.DataFrame()
+
+        df_pvd = get_df_safe('Provident_Fund')
+        df_ins = get_df_safe('Insurance')
+        df_coop = get_df_safe('Coop')
+        df_bank = get_df_safe('Bank_Account')
+        df_sso = get_df_safe('SSO')
+        df_mf = get_df_safe('Fund_Value_History')
+        df_portfolio_hist = get_df_safe('Portfolio_History')
+        df_gold = get_df_safe('Gold_Value_History')
+        df_re = get_df_safe('Real_Estate_Value_History')
+
+        def prepare_series(df, date_col, val_col, name):
+            df = df.copy()
+            if df.empty or val_col not in df.columns or date_col not in df.columns:
+                return pd.DataFrame(columns=[name], index=pd.to_datetime([]))
+            if date_col == 'Month':
+                thai_months = {'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04', 'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08', 'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12'}
+                df['Month_Num'] = df[date_col].map(thai_months).fillna('12')
+                df['Date'] = pd.to_datetime(df['Year_CE'].astype(str) + '-' + df['Month_Num'] + '-01', errors='coerce')
+            else:
+                df['Date'] = pd.to_datetime(df[date_col], errors='coerce')
+            df[name] = df[val_col].astype(str).str.replace(',', '').replace('', '0').astype(float)
+            return df.dropna(subset=['Date']).set_index('Date')[[name]]
+
+        s_pvd = prepare_series(df_pvd, 'Month', 'Grand_Total', 'PVD')
+        s_ins = prepare_series(df_ins, 'Date', 'Redemption_Value', 'Insurance')
+        s_sso = prepare_series(df_sso, 'Date', 'Value', 'SSO')
+        s_coop = prepare_series(df_coop, 'Date', 'Coop_Value', 'Coop')
+        s_bank = prepare_series(df_bank, 'Date', 'Balance', 'Bank')
+        s_mf = prepare_series(df_mf, 'Date', 'Value', 'Mutual_Fund')
+        s_port = prepare_series(df_portfolio_hist, 'Date', 'Market_Value', 'Stock+TFEX')
+        s_gold = prepare_series(df_gold, 'Date', 'Value', 'Gold')
+        s_re = prepare_series(df_re, 'Date', 'Value', 'Real_Estate')
+
+        if not s_ins.empty and not s_sso.empty:
+            s_ins = s_ins.join(s_sso, how='outer').sort_index().ffill().fillna(0)
+            s_ins['Insurance'] = s_ins['Insurance'] + s_ins['SSO']
+            s_ins = s_ins[['Insurance']]
+        elif s_ins.empty and not s_sso.empty:
+            s_ins = s_sso.rename(columns={'SSO': 'Insurance'})
+
+        series_list = [s for s in [s_pvd, s_ins, s_coop, s_bank, s_mf, s_port, s_gold, s_re] if not s.empty]
+        if not series_list:
+            return pd.DataFrame()
+
+        df_merged = series_list[0]
+        for s in series_list[1:]:
+            df_merged = df_merged.join(s, how='outer')
+        df_merged = df_merged.sort_index().ffill().fillna(0)
+        df_merged['Total'] = df_merged.sum(axis=1)
+        # 🆕 Total_Excl_RE = รวมทุกหมวดยกเว้นอสังหาริมทรัพย์ (ใช้ในกราฟรายงานอัตโนมัติตามที่ขอ)
+        df_merged['Total_Excl_RE'] = df_merged['Total'] - df_merged.get('Real_Estate', 0)
+
+        return df_merged
+    except Exception as e:
+        print(f"⚠️ ดึงข้อมูลแนวโน้ม Net Worth ไม่สำเร็จ: {e}")
+        return pd.DataFrame()
+
+
+def send_telegram_document(bot_token, chat_id, file_path, caption=""):
+    """ส่งไฟล์แนบ (เช่น PDF) ผ่าน Telegram Bot คืนค่าเป็น (สำเร็จหรือไม่: bool, ข้อความ: str)"""
+    url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+    try:
+        with open(file_path, 'rb') as f:
+            files = {'document': f}
+            payload = {'chat_id': chat_id, 'caption': caption, 'parse_mode': 'HTML'}
+            resp = requests.post(url, data=payload, files=files, timeout=30)
+        if resp.status_code == 200:
+            return True, "ส่งไฟล์ Telegram สำเร็จ"
+        return False, f"ส่งไม่สำเร็จ (HTTP {resp.status_code}): {resp.text}"
+    except Exception as e:
+        return False, f"ส่งไม่สำเร็จ: {e}"
