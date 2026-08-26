@@ -2460,3 +2460,167 @@ def send_telegram_document(bot_token, chat_id, file_path, caption=""):
         return False, f"ส่งไม่สำเร็จ (HTTP {resp.status_code}): {resp.text}"
     except Exception as e:
         return False, f"ส่งไม่สำเร็จ: {e}"
+
+
+# =============================================================
+# 🆕 คำนวณ Net Worth แบบ "สด" (Live) สำหรับใช้ในรายงานอัตโนมัติรายเดือน — ให้ตัวเลขตรงกับที่
+# หน้าเว็บแสดง ณ ขณะนั้นเป๊ะๆ (ไม่ใช่ยอดที่สแตมป์ไว้รายเดือนซึ่งอาจมาจากคนละวันกันในแต่ละหมวด)
+# ดึงราคาตลาดสดจริงสำหรับหมวดที่ผันผวนรายวัน (หุ้น+TFEX ผ่าน yfinance, ทองคำผ่าน goldtraders.or.th)
+# ส่วนหมวดอื่นๆ (PVD, ประกัน, สหกรณ์, ธนาคาร, ประกันสังคม, ประกันบำนาญ, กองทุนรวม) ใช้ยอดล่าสุดที่
+# บันทึกไว้ในชีต ตรงกับที่หน้าเว็บทำอยู่แล้วทุกประการ (เพราะเป็นค่าที่กรอกเองเป็นครั้งคราว ไม่ใช่
+# ราคาตลาดที่ขยับทุกวัน จึงไม่มีปัญหาความคลาดเคลื่อนแบบเดียวกับหุ้น/ทองคำ)
+# =============================================================
+def compute_live_net_worth(spreadsheet_name):
+    """
+    คำนวณ Net Worth แบบสด คืนค่าเป็น dict {
+        'asset_breakdown': [(ชื่อหมวด, มูลค่า), ...],   # เรียงเหมือนหน้าเว็บ ใช้กับ PDF ได้ตรงๆ
+        'net_worth_excl_re': float, 'net_worth_total': float
+    }
+    """
+    client = get_gsheet_client()
+
+    def get_records_safe(ws_name):
+        try:
+            sheet = get_cached_worksheet(client, spreadsheet_name, ws_name)
+            return sheet.get_all_records()
+        except Exception:
+            return []
+
+    def safe_float(raw, default=0.0):
+        s = str(raw).replace(',', '').replace('฿', '').replace('THB', '').strip()
+        if not s:
+            return default
+        try:
+            return float(s)
+        except ValueError:
+            return default
+
+    # --- หมวดที่ใช้ "ยอดล่าสุดที่บันทึกไว้" (เหมือนหน้าเว็บทุกประการ ไม่ต้องคำนวณสดเพิ่ม) ---
+    pvd_records = get_records_safe('Provident_Fund')
+    pvd_value = safe_float(pvd_records[-1].get('Grand_Total', pvd_records[-1].get('Value', 0))) if pvd_records else 0.0
+
+    ins_records = get_records_safe('Insurance')
+    insurance_value = safe_float(ins_records[-1].get('Redemption_Value', ins_records[-1].get('Value', 0))) if ins_records else 0.0
+
+    coop_records = get_records_safe('Coop')
+    coop_value = safe_float(coop_records[-1].get('Coop_Value', coop_records[-1].get('Value', 0))) if coop_records else 0.0
+
+    sso_records = get_records_safe('SSO')
+    sso_value = safe_float(sso_records[-1].get('Value', 0)) if sso_records else 0.0
+
+    pension_records = get_records_safe('Pension')
+    pension_insurance_value = sum(safe_float(row.get('Value', 0)) for row in pension_records)
+
+    bank_records = get_records_safe('Bank_Account')
+    bank_balance = safe_float(bank_records[-1].get('Balance', 0)) if bank_records else 0.0
+
+    # --- กองทุนรวม: คำนวณสดจาก Fund_History (ราคาปัจจุบันที่กรอกไว้ล่าสุด x จำนวนหน่วยที่ถืออยู่) ---
+    fund_records = get_records_safe('Fund_History')
+    mutual_fund_value = 0.0
+    for fund_row in fund_records:
+        if fund_row.get('Status', 'Holding') == 'Holding':
+            try:
+                curr_p = safe_float(fund_row.get('Current_Price', 0))
+                units = safe_float(fund_row.get('Units', 0))
+                mutual_fund_value += curr_p * units
+            except (ValueError, TypeError):
+                pass
+
+    # --- อสังหาริมทรัพย์ ---
+    re_records = get_records_safe('Real_Estate')
+    total_real_estate = 0.0
+    for item in re_records:
+        market_val = safe_float(item.get("มูลค่าตลาด (บาท)", item.get("มูลค่าตลาด", 0)))
+        debt_val = safe_float(item.get("ยอดหนี้คงเหลือ (บาท)", item.get("ยอดหนี้คงเหลือ", 0)))
+        total_real_estate += (market_val - debt_val)
+
+    # --- หุ้น: คำนวณสด ดึงราคาล่าสุดจริงต่อหุ้นแต่ละตัวที่ถืออยู่ (เหมือนหน้าเว็บ) ---
+    portfolio_records = get_records_safe('PortfolioData')
+    total_stock_value = 0.0
+    for p in portfolio_records:
+        ticker = str(p.get('หุ้น', '')).strip().upper()
+        shares = safe_float(p.get('shares', 0))
+        if not ticker or shares <= 0:
+            continue
+        try:
+            m_price = float(yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1])
+        except Exception:
+            m_price = safe_float(p.get('avg_price', 0))  # ดึงสดไม่สำเร็จ ใช้ราคาต้นทุนแทนชั่วคราว
+        total_stock_value += shares * m_price
+
+    # --- TFEX: เงินฝาก-ถอนสุทธิ + กำไร-ขาดทุนจากรายการที่ปิดสถานะแล้ว (ไม่ต้องดึงราคาตลาดสด
+    # เพราะคำนวณจาก Realized PnL ที่บันทึกไว้แล้วเท่านั้น เหมือนหน้าเว็บ) ---
+    tfex_records = get_records_safe('TFEX_History')
+    total_pnl = 0.0
+    for row in tfex_records:
+        close_price = safe_float(row.get('Close_Price', 0))
+        if close_price > 0:
+            total_pnl += safe_float(row.get('Net_Profit', row.get('กำไรสุทธิ', 0)))
+
+    cash_flow_records = get_records_safe('Cash_Flow')
+    total_deposit = sum(safe_float(row.get('Amount', 0)) for row in cash_flow_records if str(row.get('Type', '')).strip().lower() == 'deposit')
+    total_withdraw = sum(safe_float(row.get('Amount', 0)) for row in cash_flow_records if str(row.get('Type', '')).strip().lower() == 'withdraw')
+    tfex_net_worth = (total_deposit - total_withdraw) + total_pnl
+
+    total_stock_and_tfex = total_stock_value + tfex_net_worth
+
+    # --- ทองคำ: ดึงราคาสดจากเว็บสมาคมค้าทองคำ (เหมือนหน้าเว็บ) ---
+    gold_records = get_records_safe('Gold_Portfolio')
+    ref_gold_bar, ref_gold_jewelry = 68300.0, 69100.0
+    try:
+        headers_req = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        resp = requests.get("https://www.goldtraders.or.th/", headers=headers_req, timeout=8)
+        if resp.status_code == 200:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(resp.text, 'html.parser')
+            prices = []
+            for span in soup.find_all('span'):
+                text = span.get_text().strip().replace(',', '')
+                try:
+                    val = float(text)
+                    if 30000 <= val <= 100000:
+                        prices.append(val)
+                except ValueError:
+                    pass
+            if len(prices) >= 2:
+                ref_gold_bar, ref_gold_jewelry = prices[0], prices[1]
+    except Exception:
+        pass  # ดึงสดไม่สำเร็จ ใช้ราคาสำรองที่ตั้งไว้ต่อไป
+
+    total_gold_value = 0.0
+    for row in gold_records:
+        g_type = row.get("ประเภท", "")
+        weight_val = safe_float(row.get("น้ำหนัก/มูลค่าซื้อ", row.get("น้ำหนัก", 0.0)))
+        if g_type == "ทองคำแท่ง":
+            market_val = (weight_val / 15.244) * ref_gold_bar
+        elif g_type == "ทองรูปพรรณ":
+            market_val = weight_val * ref_gold_jewelry
+        else:
+            m_val = safe_float(row.get("มูลค่าตลาด", 0.0))
+            market_val = m_val if m_val > 0 else weight_val
+        total_gold_value += market_val
+
+    net_worth_excl_re = (
+        total_stock_and_tfex + pvd_value + insurance_value + coop_value + sso_value
+        + pension_insurance_value + bank_balance + total_gold_value + mutual_fund_value
+    )
+    net_worth_total = net_worth_excl_re + total_real_estate
+
+    asset_breakdown = [
+        ("Stock + TFEX Portfolio", total_stock_and_tfex),
+        ("Mutual Funds", mutual_fund_value),
+        ("Provident Fund (PVD)", pvd_value),
+        ("Unit-Linked Insurance", insurance_value),
+        ("Cooperative Fund", coop_value),
+        ("Social Security Fund", sso_value),
+        ("Bank Accounts", bank_balance),
+        ("Pension Insurance", pension_insurance_value),
+        ("Gold", total_gold_value),
+        ("Real Estate", total_real_estate),
+    ]
+
+    return {
+        'asset_breakdown': asset_breakdown,
+        'net_worth_excl_re': net_worth_excl_re,
+        'net_worth_total': net_worth_total,
+    }
