@@ -2569,7 +2569,7 @@ def compute_live_net_worth(spreadsheet_name):
     # --- ทองคำ: ดึงราคาสดจากเว็บสมาคมค้าทองคำ (ใช้ฟังก์ชันกลาง fetch_live_gold_price() ที่แก้
     # ไปแล้ว ดึงจากเว็บ classic แทนเว็บใหม่ที่โหลดราคาผ่าน JavaScript) ---
     gold_records = get_records_safe('Gold_Portfolio')
-    _live_bar, _live_jewelry = fetch_live_gold_price()
+    _live_bar, _live_jewelry, _ = fetch_live_gold_price()
     ref_gold_bar = _live_bar if _live_bar is not None else 68300.0
     ref_gold_jewelry = _live_jewelry if _live_jewelry is not None else 69100.0
 
@@ -2627,20 +2627,23 @@ def compute_live_net_worth(spreadsheet_name):
 def fetch_live_gold_price():
     """
     ดึงราคาทองคำแท่ง/ทองรูปพรรณ (ขายออก) สดจากเว็บสมาคมค้าทองคำ คืนค่าเป็น
-    (ราคาทองคำแท่งขายออก, ราคาทองรูปพรรณขายออก) — คืนค่าเป็น (None, None) ถ้าดึงไม่สำเร็จ
-    ให้ผู้เรียกตัดสินใจเองว่าจะใช้ค่าสำรองอะไรต่อ (ไม่ใส่ค่าสำรองไว้ในฟังก์ชันนี้ตรงๆ เพื่อไม่ให้
-    ผู้เรียกเข้าใจผิดว่าดึงสำเร็จทั้งที่จริงๆ ได้ค่าสำรองมา)
+    (ราคาทองคำแท่งขายออก, ราคาทองรูปพรรณขายออก, ข้อความสาเหตุ) — ราคาเป็น None ถ้าดึงไม่สำเร็จ
+    ให้ผู้เรียกตัดสินใจเองว่าจะใช้ค่าสำรองอะไรต่อ
+    🔧 แก้บั๊ก: เดิมใช้ print() รายงานสาเหตุ ซึ่งใช้ได้ดีตอนรันผ่าน GitHub Actions (เห็นใน log ของ
+    workflow) แต่ Streamlit Cloud ไม่แสดง print() ธรรมดาใน log ของ "Manage app" เลย (แสดงแค่
+    ข้อความเตือนภายในของ Streamlit เอง) ทำให้ตอนเรียกจากหน้าเว็บ (tab_gold.py) ไม่มีทางเห็นสาเหตุ
+    ที่แท้จริงได้เลย ตอนนี้เปลี่ยนมา "คืนค่าข้อความสาเหตุกลับไปเป็นค่าที่ 3" แทน ให้ผู้เรียกเอาไป
+    แสดงในหน้าเว็บได้โดยตรง (เห็นผลทันทีไม่ต้องพึ่ง log ฝั่งเซิร์ฟเวอร์เลย) ยังคง print() ไว้ด้วย
+    เผื่อตอนเรียกจาก GitHub Actions (monthly_report.py) จะได้เห็นใน log ของ workflow เหมือนเดิม
     """
     try:
         headers_req = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         resp = requests.get("https://classic.goldtraders.or.th/", headers=headers_req, timeout=8)
-        # 🔧 เพิ่ม log แสดงสาเหตุจริงถ้าดึงไม่สำเร็จ (ใช้ print() เพราะฟังก์ชันนี้ถูกเรียกทั้งจาก
-        # หน้าเว็บ Streamlit — ซึ่ง print() จะไปโผล่ใน log ของ "Manage app" — และจากสคริปต์รายงาน
-        # รายเดือนที่รันผ่าน GitHub Actions ด้วย) เดิมกลืน error ไปเงียบๆ ไม่มีทางรู้เลยว่าทำไม
-        # ดึงไม่สำเร็จ (เว็บบล็อก IP ของ Streamlit Cloud? โครงสร้างหน้าเปลี่ยน? อื่นๆ?)
+
         if resp.status_code != 200:
-            print(f"⚠️ ดึงราคาทองไม่สำเร็จ: เว็บตอบกลับ HTTP {resp.status_code}")
-            return None, None
+            _msg = f"เว็บตอบกลับ HTTP {resp.status_code}"
+            print(f"⚠️ ดึงราคาทองไม่สำเร็จ: {_msg}")
+            return None, None, _msg
 
         soup = BeautifulSoup(resp.text, 'html.parser')
         full_text = soup.get_text()
@@ -2653,19 +2656,25 @@ def fetch_live_gold_price():
 
         # กันเผื่อ Regex จับตัวเลขผิดเพี้ยนไปนอกช่วงราคาทองที่สมเหตุสมผล (เช่น จับเลขปี/รหัสอื่น
         # มาแทน) ราคาทองคำควรอยู่ในช่วงหลักหมื่นบาทเสมอ ไม่ใช่หลักสิบ/ร้อย/ล้าน
-        if bar_val is not None and not (10000 <= bar_val <= 200000):
+        _bar_out_of_range = bar_val is not None and not (10000 <= bar_val <= 200000)
+        _jewelry_out_of_range = jewelry_val is not None and not (10000 <= jewelry_val <= 200000)
+        if _bar_out_of_range:
             bar_val = None
-        if jewelry_val is not None and not (10000 <= jewelry_val <= 200000):
+        if _jewelry_out_of_range:
             jewelry_val = None
 
         if bar_val is None or jewelry_val is None:
-            print(
-                f"⚠️ ดึงหน้าเว็บสำเร็จ (HTTP 200) แต่หาตัวเลขราคาทองในเนื้อหาไม่เจอ "
-                f"(bar_match={'พบ' if bar_match else 'ไม่พบ'}, jewelry_match={'พบ' if jewelry_match else 'ไม่พบ'}) "
-                f"— ความยาวเนื้อหาที่ดึงได้ {len(full_text)} ตัวอักษร"
+            _msg = (
+                f"HTTP 200 แต่หาตัวเลขราคาทองไม่เจอ (bar_match={'พบ' if bar_match else 'ไม่พบ'}"
+                f"{'/นอกช่วง' if _bar_out_of_range else ''}, "
+                f"jewelry_match={'พบ' if jewelry_match else 'ไม่พบ'}{'/นอกช่วง' if _jewelry_out_of_range else ''}, "
+                f"ความยาวเนื้อหา={len(full_text)} ตัวอักษร)"
             )
+            print(f"⚠️ ดึงราคาทองไม่สำเร็จ: {_msg}")
+            return bar_val, jewelry_val, _msg
 
-        return bar_val, jewelry_val
+        return bar_val, jewelry_val, "สำเร็จ"
     except Exception as e:
-        print(f"⚠️ ดึงราคาทองไม่สำเร็จ: {type(e).__name__}: {e}")
-        return None, None
+        _msg = f"{type(e).__name__}: {e}"
+        print(f"⚠️ ดึงราคาทองไม่สำเร็จ: {_msg}")
+        return None, None, _msg
