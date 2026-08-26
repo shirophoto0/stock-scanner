@@ -2634,7 +2634,12 @@ def fetch_live_gold_price():
     try:
         headers_req = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
         resp = requests.get("https://classic.goldtraders.or.th/", headers=headers_req, timeout=8)
+        # 🔧 เพิ่ม log แสดงสาเหตุจริงถ้าดึงไม่สำเร็จ (ใช้ print() เพราะฟังก์ชันนี้ถูกเรียกทั้งจาก
+        # หน้าเว็บ Streamlit — ซึ่ง print() จะไปโผล่ใน log ของ "Manage app" — และจากสคริปต์รายงาน
+        # รายเดือนที่รันผ่าน GitHub Actions ด้วย) เดิมกลืน error ไปเงียบๆ ไม่มีทางรู้เลยว่าทำไม
+        # ดึงไม่สำเร็จ (เว็บบล็อก IP ของ Streamlit Cloud? โครงสร้างหน้าเปลี่ยน? อื่นๆ?)
         if resp.status_code != 200:
+            print(f"⚠️ ดึงราคาทองไม่สำเร็จ: เว็บตอบกลับ HTTP {resp.status_code}")
             return None, None
 
         soup = BeautifulSoup(resp.text, 'html.parser')
@@ -2653,6 +2658,14 @@ def fetch_live_gold_price():
         if jewelry_val is not None and not (10000 <= jewelry_val <= 200000):
             jewelry_val = None
 
+        if bar_val is None or jewelry_val is None:
+            print(
+                f"⚠️ ดึงหน้าเว็บสำเร็จ (HTTP 200) แต่หาตัวเลขราคาทองในเนื้อหาไม่เจอ "
+                f"(bar_match={'พบ' if bar_match else 'ไม่พบ'}, jewelry_match={'พบ' if jewelry_match else 'ไม่พบ'}) "
+                f"— ความยาวเนื้อหาที่ดึงได้ {len(full_text)} ตัวอักษร"
+            )
+
         return bar_val, jewelry_val
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ ดึงราคาทองไม่สำเร็จ: {type(e).__name__}: {e}")
         return None, None
