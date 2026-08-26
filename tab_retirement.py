@@ -392,21 +392,40 @@ def _render_concept1(total_wealth, retirement_age):
     st.markdown("#### 🧩 Concept 1: กำหนดสัดส่วนการลงทุนเอง")
     st.caption("แบ่งเงินก้อนทั้งหมดไปลงทุนแต่ละประเภท (รวมกันควรเป็น 100%) แล้วดูว่าจะมีเงินใช้ต่อเดือนเท่าไหร่")
 
+    # 🆕 ดึง slider "สัดส่วน %" ทั้ง 4 ตัว ออกมาไว้นอกฟอร์ม เพื่อให้อัปเดตยอดรวมแบบสดๆ ได้ทันทีที่
+    # เลื่อน (widget ในฟอร์มจะไม่อัปเดตจนกว่าจะกดปุ่ม Submit) ส่วน slider อื่นๆ ที่ไม่ต้องรวมกันเป็น
+    # 100% (อัตราผลตอบแทน, อายุ) ยังคงอยู่ในฟอร์มเหมือนเดิม ไม่กระทบความเร็วที่แก้ไปก่อนหน้านี้
+    st.markdown("##### 🎯 แบ่งสัดส่วนเงินลงทุน (รวมกันให้ได้ 100%)")
+    b1, b2, b3, b4 = st.columns(4)
+    with b1:
+        cash_pct = st.slider("💵 % เงินสด", 0, 100, 10, key="c1_cash_pct")
+    with b2:
+        stock_pct = st.slider("📈 % หุ้น", 0, 100, 40, key="c1_stock_pct")
+    with b3:
+        fund_pct = st.slider("🧺 % กองทุน", 0, 100, 30, key="c1_fund_pct")
+    with b4:
+        other_pct = st.slider("🏦 % อื่นๆ", 0, 100, 20, key="c1_other_pct")
+
+    # 🆕 ตัวเลข remind ยอดรวมแบบสด — บอกทันทีว่าเกิน/ขาดจาก 100% อยู่เท่าไหร่
+    _live_total_pct = cash_pct + stock_pct + fund_pct + other_pct
+    if _live_total_pct == 100:
+        st.success(f"✅ รวมได้ {_live_total_pct}% พอดีเป๊ะ")
+    elif _live_total_pct > 100:
+        st.error(f"⚠️ รวมได้ {_live_total_pct}% — **เกิน 100% ไป {_live_total_pct - 100}%** ลองปรับลดลงหน่อยครับ")
+    else:
+        st.warning(f"⚠️ รวมได้ {_live_total_pct}% — **ยังขาดอีก {100 - _live_total_pct}%** ถึงจะครบ 100%")
+
+    st.divider()
+
     # 🔧 ปรับปรุง: เดิมทุก slider คำนวณผลลัพธ์ใหม่ทันทีที่ขยับแม้แต่ตัวเดียว ทำให้หน้าเว็บวนคำนวณ
     # (spinner หมุน) ทุกครั้งที่ปรับ กว่าจะตั้งครบทุก slider ก็ช้ามาก ตอนนี้ครอบด้วย st.form() ให้
     # ปรับ slider ให้ครบทุกตัวก่อน แล้วค่อยกดปุ่ม "คำนวณ" ทีเดียว เหมือนกับแท็บ "ประเมินเงินเกษียณ"
     with st.form("concept1_form"):
+        st.markdown("##### 📈 อัตราผลตอบแทนของแต่ละประเภท + อายุ")
         # จับคู่ slider แต่ละกลุ่มไว้ในกรอบสีจาง (st.container(border=True)) ให้เห็นชัดว่าอันไหน
-        # คู่กับอันไหน (เช่น % หุ้น คู่กับ % ปันผลหุ้น)
+        # คู่กับอันไหน (เช่น % ปันผลหุ้น คู่กับอายุที่คาดว่าจะมีชีวิตอยู่)
         a1, a2 = st.columns(2)
         with a1:
-            with st.container(border=True):
-                cash_pct = st.slider("💵 % เงินสด (สภาพคล่อง ไม่ลงทุน)", 0, 100, 10, key="c1_cash_pct")
-            with st.container(border=True):
-                stock_pct = st.slider("📈 % หุ้น", 0, 100, 40, key="c1_stock_pct")
-                stock_yield_pct = st.slider("　└ % ปันผลหุ้นเฉลี่ยต่อปี", 0.0, 15.0, 5.0, step=0.5, key="c1_stock_yield")
-        with a2:
-            # slide bar อายุที่คาดว่าจะมีชีวิตอยู่ วางคู่กับ % เงินสด (อยู่ด้านขวาของมันพอดี)
             with st.container(border=True):
                 death_age = st.slider(
                     "🕊️ อายุที่คาดว่าจะมีชีวิตอยู่ถึง", min_value=retirement_age + 1, max_value=110,
@@ -414,12 +433,12 @@ def _render_concept1(total_wealth, retirement_age):
                     help="ใช้คำนวณว่าเงินจะพอใช้ไปตลอดกี่ปี ถ้าเลือกแตะเงินต้นด้วย"
                 )
             with st.container(border=True):
-                fund_pct = st.slider("🧺 % กองทุน", 0, 100, 30, key="c1_fund_pct")
-                fund_yield_pct = st.slider("　└ % ผลตอบแทนกองทุนเฉลี่ยต่อปี", 0.0, 15.0, 4.0, step=0.5, key="c1_fund_yield")
-
-        with st.container(border=True):
-            other_pct = st.slider("🏦 % อื่นๆ (ตราสารหนี้ / REITs / ฝากประจำ ฯลฯ)", 0, 100, 20, key="c1_other_pct")
-            other_yield_pct = st.slider("　└ % ผลตอบแทนอื่นๆ เฉลี่ยต่อปี", 0.0, 15.0, 3.0, step=0.5, key="c1_other_yield")
+                stock_yield_pct = st.slider("📈 % ปันผลหุ้นเฉลี่ยต่อปี", 0.0, 15.0, 5.0, step=0.5, key="c1_stock_yield")
+        with a2:
+            with st.container(border=True):
+                fund_yield_pct = st.slider("🧺 % ผลตอบแทนกองทุนเฉลี่ยต่อปี", 0.0, 15.0, 4.0, step=0.5, key="c1_fund_yield")
+            with st.container(border=True):
+                other_yield_pct = st.slider("🏦 % ผลตอบแทนอื่นๆ เฉลี่ยต่อปี (ตราสารหนี้/REITs/ฝากประจำ)", 0.0, 15.0, 3.0, step=0.5, key="c1_other_yield")
 
         c1_submitted = st.form_submit_button("🧮 คำนวณ", use_container_width=True)
 
@@ -487,6 +506,29 @@ def _render_concept2(total_wealth, default_retirement_age):
     st.markdown("#### 🎯 Concept 2: ให้ระบบออกแบบให้")
     st.caption("บอกว่าอยากมีเงินใช้ต่อเดือนเท่าไหร่ ระบบจะคำนวณย้อนกลับให้ว่าต้องมีเงินก้อนเท่าไหร่ และควรแบ่งสัดส่วนลงทุนยังไง")
 
+    # 🆕 ดึง slider "สัดส่วน %" ของเงินลงทุน (หุ้น/กองทุน) ออกมาไว้นอกฟอร์ม เพื่อให้เห็นสัดส่วน
+    # "อื่นๆ" ที่เหลือ (คำนวณอัตโนมัติจาก 100% ลบหุ้นลบกองทุน) อัปเดตแบบสดทันทีที่เลื่อน แทนที่จะ
+    # ต้องกดคำนวณก่อนถึงจะเห็นค่าล่าสุด
+    st.markdown("##### 🎯 แบ่งสัดส่วนเงินที่นำไปลงทุนจริง (ไม่รวมเงินสดสำรอง)")
+    g1, g2, g3 = st.columns(3)
+    with g1:
+        invest_stock_pct = st.slider("📈 % หุ้น (ของเงินลงทุน)", 0, 100, 50, key="c2_invest_stock_pct")
+    with g2:
+        invest_fund_pct = st.slider("🧺 % กองทุน (ของเงินลงทุน)", 0, 100, 30, key="c2_invest_fund_pct")
+    with g3:
+        invest_other_pct = max(100 - invest_stock_pct - invest_fund_pct, 0)
+        st.metric("🏦 % อื่นๆ (ส่วนที่เหลือ)", f"{invest_other_pct}%")
+
+    # 🆕 ตัวเลข remind ยอดรวมแบบสด — เตือนทันทีถ้าหุ้น+กองทุนรวมกันเกิน 100% (กรณีนี้ % อื่นๆ จะ
+    # ติดลบไม่ได้ จึงต้องเตือนแยกจากกรณีปกติ)
+    _live_invest_total = invest_stock_pct + invest_fund_pct
+    if _live_invest_total > 100:
+        st.error(f"⚠️ % หุ้น + % กองทุน รวมกันได้ {_live_invest_total}% — **เกิน 100% ไป {_live_invest_total - 100}%** ลองปรับลดลงหน่อยครับ")
+    else:
+        st.success(f"✅ % หุ้น + % กองทุน รวมกันได้ {_live_invest_total}% เหลือเป็น % อื่นๆ อีก {invest_other_pct}% พอดี")
+
+    st.divider()
+
     # 🔧 ปรับปรุง: ครอบด้วย st.form() ให้ปรับ slider/ตัวเลขให้ครบก่อน แล้วค่อยกดปุ่ม "คำนวณ"
     # ทีเดียว (เหมือนที่ปรับ Concept 1 ไปแล้ว) แทนที่จะคำนวณใหม่ทันทีทุกครั้งที่ขยับแม้แต่ตัวเดียว
     with st.form("concept2_form"):
@@ -511,24 +553,17 @@ def _render_concept2(total_wealth, default_retirement_age):
                     help="ใช้คำนวณผลลัพธ์แบบแตะเงินต้น 4% ด้านล่าง"
                 )
 
-        st.caption("สัดส่วนของเงินที่ **นำไปลงทุนจริง** (ไม่รวมเงินสดสำรอง) แบ่งเป็น 3 ประเภท ปรับได้ตามต้องการ")
+        st.caption("อัตราผลตอบแทนของแต่ละประเภท (ตามสัดส่วนที่เลือกไว้ด้านบน)")
         f1, f2, f3 = st.columns(3)
         with f1:
             with st.container(border=True):
-                invest_stock_pct = st.slider("📈 % หุ้น (ของเงินลงทุน)", 0, 100, 50, key="c2_invest_stock_pct")
-                stock_yield_pct2 = st.slider("% ปันผลหุ้น/ปี", 0.0, 15.0, 5.0, step=0.5, key="c2_stock_yield")
+                stock_yield_pct2 = st.slider("📈 % ปันผลหุ้น/ปี", 0.0, 15.0, 5.0, step=0.5, key="c2_stock_yield")
         with f2:
             with st.container(border=True):
-                invest_fund_pct = st.slider("🧺 % กองทุน (ของเงินลงทุน)", 0, 100, 30, key="c2_invest_fund_pct")
-                fund_yield_pct2 = st.slider("% ผลตอบแทนกองทุน/ปี", 0.0, 15.0, 4.0, step=0.5, key="c2_fund_yield")
+                fund_yield_pct2 = st.slider("🧺 % ผลตอบแทนกองทุน/ปี", 0.0, 15.0, 4.0, step=0.5, key="c2_fund_yield")
         with f3:
             with st.container(border=True):
-                # หมายเหตุ: ค่า invest_other_pct นี้จะอัปเดตก็ต่อเมื่อกดปุ่มคำนวณแล้วเท่านั้น
-                # (เพราะอยู่ในฟอร์ม) ไม่ได้อัปเดตสดทันทีที่ขยับ slider ข้างบนแล้ว เป็นผลข้างเคียง
-                # ปกติของการเปลี่ยนมาใช้ฟอร์ม ไม่ใช่บั๊ก
-                invest_other_pct = max(100 - invest_stock_pct - invest_fund_pct, 0)
-                st.metric("🏦 % อื่นๆ (ส่วนที่เหลือ)", f"{invest_other_pct}%")
-                other_yield_pct2 = st.slider("% ผลตอบแทนอื่นๆ/ปี", 0.0, 15.0, 3.0, step=0.5, key="c2_other_yield")
+                other_yield_pct2 = st.slider("🏦 % ผลตอบแทนอื่นๆ/ปี", 0.0, 15.0, 3.0, step=0.5, key="c2_other_yield")
 
         c2_submitted = st.form_submit_button("🧮 คำนวณ", use_container_width=True)
 
@@ -646,16 +681,20 @@ def _render_concept3(default_retirement_age):
     _pvd_growth_pct = st.session_state.get('retirement_pvd_growth_pct')
     _current_wealth = st.session_state.get('retirement_current_wealth')
     _current_pvd = st.session_state.get('retirement_current_pvd')
-    _projected_wealth = st.session_state.get('retirement_projected_wealth')
 
-    if _current_age is None or _projected_wealth is None:
+    if _current_age is None or _current_wealth is None:
         st.warning(
             "⚠️ กรุณาไปกดปุ่ม \"🧮 คำนวณ\" ในแท็บ \"📊 ประเมินเงินเกษียณ\" ก่อนสักครั้ง "
             "ระบบจะดึงข้อมูลมาใช้คำนวณต่อที่นี่อัตโนมัติ"
         )
         return
 
-    st.info(f"💰 เงินที่คาดว่าจะมีตอนเกษียณ (จากแท็บประเมินเงินเกษียณ): **{_projected_wealth:,.0f} ฿**")
+    # 🔧 ปรับปรุง: เปลี่ยนจากใช้ "เงินที่คาดการณ์ว่าจะมีตอนเกษียณ" (ซึ่งอิงสมมติฐานการออม/ผลตอบแทน
+    # ในอนาคตที่ยังไม่แน่นอน) มาใช้ "เงิน Net Worth ปัจจุบันจริงๆ ณ ตอนนี้" แทน จะได้เห็นชัดๆ ว่า
+    # ถ้าเก็บได้แค่เท่าที่มีอยู่จริงตอนนี้ (ยังไม่นับการออมเพิ่มในอนาคต) เทียบกับเป้าหมายค่าใช้จ่าย
+    # ที่ตั้งไว้ ขาดอยู่เท่าไหร่ ต้องออมเพิ่มอีกเท่าไหร่ถึงจะพอ (ทางเลือก A/B ด้านล่างจะคำนวณส่วน
+    # "ต้องทำอะไรเพิ่ม" จากช่องว่างนี้ต่อไป)
+    st.info(f"💰 เงิน Net Worth ปัจจุบัน (ไม่รวมอสังหาฯ) ณ ตอนนี้: **{_current_wealth:,.0f} ฿**")
 
     # 🔧 ปรับปรุง: ครอบด้วย st.form() ให้ปรับ slider ทั้ง 7 ตัวให้ครบก่อน แล้วค่อยกดปุ่ม "คำนวณ"
     # ทีเดียว (เหมือนที่ปรับ Concept 1/2 ไปแล้ว) แทนที่จะคำนวณใหม่ทันทีทุกครั้งที่ขยับแม้แต่ตัวเดียว
@@ -720,17 +759,17 @@ def _render_concept3(default_retirement_age):
     render_metric_card(r2, "เงินก้อนเดียว (รักษาพยาบาล+รถ+อื่นๆ)", f"{total_lump_sum:,.0f} ฿", icon="📦")
     render_metric_card(r3, "รวมทั้งหมดที่ต้องมี", f"{total_required_wealth:,.0f} ฿", icon="🎯")
 
-    shortfall = total_required_wealth - _projected_wealth
+    shortfall = total_required_wealth - _current_wealth
 
     st.divider()
     if shortfall <= 0:
         st.success(
-            f"🎉 เงินที่คาดว่าจะมีตอนเกษียณ ({_projected_wealth:,.0f} ฿) **เพียงพอ** กับแผนค่าใช้จ่ายนี้แล้วครับ! "
+            f"🎉 เงิน Net Worth ปัจจุบัน ({_current_wealth:,.0f} ฿) **เพียงพอ** กับแผนค่าใช้จ่ายนี้แล้วครับ! "
             f"เหลือเผื่ออีก {abs(shortfall):,.0f} ฿"
         )
     else:
         st.warning(
-            f"⚠️ ยังขาดอยู่ **{shortfall:,.0f} ฿** — เทียบเงินที่คาดว่าจะมี ({_projected_wealth:,.0f} ฿) "
+            f"⚠️ ยังขาดอยู่ **{shortfall:,.0f} ฿** — เทียบเงิน Net Worth ปัจจุบัน ({_current_wealth:,.0f} ฿) "
             f"กับที่ต้องใช้ตามแผนนี้ ({total_required_wealth:,.0f} ฿)"
         )
 
