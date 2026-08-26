@@ -2664,11 +2664,15 @@ def fetch_live_gold_price():
             jewelry_val = None
 
         if bar_val is None or jewelry_val is None:
+            # 🆕 แนบตัวอย่างเนื้อหาจริงที่ดึงได้มาด้วย (ตัดช่องว่าง/บรรทัดว่างส่วนเกินออกก่อน แล้ว
+            # เอาแค่ 400 ตัวอักษรแรก) เพื่อดูว่าเจอหน้าเว็บแบบไหนกันแน่ (หน้าจริง? หน้าเช็คบอท?
+            # หน้า redirect? ข้อความ error อื่นๆ?) โดยไม่ต้องเดาสุ่มแก้ไปเรื่อยๆ
+            _cleaned_preview = ' '.join(full_text.split())[:400]
             _msg = (
                 f"HTTP 200 แต่หาตัวเลขราคาทองไม่เจอ (bar_match={'พบ' if bar_match else 'ไม่พบ'}"
                 f"{'/นอกช่วง' if _bar_out_of_range else ''}, "
                 f"jewelry_match={'พบ' if jewelry_match else 'ไม่พบ'}{'/นอกช่วง' if _jewelry_out_of_range else ''}, "
-                f"ความยาวเนื้อหา={len(full_text)} ตัวอักษร)"
+                f"ความยาวเนื้อหา={len(full_text)} ตัวอักษร) | ตัวอย่างเนื้อหาที่ได้จริง: {_cleaned_preview}"
             )
             print(f"⚠️ ดึงราคาทองไม่สำเร็จ: {_msg}")
             return bar_val, jewelry_val, _msg
