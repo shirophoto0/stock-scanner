@@ -37,6 +37,7 @@ def render_tab_gold(client):
                 and _cached_bar is not None and _cached_jewelry is not None
                 and not _looks_like_stale_fallback
             ):
+                st.session_state['gold_price_status'] = f"✅ ใช้ราคาที่แคชไว้ (ดึงสดล่าสุดเมื่อ {last_update.strftime('%H:%M:%S')})"
                 return _cached_bar, _cached_jewelry
 
         bar_val, jewelry_val = fetch_live_gold_price()
@@ -45,15 +46,35 @@ def render_tab_gold(client):
             st.session_state['scraped_gold_date'] = datetime.now()
             st.session_state['scraped_gold_bar'] = bar_val
             st.session_state['scraped_gold_jewelry'] = jewelry_val
+            st.session_state['gold_price_status'] = f"✅ ดึงราคาสดสำเร็จ ({datetime.now().strftime('%H:%M:%S')})"
             return bar_val, jewelry_val
 
         # Fallback: ถ้า Scrape ไม่สำเร็จ ดึงค่าเดิมมาใช้ หรือใช้ค่าสำรองปัจจุบัน
+        st.session_state['gold_price_status'] = "⚠️ ดึงราคาสดไม่สำเร็จ กำลังใช้ราคาสำรอง/ราคาเก่าที่มีอยู่แทน"
         fallback_bar = st.session_state.get('scraped_gold_bar', 68300.0)
         fallback_jewelry = st.session_state.get('scraped_gold_jewelry', 69100.0)
         return fallback_bar, fallback_jewelry
 
+    # 🆕 ปุ่มบังคับรีเฟรชราคาทองทันที (เคลียร์แคชแล้วดึงสดใหม่) ใช้ทดสอบ/วินิจฉัยปัญหาได้ตรงจุด
+    # โดยไม่ต้องพึ่งการเช็ค log ฝั่งเซิร์ฟเวอร์ เพราะเห็นผลตรงในหน้าเว็บทันที
+    _refresh_col1, _refresh_col2 = st.columns([3, 1])
+    with _refresh_col2:
+        if st.button("🔄 รีเฟรชราคาทองคำ", use_container_width=True):
+            for _k in ['scraped_gold_date', 'scraped_gold_bar', 'scraped_gold_jewelry', 'gold_price_status']:
+                st.session_state.pop(_k, None)
+            st.rerun()
+
     # เรียกใช้งานฟังก์ชัน Scraping
     ref_gold_bar, ref_gold_jewelry = get_gold_price_by_scraping()
+
+    # 🆕 แสดงสถานะจริงของการดึงราคาไว้ให้เห็นตรงในหน้าเว็บ (แทนการต้องเช็ค log ฝั่งเซิร์ฟเวอร์
+    # ซึ่งบางครั้งอาจไม่แสดงผลตามที่คาดไว้) เห็นผลได้ทันทีว่าดึงสดสำเร็จหรือใช้ราคาสำรองอยู่
+    with _refresh_col1:
+        _status_msg = st.session_state.get('gold_price_status', "✅ ดึงราคาสดสำเร็จล่าสุด")
+        if "⚠️" in _status_msg:
+            st.warning(_status_msg)
+        else:
+            st.success(_status_msg)
 
 
     # แสดงผลราคาอ้างอิง
