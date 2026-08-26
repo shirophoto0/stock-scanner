@@ -71,9 +71,15 @@ def render_tab_gold(client):
 
     # 🆕 แสดงสถานะจริงของการดึงราคาไว้ให้เห็นตรงในหน้าเว็บ (แทนการต้องเช็ค log ฝั่งเซิร์ฟเวอร์
     # ซึ่งบางครั้งอาจไม่แสดงผลตามที่คาดไว้) เห็นผลได้ทันทีว่าดึงสดสำเร็จหรือใช้ราคาสำรองอยู่
+    # 🔧 ปรับปรุง: ข้อความยาวขึ้น (มีตัวอย่างเนื้อหาที่ดึงได้จริงแนบมาด้วย) แยกส่วนสั้นๆ ไว้บน
+    # และเนื้อหายาวๆ ไว้ในกล่องโค้ด (st.code) อ่านง่ายกว่าโยนไว้ในบรรทัดเดียวยาวๆ
     with _refresh_col1:
         _status_msg = st.session_state.get('gold_price_status', "✅ ดึงราคาสดสำเร็จล่าสุด")
-        if "⚠️" in _status_msg:
+        if "⚠️" in _status_msg and "| ตัวอย่างเนื้อหาที่ได้จริง:" in _status_msg:
+            _short_part, _preview_part = _status_msg.split("| ตัวอย่างเนื้อหาที่ได้จริง:", 1)
+            st.warning(_short_part.strip())
+            st.code(_preview_part.strip(), language=None)
+        elif "⚠️" in _status_msg:
             st.warning(_status_msg)
         else:
             st.success(_status_msg)
