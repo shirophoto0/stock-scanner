@@ -1513,6 +1513,13 @@ def get_total_market_value():
             try:
                 # ดึงราคาปิดล่าสุด
                 m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+                # 🔧 แก้บั๊ก: เดิมถ้าดึงราคาได้แต่ค่าที่ได้ดันเป็น NaN (เช่น หุ้นถูกพักการซื้อขาย
+                # หรือข้อมูลผิดปกติชั่วคราว) จะไม่เข้า except เลย เพราะ NaN ไม่ใช่ error แต่เป็น
+                # float ที่ถูกต้องตามชนิดข้อมูล ทำให้ total_val กลายเป็น NaN ไปด้วยทั้งก้อน แล้ว
+                # ลามไปทำให้หน้า Risk Management พังตอนแปลงเป็น int() ตอนนี้เช็ค NaN เพิ่ม แล้ว
+                # ตกไปใช้ราคาต้นทุนแทนเหมือนกับกรณี error ปกติ
+                if pd.isna(m_price):
+                    m_price = avg_price
             except:
                 m_price = avg_price # ถ้าดึงไม่ได้ ให้ใช้ต้นทุนไปก่อน
             total_val += (shares * m_price)
