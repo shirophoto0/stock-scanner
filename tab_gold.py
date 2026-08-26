@@ -24,11 +24,20 @@ def render_tab_gold(client):
     # ทนทานกว่าเดิม) ใช้ร่วมกับฟังก์ชันคำนวณ Net Worth สดในรายงานอัตโนมัติรายเดือนด้วย
     def get_gold_price_by_scraping():
         # ตรวจสอบ Cache ใน Session ไม่ให้ยิงถี่เกินไป (ภายใน 3 ชม.)
+        # 🔧 กันเผื่อเพิ่ม: ถ้าค่าที่แคชไว้ดันตรงกับราคาสำรอง (Fallback) เป๊ะๆ (68,300 หรือ 69,100)
+        # ถือว่าน่าสงสัยว่าอาจเป็นค่าค้างจากตอนที่ดึงสดไม่สำเร็จมาก่อนหน้านี้ ให้ข้ามแคชแล้วลองดึง
+        # สดใหม่ทันที แทนที่จะเชื่อค่าที่แคชไว้ตรงๆ
         if 'scraped_gold_date' in st.session_state:
             last_update = st.session_state['scraped_gold_date']
-            if isinstance(last_update, datetime) and (datetime.now() - last_update) < timedelta(hours=3):
-                if 'scraped_gold_bar' in st.session_state and 'scraped_gold_jewelry' in st.session_state:
-                    return st.session_state['scraped_gold_bar'], st.session_state['scraped_gold_jewelry']
+            _cached_bar = st.session_state.get('scraped_gold_bar')
+            _cached_jewelry = st.session_state.get('scraped_gold_jewelry')
+            _looks_like_stale_fallback = _cached_bar == 68300.0 or _cached_jewelry == 69100.0
+            if (
+                isinstance(last_update, datetime) and (datetime.now() - last_update) < timedelta(hours=3)
+                and _cached_bar is not None and _cached_jewelry is not None
+                and not _looks_like_stale_fallback
+            ):
+                return _cached_bar, _cached_jewelry
 
         bar_val, jewelry_val = fetch_live_gold_price()
 
