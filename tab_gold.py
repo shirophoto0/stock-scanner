@@ -40,7 +40,7 @@ def render_tab_gold(client):
                 st.session_state['gold_price_status'] = f"✅ ใช้ราคาที่แคชไว้ (ดึงสดล่าสุดเมื่อ {last_update.strftime('%H:%M:%S')})"
                 return _cached_bar, _cached_jewelry
 
-        bar_val, jewelry_val = fetch_live_gold_price()
+        bar_val, jewelry_val, debug_msg = fetch_live_gold_price()
 
         if bar_val is not None and jewelry_val is not None:
             st.session_state['scraped_gold_date'] = datetime.now()
@@ -50,7 +50,9 @@ def render_tab_gold(client):
             return bar_val, jewelry_val
 
         # Fallback: ถ้า Scrape ไม่สำเร็จ ดึงค่าเดิมมาใช้ หรือใช้ค่าสำรองปัจจุบัน
-        st.session_state['gold_price_status'] = "⚠️ ดึงราคาสดไม่สำเร็จ กำลังใช้ราคาสำรอง/ราคาเก่าที่มีอยู่แทน"
+        # 🔧 แก้บั๊ก: เดิมโชว์แค่ข้อความทั่วไป ไม่บอกสาเหตุจริง ตอนนี้แนบข้อความ debug_msg ที่ได้
+        # จาก fetch_live_gold_price() มาแสดงต่อท้ายด้วยเลย เห็นสาเหตุจริงตรงในหน้าเว็บทันที
+        st.session_state['gold_price_status'] = f"⚠️ ดึงราคาสดไม่สำเร็จ (สาเหตุ: {debug_msg}) กำลังใช้ราคาสำรอง/ราคาเก่าที่มีอยู่แทน"
         fallback_bar = st.session_state.get('scraped_gold_bar', 68300.0)
         fallback_jewelry = st.session_state.get('scraped_gold_jewelry', 69100.0)
         return fallback_bar, fallback_jewelry
