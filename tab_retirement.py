@@ -666,35 +666,71 @@ def _render_concept2(total_wealth, default_retirement_age):
 def _render_concept3(default_retirement_age):
     """
     Concept 3: วางแผนค่าใช้จ่ายหลังเกษียณอย่างละเอียด (เงินใช้รายเดือน, รักษาพยาบาล, ท่องเที่ยว,
-    ซื้อรถ, บำรุงบ้าน, อื่นๆ) แล้วเทียบกับเงินที่คาดว่าจะเก็บได้ ถ้าขาด จะบอกว่าต้องออมเพิ่มเท่าไหร่
+    ซื้อรถ, บำรุงบ้าน, อื่นๆ) แล้วเทียบกับเงินที่มีอยู่จริงตอนนี้ ถ้าขาด จะบอกว่าต้องออมเพิ่มเท่าไหร่
     (คงผลตอบแทนเดิม) หรือต้องได้ผลตอบแทนอย่างน้อยกี่% (คงเงินออมเดิม) ถึงจะพอ
+    🔧 แก้บั๊ก: เดิม "ล็อก" ให้ต้องไปกดคำนวณในแท็บ "ประเมินเงินเกษียณ" ก่อนเสมอ ทั้งที่ Concept นี้
+    เปลี่ยนมาใช้เงิน Net Worth ปัจจุบันเป็นฐานคำนวณแล้ว (ไม่ได้พึ่งผลจากแท็บนั้นโดยตรงอีกต่อไป)
+    ตอนนี้ดึง Net Worth/PVD ปัจจุบันจากแท็บภาพรวมโดยตรง (เหมือนที่แท็บประเมินเงินเกษียณทำ) และมี
+    ช่องกรอกอายุ/เงินออม/อัตราผลตอบแทนเป็นของตัวเอง (ดึงค่าจากแท็บประเมินเงินเกษียณมาเป็นค่าเริ่มต้น
+    ให้ถ้ามีอยู่แล้ว แต่ไม่บังคับว่าต้องไปกดคำนวณที่นั่นก่อนอีกต่อไป)
     """
     st.markdown("#### 🩺 Concept 3: วางแผนค่าใช้จ่ายละเอียดหลังเกษียณ")
-    st.caption("ระบุค่าใช้จ่ายแต่ละประเภทอย่างละเอียด ระบบจะเทียบกับเงินที่คาดว่าจะมี แล้วบอกว่าขาดเท่าไหร่ ต้องทำยังไงถึงจะพอ")
+    st.caption("ระบุค่าใช้จ่ายแต่ละประเภทอย่างละเอียด ระบบจะเทียบกับเงินที่มีอยู่จริงตอนนี้ แล้วบอกว่าขาดเท่าไหร่ ต้องทำยังไงถึงจะพอ")
 
-    # ดึงพารามิเตอร์จากแท็บ "ประเมินเงินเกษียณ" ที่คำนวณไว้แล้ว (ต้องกดคำนวณที่แท็บนั้นก่อน)
-    _current_age = st.session_state.get('retirement_current_age')
-    _retirement_age = st.session_state.get('retirement_age_selected', default_retirement_age)
-    _monthly_savings = st.session_state.get('retirement_monthly_savings')
-    _annual_savings_increase_pct = st.session_state.get('retirement_annual_savings_increase_pct')
-    _annual_return_pct = st.session_state.get('retirement_annual_return_pct')
-    _pvd_growth_pct = st.session_state.get('retirement_pvd_growth_pct')
-    _current_wealth = st.session_state.get('retirement_current_wealth')
-    _current_pvd = st.session_state.get('retirement_current_pvd')
+    # ดึง Net Worth / PVD ปัจจุบันจากแท็บภาพรวมโดยตรง (ตัวเดียวกับที่แท็บ "ประเมินเงินเกษียณ" ใช้
+    # เป็นจุดเริ่มต้น) — ต้องเปิดแท็บภาพรวมมาแล้วอย่างน้อย 1 ครั้งในเซสชันนี้เท่านั้น ไม่ต้องพึ่ง
+    # การกดคำนวณในแท็บประเมินเงินเกษียณเลย
+    _current_wealth = st.session_state.get('net_worth_excl_re')
+    _current_pvd_from_overview = st.session_state.get('pvd_value', 0.0)
 
-    if _current_age is None or _current_wealth is None:
+    if _current_wealth is None:
         st.warning(
-            "⚠️ กรุณาไปกดปุ่ม \"🧮 คำนวณ\" ในแท็บ \"📊 ประเมินเงินเกษียณ\" ก่อนสักครั้ง "
-            "ระบบจะดึงข้อมูลมาใช้คำนวณต่อที่นี่อัตโนมัติ"
+            "⚠️ ยังไม่มีข้อมูล Net Worth ปัจจุบัน — กรุณาเปิดแท็บ \"🌐 ภาพรวมความมั่งคั่ง\" → "
+            "\"ภาพรวม Net Worth & สัดส่วนสินทรัพย์\" สักครั้งก่อน (ระบบจะดึงมาให้อัตโนมัติ) แล้วค่อยกลับมาที่นี่"
         )
         return
 
-    # 🔧 ปรับปรุง: เปลี่ยนจากใช้ "เงินที่คาดการณ์ว่าจะมีตอนเกษียณ" (ซึ่งอิงสมมติฐานการออม/ผลตอบแทน
-    # ในอนาคตที่ยังไม่แน่นอน) มาใช้ "เงิน Net Worth ปัจจุบันจริงๆ ณ ตอนนี้" แทน จะได้เห็นชัดๆ ว่า
-    # ถ้าเก็บได้แค่เท่าที่มีอยู่จริงตอนนี้ (ยังไม่นับการออมเพิ่มในอนาคต) เทียบกับเป้าหมายค่าใช้จ่าย
-    # ที่ตั้งไว้ ขาดอยู่เท่าไหร่ ต้องออมเพิ่มอีกเท่าไหร่ถึงจะพอ (ทางเลือก A/B ด้านล่างจะคำนวณส่วน
-    # "ต้องทำอะไรเพิ่ม" จากช่องว่างนี้ต่อไป)
     st.info(f"💰 เงิน Net Worth ปัจจุบัน (ไม่รวมอสังหาฯ) ณ ตอนนี้: **{_current_wealth:,.0f} ฿**")
+
+    # 🆕 ข้อมูลสำหรับคำนวณ "ทางเลือก A/B" (ต้องออมเพิ่มเท่าไหร่ / ต้องได้ผลตอบแทนเท่าไหร่) — ดึง
+    # ค่าจากแท็บ "ประเมินเงินเกษียณ" มาเป็นค่าเริ่มต้นให้ถ้ามีอยู่แล้ว (สะดวก ไม่ต้องกรอกซ้ำ) แต่ถ้า
+    # ยังไม่เคยกดคำนวณที่นั่น จะใช้ค่าเริ่มต้นทั่วไปแทน ไม่ล็อกไม่ให้ใช้งานอีกต่อไป
+    _default_birth_year = 1980
+    _saved_current_age = st.session_state.get('retirement_current_age')
+    _default_current_age = _saved_current_age if _saved_current_age else (date.today().year - _default_birth_year)
+    _default_monthly_savings = st.session_state.get('retirement_monthly_savings', 20000.0)
+    _default_savings_increase = st.session_state.get('retirement_annual_savings_increase_pct', 3.0)
+    _default_annual_return = st.session_state.get('retirement_annual_return_pct', 7.0)
+    _default_pvd_growth = st.session_state.get('retirement_pvd_growth_pct', 6.0)
+    _current_pvd = st.session_state.get('retirement_current_pvd', _current_pvd_from_overview)
+
+    with st.container(border=True):
+        st.markdown("##### ⚙️ ข้อมูลสำหรับคำนวณทางเลือก (ออมเพิ่ม / ต้องการผลตอบแทนเท่าไหร่)")
+        h1, h2, h3 = st.columns(3)
+        with h1:
+            _current_age = st.number_input(
+                "อายุปัจจุบัน", min_value=18, max_value=90, value=int(_default_current_age), step=1, key="c3_current_age"
+            )
+        with h2:
+            _monthly_savings = st.number_input(
+                "เงินออม/ลงทุนเพิ่มต่อเดือน (บาท)", min_value=0.0, value=float(_default_monthly_savings),
+                step=1000.0, format="%.0f", key="c3_monthly_savings"
+            )
+        with h3:
+            _annual_return_pct = st.slider(
+                "% ผลตอบแทนพอร์ตทั่วไปต่อปี", 0.0, 20.0, float(_default_annual_return), step=0.5, key="c3_annual_return"
+            )
+        h4, h5 = st.columns(2)
+        with h4:
+            _annual_savings_increase_pct = st.slider(
+                "% อัตราเพิ่มเงินเก็บต่อปี (ทบต้น)", 0.0, 20.0, float(_default_savings_increase), step=0.5, key="c3_savings_increase"
+            )
+        with h5:
+            _pvd_growth_pct = st.slider(
+                "% การเติบโตของ PVD ต่อปี", 0.0, 20.0, float(_default_pvd_growth), step=0.5, key="c3_pvd_growth"
+            )
+
+    _retirement_age = st.session_state.get('retirement_age_selected', default_retirement_age)
 
     # 🔧 ปรับปรุง: ครอบด้วย st.form() ให้ปรับ slider ทั้ง 7 ตัวให้ครบก่อน แล้วค่อยกดปุ่ม "คำนวณ"
     # ทีเดียว (เหมือนที่ปรับ Concept 1/2 ไปแล้ว) แทนที่จะคำนวณใหม่ทันทีทุกครั้งที่ขยับแม้แต่ตัวเดียว
