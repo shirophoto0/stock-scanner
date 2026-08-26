@@ -14,6 +14,7 @@ import os
 from datetime import date
 from backend_functions import (
     get_net_worth_trend_data,
+    compute_live_net_worth,
     generate_net_worth_pdf_report,
     send_telegram_document,
 )
@@ -32,39 +33,6 @@ SPREADSHEET_APP_TITLES = {
 }
 
 
-def build_asset_breakdown_from_trend(trend_df):
-    """
-    ดึงยอดล่าสุด (แถวสุดท้าย) ของแต่ละหมวดสินทรัพย์จาก trend_df มาทำเป็น asset_breakdown
-    สำหรับใส่ในตาราง/กราฟวงกลมของรายงาน PDF (ใช้ยอดจากประวัติรายเดือนล่าสุด เหมาะกับรายงาน
-    รายเดือนอยู่แล้ว ไม่ต้องคำนวณยอดปัจจุบันแบบเรียลไทม์ซ้ำอีกรอบ)
-    """
-    if trend_df.empty:
-        return [], 0.0, 0.0
-
-    latest = trend_df.iloc[-1]
-    category_labels = {
-        'Stock+TFEX': 'Stock + TFEX Portfolio',
-        'Mutual_Fund': 'Mutual Funds',
-        'PVD': 'Provident Fund (PVD)',
-        'Insurance': 'Unit-Linked Insurance + Social Security',
-        'Coop': 'Cooperative Fund',
-        'Bank': 'Bank Accounts',
-        'Gold': 'Gold',
-        'Real_Estate': 'Real Estate',
-    }
-
-    asset_breakdown = []
-    for col, label in category_labels.items():
-        if col in latest.index:
-            value = float(latest[col])
-            if value > 0:
-                asset_breakdown.append((label, value))
-
-    net_worth_total = float(latest.get('Total', 0))
-    net_worth_excl_re = float(latest.get('Total_Excl_RE', 0))
-    return asset_breakdown, net_worth_excl_re, net_worth_total
-
-
 def main():
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not bot_token:
@@ -78,13 +46,23 @@ def main():
             continue
 
         print(f"📊 กำลังสร้างรายงานสำหรับ {spreadsheet_name}...")
-        trend_df = get_net_worth_trend_data(spreadsheet_name)
 
-        if trend_df.empty:
-            print(f"⚠️ {spreadsheet_name}: ยังไม่มีข้อมูลแนวโน้มเพียงพอ ข้ามการส่งรายงานเดือนนี้")
+        # 🔧 แก้บั๊ก: เดิมใช้ยอดที่ "สแตมป์ไว้รายเดือน" (จากชีต History ต่างๆ) มาสร้างสรุป/ตาราง
+        # ในรายงาน แต่แต่ละหมวดสแตมป์คนละวันกัน (ตามแต่ว่าใครไปเปิดหน้าเว็บ/ทำธุรกรรมวันไหน) ทำให้
+        # ตัวเลขรวมออกมาไม่ตรงกับที่หน้าเว็บแสดง ณ ตอนนั้นเป๊ะๆ โดยเฉพาะหุ้น+TFEX กับทองคำที่ราคา
+        # ขยับทุกวัน ตอนนี้เปลี่ยนมาใช้ compute_live_net_worth() คำนวณสดใหม่ทั้งหมด ตรงกับหน้าเว็บ
+        # เป๊ะๆ แทน — ส่วนกราฟเส้นแนวโน้มด้านล่างยังคงใช้ข้อมูลย้อนหลังแบบเดิม (get_net_worth_trend_data)
+        # เพราะกราฟแนวโน้มต้องดูพัฒนาการข้ามเวลาอยู่แล้ว ไม่ใช่ตัวเลข ณ จุดเดียว
+        live_data = compute_live_net_worth(spreadsheet_name)
+        asset_breakdown = live_data['asset_breakdown']
+        net_worth_excl_re = live_data['net_worth_excl_re']
+        net_worth_total = live_data['net_worth_total']
+
+        if not asset_breakdown or net_worth_total <= 0:
+            print(f"⚠️ {spreadsheet_name}: ยังไม่มีข้อมูลสินทรัพย์เพียงพอ ข้ามการส่งรายงานเดือนนี้")
             continue
 
-        asset_breakdown, net_worth_excl_re, net_worth_total = build_asset_breakdown_from_trend(trend_df)
+        trend_df = get_net_worth_trend_data(spreadsheet_name)
         app_title = SPREADSHEET_APP_TITLES.get(spreadsheet_name, spreadsheet_name)
 
         pdf_bytes = generate_net_worth_pdf_report(
