@@ -795,25 +795,46 @@ def _render_concept3(default_retirement_age):
     render_metric_card(r2, "เงินก้อนเดียว (รักษาพยาบาล+รถ+อื่นๆ)", f"{total_lump_sum:,.0f} ฿", icon="📦")
     render_metric_card(r3, "รวมทั้งหมดที่ต้องมี", f"{total_required_wealth:,.0f} ฿", icon="🎯")
 
-    shortfall = total_required_wealth - _current_wealth
+    # 🔧 แก้บั๊ก: เดิมเทียบ "เงินก้อนวันนี้" ตรงๆ กับ "เงินที่ต้องมีตอนเกษียณ" โดยไม่ได้คิดว่าเงิน
+    # ก้อนนี้ (ทั้ง PVD และส่วนอื่น) จะเติบโตต่อไปเองระหว่างทางจนถึงวันเกษียณด้วย ทำให้ตัวเลข "ขาด
+    # เท่าไหร่" สูงเกินจริงไปมาก (นับเหมือนเงินหยุดโตนิ่งๆ) ตอนนี้เปลี่ยนมาใช้สูตรโปรเจกชันแบบ
+    # เดียวกับแท็บ "ประเมินเงินเกษียณ" — แยกคำนวณ PVD โตด้วยอัตราของตัวเอง (ไม่ต้องพึ่งเงินออมเพิ่ม
+    # รายเดือน เพราะ PVD โตเองผ่านเงินสมทบจากนายจ้าง+ผลตอบแทน) กับส่วนอื่นโตด้วยเงินออมที่มีอยู่ +
+    # อัตราผลตอบแทนทั่วไป แล้วค่อยเทียบผลรวมที่โปรเจกชันได้กับเงินที่ต้องมี ได้ "ส่วนที่ขาดจริงๆ"
+    # ที่แม่นยำกว่าเดิมมาก — ทำให้ "ทางเลือก A" (ออมเพิ่มต่อเดือน) กลายเป็นตัวเลขที่แยก PVD ออกไป
+    # แล้วจริงๆ (เป็นแค่ส่วนที่ต้องออมเพิ่มเติมจากที่มีอยู่ ไม่ได้รวมเอาการเติบโตของ PVD มาปนด้วย)
+    years_to_go = max(_retirement_age - _current_age, 0)
+    other_current = max(_current_wealth - _current_pvd, 0.0)
+
+    _proj_ages, _proj_totals, projected_wealth_at_retirement = _project_growth(
+        _current_age, _retirement_age, other_current, _current_pvd,
+        _monthly_savings, _annual_savings_increase_pct, _assumed_retirement_return, _pvd_growth_pct
+    )
+
+    shortfall = total_required_wealth - projected_wealth_at_retirement
 
     st.divider()
+    st.markdown("##### 📈 เงินที่คาดว่าจะมีตอนเกษียณ (คำนวณแยกการเติบโตของ PVD ออกจากส่วนอื่น)")
+    p1, p2, p3 = st.columns(3)
+    render_metric_card(p1, f"เงิน Net Worth คาดว่าจะมีตอนอายุ {_retirement_age}", f"{projected_wealth_at_retirement:,.0f} ฿", icon="📈")
+    render_metric_card(p2, "เป้าหมายที่ต้องมี", f"{total_required_wealth:,.0f} ฿", icon="🎯")
+    render_metric_card(
+        p3, "ส่วนต่าง", f"{abs(shortfall):,.0f} ฿", icon="✅" if shortfall <= 0 else "⚠️",
+        delta="เกินเป้าหมาย" if shortfall <= 0 else "ยังขาดอยู่", delta_positive=(shortfall <= 0)
+    )
+
     if shortfall <= 0:
         st.success(
-            f"🎉 เงิน Net Worth ปัจจุบัน ({_current_wealth:,.0f} ฿) **เพียงพอ** กับแผนค่าใช้จ่ายนี้แล้วครับ! "
-            f"เหลือเผื่ออีก {abs(shortfall):,.0f} ฿"
+            f"🎉 ตามแผนการออมปัจจุบัน คาดว่าจะมีเงินพอตามเป้าหมายตอนอายุ {_retirement_age} ปีครับ! "
+            f"(เกินเป้าหมายไปอีก {abs(shortfall):,.0f} ฿)"
         )
     else:
-        st.warning(
-            f"⚠️ ยังขาดอยู่ **{shortfall:,.0f} ฿** — เทียบเงิน Net Worth ปัจจุบัน ({_current_wealth:,.0f} ฿) "
-            f"กับที่ต้องใช้ตามแผนนี้ ({total_required_wealth:,.0f} ฿)"
-        )
+        st.warning(f"⚠️ ตามแผนการออมปัจจุบัน คาดว่าจะยังขาดอยู่ **{shortfall:,.0f} ฿** ตอนอายุ {_retirement_age} ปี")
 
         st.markdown("##### 🛠️ จะปิดช่องว่างนี้ได้ยังไง (เลือกทำอย่างใดอย่างหนึ่งก็พอ)")
-        years_to_go = max(_retirement_age - _current_age, 0)
-        other_current = max(_current_wealth - _current_pvd, 0.0)
 
-        # ทางเลือก A: ออมเพิ่มต่อเดือน (คงอัตราผลตอบแทนเดิมไว้)
+        # ทางเลือก A: ออมเพิ่มต่อเดือน "เฉพาะส่วนที่ไม่ใช่ PVD" (คงอัตราผลตอบแทนเดิมไว้) — PVD
+        # เติบโตของมันเองอยู่แล้วตามอัตราที่ตั้งไว้ด้านบน ไม่ต้องพึ่งเงินออมเพิ่มส่วนนี้เลย
         _extra_monthly = _required_monthly_savings(shortfall, years_to_go, _assumed_retirement_return)
 
         # ทางเลือก B: หาอัตราผลตอบแทนขั้นต่ำที่ต้องการ (คงเงินออมเดิมไว้) ด้วย Binary Search
@@ -825,10 +846,10 @@ def _render_concept3(default_retirement_age):
 
         opt1, opt2 = st.columns(2)
         render_metric_card(
-            opt1, "ทางเลือก A: ออมเพิ่มต่อเดือน", f"+{_extra_monthly:,.0f} ฿/เดือน",
+            opt1, "ทางเลือก A: ออมเพิ่มต่อเดือน (ไม่รวม PVD)", f"+{_extra_monthly:,.0f} ฿/เดือน",
             icon="💰", caption=(
                 f"รวมเป็น {_monthly_savings + _extra_monthly:,.0f} ฿/เดือน "
-                f"(คงผลตอบแทนเดิม {_assumed_retirement_return:.1f}%/ปี)"
+                f"(คงผลตอบแทนเดิม {_assumed_retirement_return:.1f}%/ปี, PVD โตแยกต่างหากที่ {_pvd_growth_pct:.1f}%/ปี อยู่แล้ว)"
             )
         )
         render_metric_card(
