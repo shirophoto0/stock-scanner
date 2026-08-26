@@ -27,8 +27,10 @@ from google.oauth2.service_account import Credentials
 from plotly.subplots import make_subplots
 from PIL import Image
 import time
+import re
 import random
 from gspread.exceptions import APIError
+from bs4 import BeautifulSoup
 from constants import SET100_TICKERS
 from theme import style_plotly
 
@@ -2564,28 +2566,12 @@ def compute_live_net_worth(spreadsheet_name):
 
     total_stock_and_tfex = total_stock_value + tfex_net_worth
 
-    # --- ทองคำ: ดึงราคาสดจากเว็บสมาคมค้าทองคำ (เหมือนหน้าเว็บ) ---
+    # --- ทองคำ: ดึงราคาสดจากเว็บสมาคมค้าทองคำ (ใช้ฟังก์ชันกลาง fetch_live_gold_price() ที่แก้
+    # ไปแล้ว ดึงจากเว็บ classic แทนเว็บใหม่ที่โหลดราคาผ่าน JavaScript) ---
     gold_records = get_records_safe('Gold_Portfolio')
-    ref_gold_bar, ref_gold_jewelry = 68300.0, 69100.0
-    try:
-        headers_req = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-        resp = requests.get("https://www.goldtraders.or.th/", headers=headers_req, timeout=8)
-        if resp.status_code == 200:
-            from bs4 import BeautifulSoup
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            prices = []
-            for span in soup.find_all('span'):
-                text = span.get_text().strip().replace(',', '')
-                try:
-                    val = float(text)
-                    if 30000 <= val <= 100000:
-                        prices.append(val)
-                except ValueError:
-                    pass
-            if len(prices) >= 2:
-                ref_gold_bar, ref_gold_jewelry = prices[0], prices[1]
-    except Exception:
-        pass  # ดึงสดไม่สำเร็จ ใช้ราคาสำรองที่ตั้งไว้ต่อไป
+    _live_bar, _live_jewelry = fetch_live_gold_price()
+    ref_gold_bar = _live_bar if _live_bar is not None else 68300.0
+    ref_gold_jewelry = _live_jewelry if _live_jewelry is not None else 69100.0
 
     total_gold_value = 0.0
     for row in gold_records:
@@ -2624,3 +2610,49 @@ def compute_live_net_worth(spreadsheet_name):
         'net_worth_excl_re': net_worth_excl_re,
         'net_worth_total': net_worth_total,
     }
+
+
+# =============================================================
+# 🆕 แก้บั๊ก: ฟังก์ชันดึงราคาทองสดเดิม (เดิมอยู่กระจายซ้ำใน tab_gold.py และในฟังก์ชัน
+# compute_live_net_worth ด้านบน) ดึงราคาไม่สำเร็จเลยสักครั้ง เพราะเว็บสมาคมค้าทองคำหลัก
+# (www.goldtraders.or.th) ย้ายไปเป็น React App ที่โหลดราคาผ่าน JavaScript หลังโหลดหน้าเสร็จ
+# (ข้อมูลไม่ได้ฝังมาใน HTML ตอนโหลดหน้าครั้งแรกเลย) ดึงด้วย requests/BeautifulSoup ตรงๆ จึงเจอแต่
+# ข้อความ "กำลังโหลด..." ทำให้ตกไปใช้ราคาสำรอง (Fallback) ตลอดเวลา ไม่เคยอัปเดตจริงเลยสักครั้ง
+# ตอนนี้เปลี่ยนไปดึงจากเว็บเวอร์ชัน "classic" (classic.goldtraders.or.th) แทน ซึ่งยังเป็น HTML
+# แบบดั้งเดิมที่ราคาฝังมาในหน้าเพจตรงๆ (เจอผ่านลิงก์ "ไปยังเว็บไซต์เดิม" บนเว็บใหม่) พร้อมเปลี่ยน
+# วิธีค้นหาจากการไล่ดู <span> ทุกตัว (เดิม เปราะบางมาก) มาเป็นการค้นหาข้อความด้วย Regex รอบคำว่า
+# "ทองคำแท่ง 96.5%" / "ทองรูปพรรณ 96.5%" คู่กับ "ขายออก" แทน ทนทานต่อการเปลี่ยนโครงสร้าง HTML
+# เล็กน้อยได้ดีกว่าเดิมมาก รวมเป็นฟังก์ชันกลางจุดเดียว ใช้ร่วมกันได้ทั้งหน้าเว็บทองคำและรายงาน
+# =============================================================
+def fetch_live_gold_price():
+    """
+    ดึงราคาทองคำแท่ง/ทองรูปพรรณ (ขายออก) สดจากเว็บสมาคมค้าทองคำ คืนค่าเป็น
+    (ราคาทองคำแท่งขายออก, ราคาทองรูปพรรณขายออก) — คืนค่าเป็น (None, None) ถ้าดึงไม่สำเร็จ
+    ให้ผู้เรียกตัดสินใจเองว่าจะใช้ค่าสำรองอะไรต่อ (ไม่ใส่ค่าสำรองไว้ในฟังก์ชันนี้ตรงๆ เพื่อไม่ให้
+    ผู้เรียกเข้าใจผิดว่าดึงสำเร็จทั้งที่จริงๆ ได้ค่าสำรองมา)
+    """
+    try:
+        headers_req = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        resp = requests.get("https://classic.goldtraders.or.th/", headers=headers_req, timeout=8)
+        if resp.status_code != 200:
+            return None, None
+
+        soup = BeautifulSoup(resp.text, 'html.parser')
+        full_text = soup.get_text()
+
+        bar_match = re.search(r'ทองคำแท่ง\s*96\.5%.*?ขายออก\D{0,10}([\d,]+\.?\d*)', full_text, re.DOTALL)
+        jewelry_match = re.search(r'ทองรูปพรรณ\s*96\.5%.*?ขายออก\D{0,10}([\d,]+\.?\d*)', full_text, re.DOTALL)
+
+        bar_val = float(bar_match.group(1).replace(',', '')) if bar_match else None
+        jewelry_val = float(jewelry_match.group(1).replace(',', '')) if jewelry_match else None
+
+        # กันเผื่อ Regex จับตัวเลขผิดเพี้ยนไปนอกช่วงราคาทองที่สมเหตุสมผล (เช่น จับเลขปี/รหัสอื่น
+        # มาแทน) ราคาทองคำควรอยู่ในช่วงหลักหมื่นบาทเสมอ ไม่ใช่หลักสิบ/ร้อย/ล้าน
+        if bar_val is not None and not (10000 <= bar_val <= 200000):
+            bar_val = None
+        if jewelry_val is not None and not (10000 <= jewelry_val <= 200000):
+            jewelry_val = None
+
+        return bar_val, jewelry_val
+    except Exception:
+        return None, None
