@@ -115,7 +115,12 @@ def render_tab_risk():
         st.error("⚠️ ราคา Stop Loss ต้องต่ำกว่าราคาซื้อปัจจุบันครับ!")
     else:
         shares_by_risk = max_risk_money / risk_per_share       
-        shares_by_budget = effective_budget / current_p         
+        shares_by_budget = effective_budget / current_p
+        # 🔧 กันเผื่อเพิ่ม: ถ้ามีค่า NaN หลุดมาจากจุดใดจุดหนึ่ง (เช่น ราคาหุ้นดึงมาผิดปกติ) ให้แจ้ง
+        # เตือนตรงๆ แทนที่จะปล่อยให้ int() พังแบบไม่มีคำอธิบาย
+        if pd.isna(shares_by_risk) or pd.isna(shares_by_budget):
+            st.error("⚠️ คำนวณไม่ได้ครับ เนื่องจากมีข้อมูลราคาบางส่วนผิดปกติ (NaN) ลองรีเฟรชหน้าเว็บใหม่อีกครั้ง")
+            st.stop()
         shares_to_buy = int(min(shares_by_risk, shares_by_budget))
         total_buy_value = shares_to_buy * current_p
 
