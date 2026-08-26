@@ -6,7 +6,7 @@ import streamlit as st
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
-from backend_functions import get_worksheet_safely, get_active_sheet_name
+from backend_functions import get_worksheet_safely, get_active_sheet_name, fetch_live_gold_price
 from theme import render_metric_card
 
 
@@ -14,12 +14,14 @@ def render_tab_gold(client):
     st.markdown("### 🟡 จัดการพอร์ตการลงทุนทองคำ")
     st.markdown("เลือกประเภทการลงทุน: ทองคำแท่ง/ทองรูปพรรณ หรือ เทรดทอง/กองทุนทอง (ระบบดึงข้อมูลแบบ Web Scraping สดจากเว็บอ้างอิง)")
 
-    import requests
-    import pandas as pd
-    from bs4 import BeautifulSoup
     from datetime import datetime, timedelta
 
-    # 🔄 ฟังก์ชัน Scraping ราคาทองคำจากเว็บสมาคมฯ หรือเว็บสำรอง
+    # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ดึงราคาจาก www.goldtraders.or.th ไม่สำเร็จเลยสักครั้ง เพราะเว็บ
+    # ย้ายไปเป็น React App ที่โหลดราคาผ่าน JavaScript หลังโหลดหน้าเสร็จ (ราคาไม่ได้ฝังมาใน HTML
+    # ตอนโหลดครั้งแรก) ทำให้ตกไปใช้ราคาสำรอง (68,300/69,100) ตลอดเวลา ไม่เคยอัปเดตจริงเลย ตอนนี้
+    # เปลี่ยนไปเรียกใช้ fetch_live_gold_price() ฟังก์ชันกลางใน backend_functions.py ที่แก้ไปแล้ว
+    # (ดึงจากเว็บ classic.goldtraders.or.th ซึ่งยังเป็น HTML แบบดั้งเดิม + ค้นหาด้วย Regex ที่
+    # ทนทานกว่าเดิม) ใช้ร่วมกับฟังก์ชันคำนวณ Net Worth สดในรายงานอัตโนมัติรายเดือนด้วย
     def get_gold_price_by_scraping():
         # ตรวจสอบ Cache ใน Session ไม่ให้ยิงถี่เกินไป (ภายใน 3 ชม.)
         if 'scraped_gold_date' in st.session_state:
@@ -28,58 +30,13 @@ def render_tab_gold(client):
                 if 'scraped_gold_bar' in st.session_state and 'scraped_gold_jewelry' in st.session_state:
                     return st.session_state['scraped_gold_bar'], st.session_state['scraped_gold_jewelry']
 
-        try:
-            # ใช้ User-Agent เพื่อป้องกันเว็บมองว่าเป็น Bot แล้วบล็อก
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
+        bar_val, jewelry_val = fetch_live_gold_price()
 
-            # ตัวอย่างดึงจากเว็บราคาทองไทยยอดนิยม (เช่น goldtraders หรือเว็บตัวแทนที่โครงสร้างอ่านง่าย)
-            # หมายเหตุ: หากโครงสร้าง HTML ของเว็บสมาคมมีการเปลี่ยนแปลง อาจต้องปรับตัวเลือก tag ค้นหา
-            url = "https://www.goldtraders.or.th/"
-            response = requests.get(url, headers=headers, timeout=8)
-
-            if response.status_code == 200:
-                # ใช้ lxml หรือ html.parser แกะโครงสร้าง HTML
-                soup = BeautifulSoup(response.text, 'html.parser')
-
-                # ค้นหาตามโครงสร้างตารางราคาของเว็บสมาคมฯ (ตัวอย่าง ID หรือ Class มาตรฐาน)
-                # โดยปกติเว็บสมาคมจะแสดงราคาทองคำแท่งและทองรูปพรรณในตารางหน้าแรก
-                bar_val = None
-                jewelry_val = None
-
-                # ค้นหาตัวเลขราคาจาก element ที่เกี่ยวข้อง
-                # (โครงสร้างเว็บสมาคมค้าทองคำหลักมักจะใช้ id เช่น DetailPlace_LabelBuy หรือคล้ายกัน)
-                # หากเว็บหลักบล็อกหรือโครงสร้างเปลี่ยน เราสามารถสลับมาดึงผ่านเว็บสำรองที่โครงสร้างนิ่งกว่าได้
-
-                # ลองค้นหาจากตารางราคารับซื้อ/ขายออกทั่วไป
-                spans = soup.find_all('span')
-                prices = []
-                for span in spans:
-                    text = span.get_text().strip().replace(',', '')
-                    # กรองหาตัวเลขที่เป็นเรทราคาทอง (เช่น อยู่ในช่วง 30,000 - 100,000 บาท)
-                    try:
-                        val = float(text)
-                        if 30000 <= val <= 100000:
-                            prices.append(val)
-                    except ValueError:
-                        pass
-
-                # ถอดรหัสค่าที่ดึงได้ (มักเรียงตาม ลำดับ ทองคำแท่งขายออก, ทองรูปพรรณขายออก ฯลฯ)
-                if len(prices) >= 2:
-                    # สมมติฐานตำแหน่งราคาขายออกแท่งและรูปพรรณ
-                    bar_val = prices[0] # ปรับแก้ตามหน้าเว็บจริง
-                    jewelry_val = prices[1]
-
-                    # บันทึกลง Session
-                    st.session_state['scraped_gold_date'] = datetime.now()
-                    st.session_state['scraped_gold_bar'] = bar_val
-                    st.session_state['scraped_gold_jewelry'] = jewelry_val
-
-                    return bar_val, jewelry_val
-
-        except Exception as e:
-            pass
+        if bar_val is not None and jewelry_val is not None:
+            st.session_state['scraped_gold_date'] = datetime.now()
+            st.session_state['scraped_gold_bar'] = bar_val
+            st.session_state['scraped_gold_jewelry'] = jewelry_val
+            return bar_val, jewelry_val
 
         # Fallback: ถ้า Scrape ไม่สำเร็จ ดึงค่าเดิมมาใช้ หรือใช้ค่าสำรองปัจจุบัน
         fallback_bar = st.session_state.get('scraped_gold_bar', 68300.0)
@@ -88,6 +45,7 @@ def render_tab_gold(client):
 
     # เรียกใช้งานฟังก์ชัน Scraping
     ref_gold_bar, ref_gold_jewelry = get_gold_price_by_scraping()
+
 
     # แสดงผลราคาอ้างอิง
     # 🔧 ปรับปรุง: จัดเป็นตาราง 2x3 (2 แถว x 3 คอลัมน์) ให้กล่องขนาดเท่ากันทั้งหมด
