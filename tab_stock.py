@@ -1048,14 +1048,20 @@ def render_tab_stock():
                     p_sell_date = None
 
             with col2:
-                p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"], key="journal_p_type")
-                p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง", key="journal_p_result")
-                p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f", key="journal_p_price")
-                p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100, key="journal_p_qty")
-                p_comm = st.number_input("ค่าธรรมเนียม:", min_value=0.0, step=1.0, key="journal_p_comm")
-
-            p_reason = st.text_area("เหตุผล/กลยุทธ์:", key="journal_p_reason")
-            submitted = st.button("ยืนยันรายการบันทึก", type="primary")
+                # 🔧 แก้บั๊ก: เดิม p_type/p_result/p_price/p_qty/p_comm/p_reason อยู่นอกฟอร์มทั้งหมด
+                # พิมพ์ตัวเลขทีละตัวในช่องไหนก็ตาม หน้าเว็บจะรันใหม่ทันที (หมุนรัวๆ) กว่าจะกรอกครบ
+                # ทุกช่องก็ช้ามาก ตอนนี้ครอบกลุ่มนี้ด้วย st.form() ให้กรอกให้ครบก่อน แล้วค่อยกดปุ่ม
+                # ยืนยันทีเดียว — ส่วน col1 (เลือกหุ้น/สถานะ/วันที่) ยังคงอยู่นอกฟอร์มเหมือนเดิม เพราะ
+                # ต้องอัปเดตสดจริงๆ (auto-fill Sector ตอนเลือกหุ้น, โชว์ช่องวันที่ต่างกันตามสถานะ) ซึ่ง
+                # เป็นสิ่งที่ทำในฟอร์มไม่ได้ (on_change callback ใช้ไม่ได้ในฟอร์ม)
+                with st.form("journal_entry_form"):
+                    p_type = st.selectbox("ประเภท:", ["ซื้อ (Buy)", "ขายทำกำไร (Take Profit)", "ขายตัดขาดทุน (Stop Loss)"], key="journal_p_type")
+                    p_result = st.number_input("กำไร/ขาดทุน (บาท):", step=100.0, format="%.2f", help="กรอกแค่ตัวเลข ระบบจะใส่เครื่องหมายให้เอง", key="journal_p_result")
+                    p_price = st.number_input("ราคาต่อหุ้น:", min_value=0.01, step=0.05, format="%.2f", key="journal_p_price")
+                    p_qty = st.number_input("จำนวนหุ้น:", min_value=1, step=100, key="journal_p_qty")
+                    p_comm = st.number_input("ค่าธรรมเนียม:", min_value=0.0, step=1.0, key="journal_p_comm")
+                    p_reason = st.text_area("เหตุผล/กลยุทธ์:", key="journal_p_reason")
+                    submitted = st.form_submit_button("ยืนยันรายการบันทึก", type="primary")
 
             if submitted:
                 if not p_ticker or p_ticker.strip() == "":
