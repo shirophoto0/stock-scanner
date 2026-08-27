@@ -8,7 +8,7 @@ import yfinance as yf
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from constants import SET100_TICKERS
-from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet, load_and_calculate_stock_data_optimized, add_to_watchlist
+from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet, load_and_calculate_stock_data_optimized, add_to_watchlist, add_to_fundamental_watchlist, get_active_sheet_name
 from theme import style_plotly
 from tab_risk import render_tab_risk
 
@@ -741,14 +741,17 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             key="stock_table"
         )
 
-        # 🆕 ปุ่มเพิ่มหุ้นที่เลือกอยู่ (จากการคลิกแถวในตาราง) เข้า Watchlist — แยกจากพอร์ตจริง
-        # ไม่ต้องซื้อจริงก็เก็บติดตามได้ ใช้กลไก "หุ้นที่เลือกอยู่" (selected_ticker) ตัวเดียวกับที่
-        # ใช้แสดงกราฟเทคนิคัล/ปัจจัยพื้นฐานอยู่แล้วด้านล่าง ไม่ต้องสร้างกลไกเลือกหุ้นซ้ำอีกชุด
+        # 🆕 ปุ่มเพิ่มหุ้นที่เลือกอยู่ (จากการคลิกแถวในตาราง) เข้า Watchlist — เลือกได้ว่าจะเพิ่มเข้า
+        # Watchlist เทรด (ติดตามราคาเพื่อซื้อขาย), Watchlist เชิงปัจจัยพื้นฐาน (ติดตามงบการเงิน
+        # รายไตรมาส แยกระบบกันคนละเรื่อง), หรือทั้งสองอย่างพร้อมกันเลยก็ได้ ใช้กลไก "หุ้นที่เลือกอยู่"
+        # (selected_ticker) ตัวเดียวกับที่ใช้แสดงกราฟเทคนิคัล/ปัจจัยพื้นฐานอยู่แล้วด้านล่าง ไม่ต้อง
+        # สร้างกลไกเลือกหุ้นซ้ำอีกชุด
         _current_selected = st.session_state.get("selected_ticker")
         if _current_selected:
-            _wl_col1, _wl_col2 = st.columns([3, 1])
-            _wl_col1.caption(f"หุ้นที่เลือกอยู่ตอนนี้: **{_current_selected}** (คลิกแถวในตารางเพื่อเลือกหุ้นตัวอื่น)")
-            if _wl_col2.button(f"⭐ เพิ่ม {_current_selected} เข้า Watchlist", use_container_width=True):
+            st.caption(f"หุ้นที่เลือกอยู่ตอนนี้: **{_current_selected}** (คลิกแถวในตารางเพื่อเลือกหุ้นตัวอื่น)")
+            _wl_col1, _wl_col2, _wl_col3 = st.columns(3)
+
+            if _wl_col1.button(f"⭐ เพิ่มเข้า Watchlist เทรด", use_container_width=True, key="btn_add_trade_wl"):
                 _selected_row = final_sorted_df[final_sorted_df['Ticker'] == _current_selected]
                 _price_now = float(_selected_row.iloc[0]['ราคาล่าสุด']) if not _selected_row.empty else 0.0
                 _success, _msg = add_to_watchlist(_current_selected, _price_now)
@@ -756,6 +759,29 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
                     st.success(_msg)
                 else:
                     st.warning(_msg)
+
+            if _wl_col2.button(f"📊 เพิ่มเข้า Fundamental Watchlist", use_container_width=True, key="btn_add_fund_wl"):
+                _success, _msg = add_to_fundamental_watchlist(get_active_sheet_name(), _current_selected)
+                if _success:
+                    st.success(_msg)
+                    st.cache_data.clear()
+                else:
+                    st.warning(_msg)
+
+            if _wl_col3.button(f"⭐📊 เพิ่มเข้าทั้งสองอย่าง", use_container_width=True, key="btn_add_both_wl"):
+                _selected_row = final_sorted_df[final_sorted_df['Ticker'] == _current_selected]
+                _price_now = float(_selected_row.iloc[0]['ราคาล่าสุด']) if not _selected_row.empty else 0.0
+                _success1, _msg1 = add_to_watchlist(_current_selected, _price_now)
+                _success2, _msg2 = add_to_fundamental_watchlist(get_active_sheet_name(), _current_selected)
+                if _success1:
+                    st.success(f"✅ Watchlist เทรด: {_msg1}")
+                else:
+                    st.warning(f"⚠️ Watchlist เทรด: {_msg1}")
+                if _success2:
+                    st.success(f"✅ Fundamental Watchlist: {_msg2}")
+                    st.cache_data.clear()
+                else:
+                    st.warning(f"⚠️ Fundamental Watchlist: {_msg2}")
 
         # 8. ดึงข้อมูลการเลือกหุ้น (สรุปรวมเหลือบล็อกเดียว)
         if event.selection and "rows" in event.selection and event.selection["rows"]:
