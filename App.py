@@ -45,6 +45,7 @@ from tab_retirement import render_tab_retirement
 from tab_sector_rotation import render_tab_sector_rotation
 from tab_backtest import render_tab_backtest
 from tab_correlation import render_tab_correlation
+from tab_document_analysis import render_tab_document_analysis
 from tab_pvd import render_tab_pvd
 from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
@@ -138,7 +139,61 @@ from constants import SET100_TICKERS
         
 # --- Initialize Session State ---
 
+def _inject_pwa_meta():
+    """
+    🆕 ฉีดแท็ก PWA (manifest.json + icon) เข้าไปใน <head> ของหน้าเว็บจริงๆ ผ่าน JavaScript
+    เพราะ Streamlit ไม่มีช่องทางแก้ไข <head> ของหน้าตรงๆ ให้ (st.markdown() แทรกเนื้อหาลงใน
+    ส่วน body เท่านั้น ไม่ใช่ head) ใช้ st.components.v1.html() แทน เพราะเนื้อหาข้างในรันอยู่บน
+    origin เดียวกับหน้าเว็บหลัก จึงเข้าถึง window.parent.document ได้ ทำให้ฉีดแท็กเข้า head จริง
+    ของหน้าเว็บได้สำเร็จ ผลลัพธ์: กด "เพิ่มลงในหน้าจอโฮม" จากมือถือได้ เหมือนเป็นแอปจริง
+    """
+    st.components.v1.html(
+        """
+        <script>
+        (function() {
+            var head = window.parent.document.head;
+
+            var manifestLink = window.parent.document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = './app/static/manifest.json';
+            head.appendChild(manifestLink);
+
+            var themeColor = window.parent.document.createElement('meta');
+            themeColor.name = 'theme-color';
+            themeColor.content = '#7C9885';
+            head.appendChild(themeColor);
+
+            // แท็กเฉพาะของ iOS Safari (ไม่รองรับ manifest.json เต็มรูปแบบ ต้องใช้แท็กเหล่านี้แทน)
+            var appleCapable = window.parent.document.createElement('meta');
+            appleCapable.name = 'apple-mobile-web-app-capable';
+            appleCapable.content = 'yes';
+            head.appendChild(appleCapable);
+
+            var appleStatusBar = window.parent.document.createElement('meta');
+            appleStatusBar.name = 'apple-mobile-web-app-status-bar-style';
+            appleStatusBar.content = 'default';
+            head.appendChild(appleStatusBar);
+
+            var appleTitle = window.parent.document.createElement('meta');
+            appleTitle.name = 'apple-mobile-web-app-title';
+            appleTitle.content = 'Wealth Tracker';
+            head.appendChild(appleTitle);
+
+            var appleIcon = window.parent.document.createElement('link');
+            appleIcon.rel = 'apple-touch-icon';
+            appleIcon.href = './app/static/icon-192.png';
+            head.appendChild(appleIcon);
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
 def main():
+    _inject_pwa_meta()
+
     import plotly.express as px
     import plotly.graph_objects as go
     from datetime import date
@@ -223,7 +278,7 @@ def main():
     # ==========================================================
     with main_tab_system:
         ###### ส่วนการสร้าง TAB หลัก ##################
-        tab_stock, tab_tfex, tab_gold, tab_tech, tab_sector, tab_backtest, tab_correlation, tab_risk = st.tabs([
+        tab_stock, tab_tfex, tab_gold, tab_tech, tab_sector, tab_backtest, tab_correlation, tab_docai, tab_risk = st.tabs([
             "📊 หุ้น (Stock)", 
             "📈 TFEX", 
             "🟡 ทองคำ (Gold)", 
@@ -231,6 +286,7 @@ def main():
             "🔄 Sector Rotation",
             "🔬 Backtest",
             "🔗 Correlation",
+            "🤖 วิเคราะห์เอกสาร AI",
             "🛡️ Risk Management"
         ])
 
@@ -246,6 +302,8 @@ def main():
             render_tab_backtest()
         with tab_correlation:
             render_tab_correlation()
+        with tab_docai:
+            render_tab_document_analysis()
         with tab_stock:
                            
             render_tab_stock()
