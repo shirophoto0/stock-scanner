@@ -433,18 +433,23 @@ def render_tab_tfex():
 
             st.info(f"🔍 รายละเอียด: ซีรีส์ **{series_val}** | สถานะ: **{status_val}** | จำนวน: **{size_val}** สัญญา | ราคาเปิด: **{open_price_val}**")
 
-            # ฟอร์มกรอกข้อมูลปิดสถานะ
-            c_col1, c_col2 = st.columns(2)
+            # 🔧 แก้บั๊ก: เดิม close_price/close_date อยู่นอกฟอร์ม พิมพ์ราคาปิดทีละตัวแล้วหน้าเว็บ
+            # รันใหม่ทันที ตอนนี้ครอบด้วย st.form() ให้กรอกครบก่อนค่อยกดปุ่มยืนยัน — selected_trade_id
+            # ด้านบนยังอยู่นอกฟอร์มเหมือนเดิม เพราะต้องอัปเดตกล่องรายละเอียดออเดอร์แบบสดทันทีที่เลือก
+            with st.form("tfex_close_form"):
+                c_col1, c_col2 = st.columns(2)
 
-            # แปลง Open_Price เป็น float สำหรับค่าเริ่มต้นใน number_input
-            default_open_price = pd.to_numeric(open_price_val, errors='coerce')
-            if pd.isna(default_open_price):
-                default_open_price = 0.0
+                # แปลง Open_Price เป็น float สำหรับค่าเริ่มต้นใน number_input
+                default_open_price = pd.to_numeric(open_price_val, errors='coerce')
+                if pd.isna(default_open_price):
+                    default_open_price = 0.0
 
-            close_price = c_col1.number_input("ราคาปิด (Close_Price):", value=float(default_open_price), step=0.1, format="%.2f")
-            close_date = c_col2.date_input("วันที่ปิด (Date_Close):")
+                close_price = c_col1.number_input("ราคาปิด (Close_Price):", value=float(default_open_price), step=0.1, format="%.2f")
+                close_date = c_col2.date_input("วันที่ปิด (Date_Close):")
 
-            if st.button("ยืนยันการปิดสถานะ", use_container_width=True, type="primary"):
+                close_submitted = st.form_submit_button("ยืนยันการปิดสถานะ", use_container_width=True, type="primary")
+
+            if close_submitted:
                 # บันทึกปิดสถานะพร้อม Loading Spinner และล้าง Cache ทันที
                 with st.spinner("⏳ กำลังบันทึกการปิดสถานะและคำนวณผลลัพธ์..."):
                     # ส่งค่าไปอัปเดต (ตรวจสอบให้แน่ใจว่าฟังก์ชัน update_trade_close รับพารามิเตอร์ตามนี้)
