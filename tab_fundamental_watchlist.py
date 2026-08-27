@@ -237,10 +237,18 @@ def render_tab_fundamental_watchlist():
                     if st.button(f"🤖 ให้ AI วิเคราะห์แนวโน้มการเติบโต — {ticker}", key=f"trend_{ticker}"):
                         with st.spinner("กำลังวิเคราะห์แนวโน้ม..."):
                             try:
-                                # 🔧 แก้บั๊กเดียวกัน: to_markdown() ต้องพึ่งไลบรารี tabulate ที่ไม่มี
-                                # อยู่ในระบบ เปลี่ยนมาใช้ to_csv() แทน (AI อ่านเข้าใจได้เหมือนกัน)
-                                history_text = df_history.to_csv(index=False)
-                                prompt = TREND_ANALYSIS_PROMPT.format(ticker=ticker, history_text=history_text)
+                                # 🔧 แก้บั๊ก: เดิมใช้ df_history.to_csv() แบบรวมทุกคอลัมน์ ซึ่งมีคอลัมน์
+                                # Raw_Json (เก็บ JSON เต็มรูปแบบ มีเครื่องหมายปีกกา {} เยอะมาก) รวมอยู่
+                                # ด้วย พอเอาไปใส่ Prompt ผ่าน .format() ระบบตีความเครื่องหมายปีกกาใน
+                                # เนื้อหาผิดเป็น placeholder ของ .format() เอง (เช่นเจอ {"revenue": ...}
+                                # ในเนื้อหา แล้วพยายามมองหาตัวแปรชื่อ "revenue" ทำให้เกิด KeyError ที่ทำ
+                                # ให้แอปพังทั้งหน้า) ตอนนี้แก้ 2 ชั้น: (1) ตัดคอลัมน์ Raw_Json ออกก่อน
+                                # ส่งให้ AI เพราะไม่จำเป็นสำหรับวิเคราะห์แนวโน้มอยู่แล้ว ยิ่งตัดยิ่งประหยัด
+                                # token ด้วย (2) เปลี่ยนจาก .format() เป็น .replace() ซึ่งไม่ตีความ
+                                # เครื่องหมายปีกกาในเนื้อหาเป็น placeholder เลย ปลอดภัยกว่าสำหรับกรณีนี้
+                                _cols_for_ai = [c for c in df_history.columns if c != 'Raw_Json']
+                                history_text = df_history[_cols_for_ai].to_csv(index=False)
+                                prompt = TREND_ANALYSIS_PROMPT.replace("{ticker}", ticker).replace("{history_text}", history_text)
                                 result_text, usage = _call_claude_text_analysis(api_key, prompt)
                                 st.markdown(result_text)
                                 st.caption(f"💰 token: อินพุต {usage.input_tokens:,} / เอาต์พุต {usage.output_tokens:,}")
