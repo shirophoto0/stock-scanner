@@ -58,7 +58,7 @@ from auth import check_login, show_user_bar
 from theme import apply_theme
 
 # --- ตั้งค่าหน้าเว็บ: ต้องอยู่เป็นคำสั่ง Streamlit คำสั่งแรกสุดของแอปเสมอ ---
-st.set_page_config(layout="wide")
+st.set_page_config(layout="wide", page_title="Wealth Tracker", page_icon="📊")
 
 # --- ฉีดธีมสีเข้าไปก่อนเลย (ให้หน้า Login ก็มีธีมด้วย) ---
 apply_theme()
