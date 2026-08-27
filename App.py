@@ -46,6 +46,7 @@ from tab_sector_rotation import render_tab_sector_rotation
 from tab_backtest import render_tab_backtest
 from tab_correlation import render_tab_correlation
 from tab_document_analysis import render_tab_document_analysis
+from tab_fundamental_watchlist import render_tab_fundamental_watchlist
 from tab_pvd import render_tab_pvd
 from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
@@ -278,7 +279,7 @@ def main():
     # ==========================================================
     with main_tab_system:
         ###### ส่วนการสร้าง TAB หลัก ##################
-        tab_stock, tab_tfex, tab_gold, tab_tech, tab_sector, tab_backtest, tab_correlation, tab_docai, tab_risk = st.tabs([
+        tab_stock, tab_tfex, tab_gold, tab_tech, tab_sector, tab_backtest, tab_correlation, tab_docai, tab_fundwatch, tab_risk = st.tabs([
             "📊 หุ้น (Stock)", 
             "📈 TFEX", 
             "🟡 ทองคำ (Gold)", 
@@ -287,6 +288,7 @@ def main():
             "🔬 Backtest",
             "🔗 Correlation",
             "🤖 วิเคราะห์เอกสาร AI",
+            "📊 Fundamental Watchlist",
             "🛡️ Risk Management"
         ])
 
@@ -304,6 +306,8 @@ def main():
             render_tab_correlation()
         with tab_docai:
             render_tab_document_analysis()
+        with tab_fundwatch:
+            render_tab_fundamental_watchlist()
         with tab_stock:
                            
             render_tab_stock()
