@@ -19,6 +19,9 @@ from backend_functions import (
     load_fundamental_analysis_history,
 )
 from theme import render_metric_card
+# 🆕 ดึงฟังก์ชันแปลง Excel/Word เป็นข้อความ ที่มีอยู่แล้วจากแท็บ "วิเคราะห์เอกสาร AI" มาใช้ร่วมกัน
+# ไม่ต้องเขียนตรรกะซ้ำอีกรอบ (ทั้ง 2 แท็บอ่านไฟล์ประเภทเดียวกัน แค่คนละบริบทการใช้งาน)
+from tab_document_analysis import _extract_text_from_xlsx, _extract_text_from_docx
 
 MODEL_NAME = "claude-sonnet-5"
 
@@ -51,21 +54,35 @@ TREND_ANALYSIS_PROMPT = """คุณเป็นนักวิเคราะ�
 {history_text}"""
 
 
-def _call_claude_pdf_analysis(api_key, pdf_bytes, prompt_text):
-    """ส่ง PDF + Prompt ไปให้ Claude วิเคราะห์ คืนค่าเป็น (สำเร็จหรือไม่, ข้อความผลลัพธ์หรือ error, usage info)"""
+def _call_claude_document_analysis(api_key, file_bytes, file_ext, prompt_text):
+    """
+    ส่งเอกสาร (PDF/Excel/Word) + Prompt ไปให้ Claude วิเคราะห์ คืนค่าเป็น (ข้อความผลลัพธ์, usage info)
+    🆕 รองรับทั้ง 3 ประเภทไฟล์แล้ว (เดิมรองรับแค่ PDF) — PDF ส่งเข้า API ได้ตรงๆ (รองรับทั้งข้อความ
+    และภาพ/กราฟ/ตารางในตัว) ส่วน Excel/Word ต้องแปลงเป็นข้อความก่อน เพราะ Claude API ไม่รองรับ
+    ไฟล์ 2 ประเภทนี้โดยตรง (ใช้ตัวแปลงเดียวกับแท็บ "วิเคราะห์เอกสาร AI")
+    """
     import anthropic
     client = anthropic.Anthropic(api_key=api_key)
-    base64_data = base64.standard_b64encode(pdf_bytes).decode("utf-8")
+
+    if file_ext == "pdf":
+        base64_data = base64.standard_b64encode(file_bytes).decode("utf-8")
+        message_content = [
+            {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": base64_data}},
+            {"type": "text", "text": prompt_text},
+        ]
+    elif file_ext == "xlsx":
+        extracted_text = _extract_text_from_xlsx(file_bytes)
+        message_content = f"เนื้อหาจากไฟล์ Excel:\n\n{extracted_text}\n\n{prompt_text}"
+    elif file_ext == "docx":
+        extracted_text = _extract_text_from_docx(file_bytes)
+        message_content = f"เนื้อหาจากไฟล์ Word:\n\n{extracted_text}\n\n{prompt_text}"
+    else:
+        raise ValueError(f"ไม่รองรับไฟล์ประเภทนี้: .{file_ext}")
+
     response = client.messages.create(
         model=MODEL_NAME,
         max_tokens=1500,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": base64_data}},
-                {"type": "text", "text": prompt_text},
-            ],
-        }],
+        messages=[{"role": "user", "content": message_content}],
     )
     result_text = "".join(block.text for block in response.content if block.type == "text")
     return result_text, response.usage
@@ -94,9 +111,14 @@ def render_tab_fundamental_watchlist():
 
     api_key = st.secrets.get("ANTHROPIC_API_KEY") if hasattr(st, "secrets") else None
     if not api_key:
+        # 🆕 แสดง "ชื่อ Secret ที่ระบบเจอจริง" ด้วย (ไม่โชว์ค่าจริงเพื่อความปลอดภัย) เพื่อวินิจฉัย
+        # ปัญหาการพิมพ์ผิด/วางผิดตำแหน่งได้ตรงจุด
+        _found_keys = list(st.secrets.keys()) if hasattr(st, "secrets") else []
         st.warning(
             "⚠️ ยังไม่ได้ตั้งค่า Claude API Key ครับ — ไปที่ Streamlit Cloud → Settings → Secrets "
-            "แล้วเพิ่ม `ANTHROPIC_API_KEY = \"sk-ant-...\"`"
+            "แล้วเพิ่ม `ANTHROPIC_API_KEY = \"sk-ant-...\"`\n\n"
+            f"🔍 **ตรวจสอบ:** ตอนนี้ระบบเจอชื่อ Secret ทั้งหมด {len(_found_keys)} รายการ: "
+            f"{', '.join(_found_keys) if _found_keys else '(ไม่เจอเลยสักตัว)'}"
         )
         return
 
@@ -148,17 +170,22 @@ def render_tab_fundamental_watchlist():
                     u1, u2, u3 = st.columns([1, 1, 2])
                     quarter = u1.selectbox("ไตรมาส", [1, 2, 3, 4], key=f"q_{ticker}")
                     year = u2.number_input("ปี (พ.ศ.)", min_value=2560, max_value=2580, value=2568, step=1, key=f"y_{ticker}")
-                    pdf_file = u3.file_uploader("ไฟล์ PDF งบการเงิน", type=["pdf"], key=f"pdf_{ticker}")
+                    # 🔧 แก้บั๊ก: เดิมรับแค่ .pdf แต่ไฟล์งบการเงินที่ดาวน์โหลดจาก set.or.th มักแตกไฟล์
+                    # ออกมาเป็น .xlsx หรือ .docx (ไม่ใช่ .pdf เสมอไป) ตอนนี้รับได้ทั้ง 3 ประเภทแล้ว
+                    doc_file = u3.file_uploader("ไฟล์งบการเงิน (PDF/Excel/Word)", type=["pdf", "xlsx", "docx"], key=f"doc_{ticker}")
                     upload_submitted = st.form_submit_button("🔍 วิเคราะห์งบนี้ด้วย AI", type="primary")
 
                 if upload_submitted:
-                    if pdf_file is None:
-                        st.warning("กรุณาแนบไฟล์ PDF ก่อนครับ")
+                    if doc_file is None:
+                        st.warning("กรุณาแนบไฟล์ก่อนครับ (รองรับ PDF, Excel, Word)")
                     else:
                         with st.spinner("กำลังให้ AI อ่านงบการเงิน... (10-30 วินาที)"):
                             try:
+                                _file_ext = doc_file.name.split(".")[-1].lower()
                                 prompt = ANALYSIS_PROMPT_TEMPLATE.format(ticker=ticker, quarter=quarter, year=year)
-                                result_text, usage = _call_claude_pdf_analysis(api_key, pdf_file.read(), prompt)
+                                result_text, usage = _call_claude_document_analysis(
+                                    api_key, doc_file.read(), _file_ext, prompt
+                                )
 
                                 # แกะ JSON ออกจากคำตอบ (เผื่อ Claude ใส่ ```json ครอบมาด้วย)
                                 cleaned = result_text.strip()
