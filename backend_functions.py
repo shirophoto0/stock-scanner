@@ -2701,3 +2701,128 @@ def fetch_live_gold_price():
         _msg = f"{type(e).__name__}: {e}"
         print(f"⚠️ ดึงราคาทองไม่สำเร็จ: {_msg}")
         return None, None, _msg
+
+
+# =============================================================
+# 🆕 ระบบ Watchlist เชิงปัจจัยพื้นฐาน (Fundamental Watchlist) — แยกจาก Watchlist เดิมที่ใช้เทรด
+# โดยสิ้นเชิง เก็บหุ้นที่สนใจติดตามงบการเงินรายไตรมาส อัปโหลด PDF งบเอง (ดาวน์โหลดจาก set.or.th)
+# ให้ Claude อ่าน สกัดตัวเลขสำคัญสไตล์ Mark Minervini ออกมาเป็นโครงสร้างที่เทียบข้ามไตรมาสได้ง่าย
+# แล้วบันทึกประวัติถาวรไว้ เรียกดูย้อนหลัง + ให้ AI วิเคราะห์แนวโน้มการเติบโตได้
+# =============================================================
+
+# URL ไปหน้าวิเคราะห์งบการเงินของหุ้นแต่ละตัวบน SET (ยืนยันแล้วว่าใช้งานได้จริง)
+SET_FINANCIAL_STATEMENT_URL_TEMPLATE = "https://www.set.or.th/th/market/product/stock/quote/{ticker}/financial-statement/financial-statements-analysis"
+
+
+def get_set_financial_statement_url(ticker):
+    """คืนค่า URL ไปหน้าวิเคราะห์งบการเงินของหุ้นตัวนั้นๆ บนเว็บ SET (ให้ผู้ใช้กดไปดาวน์โหลด PDF งบเอง)"""
+    return SET_FINANCIAL_STATEMENT_URL_TEMPLATE.format(ticker=ticker.strip().upper())
+
+
+def load_fundamental_watchlist(spreadsheet_name):
+    """โหลดรายชื่อหุ้นในระบบ Watchlist เชิงปัจจัยพื้นฐาน (แยกจาก Watchlist เดิมที่ใช้เทรด) คืนค่าเป็น list ของ dict"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Watchlist')
+        return sheet.get_all_records()
+    except Exception:
+        return []
+
+
+def add_to_fundamental_watchlist(spreadsheet_name, ticker, note=""):
+    """เพิ่มหุ้นเข้า Watchlist เชิงปัจจัยพื้นฐาน คืนค่าเป็น (สำเร็จหรือไม่: bool, ข้อความ: str)"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Watchlist')
+        existing = sheet.get_all_records()
+        ticker_clean = ticker.strip().upper()
+        if any(str(row.get('Ticker', '')).strip().upper() == ticker_clean for row in existing):
+            return False, f"{ticker_clean} อยู่ใน Watchlist นี้อยู่แล้วครับ"
+        sheet.append_row([ticker_clean, str(date.today()), note])
+        return True, f"เพิ่ม {ticker_clean} เข้า Watchlist เชิงปัจจัยพื้นฐานสำเร็จ"
+    except Exception as e:
+        return False, f"เพิ่มไม่สำเร็จ: {e}"
+
+
+def remove_from_fundamental_watchlist(spreadsheet_name, ticker):
+    """ลบหุ้นออกจาก Watchlist เชิงปัจจัยพื้นฐาน คืนค่าเป็น (สำเร็จหรือไม่: bool, ข้อความ: str)"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Watchlist')
+        records = sheet.get_all_records()
+        ticker_clean = ticker.strip().upper()
+        rows_to_keep = [r for r in records if str(r.get('Ticker', '')).strip().upper() != ticker_clean]
+        sheet.clear()
+        sheet.append_row(["Ticker", "Date_Added", "Note"])
+        for r in rows_to_keep:
+            sheet.append_row([r.get('Ticker', ''), r.get('Date_Added', ''), r.get('Note', '')])
+        return True, f"ลบ {ticker_clean} ออกจาก Watchlist สำเร็จ"
+    except Exception as e:
+        return False, f"ลบไม่สำเร็จ: {e}"
+
+
+def save_fundamental_analysis(spreadsheet_name, ticker, quarter, year, metrics_dict, raw_analysis_json):
+    """
+    บันทึกผลวิเคราะห์งบการเงินรายไตรมาสลงชีต 'Fundamental_Analysis_History' — เก็บทั้งตัวเลขสำคัญ
+    แยกคอลัมน์ (เทียบข้ามไตรมาสได้ง่าย) และข้อความ JSON เต็มไว้ด้วยเผื่อใช้อ้างอิงทีหลัง
+    """
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Analysis_History')
+        row = [
+            ticker.strip().upper(), f"{quarter}", f"{year}", str(date.today()),
+            metrics_dict.get('revenue'), metrics_dict.get('revenue_yoy_growth_pct'),
+            metrics_dict.get('net_profit'), metrics_dict.get('net_profit_yoy_growth_pct'),
+            metrics_dict.get('eps'), metrics_dict.get('gross_margin_pct'),
+            metrics_dict.get('net_margin_pct'), metrics_dict.get('debt_to_equity'),
+            metrics_dict.get('summary', ''), metrics_dict.get('highlights', ''),
+            metrics_dict.get('risks', ''), raw_analysis_json,
+        ]
+        sheet.append_row(row)
+        return True, "บันทึกผลวิเคราะห์สำเร็จ"
+    except Exception as e:
+        return False, f"บันทึกไม่สำเร็จ: {e}"
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_fundamental_analysis_history(spreadsheet_name, ticker=None):
+    """โหลดประวัติผลวิเคราะห์งบการเงินทั้งหมด (หรือกรองเฉพาะหุ้นตัวเดียวถ้าระบุ ticker) คืนค่าเป็น DataFrame"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Analysis_History')
+        records = sheet.get_all_records()
+        if not records:
+            return pd.DataFrame()
+        df = pd.DataFrame(records)
+        if ticker and 'Ticker' in df.columns:
+            df = df[df['Ticker'].astype(str).str.upper() == ticker.strip().upper()]
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def save_document_analysis_history(spreadsheet_name, filename, analysis_result):
+    """
+    บันทึกผลวิเคราะห์เอกสาร (จากแท็บ "วิเคราะห์เอกสาร AI") ลงชีต 'Document_Analysis_History'
+    เรียกดูย้อนหลังได้ในภายหลัง — ก่อนหน้านี้แสดงแค่บนหน้าจอตอนนั้น พอปิด/รีเฟรชหน้าเว็บ ผลลัพธ์
+    จะหายไปเลย ไม่มีทางเรียกดูย้อนหลังได้
+    """
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Document_Analysis_History')
+        sheet.append_row([str(date.today()), filename, analysis_result])
+        return True, "บันทึกสำเร็จ"
+    except Exception as e:
+        return False, f"บันทึกไม่สำเร็จ: {e}"
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_document_analysis_history(spreadsheet_name):
+    """โหลดประวัติผลวิเคราะห์เอกสารทั้งหมด คืนค่าเป็น DataFrame"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Document_Analysis_History')
+        records = sheet.get_all_records()
+        return pd.DataFrame(records) if records else pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
