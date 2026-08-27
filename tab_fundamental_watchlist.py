@@ -27,7 +27,8 @@ MODEL_NAME = "claude-sonnet-5"
 
 ANALYSIS_PROMPT_TEMPLATE = """คุณเป็นนักวิเคราะห์หุ้นสไตล์ Mark Minervini ที่เน้นดูการเติบโตของยอดขายและกำไรเป็นหลัก
 อ่านงบการเงินไตรมาสที่แนบมา (บริษัท {ticker} ไตรมาสที่ {quarter}/{year}) แล้วตอบกลับเป็น JSON เท่านั้น
-ห้ามมีข้อความอื่นนอกเหนือจาก JSON เลย ตามโครงสร้างนี้เป๊ะๆ:
+ห้ามมีข้อความอื่นนอกเหนือจาก JSON เลยแม้แต่คำเดียว ห้ามมีคำนำ ห้ามมีคำอธิบายก่อนหรือหลัง JSON
+ห้ามใส่ ```json ครอบ ตอบเริ่มต้นด้วยเครื่องหมาย {{ ทันทีที่ตัวอักษรแรกของคำตอบ ตามโครงสร้างนี้เป๊ะๆ:
 
 {{
   "revenue": <ตัวเลขรายได้รวม หน่วยล้านบาท ตัวเลขล้วนไม่มีข้อความ ถ้าไม่พบใส่ null>,
@@ -187,13 +188,16 @@ def render_tab_fundamental_watchlist():
                                     api_key, doc_file.read(), _file_ext, prompt
                                 )
 
-                                # แกะ JSON ออกจากคำตอบ (เผื่อ Claude ใส่ ```json ครอบมาด้วย)
-                                cleaned = result_text.strip()
-                                if cleaned.startswith("```"):
-                                    cleaned = cleaned.split("```")[1]
-                                    if cleaned.startswith("json"):
-                                        cleaned = cleaned[4:]
-                                metrics = json.loads(cleaned.strip())
+                                # 🔧 แก้บั๊ก: เดิมเช็คแค่ "ขึ้นต้นด้วย ```" เท่านั้น ถ้า AI ตอบมาโดยมี
+                                # ข้อความอื่นนำหน้าก่อน JSON (เช่น "นี่คือผลวิเคราะห์ครับ:" ก่อนเข้า
+                                # เนื้อหาจริง) จะแกะไม่ออกทันที เปลี่ยนมาใช้ Regex ค้นหาตำแหน่ง { แรก
+                                # และ } สุดท้ายในข้อความทั้งหมดแทน ทนทานกว่ามาก ไม่สนใจว่าจะมีข้อความ
+                                # อื่นล้อมรอบ JSON อยู่หรือไม่
+                                import re
+                                _json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
+                                if not _json_match:
+                                    raise json.JSONDecodeError("ไม่พบโครงสร้าง JSON ในคำตอบเลย", result_text, 0)
+                                metrics = json.loads(_json_match.group(0))
 
                                 success, msg = save_fundamental_analysis(
                                     spreadsheet_name, ticker, quarter, year, metrics, result_text
@@ -205,7 +209,10 @@ def render_tab_fundamental_watchlist():
                                 else:
                                     st.error(msg)
                             except json.JSONDecodeError:
-                                st.error("⚠️ AI ตอบกลับมาในรูปแบบที่ไม่ใช่ JSON ที่คาดไว้ ลองอัปโหลดใหม่อีกครั้งครับ")
+                                # 🆕 แสดงคำตอบจริงที่ AI ส่งกลับมา (ตัวอย่าง 600 ตัวอักษรแรก) ให้เห็น
+                                # ตรงๆ แทนที่จะซ่อนไว้ จะได้วินิจฉัยได้ทันทีว่าติดปัญหาอะไรกันแน่
+                                st.error("⚠️ AI ตอบกลับมาในรูปแบบที่ไม่ใช่ JSON ที่คาดไว้")
+                                st.code(result_text[:600], language=None)
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 
