@@ -1307,13 +1307,15 @@ def render_tab_stock():
                 # ตามที่ขอ) แทนที่จะแสดงตรงนี้เหมือนเดิม — คำนวณข้อมูลตรงนี้เหมือนเดิมทุกประการ
                 # เปลี่ยนแค่ "ตำแหน่งที่แสดงผลจริงบนจอ" เท่านั้น
                 with sl_tp_placeholder.container():
-                    # 🔧 แก้บั๊ก: เดิมกล่องนี้ปิดกลับทุกครั้งที่โต้ตอบกับตัวควบคุมข้างใน (เลือกหุ้น,
-                    # พิมพ์ตัวเลข) เพราะ Streamlit รีเซ็ตสถานะเปิด/ปิดกลับเป็นค่าเริ่มต้นทุกครั้งที่
-                    # หน้าเว็บรันซ้ำ แก้รอบแรกด้วย expanded=True ตรงๆ ทำให้เปิดค้างตลอดเวลา (ไม่ตรง
-                    # ตามต้องการ อยากให้ปิดโดยเริ่มต้น แต่ไม่กระพริบปิดๆ เปิดๆ ระหว่างใช้งาน) ตอนนี้
-                    # ใช้ session_state จดจำว่า "ผู้ใช้กำลังใช้งานอยู่จริง" (ผ่าน on_change ของตัว
-                    # ควบคุมข้างใน ซึ่งจะทำงานเฉพาะตอนผู้ใช้เปลี่ยนค่าจริงๆ ไม่ใช่แค่โหลดหน้าครั้งแรก)
-                    # เริ่มต้นปิดไว้ตามปกติ แต่พอเริ่มโต้ตอบแล้วจะเปิดค้างจนกว่าจะบันทึกสำเร็จ
+                    # 🔧 แก้บั๊ก: เดิม _new_sl/_new_tp (ช่องตัวเลข) อยู่นอกฟอร์ม ใช้ .number_input()
+                    # เรียกผ่านคอลัมน์ (ไม่ใช่ st.number_input() ตรงๆ) พิมพ์ตัวเลขทีละตัวแล้วหน้าเว็บ
+                    # รันใหม่ทันที ตอนนี้ครอบด้วย st.form() ให้กรอกครบก่อนค่อยกดปุ่มบันทึกทีเดียว —
+                    # เลือกหุ้น (selectbox) ยังคงอยู่นอกฟอร์มเหมือนเดิม เพราะต้องอัปเดตสดจริงๆ (โชว์
+                    # "ปัจจุบัน: Stop Loss/Take Profit" ของหุ้นที่เพิ่งเลือกทันที) ซึ่งพอครอบด้วยฟอร์ม
+                    # แล้ว การพิมพ์ตัวเลขจะไม่ trigger rerun เลยจนกว่าจะกดปุ่ม ทำให้กล่องนี้ไม่ปิดเอง
+                    # ระหว่างพิมพ์อีกต่อไป (ไม่ต้องพึ่งกลไก "จำสถานะเปิดค้าง" ผ่าน on_change สำหรับ
+                    # ช่องตัวเลขอีกแล้ว แต่ selectbox เลือกหุ้นยังต้องใช้ on_change อยู่ เพราะยังอยู่
+                    # นอกฟอร์ม การเปลี่ยนหุ้นก็ยัง trigger rerun ปกติ)
                     if 'sl_tp_expander_open' not in st.session_state:
                         st.session_state['sl_tp_expander_open'] = False
 
@@ -1340,16 +1342,17 @@ def render_tab_stock():
                                     + (f"| Take Profit {float(_cur_tp):,.2f} ฿" if _cur_tp else "")
                                 )
 
-                        _sltp_col1, _sltp_col2, _sltp_col3 = st.columns([1, 1, 1])
-                        _new_sl = _sltp_col1.number_input(
-                            "Stop Loss (ราคา)", min_value=0.0, step=0.01, format="%.2f",
-                            key="new_sl_price", on_change=_mark_sltp_open
-                        )
-                        _new_tp = _sltp_col2.number_input(
-                            "Take Profit (ราคา)", min_value=0.0, step=0.01, format="%.2f",
-                            key="new_tp_price", on_change=_mark_sltp_open
-                        )
-                        if _sltp_col3.button("💾 บันทึกจุด SL/TP", key="save_sl_tp"):
+                        with st.form("sltp_form"):
+                            _sltp_col1, _sltp_col2, _sltp_col3 = st.columns([1, 1, 1])
+                            _new_sl = _sltp_col1.number_input(
+                                "Stop Loss (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_sl_price"
+                            )
+                            _new_tp = _sltp_col2.number_input(
+                                "Take Profit (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_tp_price"
+                            )
+                            _sltp_submitted = _sltp_col3.form_submit_button("💾 บันทึกจุด SL/TP")
+
+                        if _sltp_submitted:
                             if _new_sl <= 0 and _new_tp <= 0:
                                 st.warning("กรุณาระบุอย่างน้อย Stop Loss หรือ Take Profit อย่างใดอย่างหนึ่ง")
                             else:
@@ -1557,12 +1560,20 @@ def render_tab_stock():
         # 🆕 เพิ่มหุ้นเข้า Watchlist ด้วยการพิมพ์ชื่อเองได้โดยตรง (นอกจากกดปุ่ม "⭐ เพิ่มเข้า Watchlist"
         # จากตารางผลการสแกนในแท็บวิเคราะห์กราฟเทคนิคัล) ทำงานแบบเดียวกันทุกประการ แค่ไม่ต้องไปคลิก
         # เลือกจากตารางก่อน
+        # 🔧 แก้บั๊ก: เดิม text_input อยู่นอกฟอร์ม พิมพ์ชื่อหุ้นทีละตัวอักษรแล้วหน้าเว็บรันใหม่ทันที
+        # (ซ้ำร้ายกว่านั้น expander นี้ยังปิดกลับเองทุกครั้งที่รันซ้ำด้วย เพราะ expanded=False ตั้ง
+        # ค่าคงที่ไว้) ตอนนี้ครอบด้วย st.form() แก้ได้ทั้ง 2 ปัญหาพร้อมกัน เพราะพิมพ์ในฟอร์มจะไม่
+        # trigger rerun เลยจนกว่าจะกดปุ่ม
         with st.expander("➕ พิมพ์ชื่อหุ้นเพิ่มเข้า Watchlist เอง", expanded=False):
-            _wc_add_col1, _wc_add_col2 = st.columns([3, 1])
-            _manual_ticker = _wc_add_col1.text_input(
-                "ชื่อหุ้น (Ticker)", placeholder="เช่น PTT, AOT, CPALL", key="manual_watchlist_ticker"
-            ).strip().upper()
-            if _wc_add_col2.button("⭐ เพิ่มเข้า Watchlist", key="manual_add_watchlist_btn", use_container_width=True):
+            with st.form("manual_watchlist_form"):
+                _wc_add_col1, _wc_add_col2 = st.columns([3, 1])
+                _manual_ticker_raw = _wc_add_col1.text_input(
+                    "ชื่อหุ้น (Ticker)", placeholder="เช่น PTT, AOT, CPALL", key="manual_watchlist_ticker"
+                )
+                _manual_add_submitted = _wc_add_col2.form_submit_button("⭐ เพิ่มเข้า Watchlist", use_container_width=True)
+
+            if _manual_add_submitted:
+                _manual_ticker = _manual_ticker_raw.strip().upper()
                 if not _manual_ticker:
                     st.warning("กรุณาพิมพ์ชื่อหุ้นก่อนครับ")
                 else:
@@ -1641,17 +1652,23 @@ def render_tab_stock():
                         _status_label = " (แจ้งเตือนไปแล้ว)" if _alert_sent else " (รอเช็คทุกวัน)"
                         st.caption(f"🎯 ราคาเป้าหมายปัจจุบัน: {_dir_label} {float(_target_price):,.2f} ฿{_status_label}")
 
+                    # 🔧 แก้บั๊ก: เดิม _new_target/_new_dir อยู่นอกฟอร์ม พิมพ์ตัวเลขทีละตัวแล้วหน้าเว็บ
+                    # รันใหม่ทันที (expander นี้ก็ปิดกลับเองทุกครั้งด้วย เพราะ expanded ไม่ได้ผูกกับ
+                    # session_state) ตอนนี้ครอบด้วย st.form() แก้ได้ทั้ง 2 ปัญหาพร้อมกัน
                     with st.expander(f"🎯 ตั้ง/แก้ราคาเป้าหมายแจ้งเตือน — {_ticker}"):
-                        _tp_col1, _tp_col2, _tp_col3 = st.columns([1, 1, 1])
-                        _new_target = _tp_col1.number_input(
-                            "ราคาเป้าหมาย", min_value=0.0, step=0.01, format="%.2f", key=f"target_price_{_ticker}"
-                        )
-                        _new_dir = _tp_col2.selectbox(
-                            "เงื่อนไข", ["below", "above"],
-                            format_func=lambda x: "ราคาลงมาถึง/ต่ำกว่า (ซื้อตอนถูก)" if x == "below" else "ราคาขึ้นมาถึง/เกิน (ขายทำกำไร)",
-                            key=f"target_dir_{_ticker}"
-                        )
-                        if _tp_col3.button("💾 บันทึกเป้าหมาย", key=f"save_target_{_ticker}"):
+                        with st.form(f"target_form_{_ticker}"):
+                            _tp_col1, _tp_col2, _tp_col3 = st.columns([1, 1, 1])
+                            _new_target = _tp_col1.number_input(
+                                "ราคาเป้าหมาย", min_value=0.0, step=0.01, format="%.2f", key=f"target_price_{_ticker}"
+                            )
+                            _new_dir = _tp_col2.selectbox(
+                                "เงื่อนไข", ["below", "above"],
+                                format_func=lambda x: "ราคาลงมาถึง/ต่ำกว่า (ซื้อตอนถูก)" if x == "below" else "ราคาขึ้นมาถึง/เกิน (ขายทำกำไร)",
+                                key=f"target_dir_{_ticker}"
+                            )
+                            _target_submitted = _tp_col3.form_submit_button("💾 บันทึกเป้าหมาย")
+
+                        if _target_submitted:
                             if _new_target <= 0:
                                 st.warning("กรุณาระบุราคาเป้าหมายมากกว่า 0")
                             else:
