@@ -82,10 +82,18 @@ def _call_claude_document_analysis(api_key, file_bytes, file_ext, prompt_text):
 
     response = client.messages.create(
         model=MODEL_NAME,
-        max_tokens=1500,
+        # 🔧 เพิ่มจาก 1500 เป็น 4000 — สงสัยว่าคำตอบ AI อาจยาวเกินขีดจำกัดเดิมจนถูกตัดกลางคัน
+        # (โดยเฉพาะไฟล์ Excel ที่มีหลายชีต เนื้อหายาว ทำให้ AI ต้องตอบละเอียดขึ้นตามไปด้วย)
+        max_tokens=4000,
         messages=[{"role": "user", "content": message_content}],
     )
     result_text = "".join(block.text for block in response.content if block.type == "text")
+
+    # 🆕 เช็คว่าคำตอบถูกตัดกลางคันเพราะชน max_tokens จริงไหม (stop_reason == "max_tokens") ถ้าใช่
+    # จะได้รู้สาเหตุที่แท้จริงทันที ไม่ต้องเดาสุ่มว่าทำไม JSON ไม่สมบูรณ์
+    if response.stop_reason == "max_tokens":
+        result_text += "\n\n[⚠️ คำตอบถูกตัดกลางคัน เพราะยาวเกิน max_tokens ที่ตั้งไว้]"
+
     return result_text, response.usage
 
 
