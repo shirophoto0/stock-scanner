@@ -15,6 +15,7 @@
 import streamlit as st
 import pandas as pd
 import base64
+from backend_functions import get_active_sheet_name, save_document_analysis_history, load_document_analysis_history
 import io
 
 MODEL_NAME = "claude-sonnet-5"  # โมเดลปัจจุบันที่สมดุลระหว่างคุณภาพและราคา เหมาะกับงานสรุปเอกสาร
@@ -143,5 +144,24 @@ def render_tab_document_analysis():
                     f"(ราคาอ้างอิง ≈ ${usage.input_tokens/1_000_000*2 + usage.output_tokens/1_000_000*10:.4f})"
                 )
 
+                # 🆕 บันทึกผลลัพธ์ลง Google Sheets ทันที ก่อนหน้านี้แสดงแค่บนหน้าจอ พอปิด/รีเฟรช
+                # หน้าเว็บ ผลลัพธ์จะหายไปเลย ไม่มีทางเรียกดูย้อนหลังได้ ตอนนี้บันทึกอัตโนมัติทุกครั้ง
+                _save_success, _save_msg = save_document_analysis_history(
+                    get_active_sheet_name(), uploaded_file.name, result_text
+                )
+                if _save_success:
+                    st.caption("✅ บันทึกผลวิเคราะห์นี้ไว้แล้ว เรียกดูย้อนหลังได้ที่ด้านล่างสุดของหน้านี้")
+
             except Exception as e:
                 st.error(f"❌ เกิดข้อผิดพลาดในการวิเคราะห์: {e}")
+
+    # --- ประวัติผลวิเคราะห์ย้อนหลัง ---
+    st.divider()
+    st.markdown("#### 📜 ประวัติผลวิเคราะห์ย้อนหลัง")
+    df_history = load_document_analysis_history(get_active_sheet_name())
+    if df_history.empty:
+        st.caption("ยังไม่มีประวัติการวิเคราะห์เลยครับ")
+    else:
+        for _, row in df_history.sort_values('Date', ascending=False).iterrows():
+            with st.expander(f"📄 {row.get('Filename', '?')} — {row.get('Date', '?')}"):
+                st.markdown(row.get('Analysis_Result', ''))
