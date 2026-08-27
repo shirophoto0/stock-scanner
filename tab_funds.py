@@ -115,10 +115,17 @@ def render_tab_funds():
 
                         action_type = st.radio("เลือกการดำเนินการ:", ["อัปเดตราคาปัจจุบัน", "ขายกองทุนออก"], horizontal=True, key="fund_action_radio")
 
+                        # 🔧 แก้บั๊ก: เดิม new_price/sell_units/sell_price อยู่นอกฟอร์มทั้งหมด พิมพ์ตัวเลข
+                        # ทีละตัวแล้วหน้าเว็บรันใหม่ทันที ตอนนี้ครอบด้วย st.form() แยกตาม action ที่
+                        # เลือก (คนละฟอร์ม คนละปุ่ม) ให้กรอกครบก่อนค่อยกดปุ่มยืนยัน — selected_fund กับ
+                        # action_type ด้านบนยังอยู่นอกฟอร์มเหมือนเดิม เพราะต้องอัปเดตสดจริงๆ (โชว์ข้อมูล
+                        # กองทุนที่เลือก, สลับช่องกรอกตาม action ที่เลือก)
                         if action_type == "อัปเดตราคาปัจจุบัน":
-                            new_price = st.number_input("ราคาปัจจุบันใหม่:", min_value=0.0, step=0.01, format="%.4f", key="new_price_input")
+                            with st.form("fund_update_price_form"):
+                                new_price = st.number_input("ราคาปัจจุบันใหม่:", min_value=0.0, step=0.01, format="%.4f", key="new_price_input")
+                                update_price_submitted = st.form_submit_button("💾 บันทึกราคาอัปเดต")
 
-                            if st.button("💾 บันทึกราคาอัปเดต"):
+                            if update_price_submitted:
                                 sheet.update_cell(selected_row_index, 6, new_price)
                                 # 🆕 บันทึกวันที่อัปเดตราคาล่าสุดไว้ที่คอลัมน์ 9 (Price_Updated_Date)
                                 # ด้วย ใช้เตือน "ราคาเก่า" ในหน้าภาพรวมพอร์ตถ้าไม่ได้อัปเดตนานเกินไป
@@ -127,10 +134,12 @@ def render_tab_funds():
                                 st.rerun()
 
                         elif action_type == "ขายกองทุนออก":
-                            sell_units = st.number_input("จำนวนหน่วยที่ต้องการขาย:", min_value=0.0, max_value=units_val, step=0.01, format="%.2f", key="sell_units_input")
-                            sell_price = st.number_input("ราคาขายต่อหน่วย:", min_value=0.0, step=0.01, format="%.4f", key="sell_price_input")
+                            with st.form("fund_sell_form"):
+                                sell_units = st.number_input("จำนวนหน่วยที่ต้องการขาย:", min_value=0.0, max_value=units_val, step=0.01, format="%.2f", key="sell_units_input")
+                                sell_price = st.number_input("ราคาขายต่อหน่วย:", min_value=0.0, step=0.01, format="%.4f", key="sell_price_input")
+                                sell_submitted = st.form_submit_button("💸 ยืนยันการขายกองทุน")
 
-                            if st.button("💸 ยืนยันการขายกองทุน"):
+                            if sell_submitted:
                                 remaining_units = units_val - sell_units
                                 if remaining_units <= 0:
                                     sheet.update_cell(selected_row_index, 8, "Sold")
