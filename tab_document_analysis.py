@@ -69,11 +69,16 @@ def render_tab_document_analysis():
     # เช็คว่ามี API Key ตั้งค่าไว้แล้วหรือยัง (เก็บใน Streamlit Secrets ไม่ใช่ในโค้ด)
     api_key = st.secrets.get("ANTHROPIC_API_KEY") if hasattr(st, "secrets") else None
     if not api_key:
+        # 🆕 แสดง "ชื่อ Secret ที่ระบบเจอจริง" ด้วย (ไม่โชว์ค่าจริงเพื่อความปลอดภัย) เพื่อวินิจฉัย
+        # ปัญหาการพิมพ์ผิด/วางผิดตำแหน่งได้ตรงจุด แทนที่จะเดาสุ่มแก้ไปเรื่อยๆ
+        _found_keys = list(st.secrets.keys()) if hasattr(st, "secrets") else []
         st.warning(
             "⚠️ ยังไม่ได้ตั้งค่า Claude API Key ครับ — ไปที่ Streamlit Cloud → เลือกแอปนี้ → "
             "**Settings → Secrets** แล้วเพิ่มบรรทัด:\n\n"
             "`ANTHROPIC_API_KEY = \"sk-ant-...\"`\n\n"
-            "(ใช้ API Key จาก console.anthropic.com ของคุณเอง)"
+            "(ใช้ API Key จาก console.anthropic.com ของคุณเอง)\n\n"
+            f"🔍 **ตรวจสอบ:** ตอนนี้ระบบเจอชื่อ Secret ทั้งหมด {len(_found_keys)} รายการ: "
+            f"{', '.join(_found_keys) if _found_keys else '(ไม่เจอเลยสักตัว)'}"
         )
         return
 
