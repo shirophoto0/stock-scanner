@@ -1,211 +1,172 @@
 # =============================================================
-# tab_fundamental_watchlist.py
-# 📊 Watchlist เชิงปัจจัยพื้นฐาน (Fundamental Watchlist) — แยกจาก Watchlist เดิมที่ใช้เทรดโดยสิ้นเชิง
-# เก็บหุ้นที่สนใจติดตามงบการเงินรายไตรมาส มีไอคอนลิงก์ไปหน้าดาวน์โหลดงบจริงบน set.or.th ให้เลย
-# อัปโหลด PDF งบเอง (มือ) ให้ Claude อ่าน สกัดตัวเลขสำคัญสไตล์ Mark Minervini ออกมาเป็นโครงสร้าง
-# ที่เทียบข้ามไตรมาสได้ง่าย บันทึกประวัติถาวร เรียกดูย้อนหลัง + ให้ AI วิเคราะห์แนวโน้มการเติบโตได้
+# tab_document_analysis.py
+# 🤖 วิเคราะห์เอกสารการเงินด้วย Claude API — อัปโหลด PDF/Excel/Word (เช่น งบการเงิน, รายงาน
+# ประจำปี 56-1) ให้ Claude อ่านและสรุปจุดเด่น/จุดเสี่ยงให้อัตโนมัติ
+#
+# ใช้ API Key ส่วนตัวของผู้ใช้เอง (ไม่ใช่ของแอป) เก็บไว้ใน Streamlit Secrets เพื่อความปลอดภัย
+# ไม่ฝัง Key ไว้ในโค้ดหรือ Google Sheets โดยตรง
+#
+# หมายเหตุสำคัญเรื่องชนิดไฟล์:
+#   - PDF: ส่งเข้า Claude API ได้ตรงๆ (Claude อ่าน PDF ได้ทั้งข้อความและภาพ/กราฟ/ตารางในตัว)
+#   - Excel (.xlsx) และ Word (.docx): Claude API "ไม่รองรับ" ไฟล์ 2 ประเภทนี้โดยตรง ต้องแปลงเป็น
+#     ข้อความล้วนก่อน (ใช้ pandas สำหรับ Excel, python-docx สำหรับ Word) แล้วค่อยส่งข้อความที่
+#     แปลงแล้วเข้าไปแทน
 # =============================================================
 import streamlit as st
 import pandas as pd
 import base64
-import json
-from backend_functions import (
-    get_active_sheet_name,
-    get_set_financial_statement_url,
-    load_fundamental_watchlist,
-    add_to_fundamental_watchlist,
-    remove_from_fundamental_watchlist,
-    save_fundamental_analysis,
-    load_fundamental_analysis_history,
-)
-from theme import render_metric_card
+from backend_functions import get_active_sheet_name, save_document_analysis_history, load_document_analysis_history
+import io
 
-MODEL_NAME = "claude-sonnet-5"
+MODEL_NAME = "claude-sonnet-5"  # โมเดลปัจจุบันที่สมดุลระหว่างคุณภาพและราคา เหมาะกับงานสรุปเอกสาร
 
-ANALYSIS_PROMPT_TEMPLATE = """คุณเป็นนักวิเคราะห์หุ้นสไตล์ Mark Minervini ที่เน้นดูการเติบโตของยอดขายและกำไรเป็นหลัก
-อ่านงบการเงินไตรมาสที่แนบมา (บริษัท {ticker} ไตรมาสที่ {quarter}/{year}) แล้วตอบกลับเป็น JSON เท่านั้น
-ห้ามมีข้อความอื่นนอกเหนือจาก JSON เลย ตามโครงสร้างนี้เป๊ะๆ:
+ANALYSIS_PROMPT = """คุณเป็นนักวิเคราะห์การเงินที่ช่วยสรุปเอกสารให้นักลงทุนรายย่อยเข้าใจง่าย
+กรุณาอ่านเอกสารที่แนบมา แล้วสรุปให้ครบทั้ง 4 หัวข้อนี้ เป็นภาษาไทย กระชับ อ่านง่าย:
 
-{{
-  "revenue": <ตัวเลขรายได้รวม หน่วยล้านบาท ตัวเลขล้วนไม่มีข้อความ ถ้าไม่พบใส่ null>,
-  "revenue_yoy_growth_pct": <% การเติบโตของรายได้เทียบไตรมาสเดียวกันปีก่อน ถ้าไม่ระบุในเอกสารใส่ null>,
-  "net_profit": <กำไรสุทธิ หน่วยล้านบาท ถ้าไม่พบใส่ null>,
-  "net_profit_yoy_growth_pct": <% การเติบโตกำไรสุทธิเทียบปีก่อน ถ้าไม่มีใส่ null>,
-  "eps": <กำไรต่อหุ้น บาท ถ้าไม่พบใส่ null>,
-  "gross_margin_pct": <อัตรากำไรขั้นต้น % ถ้าไม่พบใส่ null>,
-  "net_margin_pct": <อัตรากำไรสุทธิ % ถ้าไม่พบใส่ null>,
-  "debt_to_equity": <อัตราส่วนหนี้สินต่อทุน ถ้าไม่พบใส่ null>,
-  "summary": "<สรุปภาพรวมไตรมาสนี้ 2-3 ประโยค ภาษาไทย>",
-  "highlights": "<จุดเด่นของไตรมาสนี้ 2-3 ประโยค ภาษาไทย>",
-  "risks": "<จุดเสี่ยง/สัญญาณเตือนที่ควรระวัง 2-3 ประโยค ภาษาไทย>"
-}}"""
+1. **ภาพรวมธุรกิจ** — บริษัททำธุรกิจอะไร มีรายได้หลักจากไหน
+2. **จุดเด่น** — สิ่งที่น่าสนใจ/เป็นบวก เช่น การเติบโตของรายได้-กำไร, ความได้เปรียบทางธุรกิจ
+3. **จุดเสี่ยง** — สัญญาณที่ควรระวัง เช่น หนี้สินสูง, กำไรลดลง, ปัจจัยเสี่ยงที่ระบุในรายงาน
+4. **สรุปตัวเลขสำคัญ** — รายได้, กำไรสุทธิ, หนี้สินต่อทุน (ถ้ามีในเอกสาร) เทียบปีก่อนหน้า (ถ้ามีข้อมูล)
 
-TREND_ANALYSIS_PROMPT = """คุณเป็นนักวิเคราะห์หุ้นสไตล์ Mark Minervini กรุณาดูข้อมูลงบการเงินย้อนหลังของหุ้น {ticker}
-ที่มีอยู่ (เรียงจากไตรมาสเก่าสุดไปใหม่สุด) แล้วตอบเป็นภาษาไทยกระชับ ครบ 3 หัวข้อ:
-
-1. **แนวโน้มการเติบโต** — รายได้/กำไรเติบโตต่อเนื่องจริงไหม หรือเริ่มชะลอตัว/ถดถอย
-2. **จุดที่ควรจับตา** — สัญญาณเปลี่ยนแปลงที่เห็นจากการเทียบไตรมาสต่อไตรมาส
-3. **ควรถือต่อหรือไม่** — ให้มุมมองประกอบการตัดสินใจ (ไม่ใช่คำแนะนำการลงทุนโดยตรง แค่สรุปสิ่งที่ตัวเลขบอก)
-
-ข้อมูลย้อนหลัง:
-{history_text}"""
+หมายเหตุ: นี่เป็นการสรุปข้อมูลเพื่อประกอบการตัดสินใจเท่านั้น ไม่ใช่คำแนะนำการลงทุน"""
 
 
-def _call_claude_pdf_analysis(api_key, pdf_bytes, prompt_text):
-    """ส่ง PDF + Prompt ไปให้ Claude วิเคราะห์ คืนค่าเป็น (สำเร็จหรือไม่, ข้อความผลลัพธ์หรือ error, usage info)"""
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
-    base64_data = base64.standard_b64encode(pdf_bytes).decode("utf-8")
-    response = client.messages.create(
-        model=MODEL_NAME,
-        max_tokens=1500,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "document", "source": {"type": "base64", "media_type": "application/pdf", "data": base64_data}},
-                {"type": "text", "text": prompt_text},
-            ],
-        }],
-    )
-    result_text = "".join(block.text for block in response.content if block.type == "text")
-    return result_text, response.usage
+def _extract_text_from_xlsx(file_bytes):
+    """แปลงไฟล์ Excel ทุกชีตเป็นข้อความ (Markdown table) เพราะ Claude API ไม่รองรับไฟล์ .xlsx โดยตรง"""
+    excel_file = pd.ExcelFile(io.BytesIO(file_bytes))
+    text_parts = []
+    for sheet_name in excel_file.sheet_names:
+        df = excel_file.parse(sheet_name)
+        text_parts.append(f"=== ชีต: {sheet_name} ===\n{df.to_markdown(index=False)}\n")
+    return "\n".join(text_parts)
 
 
-def _call_claude_text_analysis(api_key, prompt_text):
-    """ส่ง Prompt ข้อความล้วนไปให้ Claude วิเคราะห์ (ใช้กับการวิเคราะห์แนวโน้มจากประวัติ ไม่มี PDF แนบ)"""
-    import anthropic
-    client = anthropic.Anthropic(api_key=api_key)
-    response = client.messages.create(
-        model=MODEL_NAME,
-        max_tokens=1200,
-        messages=[{"role": "user", "content": prompt_text}],
-    )
-    result_text = "".join(block.text for block in response.content if block.type == "text")
-    return result_text, response.usage
+def _extract_text_from_docx(file_bytes):
+    """แปลงไฟล์ Word เป็นข้อความล้วน (ย่อหน้า + ตาราง) เพราะ Claude API ไม่รองรับไฟล์ .docx โดยตรง"""
+    from docx import Document
+    doc = Document(io.BytesIO(file_bytes))
+
+    text_parts = []
+    for para in doc.paragraphs:
+        if para.text.strip():
+            text_parts.append(para.text)
+
+    for table_idx, table in enumerate(doc.tables):
+        text_parts.append(f"\n=== ตารางที่ {table_idx + 1} ===")
+        for row in table.rows:
+            text_parts.append(" | ".join(cell.text.strip() for cell in row.cells))
+
+    return "\n".join(text_parts)
 
 
-def render_tab_fundamental_watchlist():
-    st.markdown("### 📊 Watchlist เชิงปัจจัยพื้นฐาน")
+def render_tab_document_analysis():
+    st.markdown("### 🤖 วิเคราะห์เอกสารการเงินด้วย AI")
     st.markdown(
-        "ติดตามหุ้นที่สนใจเชิงปัจจัยพื้นฐาน — ดาวน์โหลดงบการเงินจาก set.or.th เอง แล้วอัปโหลดให้ AI "
-        "อ่านและสกัดตัวเลขสำคัญให้อัตโนมัติ บันทึกประวัติย้อนหลัง เปรียบเทียบการเติบโตข้ามไตรมาสได้ "
-        "**(แยกจากแท็บ Watchlist เดิมที่ใช้ติดตามราคาเพื่อเทรดโดยสิ้นเชิง)**"
+        "อัปโหลดงบการเงิน, รายงานประจำปี (56-1), หรือเอกสารการเงินอื่นๆ (PDF, Excel, Word) "
+        "ให้ Claude อ่านและสรุปจุดเด่น/จุดเสี่ยงให้อัตโนมัติ"
     )
 
+    # เช็คว่ามี API Key ตั้งค่าไว้แล้วหรือยัง (เก็บใน Streamlit Secrets ไม่ใช่ในโค้ด)
     api_key = st.secrets.get("ANTHROPIC_API_KEY") if hasattr(st, "secrets") else None
     if not api_key:
         # 🆕 แสดง "ชื่อ Secret ที่ระบบเจอจริง" ด้วย (ไม่โชว์ค่าจริงเพื่อความปลอดภัย) เพื่อวินิจฉัย
-        # ปัญหาการพิมพ์ผิด/วางผิดตำแหน่งได้ตรงจุด
+        # ปัญหาการพิมพ์ผิด/วางผิดตำแหน่งได้ตรงจุด แทนที่จะเดาสุ่มแก้ไปเรื่อยๆ
         _found_keys = list(st.secrets.keys()) if hasattr(st, "secrets") else []
         st.warning(
-            "⚠️ ยังไม่ได้ตั้งค่า Claude API Key ครับ — ไปที่ Streamlit Cloud → Settings → Secrets "
-            "แล้วเพิ่ม `ANTHROPIC_API_KEY = \"sk-ant-...\"`\n\n"
+            "⚠️ ยังไม่ได้ตั้งค่า Claude API Key ครับ — ไปที่ Streamlit Cloud → เลือกแอปนี้ → "
+            "**Settings → Secrets** แล้วเพิ่มบรรทัด:\n\n"
+            "`ANTHROPIC_API_KEY = \"sk-ant-...\"`\n\n"
+            "(ใช้ API Key จาก console.anthropic.com ของคุณเอง)\n\n"
             f"🔍 **ตรวจสอบ:** ตอนนี้ระบบเจอชื่อ Secret ทั้งหมด {len(_found_keys)} รายการ: "
             f"{', '.join(_found_keys) if _found_keys else '(ไม่เจอเลยสักตัว)'}"
         )
         return
 
-    spreadsheet_name = get_active_sheet_name()
-
-    # --- 1. จัดการรายชื่อหุ้นใน Watchlist เชิงปัจจัยพื้นฐาน ---
-    st.divider()
-    with st.form("add_fundamental_ticker_form"):
-        col1, col2 = st.columns([3, 1])
-        new_ticker = col1.text_input("เพิ่มหุ้นเข้า Watchlist เชิงปัจจัยพื้นฐาน", placeholder="เช่น PTT, AOT, CPALL")
-        add_submitted = col2.form_submit_button("➕ เพิ่ม", use_container_width=True)
-
-    if add_submitted and new_ticker.strip():
-        success, msg = add_to_fundamental_watchlist(spreadsheet_name, new_ticker)
-        if success:
-            st.success(msg)
-            st.cache_data.clear()
-            st.rerun()
-        else:
-            st.warning(msg)
-
-    watchlist = load_fundamental_watchlist(spreadsheet_name)
-
-    if not watchlist:
-        st.info("ยังไม่มีหุ้นใน Watchlist เชิงปัจจัยพื้นฐานเลยครับ — เพิ่มหุ้นตัวแรกด้านบนได้เลย")
+    try:
+        import anthropic
+    except ImportError:
+        st.error("⚠️ ยังไม่ได้ติดตั้งไลบรารี `anthropic` ครับ — เพิ่ม `anthropic` ลงใน requirements.txt แล้ว reboot แอปก่อนครับ")
         return
 
-    st.divider()
-    st.markdown("#### 📋 หุ้นในการติดตาม")
+    uploaded_file = st.file_uploader(
+        "อัปโหลดเอกสาร (PDF, Excel, Word)", type=["pdf", "xlsx", "docx"], key="doc_analysis_uploader"
+    )
 
-    for item in watchlist:
-        ticker = str(item.get('Ticker', '')).strip().upper()
-        set_url = get_set_financial_statement_url(ticker)
+    if uploaded_file is None:
+        st.info("💡 ตัวอย่างเอกสารที่เหมาะสม: งบการเงินรายไตรมาส, รายงานประจำปี 56-1, บทวิเคราะห์หุ้นจากโบรกเกอร์")
+        return
 
-        with st.container(border=True):
-            h1, h2, h3 = st.columns([2, 1, 1])
-            h1.markdown(f"### {ticker}")
-            h2.markdown(f"[📥 ดาวน์โหลดงบจาก SET]({set_url})")
-            if h3.button("🗑️ ลบออกจาก Watchlist", key=f"del_fund_{ticker}"):
-                success, msg = remove_from_fundamental_watchlist(spreadsheet_name, ticker)
-                if success:
-                    st.success(msg)
-                    st.cache_data.clear()
-                    st.rerun()
+    file_bytes = uploaded_file.read()
+    file_ext = uploaded_file.name.split(".")[-1].lower()
 
-            # --- 2. อัปโหลดงบไตรมาสใหม่ ให้ AI วิเคราะห์ ---
-            with st.expander(f"📤 อัปโหลดงบการเงินไตรมาสใหม่ — {ticker}"):
-                with st.form(f"upload_form_{ticker}"):
-                    u1, u2, u3 = st.columns([1, 1, 2])
-                    quarter = u1.selectbox("ไตรมาส", [1, 2, 3, 4], key=f"q_{ticker}")
-                    year = u2.number_input("ปี (พ.ศ.)", min_value=2560, max_value=2580, value=2568, step=1, key=f"y_{ticker}")
-                    pdf_file = u3.file_uploader("ไฟล์ PDF งบการเงิน", type=["pdf"], key=f"pdf_{ticker}")
-                    upload_submitted = st.form_submit_button("🔍 วิเคราะห์งบนี้ด้วย AI", type="primary")
+    st.info(f"📄 ไฟล์: **{uploaded_file.name}** ({len(file_bytes) / 1024:.0f} KB)")
 
-                if upload_submitted:
-                    if pdf_file is None:
-                        st.warning("กรุณาแนบไฟล์ PDF ก่อนครับ")
-                    else:
-                        with st.spinner("กำลังให้ AI อ่านงบการเงิน... (10-30 วินาที)"):
-                            try:
-                                prompt = ANALYSIS_PROMPT_TEMPLATE.format(ticker=ticker, quarter=quarter, year=year)
-                                result_text, usage = _call_claude_pdf_analysis(api_key, pdf_file.read(), prompt)
+    if st.button("🔍 วิเคราะห์เอกสารนี้ด้วย AI", type="primary", use_container_width=True):
+        with st.spinner("กำลังให้ AI อ่านและวิเคราะห์เอกสาร... (อาจใช้เวลา 10-30 วินาที ขึ้นกับความยาวเอกสาร)"):
+            try:
+                client = anthropic.Anthropic(api_key=api_key)
 
-                                # แกะ JSON ออกจากคำตอบ (เผื่อ Claude ใส่ ```json ครอบมาด้วย)
-                                cleaned = result_text.strip()
-                                if cleaned.startswith("```"):
-                                    cleaned = cleaned.split("```")[1]
-                                    if cleaned.startswith("json"):
-                                        cleaned = cleaned[4:]
-                                metrics = json.loads(cleaned.strip())
-
-                                success, msg = save_fundamental_analysis(
-                                    spreadsheet_name, ticker, quarter, year, metrics, result_text
-                                )
-                                if success:
-                                    st.success(f"✅ วิเคราะห์และบันทึกสำเร็จ! (token: อินพุต {usage.input_tokens:,} / เอาต์พุต {usage.output_tokens:,})")
-                                    st.cache_data.clear()
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
-                            except json.JSONDecodeError:
-                                st.error("⚠️ AI ตอบกลับมาในรูปแบบที่ไม่ใช่ JSON ที่คาดไว้ ลองอัปโหลดใหม่อีกครั้งครับ")
-                            except Exception as e:
-                                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
-
-            # --- 3. แสดงประวัติย้อนหลัง + วิเคราะห์แนวโน้ม ---
-            df_history = load_fundamental_analysis_history(spreadsheet_name, ticker)
-            if not df_history.empty:
-                st.markdown(f"##### 📈 ประวัติย้อนหลัง — {ticker} ({len(df_history)} ไตรมาส)")
-
-                display_cols = [c for c in ['Quarter', 'Year', 'Revenue', 'Net_Profit', 'EPS', 'Net_Margin_Pct'] if c in df_history.columns]
-                if display_cols:
-                    st.dataframe(df_history[display_cols], use_container_width=True, hide_index=True)
-
-                if len(df_history) >= 2:
-                    if st.button(f"🤖 ให้ AI วิเคราะห์แนวโน้มการเติบโต — {ticker}", key=f"trend_{ticker}"):
-                        with st.spinner("กำลังวิเคราะห์แนวโน้ม..."):
-                            try:
-                                history_text = df_history.to_markdown(index=False)
-                                prompt = TREND_ANALYSIS_PROMPT.format(ticker=ticker, history_text=history_text)
-                                result_text, usage = _call_claude_text_analysis(api_key, prompt)
-                                st.markdown(result_text)
-                                st.caption(f"💰 token: อินพุต {usage.input_tokens:,} / เอาต์พุต {usage.output_tokens:,}")
-                            except Exception as e:
-                                st.error(f"❌ เกิดข้อผิดพลาด: {e}")
+                if file_ext == "pdf":
+                    # PDF ส่งเข้า Claude API ได้ตรงๆ (รองรับทั้งข้อความและภาพ/กราฟ/ตารางในตัว)
+                    base64_data = base64.standard_b64encode(file_bytes).decode("utf-8")
+                    message_content = [
+                        {
+                            "type": "document",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "application/pdf",
+                                "data": base64_data,
+                            },
+                        },
+                        {"type": "text", "text": ANALYSIS_PROMPT},
+                    ]
+                elif file_ext == "xlsx":
+                    extracted_text = _extract_text_from_xlsx(file_bytes)
+                    message_content = f"เนื้อหาจากไฟล์ Excel:\n\n{extracted_text}\n\n{ANALYSIS_PROMPT}"
+                elif file_ext == "docx":
+                    extracted_text = _extract_text_from_docx(file_bytes)
+                    message_content = f"เนื้อหาจากไฟล์ Word:\n\n{extracted_text}\n\n{ANALYSIS_PROMPT}"
                 else:
-                    st.caption("💡 มีข้อมูลตั้งแต่ 2 ไตรมาสขึ้นไป ถึงจะให้ AI วิเคราะห์แนวโน้มการเติบโตได้ครับ")
+                    st.error("ไม่รองรับไฟล์ประเภทนี้ครับ")
+                    return
+
+                response = client.messages.create(
+                    model=MODEL_NAME,
+                    max_tokens=2000,
+                    messages=[{"role": "user", "content": message_content}],
+                )
+
+                result_text = "".join(block.text for block in response.content if block.type == "text")
+
+                st.divider()
+                st.markdown("#### 📋 ผลการวิเคราะห์")
+                st.markdown(result_text)
+
+                # แสดงจำนวน token ที่ใช้จริง ช่วยให้ผู้ใช้ประเมินค่าใช้จ่ายได้
+                usage = response.usage
+                st.caption(
+                    f"💰 ใช้ token: อินพุต {usage.input_tokens:,} / เอาต์พุต {usage.output_tokens:,} "
+                    f"(ราคาอ้างอิง ≈ ${usage.input_tokens/1_000_000*2 + usage.output_tokens/1_000_000*10:.4f})"
+                )
+
+                # 🆕 บันทึกผลลัพธ์ลง Google Sheets ทันที ก่อนหน้านี้แสดงแค่บนหน้าจอ พอปิด/รีเฟรช
+                # หน้าเว็บ ผลลัพธ์จะหายไปเลย ไม่มีทางเรียกดูย้อนหลังได้ ตอนนี้บันทึกอัตโนมัติทุกครั้ง
+                _save_success, _save_msg = save_document_analysis_history(
+                    get_active_sheet_name(), uploaded_file.name, result_text
+                )
+                if _save_success:
+                    st.caption("✅ บันทึกผลวิเคราะห์นี้ไว้แล้ว เรียกดูย้อนหลังได้ที่ด้านล่างสุดของหน้านี้")
+
+            except Exception as e:
+                st.error(f"❌ เกิดข้อผิดพลาดในการวิเคราะห์: {e}")
+
+    # --- ประวัติผลวิเคราะห์ย้อนหลัง ---
+    st.divider()
+    st.markdown("#### 📜 ประวัติผลวิเคราะห์ย้อนหลัง")
+    df_history = load_document_analysis_history(get_active_sheet_name())
+    if df_history.empty:
+        st.caption("ยังไม่มีประวัติการวิเคราะห์เลยครับ")
+    else:
+        for _, row in df_history.sort_values('Date', ascending=False).iterrows():
+            with st.expander(f"📄 {row.get('Filename', '?')} — {row.get('Date', '?')}"):
+                st.markdown(row.get('Analysis_Result', ''))
