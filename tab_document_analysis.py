@@ -32,12 +32,16 @@ ANALYSIS_PROMPT = """คุณเป็นนักวิเคราะห์�
 
 
 def _extract_text_from_xlsx(file_bytes):
-    """แปลงไฟล์ Excel ทุกชีตเป็นข้อความ (Markdown table) เพราะ Claude API ไม่รองรับไฟล์ .xlsx โดยตรง"""
+    """แปลงไฟล์ Excel ทุกชีตเป็นข้อความ (CSV) เพราะ Claude API ไม่รองรับไฟล์ .xlsx โดยตรง"""
+    # 🔧 แก้บั๊ก: เดิมใช้ df.to_markdown() ซึ่งต้องพึ่งไลบรารี tabulate ที่ไม่ได้อยู่ใน
+    # requirements.txt ทำให้พังตอนแปลงไฟล์ Excel จริง ("Import tabulate failed") เปลี่ยนมาใช้
+    # to_csv() แทน ซึ่งเป็นความสามารถพื้นฐานของ pandas อยู่แล้ว ไม่ต้องพึ่งไลบรารีเพิ่มเติมเลย
+    # (AI อ่านเข้าใจข้อมูลแบบ CSV ได้ดีไม่ต่างจาก Markdown table)
     excel_file = pd.ExcelFile(io.BytesIO(file_bytes))
     text_parts = []
     for sheet_name in excel_file.sheet_names:
         df = excel_file.parse(sheet_name)
-        text_parts.append(f"=== ชีต: {sheet_name} ===\n{df.to_markdown(index=False)}\n")
+        text_parts.append(f"=== ชีต: {sheet_name} ===\n{df.to_csv(index=False)}\n")
     return "\n".join(text_parts)
 
 
