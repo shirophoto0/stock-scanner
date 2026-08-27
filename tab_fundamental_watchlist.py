@@ -222,7 +222,9 @@ def render_tab_fundamental_watchlist():
                     if st.button(f"🤖 ให้ AI วิเคราะห์แนวโน้มการเติบโต — {ticker}", key=f"trend_{ticker}"):
                         with st.spinner("กำลังวิเคราะห์แนวโน้ม..."):
                             try:
-                                history_text = df_history.to_markdown(index=False)
+                                # 🔧 แก้บั๊กเดียวกัน: to_markdown() ต้องพึ่งไลบรารี tabulate ที่ไม่มี
+                                # อยู่ในระบบ เปลี่ยนมาใช้ to_csv() แทน (AI อ่านเข้าใจได้เหมือนกัน)
+                                history_text = df_history.to_csv(index=False)
                                 prompt = TREND_ANALYSIS_PROMPT.format(ticker=ticker, history_text=history_text)
                                 result_text, usage = _call_claude_text_analysis(api_key, prompt)
                                 st.markdown(result_text)
