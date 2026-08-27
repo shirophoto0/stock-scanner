@@ -11,3 +11,5 @@ oauth2client
 openpyxl
 google-generativeai
 reportlab
+anthropic
+python-docx
