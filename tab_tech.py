@@ -755,8 +755,16 @@ def render_tab_tech(df_sector_map, df_all_stocks):
             _wl_col1, _wl_col2, _wl_col3 = st.columns(3)
 
             if _wl_col1.button(f"⭐ เพิ่มเข้า Watchlist เทรด", use_container_width=True, key="btn_add_trade_wl"):
+                # 🔧 แก้บั๊ก: เดิมถ้าราคาล่าสุดในตารางเป็น NaN/None (เช่น หุ้นบางตัวยังไม่มีราคาจาก
+                # การสแกนรอบล่าสุด) จะแปลง float(NaN) ได้ค่า NaN ออกมาตรงๆ (ไม่ error ตอนแปลง)
+                # แต่พอส่งเข้า Google Sheets API (ใช้ JSON) จะพังทันที เพราะ NaN ไม่ใช่ค่าที่ JSON
+                # รองรับ ("Out of range float values are not JSON compliant: nan") ตอนนี้ใช้
+                # pd.to_numeric(errors='coerce') แปลงค่าให้ปลอดภัยเสมอ ไม่ว่าจะเป็น NaN, None,
+                # หรือแม้แต่ข้อความ "None" ก็ตาม (ไม่มีทาง error เลย กลายเป็น 0.0 อัตโนมัติ)
                 _selected_row = final_sorted_df[final_sorted_df['Ticker'] == _current_selected]
-                _price_now = float(_selected_row.iloc[0]['ราคาล่าสุด']) if not _selected_row.empty else 0.0
+                _raw_price = _selected_row.iloc[0]['ราคาล่าสุด'] if not _selected_row.empty else 0.0
+                _price_numeric = pd.to_numeric(_raw_price, errors='coerce')
+                _price_now = float(_price_numeric) if pd.notna(_price_numeric) else 0.0
                 _success, _msg = add_to_watchlist(_current_selected, _price_now)
                 if _success:
                     st.success(_msg)
@@ -772,8 +780,11 @@ def render_tab_tech(df_sector_map, df_all_stocks):
                     st.warning(_msg)
 
             if _wl_col3.button(f"⭐📊 เพิ่มเข้าทั้งสองอย่าง", use_container_width=True, key="btn_add_both_wl"):
+                # 🔧 แก้บั๊กเดียวกัน: ใช้ pd.to_numeric(errors='coerce') ป้องกัน NaN หลุดเข้า JSON
                 _selected_row = final_sorted_df[final_sorted_df['Ticker'] == _current_selected]
-                _price_now = float(_selected_row.iloc[0]['ราคาล่าสุด']) if not _selected_row.empty else 0.0
+                _raw_price = _selected_row.iloc[0]['ราคาล่าสุด'] if not _selected_row.empty else 0.0
+                _price_numeric = pd.to_numeric(_raw_price, errors='coerce')
+                _price_now = float(_price_numeric) if pd.notna(_price_numeric) else 0.0
                 _success1, _msg1 = add_to_watchlist(_current_selected, _price_now)
                 _success2, _msg2 = add_to_fundamental_watchlist(get_active_sheet_name(), _current_selected)
                 if _success1:
