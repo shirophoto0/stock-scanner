@@ -267,12 +267,14 @@ def render_tab_fundamental_watchlist():
 
                 # --- 🆕 แสดงผลวิเคราะห์แนวโน้มล่าสุดที่เคยบันทึกไว้ (ถ้ามี) ก่อนปุ่มวิเคราะห์ใหม่
                 # ไม่ต้องเรียก AI ซ้ำถ้าแค่อยากอ่านผลเดิม ประหยัดโควต้า API ---
+                # 🔧 ปรับปรุง: ครอบด้วย st.expander() แทนการแสดงยาวเหยียดตลอดเวลา เพราะเนื้อหาที่
+                # AI วิเคราะห์มักยาวมาก (มีหัวข้อย่อย 3 ส่วน) พอมีหลายหุ้นใน Watchlist หน้าจะยาว
+                # เกินไป ปิดไว้เป็นค่าเริ่มต้น กดเปิดดูเองได้เมื่อต้องการ
                 _saved_trend = load_trend_analysis(spreadsheet_name, ticker)
                 if _saved_trend:
-                    st.markdown(f"##### 🤖 ผลวิเคราะห์แนวโน้มล่าสุด — {ticker}")
-                    st.caption(f"📅 วิเคราะห์เมื่อ {_saved_trend.get('Date_Analyzed', '-')} (จากข้อมูล {_saved_trend.get('Quarters_Count', '-')} ไตรมาส)")
-                    st.markdown(_saved_trend.get('Analysis_Text', ''))
-                    st.divider()
+                    with st.expander(f"🤖 ผลวิเคราะห์แนวโน้มล่าสุด — {ticker} (วิเคราะห์เมื่อ {_saved_trend.get('Date_Analyzed', '-')})", expanded=False):
+                        st.caption(f"📅 วิเคราะห์เมื่อ {_saved_trend.get('Date_Analyzed', '-')} (จากข้อมูล {_saved_trend.get('Quarters_Count', '-')} ไตรมาส)")
+                        st.markdown(_saved_trend.get('Analysis_Text', ''))
 
                 if len(df_history) >= 2:
                     _btn_label = f"🔄 วิเคราะห์แนวโน้มใหม่อีกครั้ง — {ticker}" if _saved_trend else f"🤖 ให้ AI วิเคราะห์แนวโน้มการเติบโต — {ticker}"
@@ -300,7 +302,10 @@ def render_tab_fundamental_watchlist():
                                 )
                                 st.cache_data.clear()  # ล้างแคชผลวิเคราะห์เก่า ให้เห็นผลใหม่ทันที
 
-                                st.markdown(result_text)
+                                # 🔧 ปรับปรุง: ครอบผลลัพธ์ใหม่ด้วย st.expander() ด้วยเช่นกัน (เปิดไว้
+                                # ก่อนตอนเพิ่งวิเคราะห์เสร็จใหม่ๆ เพราะน่าจะอยากอ่านทันที)
+                                with st.expander(f"🤖 ผลวิเคราะห์แนวโน้ม — {ticker} (ผลลัพธ์ล่าสุด)", expanded=True):
+                                    st.markdown(result_text)
                                 st.caption(f"💰 token: อินพุต {usage.input_tokens:,} / เอาต์พุต {usage.output_tokens:,}")
                                 if _save_success:
                                     st.success("✅ บันทึกผลวิเคราะห์นี้ไว้แล้ว เรียกดูซ้ำได้โดยไม่ต้องเสียโควต้า API อีก")
