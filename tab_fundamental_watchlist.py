@@ -105,10 +105,20 @@ def _call_claude_text_analysis(api_key, prompt_text):
     client = anthropic.Anthropic(api_key=api_key)
     response = client.messages.create(
         model=MODEL_NAME,
-        max_tokens=1200,
+        # 🔧 แก้บั๊ก: เดิมตั้งไว้แค่ 1200 ไม่พอสำหรับการวิเคราะห์ครบ 3 หัวข้อ (แนวโน้มการเติบโต,
+        # จุดที่ควรจับตา, ควรถือต่อหรือไม่) ทำให้คำตอบถูกตัดกลางคันบ่อยๆ (สังเกตได้จากตัวเลข
+        # "เอาต์พุต 1,200" ที่ตรงกับ max_tokens เป๊ะ ยืนยันว่าชนขีดจำกัดจริง ไม่ใช่ AI ตอบสั้นเอง)
+        # เพิ่มเป็น 2500 ให้มีที่เขียนเพียงพอ
+        max_tokens=2500,
         messages=[{"role": "user", "content": prompt_text}],
     )
     result_text = "".join(block.text for block in response.content if block.type == "text")
+
+    # 🆕 เช็คว่าคำตอบถูกตัดกลางคันเพราะชน max_tokens อีกไหม (เผื่อในอนาคตวิเคราะห์จากข้อมูลหลาย
+    # ไตรมาสมากขึ้นจนยาวเกิน 2500 อีกครั้ง) จะได้รู้สาเหตุทันทีแทนที่จะเดา
+    if response.stop_reason == "max_tokens":
+        result_text += "\n\n---\n⚠️ **หมายเหตุ: คำตอบนี้ถูกตัดกลางคัน เพราะยาวเกินขีดจำกัดที่ตั้งไว้ อาจไม่ครบถ้วน**"
+
     return result_text, response.usage
 
 
