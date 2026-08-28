@@ -1,7 +1,7 @@
 name: Daily Stock Scanner
 on:
   schedule:
-    - cron: '30 10 * * *'  # ตั้งเวลา 17:30 น. เวลาประเทศไทย
+    - cron: '36 10 * * *'  # ตั้งเวลา 17:30 น. เวลาประเทศไทย
   workflow_dispatch:        # ให้กดรันเองได้ด้วย
 jobs:
   build:
