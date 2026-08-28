@@ -990,15 +990,30 @@ def load_data(sheet_name, active_sheet_name):
 
 @st.cache_data(ttl=3600)  
 def get_cached_stock_info(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        if not info or len(info) <= 1:
-            return {}
-        return info
-    except Exception as e:
-        print(f"Warning: Could not fetch info for {ticker} due to: {e}")
-        return {}
+    """
+    ดึงข้อมูลพื้นฐานของหุ้น (P/E, Market Cap, Margin ฯลฯ) จาก Yahoo Finance ผ่าน yfinance
+    🔧 แก้บั๊ก: เดิมลองดึงข้อมูลแค่ครั้งเดียว ไม่มีระบบลองใหม่อัตโนมัติเลย พอ Yahoo Finance สะดุด
+    ชั่วขณะ (rate limit/เชื่อมต่อสะดุด — เกิดขึ้นเป็นครั้งคราวกับทุกหุ้น ไม่ใช่ปัญหาเฉพาะตัวใดตัว
+    หนึ่ง) จะยอมแพ้ทันที ตอนนี้เพิ่ม retry แบบ exponential backoff + jitter เหมือนจุดอื่นๆ ในระบบ
+    ที่เคยแก้ปัญหา Yahoo Finance สะดุดมาก่อน (ราคาทอง, SET Index) ลองสูงสุด 3 ครั้งก่อนจะยอมแพ้จริงๆ
+    """
+    last_error = None
+    for attempt in range(3):
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info
+            if not info or len(info) <= 1:
+                last_error = "ได้ข้อมูลว่างเปล่ากลับมา"
+            else:
+                return info
+        except Exception as e:
+            last_error = str(e)
+
+        if attempt < 2:  # ไม่ต้องหน่วงเวลาหลังจากลองครั้งสุดท้ายแล้ว
+            time.sleep((2 ** (attempt + 1)) + random.uniform(0.5, 1.5))
+
+    print(f"Warning: Could not fetch info for {ticker} after 3 attempts due to: {last_error}")
+    return {}
 
 
 # =============================================================
