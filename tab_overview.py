@@ -8,7 +8,7 @@ import time
 from datetime import date
 import plotly.graph_objects as go
 import plotly.express as px
-from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history, generate_net_worth_pdf_report, get_net_worth_trend_data
+from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history, generate_net_worth_pdf_report, get_net_worth_trend_data, compute_live_net_worth
 from theme import style_plotly
 
 
@@ -153,8 +153,16 @@ def render_tab_overview():
     except Exception:
         pass
 
-    # ทองคำ (จาก session_state)
-    total_gold_value = st.session_state.get('total_gold_portfolio_value', 0.0)
+    # ทองคำ + หุ้น+TFEX (คำนวณสดตรงนี้เลย)
+    # 🔧 แก้บั๊ก: เดิมดึงค่าจาก st.session_state ที่ตั้งโดยแท็บหุ้น/ทองคำเท่านั้น ('total_gold_
+    # portfolio_value', 'stock_net_worth', 'tfex_net_worth') ทำให้ต้องไปเยี่ยมแท็บนั้นก่อนถึงจะมี
+    # ค่า — ก่อนหน้านี้ตอนใช้ st.tabs() แบบเดิม ทุกแท็บ render พร้อมกันหมดเสมอ (ค่าเลยพร้อมใช้เสมอ
+    # โดยไม่รู้ตัว) แต่พอเปลี่ยนมาใช้เมนู Sidebar แบบใหม่ที่ render แค่หน้าที่เลือกอยู่เท่านั้น ค่า
+    # เหล่านี้เลยเป็น 0 ค้างอยู่จนกว่าจะไปคลิกแท็บหุ้น/ทองคำเองก่อน ตอนนี้เรียก compute_live_net_
+    # worth() คำนวณสดตรงนี้แทน (มี cache 5 นาทีไว้แล้ว ไม่ต้องกลัวช้า) ไม่ต้องพึ่งว่าแท็บไหนเคย
+    # render ไปแล้วหรือยังเลย
+    _live_net_worth = compute_live_net_worth(get_active_sheet_name())
+    total_gold_value = _live_net_worth['gold_value']
 
     # 🆕 บันทึกยอดทองคำสิ้นเดือนอัตโนมัติ (ทำครั้งเดียวต่อเดือน) เพื่อใช้วาดกราฟแนวโน้มด้านล่าง
     # (จุดนี้เดิมไม่มีการบันทึกประวัติเลย ทำให้กราฟแนวโน้มไม่มีเส้นทองคำแสดงมาตลอด)
@@ -236,11 +244,10 @@ def render_tab_overview():
         pass
 
     # พอร์ตหุ้นรวม + พอร์ต TFEX
-    # 🔧 แก้บั๊ก: เดิมใช้ 'total_value' in locals() ซึ่งใช้ได้ตอนแท็บนี้ยังอยู่ไฟล์เดียวกับแท็บหุ้น
-    # แต่หลังแยกไฟล์แล้ว ต้องอ่านค่าผ่าน session_state แทน (แท็บหุ้นตั้งค่านี้ไว้ให้แล้ว)
-    base_stock_value = st.session_state.get('stock_net_worth', 0.0)
-    tfex_portfolio_value = st.session_state.get('tfex_net_worth', 0.0)
-    total_stock_and_tfex = base_stock_value + tfex_portfolio_value
+    # 🔧 แก้บั๊ก: เดิมดึงจาก st.session_state (ปัญหาเดียวกับทองคำด้านบน) ตอนนี้ใช้ค่าที่คำนวณสดไว้
+    # แล้วจาก compute_live_net_worth() ที่เรียกไว้ครั้งเดียวด้านบนสุด (ไม่ต้องเรียกซ้ำอีกรอบ
+    # ประหยัดเวลา เพราะฟังก์ชันนี้ยิง API ดึงราคาหุ้นทีละตัว ค่อนข้างช้า)
+    total_stock_and_tfex = _live_net_worth['stock_and_tfex_value']
 
     # 🆕 บันทึกยอดพอร์ตหุ้น+TFEX สิ้นเดือนอัตโนมัติ เผื่อไว้กรณีเดือนนั้นไม่มีการซื้อขายเลย
     # (ปกติมีการบันทึกอยู่แล้วทุกครั้งที่ซื้อ-ขาย ผ่าน save_portfolio_snapshot() แต่ถ้าเดือนไหน
