@@ -307,7 +307,6 @@ def main():
     }
 
     with st.sidebar:
-        st.divider()
         selected_main = option_menu(
             menu_title=None,
             options=list(MENU_STRUCTURE.keys()),
@@ -319,7 +318,6 @@ def main():
         selected_sub = None
         _sub_items = MENU_STRUCTURE[selected_main]["sub"]
         if _sub_items:
-            st.divider()
             selected_sub = option_menu(
                 menu_title=None,
                 options=list(_sub_items.keys()),
