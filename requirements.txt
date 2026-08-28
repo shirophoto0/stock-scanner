@@ -13,3 +13,4 @@ google-generativeai
 reportlab
 anthropic
 python-docx
+streamlit-option-menu
