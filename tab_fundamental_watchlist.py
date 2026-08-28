@@ -17,6 +17,8 @@ from backend_functions import (
     remove_from_fundamental_watchlist,
     save_fundamental_analysis,
     load_fundamental_analysis_history,
+    save_trend_analysis,
+    load_trend_analysis,
 )
 from theme import render_metric_card
 # 🆕 ดึงฟังก์ชันแปลง Excel/Word เป็นข้อความ ที่มีอยู่แล้วจากแท็บ "วิเคราะห์เอกสาร AI" มาใช้ร่วมกัน
@@ -233,8 +235,18 @@ def render_tab_fundamental_watchlist():
                 if display_cols:
                     st.dataframe(df_history[display_cols], use_container_width=True, hide_index=True)
 
+                # --- 🆕 แสดงผลวิเคราะห์แนวโน้มล่าสุดที่เคยบันทึกไว้ (ถ้ามี) ก่อนปุ่มวิเคราะห์ใหม่
+                # ไม่ต้องเรียก AI ซ้ำถ้าแค่อยากอ่านผลเดิม ประหยัดโควต้า API ---
+                _saved_trend = load_trend_analysis(spreadsheet_name, ticker)
+                if _saved_trend:
+                    st.markdown(f"##### 🤖 ผลวิเคราะห์แนวโน้มล่าสุด — {ticker}")
+                    st.caption(f"📅 วิเคราะห์เมื่อ {_saved_trend.get('Date_Analyzed', '-')} (จากข้อมูล {_saved_trend.get('Quarters_Count', '-')} ไตรมาส)")
+                    st.markdown(_saved_trend.get('Analysis_Text', ''))
+                    st.divider()
+
                 if len(df_history) >= 2:
-                    if st.button(f"🤖 ให้ AI วิเคราะห์แนวโน้มการเติบโต — {ticker}", key=f"trend_{ticker}"):
+                    _btn_label = f"🔄 วิเคราะห์แนวโน้มใหม่อีกครั้ง — {ticker}" if _saved_trend else f"🤖 ให้ AI วิเคราะห์แนวโน้มการเติบโต — {ticker}"
+                    if st.button(_btn_label, key=f"trend_{ticker}"):
                         with st.spinner("กำลังวิเคราะห์แนวโน้ม..."):
                             try:
                                 # 🔧 แก้บั๊ก: เดิมใช้ df_history.to_csv() แบบรวมทุกคอลัมน์ ซึ่งมีคอลัมน์
@@ -250,8 +262,18 @@ def render_tab_fundamental_watchlist():
                                 history_text = df_history[_cols_for_ai].to_csv(index=False)
                                 prompt = TREND_ANALYSIS_PROMPT.replace("{ticker}", ticker).replace("{history_text}", history_text)
                                 result_text, usage = _call_claude_text_analysis(api_key, prompt)
+
+                                # 🆕 บันทึกผลลง Google Sheets ทันที ก่อนหน้านี้แสดงแค่บนหน้าจอตอนนั้น
+                                # พอรีเฟรชหน้าเว็บ ผลลัพธ์จะหายไปเลย ไม่มีทางเรียกดูย้อนหลังได้
+                                _save_success, _save_msg = save_trend_analysis(
+                                    spreadsheet_name, ticker, result_text, len(df_history)
+                                )
+                                st.cache_data.clear()  # ล้างแคชผลวิเคราะห์เก่า ให้เห็นผลใหม่ทันที
+
                                 st.markdown(result_text)
                                 st.caption(f"💰 token: อินพุต {usage.input_tokens:,} / เอาต์พุต {usage.output_tokens:,}")
+                                if _save_success:
+                                    st.success("✅ บันทึกผลวิเคราะห์นี้ไว้แล้ว เรียกดูซ้ำได้โดยไม่ต้องเสียโควต้า API อีก")
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาด: {e}")
                 else:
