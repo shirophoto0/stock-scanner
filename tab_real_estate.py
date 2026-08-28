@@ -6,6 +6,7 @@ import streamlit as st
 from theme import render_metric_card
 import pandas as pd
 import time
+import random
 from datetime import datetime
 from backend_functions import get_gsheet_client, get_worksheet_safely, get_active_sheet_name
 
@@ -21,11 +22,20 @@ def render_tab_real_estate():
     # 🔧 แก้บั๊กเพิ่ม: เดิมฟังก์ชันนี้ "จำ" ผลลัพธ์โดยไม่รู้ว่าผู้ใช้คนไหนเป็นคนขอ ทำให้สลับ user
     # แล้วเห็นข้อมูลอสังหาฯ ของคนก่อนหน้าค้างอยู่ ตอนนี้รับชื่อชีตของผู้ใช้เป็นพารามิเตอร์ตรงๆ
     # เพื่อให้ระบบจำแยกตามผู้ใช้อัตโนมัติ ไม่มีทางปนกัน
-    @st.cache_data(ttl=600, show_spinner=False)
+    # 🔧 แก้บั๊กรอบล่าสุด: ยังคงเจอ 429 บ่อย ทั้งที่มี cache 600 วิ + retry อยู่แล้ว เพราะโควต้า Google
+    # Sheets API เป็นแบบ "รวมทั้งบัญชีต่อนาที" ไม่ได้แยกตามไฟล์/แท็บ — ถ้าทั้งแอปมีจุดอื่นที่ยิง API
+    # ถี่ในเวลาใกล้กัน (เช่น เปิดหลายแท็บพร้อมกัน) โควต้ารวมก็เกินได้ แม้ไฟล์นี้เองจะ cache ดีแล้วก็ตาม
+    # ปรับปรุง retry ให้เป็น exponential backoff จริง (หน่วงนานขึ้นเรื่อยๆ แบบทวีคูณ) + สุ่มเวลาเพิ่ม
+    # (jitter) กันหลายคำขอ retry พร้อมกันชนกันซ้ำ — แบบเดียวกับที่เคยแก้ปัญหานี้ให้ daily_scan.py แล้ว
+    # 🔧 ปรับปรุง: get_worksheet_safely() มี retry + jitter ในตัวอยู่แล้ว (4 ครั้ง สำหรับขั้นตอน
+    # "เปิด worksheet") การซ้อน retry อีกชั้นเต็มรูปแบบตรงนี้จะทำให้กรณีเลวร้ายสุดรอนานเกินจำเป็น
+    # (4×4 รอบ) จึงลดชั้นนอกนี้เหลือแค่ 2 รอบ ครอบคลุมเฉพาะส่วน .get_all_records() ที่ยังไม่มี
+    # retry ครอบให้ (อาจพังได้หลังเปิด worksheet สำเร็จแล้ว)
+    @st.cache_data(ttl=900, show_spinner=False)
     def fetch_real_estate_data_cached(active_sheet_name):
         client = get_gsheet_client()
         last_error = None
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 sheet_re = get_worksheet_safely(client, active_sheet_name, 'Real_Estate')
                 if sheet_re is not None:
@@ -33,13 +43,14 @@ def render_tab_real_estate():
                 last_error = "ไม่พบชีต Real_Estate"
             except Exception as e:
                 last_error = str(e)
-            time.sleep(1 + attempt)
+            time.sleep((2 ** (attempt + 1)) + random.uniform(0.5, 2.5))
         raise RuntimeError(last_error or "โหลดข้อมูลไม่สำเร็จ")
 
     # ฟังก์ชันช่วยบันทึกข้อมูลลง Google Sheets พร้อม Retry ป้องกัน API พัง
+    # 🔧 ปรับปรุง: ลดชั้นนอกเหลือ 2 รอบด้วยเหตุผลเดียวกัน (get_worksheet_safely มี retry ในตัวแล้ว)
     def save_real_estate_to_sheet_safe(portfolio_items):
         client = get_gsheet_client()
-        for attempt in range(3):
+        for attempt in range(2):
             try:
                 sheet_re = get_worksheet_safely(client, get_active_sheet_name(), 'Real_Estate')
                 if sheet_re is not None:
@@ -65,7 +76,7 @@ def render_tab_real_estate():
                     fetch_real_estate_data_cached.clear()
                     return True
             except Exception:
-                time.sleep(1.5 + attempt)
+                time.sleep((2 ** (attempt + 1)) + random.uniform(0.5, 2.5))
         return False
 
     # ปุ่มโหลดข้อมูลใหม่ (เคลียร์ Cache และ Session)
