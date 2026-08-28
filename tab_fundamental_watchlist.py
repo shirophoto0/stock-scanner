@@ -161,7 +161,17 @@ def render_tab_fundamental_watchlist():
         else:
             st.warning(msg)
 
-    watchlist = load_fundamental_watchlist(spreadsheet_name)
+    # 🔧 แก้บั๊ก: เดิมถ้าโหลดไม่สำเร็จ (429 Rate Limit ฯลฯ) จะได้ [] เงียบๆ แล้วขึ้นข้อความ
+    # "ยังไม่มีหุ้นเลย" ผิดความจริง ทั้งที่ข้อมูลยังอยู่ครบใน Google Sheets ตอนนี้แยกแยะ "โหลดไม่
+    # สำเร็จ" (ขึ้น error พร้อมปุ่มลองใหม่) ออกจาก "โหลดสำเร็จแต่ไม่มีข้อมูลจริง" (ขึ้นข้อความ
+    # แนะนำให้เพิ่มหุ้น) อย่างชัดเจน
+    try:
+        watchlist = load_fundamental_watchlist(spreadsheet_name)
+    except Exception as e:
+        st.error(f"⚠️ โหลดรายชื่อหุ้นใน Watchlist ไม่สำเร็จ (ข้อมูลยังอยู่ครบใน Google Sheets แค่โหลดไม่สำเร็จชั่วคราว): {e}")
+        if st.button("🔄 ลองโหลดใหม่อีกครั้ง"):
+            st.rerun()
+        return
 
     if not watchlist:
         st.info("ยังไม่มีหุ้นใน Watchlist เชิงปัจจัยพื้นฐานเลยครับ — เพิ่มหุ้นตัวแรกด้านบนได้เลย")
@@ -237,7 +247,17 @@ def render_tab_fundamental_watchlist():
                                 st.error(f"❌ เกิดข้อผิดพลาด: {e}")
 
             # --- 3. แสดงประวัติย้อนหลัง + วิเคราะห์แนวโน้ม ---
-            df_history = load_fundamental_analysis_history(spreadsheet_name, ticker)
+            # 🔧 แก้บั๊ก: เดิมถ้าโหลดไม่สำเร็จ (429 ฯลฯ) จะได้ DataFrame ว่างเปล่าเงียบๆ ดูเหมือน
+            # "ยังไม่มีประวัติ" ทั้งที่ข้อมูลยังอยู่ครบ ตอนนี้ครอบ try/except เพราะจุดนี้อยู่ใน loop
+            # แสดงหุ้นแต่ละตัว ถ้าปล่อยให้ error หลุดออกไปโดยไม่จับ จะทำให้ทั้งหน้าพังไปเลย (ไม่ใช่
+            # แค่หุ้นตัวนั้น) ตอนนี้ถ้าหุ้นตัวไหนโหลดไม่สำเร็จ จะขึ้น warning เฉพาะหุ้นตัวนั้น
+            # แล้วข้ามไปแสดงหุ้นตัวถัดไปต่อได้ตามปกติ
+            try:
+                df_history = load_fundamental_analysis_history(spreadsheet_name, ticker)
+            except Exception as e:
+                st.warning(f"⚠️ โหลดประวัติของ {ticker} ไม่สำเร็จชั่วคราว (ข้อมูลยังอยู่ครบ ลองรีเฟรชหน้าใหม่): {e}")
+                continue
+
             if not df_history.empty:
                 st.markdown(f"##### 📈 ประวัติย้อนหลัง — {ticker} ({len(df_history)} ไตรมาส)")
 
