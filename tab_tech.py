@@ -1,6 +1,11 @@
 # =============================================================
 # tab_tech.py
-# แท็บวิเคราะห์กราฟเทคนิคัล (มี Risk Management ซ้อนอยู่ข้างใน) (Phase 2 ของการแยกไฟล์)
+# แท็บวิเคราะห์กราฟเทคนิคัล (Phase 2 ของการแยกไฟล์)
+# 🔧 แก้บั๊ก: เดิมเรียก render_tab_risk() ซ้อนอยู่ข้างในตัวเอง (ผ่าน tab_risk container ที่ส่งเข้ามา
+# เป็นพารามิเตอร์) ทำให้ผูก 2 แท็บเข้าด้วยกันแปลกๆ พอต้องแยกกลุ่มเมนู (วิเคราะห์กราฟเทคนิคอลไปกลุ่ม
+# "สแกนหุ้น" ส่วน Risk Management ยังอยู่กลุ่ม "ระบบเทรด") ส่ง container ข้ามกลุ่มแบบเดิมทำไม่ได้อีก
+# ต่อไป (เพราะแต่ละกลุ่มเมนูจะ render แยกกันคนละตอน ไม่ได้อยู่พร้อมกันในหน้าเดียวอีกแล้ว) ตอนนี้
+# ตัดการเรียก Risk Management ออกจากในนี้ ให้ App.py เรียกแยกกันอิสระตามที่ควรจะเป็น
 # =============================================================
 import streamlit as st
 import pandas as pd
@@ -10,22 +15,21 @@ from plotly.subplots import make_subplots
 from constants import SET100_TICKERS
 from backend_functions import get_cached_stock_info, get_sector_from_mapping, highlight_rsi_zones, load_from_gsheet, save_to_gsheet, load_and_calculate_stock_data_optimized, add_to_watchlist, add_to_fundamental_watchlist, get_active_sheet_name
 from theme import style_plotly
-from tab_risk import render_tab_risk
 
 
-def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
+def render_tab_tech(df_sector_map, df_all_stocks):
 ################################
     # 1. Slidebar (ตัวกรอง)
     # 🔧 ปรับปรุง: ย้าย "ตัวกรองขั้นสูง (P/E, ปันผล, RSI)" ออกมาเป็น expander อิสระ แยกจาก
     # "เมนูตัวกรองหุ้น" (เดิมซ้อนอยู่ข้างในกัน) ตอนนี้วางไว้ด้านบนสุด ให้เห็นเป็น 2 dropdown
     # แยกกันชัดเจน ไม่ต้องกดเปิด "เมนูตัวกรองหุ้น" ก่อนถึงจะเจอ
-    with st.sidebar.expander("🔧 ตัวกรองขั้นสูง (P/E, ปันผล, RSI)", expanded=False):
+    with st.expander("🔧 ตัวกรองขั้นสูง (P/E, ปันผล, RSI)", expanded=False):
         max_pe = st.slider("1. ค่า P/E สูงสุด:", 5.0, 100.0, 100.0, key="filter_max_pe")
         # 🔧 ปรับปรุง (ข้อ 4): เพิ่มหน่วย % ต่อท้ายตัวเลขให้ชัดเจนขึ้น (เดิมมีแต่ตัวเลขเฉยๆ)
         min_dividend = st.slider("2. ปันผลขั้นต่ำ (%):", 0.0, 10.0, 0.0, format="%.2f%%", key="filter_min_dividend")
         rsi_range = st.slider("3. ช่วงค่า RSI:", 10.0, 90.0, (10.0, 90.0), key="filter_rsi_range")
 
-    with st.sidebar.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
+    with st.expander("⚙️ เมนูตัวกรองหุ้น", expanded=True):
         st.markdown("**🎯 กรองตามกลยุทธ์ (เลือกได้อย่างใดอย่างหนึ่ง)**")
 
         # 🔧 ปรับปรุง: เดิมรวม 2 กลุ่มกลยุทธ์ไว้ใน dropdown เดียวกัน (คั่นด้วยข้อความ "--- กลุ่ม ---")
@@ -177,7 +181,7 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
             elif strategy_option == "🔥 RS Line ใกล้จะตัด 0 (จ่อระเบิด)":
                 if 'อยู่ใต้เส้น0มาแล้ว(วัน)' in filtered_df.columns:
                     time_map = {"3 เดือน (60 วัน)": 60, "6 เดือน (120 วัน)": 120, "1 ปี (240 วัน)": 240}
-                    time_choice = st.sidebar.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
+                    time_choice = st.selectbox("เลือกระยะเวลาจมใต้เส้น 0:", list(time_map.keys()), index=1)
                     min_days = time_map[time_choice]
                     filtered_df = filtered_df[(filtered_df['RS_Line'] <= 0.0) & (filtered_df['อยู่ใต้เส้น0มาแล้ว(วัน)'] >= min_days)]
                     show_columns.append('อยู่ใต้เส้น0มาแล้ว(วัน)')
@@ -638,10 +642,9 @@ def render_tab_tech(tab_risk, df_sector_map, df_all_stocks):
         except Exception as e:
             st.error(f"⚠️ เกิดข้อผิดพลาดในการวาดกราฟ: {str(e)}")
     # ==========================================
-    # เริ่ม Tab ถัดไป (เช่น tab_risk) ตรงนี้
+    # 🔧 แก้บั๊ก: เดิมเรียก render_tab_risk() ซ้อนอยู่ตรงนี้ (ผ่าน tab_risk container ที่ส่งเข้ามา)
+    # ตัดออกแล้ว — Risk Management ถูกเรียกแยกอิสระจาก App.py โดยตรงแทน (อยู่กลุ่ม "ระบบเทรด")
     # ==========================================
-    with tab_risk:
-        render_tab_risk()
     # =============================================================
     # 7. ผลลัพธ์การสแกน (ใช้ filtered_df ที่กรองผ่าน Sidebar มาแล้ว)
     # =============================================================
