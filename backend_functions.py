@@ -2852,3 +2852,53 @@ def load_document_analysis_history(spreadsheet_name):
         return pd.DataFrame(records) if records else pd.DataFrame()
     except Exception:
         return pd.DataFrame()
+
+
+# =============================================================
+# 🆕 บันทึกผลวิเคราะห์แนวโน้มการเติบโต (จากปุ่ม "ให้ AI วิเคราะห์แนวโน้มการเติบโต" ใน Fundamental
+# Watchlist) ลง Google Sheets แทนที่จะแสดงแค่บนหน้าจอตอนนั้นแล้วหายไปเมื่อรีเฟรช เรียกดูย้อนหลังได้
+# โดยไม่ต้องเรียก AI ซ้ำ ประหยัดโควต้า API
+# =============================================================
+def save_trend_analysis(spreadsheet_name, ticker, analysis_text, quarters_count):
+    """บันทึกผลวิเคราะห์แนวโน้มของหุ้นตัวหนึ่งลงชีต 'Trend_Analysis_History' (เขียนทับของเดิมถ้ามีอยู่แล้ว เก็บแค่ผลล่าสุดต่อหุ้น)"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Trend_Analysis_History')
+        records = sheet.get_all_records()
+        ticker_clean = ticker.strip().upper()
+
+        headers = sheet.row_values(1) or ["Ticker", "Date_Analyzed", "Quarters_Count", "Analysis_Text"]
+        new_row = [ticker_clean, str(date.today()), quarters_count, analysis_text]
+
+        # หาว่าหุ้นตัวนี้เคยมีผลวิเคราะห์บันทึกไว้แล้วหรือยัง (แถวไหน) ถ้ามีให้เขียนทับแถวเดิม
+        # (เก็บแค่ผลล่าสุดต่อหุ้นพอ ไม่สะสมประวัติซ้อนกันไปเรื่อยๆ)
+        existing_row_idx = None
+        for i, row in enumerate(records):
+            if str(row.get('Ticker', '')).strip().upper() == ticker_clean:
+                existing_row_idx = i + 2  # +2 เพราะแถว 1 คือหัวตาราง และ index เริ่มที่ 0
+                break
+
+        if existing_row_idx:
+            sheet.update(range_name=f'A{existing_row_idx}', values=[new_row])
+        else:
+            sheet.append_row(new_row)
+
+        return True, "บันทึกผลวิเคราะห์แนวโน้มสำเร็จ"
+    except Exception as e:
+        return False, f"บันทึกไม่สำเร็จ: {e}"
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_trend_analysis(spreadsheet_name, ticker):
+    """โหลดผลวิเคราะห์แนวโน้มล่าสุดของหุ้นตัวหนึ่ง คืนค่าเป็น dict หรือ None ถ้ายังไม่เคยวิเคราะห์"""
+    try:
+        client = get_gsheet_client()
+        sheet = get_cached_worksheet(client, spreadsheet_name, 'Trend_Analysis_History')
+        records = sheet.get_all_records()
+        ticker_clean = ticker.strip().upper()
+        for row in records:
+            if str(row.get('Ticker', '')).strip().upper() == ticker_clean:
+                return row
+        return None
+    except Exception:
+        return None
