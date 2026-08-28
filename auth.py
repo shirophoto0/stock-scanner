@@ -122,4 +122,3 @@ def show_user_bar():
         st.markdown(f"👤 เข้าสู่ระบบในชื่อ: **{st.session_state.get('username', '')}**")
         if st.button("🚪 ออกจากระบบ (Logout)", use_container_width=True):
             logout()
-        st.divider()
