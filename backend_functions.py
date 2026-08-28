@@ -2746,13 +2746,28 @@ def get_set_financial_statement_url(ticker):
 
 
 def load_fundamental_watchlist(spreadsheet_name):
-    """โหลดรายชื่อหุ้นในระบบ Watchlist เชิงปัจจัยพื้นฐาน (แยกจาก Watchlist เดิมที่ใช้เทรด) คืนค่าเป็น list ของ dict"""
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Watchlist')
-        return sheet.get_all_records()
-    except Exception:
-        return []
+    """
+    โหลดรายชื่อหุ้นในระบบ Watchlist เชิงปัจจัยพื้นฐาน (แยกจาก Watchlist เดิมที่ใช้เทรด) คืนค่าเป็น
+    list ของ dict
+    🔧 แก้บั๊ก: เดิม except Exception: return [] กลืน error ทุกชนิดไปเงียบๆ (429 Rate Limit,
+    ปัญหาเชื่อมต่อชั่วคราว ฯลฯ) แล้วคืนค่า list ว่างเปล่าเหมือนกับ "ไม่มีข้อมูลจริง" ทำให้หน้าเว็บ
+    ขึ้นข้อความ "ยังไม่มีหุ้นเลย" ทั้งที่ข้อมูลยังอยู่ครบใน Google Sheets เพียงแค่โหลดไม่สำเร็จ
+    ชั่วคราวเท่านั้น (เจอบ่อยตอนรีเฟรชหน้าเว็บ เพราะมีการยิง API หลายจุดพร้อมกัน) ตอนนี้เพิ่ม retry
+    แบบ exponential backoff + jitter ก่อน และถ้ายังไม่สำเร็จจริงๆ ให้ "โยน error" ออกไปแทนที่จะ
+    คืนค่า [] เงียบๆ เพื่อให้ผู้เรียก (หน้าเว็บ) แยกแยะได้ว่า "โหลดไม่สำเร็จ" กับ "ไม่มีข้อมูลจริง"
+    เป็นคนละกรณีกัน
+    """
+    last_error = None
+    for attempt in range(3):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Watchlist')
+            return sheet.get_all_records()
+        except Exception as e:
+            last_error = e
+        if attempt < 2:
+            time.sleep((2 ** (attempt + 1)) + random.uniform(0.5, 1.5))
+    raise RuntimeError(f"โหลด Fundamental Watchlist ไม่สำเร็จหลังลองครบ 3 ครั้ง: {last_error}")
 
 
 def add_to_fundamental_watchlist(spreadsheet_name, ticker, note=""):
@@ -2812,19 +2827,29 @@ def save_fundamental_analysis(spreadsheet_name, ticker, quarter, year, metrics_d
 
 @st.cache_data(ttl=300, show_spinner=False)
 def load_fundamental_analysis_history(spreadsheet_name, ticker=None):
-    """โหลดประวัติผลวิเคราะห์งบการเงินทั้งหมด (หรือกรองเฉพาะหุ้นตัวเดียวถ้าระบุ ticker) คืนค่าเป็น DataFrame"""
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Analysis_History')
-        records = sheet.get_all_records()
-        if not records:
-            return pd.DataFrame()
-        df = pd.DataFrame(records)
-        if ticker and 'Ticker' in df.columns:
-            df = df[df['Ticker'].astype(str).str.upper() == ticker.strip().upper()]
-        return df
-    except Exception:
-        return pd.DataFrame()
+    """
+    โหลดประวัติผลวิเคราะห์งบการเงินทั้งหมด (หรือกรองเฉพาะหุ้นตัวเดียวถ้าระบุ ticker) คืนค่าเป็น DataFrame
+    🔧 แก้บั๊กเดียวกับ load_fundamental_watchlist: เดิมกลืน error ทุกชนิดเงียบๆ คืนค่า DataFrame
+    ว่างเปล่า ทำให้ดูเหมือน "ยังไม่มีประวัติ" ทั้งที่โหลดไม่สำเร็จชั่วคราวเท่านั้น ตอนนี้เพิ่ม retry
+    ก่อน แล้วโยน error ออกไปถ้ายังไม่สำเร็จจริงๆ ให้ผู้เรียกจัดการแยกจากกรณี "ไม่มีข้อมูลจริง"
+    """
+    last_error = None
+    for attempt in range(3):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'Fundamental_Analysis_History')
+            records = sheet.get_all_records()
+            if not records:
+                return pd.DataFrame()
+            df = pd.DataFrame(records)
+            if ticker and 'Ticker' in df.columns:
+                df = df[df['Ticker'].astype(str).str.upper() == ticker.strip().upper()]
+            return df
+        except Exception as e:
+            last_error = e
+        if attempt < 2:
+            time.sleep((2 ** (attempt + 1)) + random.uniform(0.5, 1.5))
+    raise RuntimeError(f"โหลดประวัติผลวิเคราะห์งบการเงินไม่สำเร็จหลังลองครบ 3 ครั้ง: {last_error}")
 
 
 def save_document_analysis_history(spreadsheet_name, filename, analysis_result):
