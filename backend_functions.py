@@ -2479,6 +2479,9 @@ def send_telegram_document(bot_token, chat_id, file_path, caption=""):
 # บันทึกไว้ในชีต ตรงกับที่หน้าเว็บทำอยู่แล้วทุกประการ (เพราะเป็นค่าที่กรอกเองเป็นครั้งคราว ไม่ใช่
 # ราคาตลาดที่ขยับทุกวัน จึงไม่มีปัญหาความคลาดเคลื่อนแบบเดียวกับหุ้น/ทองคำ)
 # =============================================================
+# 🆕 เพิ่ม cache ไว้ 5 นาที เพราะฟังก์ชันนี้ยิง API ดึงราคาหุ้นทีละตัว + ราคาทองสด ค่อนข้างช้า
+# ถ้าไม่แคชไว้ จะทำให้หน้า "ภาพรวม Net Worth" โหลดช้าลงมากทุกครั้งที่เปิด/รีเฟรชหน้า
+@st.cache_data(ttl=300, show_spinner=False)
 def compute_live_net_worth(spreadsheet_name):
     """
     คำนวณ Net Worth แบบสด คืนค่าเป็น dict {
@@ -2616,6 +2619,14 @@ def compute_live_net_worth(spreadsheet_name):
         'asset_breakdown': asset_breakdown,
         'net_worth_excl_re': net_worth_excl_re,
         'net_worth_total': net_worth_total,
+        # 🆕 เพิ่ม field แยกส่วนหุ้น+TFEX กับทองคำไว้ให้ดึงใช้ตรงๆ ได้ง่าย (ไม่ต้องแกะจาก
+        # asset_breakdown list) — ใช้แก้ปัญหา "Net Worth แสดง 0 ตอนเปิดหน้าแรก" ในแท็บภาพรวม
+        # Net Worth ซึ่งเดิมพึ่งค่าจาก st.session_state ที่ตั้งโดยแท็บหุ้น/ทองคำเท่านั้น (ต้องไป
+        # เยี่ยมแท็บนั้นก่อนถึงจะมีค่า) พอเปลี่ยนมาใช้เมนู Sidebar แบบใหม่ที่ render แค่หน้าที่เลือก
+        # อยู่เท่านั้น (ไม่ใช่ทุกแท็บพร้อมกันเหมือน st.tabs() เดิม) ค่าที่ยังไม่เคยไปเยี่ยมแท็บนั้นจะ
+        # เป็น 0 ค้างอยู่ ตอนนี้คำนวณสดตรงนี้แทน ไม่ต้องพึ่งว่าแท็บไหนเคย render ไปแล้วหรือยัง
+        'stock_and_tfex_value': total_stock_and_tfex,
+        'gold_value': total_gold_value,
     }
 
 
