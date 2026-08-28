@@ -51,6 +51,7 @@ from tab_pvd import render_tab_pvd
 from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
 from tab_stock import render_tab_stock
+from tab_watchlist import render_tab_watchlist
 
 # 🆕 ระบบ Login แยกผู้ใช้
 from auth import check_login, show_user_bar
@@ -262,101 +263,121 @@ def main():
         # ปล่อยว่างไว้ ให้แท็บหุ้นเป็นตัวแจ้งเตือนหรือแสดงปุ่มกดดึงข้อมูลแทน
         pass
     # ==========================================================
-    # ปรับโครงสร้าง Tab ระดับบนสุดของแอป (แบ่งหมวดหมู่ชัดเจน)
+    # 🆕 ปรับโครงสร้างเมนูทั้งหมดจากแท็บแนวนอนด้านบน มาเป็นเมนู Sidebar แนวตั้ง 2 ระดับแทน
+    # (ตามที่ขอ) แบ่งเป็น 4 กลุ่มหลัก — "ระบบเทรด & สแกนหุ้น" เดิมถูกแยกออกเป็น 2 กลุ่มอิสระ:
+    # "สแกนหุ้น" (วิเคราะห์กราฟเทคนิคอล, Watchlist, วิเคราะห์เอกสาร AI, Fundamental Watchlist)
+    # กับ "ระบบเทรด" (หุ้น, TFEX, ทองคำ, Sector Rotation, Backtest, Correlation, Risk Management)
+    # ตัวกรองหุ้นที่เคยอยู่ใน sidebar เดิม (ก่อนเปลี่ยนมาใช้เป็นเมนูนำทาง) ย้ายไปเป็นแถบด้านบนของ
+    # เนื้อหาแท็บ "วิเคราะห์กราฟเทคนิคอล" เองแล้ว (แก้ไว้ใน tab_tech.py)
     # ==========================================================
-    # 🔧 ปรับปรุง: สลับลำดับแท็บใหญ่ ให้ "ภาพรวมความมั่งคั่ง" อยู่ซ้ายสุด ตามด้วย "ระบบเทรด & สแกนหุ้น"
-    # (สลับแค่ลำดับตอนประกาศตรงนี้ ไม่ต้องย้ายเนื้อหาข้างในแท็บทั้ง 2 ก้อนด้านล่างเลย เพราะโค้ด
-    # อ้างอิงผ่านชื่อตัวแปรอยู่แล้ว ไม่ขึ้นกับตำแหน่งที่ประกาศ)
-    # 🆕 เพิ่มแท็บใหญ่ที่ 3 "🎯 เกษียณอายุ" ต่อจาก "ระบบเทรด & สแกนหุ้น" ตามที่ขอ
-    main_tab_wealth, main_tab_system, main_tab_retirement = st.tabs([
-        "🌐 ภาพรวมความมั่งคั่ง (Total Wealth)",
-        "📊 ระบบเทรด & สแกนหุ้น (Trading System)",
-        "🎯 เกษียณอายุ"
-    ])
+    from streamlit_option_menu import option_menu
+
+    MENU_STRUCTURE = {
+        "ภาพรวมความมั่งคั่ง": {
+            "icon": "globe2",
+            "sub": {
+                "ภาพรวม Net Worth": "globe2",
+                "กองทุนรวม": "cash-coin",
+                "บันทึกข้อมูล (PVD/สหกรณ์/ประกัน/ธนาคาร)": "journal-text",
+                "อสังหาริมทรัพย์": "house-door",
+            },
+        },
+        "สแกนหุ้น": {
+            "icon": "search",
+            "sub": {
+                "วิเคราะห์กราฟเทคนิคอล": "graph-up",
+                "Watchlist": "star",
+                "วิเคราะห์เอกสาร AI": "robot",
+                "Fundamental Watchlist": "clipboard-data",
+            },
+        },
+        "ระบบเทรด": {
+            "icon": "bar-chart-line",
+            "sub": {
+                "หุ้น (Stock)": "bar-chart",
+                "TFEX": "graph-up-arrow",
+                "ทองคำ (Gold)": "circle",
+                "Sector Rotation": "arrow-repeat",
+                "Backtest": "clock-history",
+                "Correlation": "diagram-3",
+                "Risk Management": "shield-check",
+            },
+        },
+        "เกษียณอายุ": {"icon": "bullseye", "sub": None},
+    }
+
+    with st.sidebar:
+        st.divider()
+        selected_main = option_menu(
+            menu_title=None,
+            options=list(MENU_STRUCTURE.keys()),
+            icons=[v["icon"] for v in MENU_STRUCTURE.values()],
+            default_index=0,
+            key="main_nav_menu",
+        )
+
+        selected_sub = None
+        _sub_items = MENU_STRUCTURE[selected_main]["sub"]
+        if _sub_items:
+            st.divider()
+            selected_sub = option_menu(
+                menu_title=None,
+                options=list(_sub_items.keys()),
+                icons=list(_sub_items.values()),
+                default_index=0,
+                key=f"sub_nav_menu_{selected_main}",
+            )
 
     # ==========================================================
-    # TAB ที่ 1: ระบบเทรด & สแกนหุ้น (ย้าย 4 แทบเดิมมาไว้ข้างในนี้)
+    # กลุ่ม 1: 🌐 ภาพรวมความมั่งคั่ง
     # ==========================================================
-    with main_tab_system:
-        ###### ส่วนการสร้าง TAB หลัก ##################
-        tab_stock, tab_tfex, tab_gold, tab_tech, tab_sector, tab_backtest, tab_correlation, tab_docai, tab_fundwatch, tab_risk = st.tabs([
-            "📊 หุ้น (Stock)", 
-            "📈 TFEX", 
-            "🟡 ทองคำ (Gold)", 
-            "📉 วิเคราะห์กราฟเทคนิคอล", 
-            "🔄 Sector Rotation",
-            "🔬 Backtest",
-            "🔗 Correlation",
-            "🤖 วิเคราะห์เอกสาร AI",
-            "📊 Fundamental Watchlist",
-            "🛡️ Risk Management"
-        ])
-
-        ## ส่วน tab Gold #######
-        with tab_gold:
-            render_tab_gold(client)
-        ######################## ส่วนวิเคราะห์แสกนกราฟหุ้น####################
-        with tab_tech:
-            render_tab_tech(tab_risk, df_sector_map, df_all_stocks)
-        with tab_sector:
-            render_tab_sector_rotation(df_sector_map)
-        with tab_backtest:
-            render_tab_backtest()
-        with tab_correlation:
-            render_tab_correlation()
-        with tab_docai:
-            render_tab_document_analysis()
-        with tab_fundwatch:
-            render_tab_fundamental_watchlist()
-        with tab_stock:
-                           
-            render_tab_stock()
-            
-        ###################################################################
-        # # --- ฟังก์ชัน Main tap stock Finish---
-        ###################################################################
-        # 2. ส่วน TFEX
-        with tab_tfex:
-            render_tab_tfex()
-    # ==========================================================
-    # TAB ที่ 2: ภาพรวมความมั่งคั่ง (เพิ่มใหม่สำหรับสินทรัพย์อื่นๆ)
-    # ==========================================================
-    with main_tab_wealth:
+    if selected_main == "ภาพรวมความมั่งคั่ง":
         st.subheader("📊 ระบบจัดการสินทรัพย์ระยะยาวและความมั่งคั่งรวม (Net Worth)")
-        
-        # 1. ประกาศสร้าง 4 Tabs หลัก
-        wealth_tab_overview, wealth_tab_funds, wealth_tab_form_general, wealth_tab_real_estate = st.tabs([
-            "📈 ภาพรวม Net Worth & สัดส่วนสินทรัพย์",
-            "💰 กองทุนรวม",
-            "📝 บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน / ธนาคาร)",
-            "🏡 บันทึกอสังหาริมทรัพย์ (บ้าน / คอนโด)"
-        ])
-
-  
-        # ==========================================
-        # TAB ย่อยที่ 1: ภาพรวม Net Worth & สัดส่วนสินทรัพย์
-        # ==========================================
-        with wealth_tab_overview:
+        if selected_sub == "ภาพรวม Net Worth":
             render_tab_overview()
-
-        # --- ส่วน UI สำหรับจัดการกองทุน (นำไปวางในหน้า App ของคุณ) ---
-        
-        # 1. Tab ซื้อกองทุนใหม่
-        with wealth_tab_funds:
+        elif selected_sub == "กองทุนรวม":
             render_tab_funds()
-        
-        # ==========================================
-        # TAB ย่อยที่ 2: บันทึกข้อมูล (PVD / สหกรณ์ / ประกัน)
-        # ==========================================
-        with wealth_tab_form_general:
+        elif selected_sub == "บันทึกข้อมูล (PVD/สหกรณ์/ประกัน/ธนาคาร)":
             render_tab_pvd()
-        with wealth_tab_real_estate:
+        elif selected_sub == "อสังหาริมทรัพย์":
             render_tab_real_estate()
 
     # ==========================================================
-    # TAB ที่ 3: 🎯 เกษียณอายุ (เพิ่มใหม่)
+    # กลุ่ม 2: 🔍 สแกนหุ้น (ใหม่ — แยกออกมาจาก "ระบบเทรด & สแกนหุ้น" เดิม)
     # ==========================================================
-    with main_tab_retirement:
+    elif selected_main == "สแกนหุ้น":
+        if selected_sub == "วิเคราะห์กราฟเทคนิคอล":
+            render_tab_tech(df_sector_map, df_all_stocks)
+        elif selected_sub == "Watchlist":
+            render_tab_watchlist()
+        elif selected_sub == "วิเคราะห์เอกสาร AI":
+            render_tab_document_analysis()
+        elif selected_sub == "Fundamental Watchlist":
+            render_tab_fundamental_watchlist()
+
+    # ==========================================================
+    # กลุ่ม 3: 💹 ระบบเทรด (เดิม แยกออกมาจาก "ระบบเทรด & สแกนหุ้น")
+    # ==========================================================
+    elif selected_main == "ระบบเทรด":
+        if selected_sub == "หุ้น (Stock)":
+            render_tab_stock()
+        elif selected_sub == "TFEX":
+            render_tab_tfex()
+        elif selected_sub == "ทองคำ (Gold)":
+            render_tab_gold(client)
+        elif selected_sub == "Sector Rotation":
+            render_tab_sector_rotation(df_sector_map)
+        elif selected_sub == "Backtest":
+            render_tab_backtest()
+        elif selected_sub == "Correlation":
+            render_tab_correlation()
+        elif selected_sub == "Risk Management":
+            render_tab_risk()
+
+    # ==========================================================
+    # กลุ่ม 4: 🎯 เกษียณอายุ
+    # ==========================================================
+    elif selected_main == "เกษียณอายุ":
         render_tab_retirement()
 
 # ------------------------------
