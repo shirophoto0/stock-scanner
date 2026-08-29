@@ -2565,14 +2565,20 @@ def compute_live_net_worth(spreadsheet_name):
     portfolio_records = get_records_safe('PortfolioData')
     total_stock_value = 0.0
     for p in portfolio_records:
-        ticker = str(p.get('หุ้น', '')).strip().upper()
-        shares = safe_float(p.get('shares', 0))
+        # 🔧 แก้บั๊ก: เดิมอ่านแค่คอลัมน์ 'หุ้น'/'shares' อย่างเดียว แต่ระบบนี้ผ่านการเปลี่ยนชื่อ
+        # คอลัมน์มาหลายรอบตลอดการพัฒนา (มีทั้ง 'หุ้น'/'Ticker' และ 'shares'/'จำนวน' ปนกันอยู่ตาม
+        # ช่วงเวลาที่บันทึกไว้ — โค้ดจุดอื่นในระบบ เช่น tab_stock.py ก็มี fallback ครบทั้ง 2 แบบไว้
+        # อยู่แล้ว) ทำให้บัญชีที่ข้อมูลพอร์ตยังเป็นชื่อคอลัมน์แบบเก่าอยู่ (เช่น 'Ticker' แทน 'หุ้น')
+        # หาหุ้นไม่เจอเลยสักตัว คำนวณได้ 0 บาทเสมอ ทั้งที่มีข้อมูลอยู่จริง ตอนนี้เพิ่ม fallback ให้
+        # ครบทุกชื่อคอลัมน์ที่เคยใช้มา เหมือนกับจุดอื่นๆ ในระบบ
+        ticker = str(p.get('หุ้น', p.get('Ticker', ''))).strip().upper()
+        shares = safe_float(p.get('shares', p.get('จำนวน', 0)))
         if not ticker or shares <= 0:
             continue
         try:
             m_price = float(yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1])
         except Exception:
-            m_price = safe_float(p.get('avg_price', 0))  # ดึงสดไม่สำเร็จ ใช้ราคาต้นทุนแทนชั่วคราว
+            m_price = safe_float(p.get('avg_price', p.get('ต้นทุนเฉลี่ย', 0)))  # ดึงสดไม่สำเร็จ ใช้ราคาต้นทุนแทนชั่วคราว
         total_stock_value += shares * m_price
 
     # --- TFEX: เงินฝาก-ถอนสุทธิ + กำไร-ขาดทุนจากรายการที่ปิดสถานะแล้ว (ไม่ต้องดึงราคาตลาดสด
