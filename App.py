@@ -47,7 +47,7 @@ from tab_backtest import render_tab_backtest
 from tab_correlation import render_tab_correlation
 from tab_document_analysis import render_tab_document_analysis
 from tab_fundamental_watchlist import render_tab_fundamental_watchlist
-from tab_pvd import render_tab_pvd
+from tab_pvd import render_tab_pvd, render_tab_manual_records
 from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
 from tab_stock import render_tab_stock
@@ -277,8 +277,9 @@ def main():
             "icon": "globe2",
             "sub": {
                 "ภาพรวม Net Worth": "globe2",
+                "กองทุนสำรองเลี้ยงชีพ (PVD)": "bank",
                 "กองทุนรวม": "cash-coin",
-                "บันทึกข้อมูล (PVD/สหกรณ์/ประกัน/ธนาคาร)": "journal-text",
+                "บันทึกข้อมูล (สหกรณ์/ประกัน/ธนาคาร)": "journal-text",
                 "อสังหาริมทรัพย์": "house-door",
             },
         },
@@ -333,10 +334,12 @@ def main():
         st.subheader("📊 ระบบจัดการสินทรัพย์ระยะยาวและความมั่งคั่งรวม (Net Worth)")
         if selected_sub == "ภาพรวม Net Worth":
             render_tab_overview()
+        elif selected_sub == "กองทุนสำรองเลี้ยงชีพ (PVD)":
+            render_tab_pvd()
         elif selected_sub == "กองทุนรวม":
             render_tab_funds()
-        elif selected_sub == "บันทึกข้อมูล (PVD/สหกรณ์/ประกัน/ธนาคาร)":
-            render_tab_pvd()
+        elif selected_sub == "บันทึกข้อมูล (สหกรณ์/ประกัน/ธนาคาร)":
+            render_tab_manual_records()
         elif selected_sub == "อสังหาริมทรัพย์":
             render_tab_real_estate()
 

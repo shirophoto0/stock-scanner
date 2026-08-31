@@ -12,10 +12,12 @@ from theme import style_plotly, render_metric_card
 
 
 def render_tab_pvd():
-    st.markdown("### 📝 บันทึกและอัปเดตข้อมูลสินทรัพย์ระยะยาว")
+    st.markdown("### 🏛️ กองทุนสำรองเลี้ยงชีพ (PVD)")
 
-    # --- 1. ส่วน PVD (รวมฟอร์มและตารางสรุปไว้ใน Expander เดียวกัน) ---
-    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=False):
+    # --- ส่วน PVD (รวมฟอร์มและตารางสรุปไว้ใน Expander เดียวกัน) ---
+    # 🔧 ย้ายออกมาเป็นแท็บของตัวเองแล้ว (เดิมรวมอยู่กับสหกรณ์/ประกัน/ธนาคาร) เปิด expanded=True ไว้
+    # เพราะตอนนี้เป็นเนื้อหาหลักของหน้านี้ ไม่ต้องคลิกเปิดเองก่อนถึงจะเห็น Dashboard
+    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=True):
         with st.form("pvd_upload_form"):
             col_y1, col_y2, col_m = st.columns(3)
 
@@ -142,6 +144,7 @@ def render_tab_pvd():
             employer_benefit = _pvd_num(latest_pvd_row, 'Employer_Benefit')
             employer_total = _pvd_num(latest_pvd_row, 'Employer_Total') or (employer_matching + employer_benefit)
             grand_total = _pvd_num(latest_pvd_row, 'Grand_Total') or (member_total + employer_total)
+            total_benefit = member_benefit + employer_benefit
 
             # 1) % เติบโต ฐาน = เงินสะสมส่วนลูกจ้างเท่านั้น (เงินสมทบนายจ้างทั้งก้อน + ผลประโยชน์ทั้งหมด นับเป็นการเติบโต)
             growth_pct_member_base = ((grand_total - member_saving) / member_saving * 100) if member_saving > 0 else 0.0
@@ -156,13 +159,17 @@ def render_tab_pvd():
             render_metric_card(c2, "ยอดเงินรวมส่วนของลูกจ้าง", f"{member_total:,.2f} ฿", icon="🧑‍💼")
             render_metric_card(c3, "ยอดเงินรวมส่วนของนายจ้าง", f"{employer_total:,.2f} ฿", icon="🏢")
 
-            c4, c5 = st.columns(2)
+            c4, c5, c6 = st.columns(3)
             render_metric_card(
-                c4, "% เติบโต (ฐาน: เงินสะสมลูกจ้างเท่านั้น)", f"{growth_pct_member_base:,.2f}%", icon="🚀",
+                c4, "ยอดเงินส่วนผลประโยชน์", f"{total_benefit:,.2f} ฿", icon="🌱",
+                caption="ผลประโยชน์ของลูกจ้าง + นายจ้างรวมกัน (ไม่รวมเงินต้น)"
+            )
+            render_metric_card(
+                c5, "% เติบโต (ฐาน: เงินสะสมลูกจ้างเท่านั้น)", f"{growth_pct_member_base:,.2f}%", icon="🚀",
                 caption="นับเงินสมทบนายจ้างทั้งหมด + ผลประโยชน์ทุกส่วนเป็นการเติบโต"
             )
             render_metric_card(
-                c5, "% เติบโต (ฐาน: เงินต้นลูกจ้าง+นายจ้างรวมกัน)", f"{growth_pct_combined_base:,.2f}%", icon="📈",
+                c6, "% เติบโต (ฐาน: เงินต้นลูกจ้าง+นายจ้างรวมกัน)", f"{growth_pct_combined_base:,.2f}%", icon="📈",
                 caption="นับเฉพาะผลประโยชน์ที่เกิดขึ้นจริงเป็นการเติบโต"
             )
 
@@ -270,7 +277,11 @@ def render_tab_pvd():
         else:
             st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund")
 
-    # --- 2. ส่วนประกันภัย Unit Linked ---
+
+def render_tab_manual_records():
+    st.markdown("### 📝 บันทึกและอัปเดตข้อมูลสินทรัพย์ระยะยาว (สหกรณ์ / ประกัน / ธนาคาร)")
+
+    # --- 1. ส่วนประกันภัย Unit Linked ---
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
         with st.form("insurance_upload_form"):
             col_d, col_v = st.columns(2)
@@ -327,7 +338,7 @@ def render_tab_pvd():
                 else:
                     st.warning("กรุณากรอกมูลค่ารับซื้อคืนหน่วยลงทุนให้มากกว่า 0")
 
-    # --- 3. ส่วนสหกรณ์ก๊าซ ปตท. (พร้อมระบบ Auto เพิ่มเงินทุกสิ้นเดือน) ---
+    # --- 2. ส่วนสหกรณ์ก๊าซ ปตท. (พร้อมระบบ Auto เพิ่มเงินทุกสิ้นเดือน) ---
     def get_coop_sheet():
         client = get_gsheet_client()
         return get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Coop')
@@ -569,5 +580,3 @@ def render_tab_pvd():
                         st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
                 else:
                     st.warning("กรุณากรอกยอดเงินให้ถูกต้อง")
-
-######## REAL ESTATE ########################
