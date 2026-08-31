@@ -14,10 +14,78 @@ from theme import style_plotly, render_metric_card
 def render_tab_pvd():
     st.markdown("### 🏛️ กองทุนสำรองเลี้ยงชีพ (PVD)")
 
-    # --- ส่วน PVD (รวมฟอร์มและตารางสรุปไว้ใน Expander เดียวกัน) ---
-    # 🔧 ย้ายออกมาเป็นแท็บของตัวเองแล้ว (เดิมรวมอยู่กับสหกรณ์/ประกัน/ธนาคาร) เปิด expanded=True ไว้
-    # เพราะตอนนี้เป็นเนื้อหาหลักของหน้านี้ ไม่ต้องคลิกเปิดเองก่อนถึงจะเห็น Dashboard
-    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=True):
+    # --- 1. ดึงข้อมูลจาก Google Sheets มาเตรียมไว้ก่อน (ต้องดึงก่อน เพราะการ์ดสรุปด้านบนสุดต้องใช้) ---
+    df_pvd_history = pd.DataFrame()
+    try:
+        client = get_gsheet_client()
+        sheet_pvd = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Provident_Fund')
+        pvd_records = sheet_pvd.get_all_records()
+        if pvd_records:
+            df_pvd_history = pd.DataFrame(pvd_records)
+    except Exception as e:
+        pass
+
+    # --- 🆕 การ์ดสรุปภาพรวมกองทุน PVD (ข้อมูลเดือนล่าสุด) แสดงบนสุด ไม่ซ่อนใน Expander ---
+    if not df_pvd_history.empty:
+        def _pvd_num(row, col):
+            raw = row.get(col, 0)
+            try:
+                return float(str(raw).replace(',', '').strip() or 0)
+            except (ValueError, TypeError):
+                return 0.0
+
+        # หาแถวของเดือนล่าสุดจริงๆ ตามปี พ.ศ. + เดือน (กันกรณีลำดับแถวในชีตไม่เรียงตามเวลา)
+        _thai_month_order = {
+            "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4,
+            "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8,
+            "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
+        }
+        _df_pvd_latest = df_pvd_history.copy()
+        if 'Month' in _df_pvd_latest.columns and 'Year_BE' in _df_pvd_latest.columns:
+            _df_pvd_latest['_m'] = _df_pvd_latest['Month'].map(_thai_month_order).fillna(0)
+            _df_pvd_latest['_y'] = pd.to_numeric(_df_pvd_latest['Year_BE'], errors='coerce').fillna(0)
+            _df_pvd_latest = _df_pvd_latest.sort_values(by=['_y', '_m'])
+        latest_pvd_row = _df_pvd_latest.iloc[-1]
+
+        member_saving = _pvd_num(latest_pvd_row, 'Member_Saving')
+        member_benefit = _pvd_num(latest_pvd_row, 'Member_Benefit')
+        member_total = _pvd_num(latest_pvd_row, 'Member_Total') or (member_saving + member_benefit)
+        employer_matching = _pvd_num(latest_pvd_row, 'Employer_Matching')
+        employer_benefit = _pvd_num(latest_pvd_row, 'Employer_Benefit')
+        employer_total = _pvd_num(latest_pvd_row, 'Employer_Total') or (employer_matching + employer_benefit)
+        grand_total = _pvd_num(latest_pvd_row, 'Grand_Total') or (member_total + employer_total)
+        total_benefit = member_benefit + employer_benefit
+
+        # 1) % เติบโต ฐาน = เงินสะสมส่วนลูกจ้างเท่านั้น (เงินสมทบนายจ้างทั้งก้อน + ผลประโยชน์ทั้งหมด นับเป็นการเติบโต)
+        growth_pct_member_base = ((grand_total - member_saving) / member_saving * 100) if member_saving > 0 else 0.0
+        # 2) % เติบโต ฐาน = เงินต้นของทั้งลูกจ้างและนายจ้างรวมกัน (นับเฉพาะผลประโยชน์ที่เกิดขึ้นจริงเป็นการเติบโต)
+        combined_base = member_saving + employer_matching
+        growth_pct_combined_base = ((grand_total - combined_base) / combined_base * 100) if combined_base > 0 else 0.0
+
+        st.markdown("##### 📌 สรุปภาพรวมกองทุน PVD (ข้อมูลเดือนล่าสุด)")
+        c1, c2, c3 = st.columns(3)
+        render_metric_card(c1, "ยอดเงินรวมทั้งสิ้น", f"{grand_total:,.2f} ฿", icon="💰")
+        render_metric_card(c2, "ยอดเงินรวมส่วนของลูกจ้าง", f"{member_total:,.2f} ฿", icon="🧑‍💼")
+        render_metric_card(c3, "ยอดเงินรวมส่วนของนายจ้าง", f"{employer_total:,.2f} ฿", icon="🏢")
+
+        c4, c5, c6 = st.columns(3)
+        render_metric_card(
+            c4, "ยอดเงินส่วนผลประโยชน์", f"{total_benefit:,.2f} ฿", icon="🌱",
+            caption="ผลประโยชน์ของลูกจ้าง + นายจ้างรวมกัน (ไม่รวมเงินต้น)"
+        )
+        render_metric_card(
+            c5, "% เติบโต (ฐาน: เงินสะสมลูกจ้างเท่านั้น)", f"{growth_pct_member_base:,.2f}%", icon="🚀",
+            caption="นับเงินสมทบนายจ้างทั้งหมด + ผลประโยชน์ทุกส่วนเป็นการเติบโต"
+        )
+        render_metric_card(
+            c6, "% เติบโต (ฐาน: เงินต้นลูกจ้าง+นายจ้างรวมกัน)", f"{growth_pct_combined_base:,.2f}%", icon="📈",
+            caption="นับเฉพาะผลประโยชน์ที่เกิดขึ้นจริงเป็นการเติบโต"
+        )
+
+    st.markdown("---")
+
+    # --- 2. ฟอร์มเพิ่ม/อัปเดตข้อมูล PVD รายเดือน (ซ่อนใน Expander เพื่อประหยัดพื้นที่หน้าจอ) ---
+    with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=False):
         with st.form("pvd_upload_form"):
             col_y1, col_y2, col_m = st.columns(3)
 
@@ -26,7 +94,7 @@ def render_tab_pvd():
             with col_y2:
                 st.info(f"ค.ศ.: **{int(input_year_be) - 543}**")
             with col_m:
-                months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", 
+                months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
                                "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
                 selected_month = st.selectbox("เลือกเดือน", months_list)
 
@@ -71,13 +139,13 @@ def render_tab_pvd():
                     is_duplicate = False
                     if not df_existing.empty and 'Month' in df_existing.columns and 'Year_BE' in df_existing.columns:
                         match_idx = df_existing[
-                            (df_existing['Year_BE'].astype(str) == str(input_year_be)) & 
+                            (df_existing['Year_BE'].astype(str) == str(input_year_be)) &
                             (df_existing['Month'] == selected_month)
                         ].index
 
                         if len(match_idx) > 0:
                             is_duplicate = True
-                            row_number_to_update = match_idx[0] + 2 
+                            row_number_to_update = match_idx[0] + 2
 
                             values_to_write = list(df_to_save.iloc[0].values)
                             sheet.update(f"A{row_number_to_update}", [values_to_write])
@@ -104,178 +172,109 @@ def render_tab_pvd():
                     else:
                         st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
 
-        # --- 1. ดึงข้อมูลจาก Google Sheets มาเตรียมไว้ก่อน ---
-        df_pvd_history = pd.DataFrame()
+    # --- 3. ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
+    st.markdown("---")
+    st.subheader("📊 กราฟแสดง % ผลตอบแทนรายบุคคล (YTD Net Return %)")
+
+    if not df_pvd_history.empty:
         try:
-            client = get_gsheet_client()
-            sheet_pvd = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Provident_Fund')
-            pvd_records = sheet_pvd.get_all_records()
-            if pvd_records:
-                df_pvd_history = pd.DataFrame(pvd_records)
-        except Exception as e:
-            pass
-
-        # --- 🆕 การ์ดสรุปภาพรวมกองทุน PVD (ข้อมูลเดือนล่าสุด) แสดงเหนือกราฟ % ผลตอบแทน ---
-        if not df_pvd_history.empty:
-            def _pvd_num(row, col):
-                raw = row.get(col, 0)
-                try:
-                    return float(str(raw).replace(',', '').strip() or 0)
-                except (ValueError, TypeError):
-                    return 0.0
-
-            # หาแถวของเดือนล่าสุดจริงๆ ตามปี พ.ศ. + เดือน (กันกรณีลำดับแถวในชีตไม่เรียงตามเวลา)
-            _thai_month_order = {
-                "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4,
-                "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8,
-                "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
-            }
-            _df_pvd_latest = df_pvd_history.copy()
-            if 'Month' in _df_pvd_latest.columns and 'Year_BE' in _df_pvd_latest.columns:
-                _df_pvd_latest['_m'] = _df_pvd_latest['Month'].map(_thai_month_order).fillna(0)
-                _df_pvd_latest['_y'] = pd.to_numeric(_df_pvd_latest['Year_BE'], errors='coerce').fillna(0)
-                _df_pvd_latest = _df_pvd_latest.sort_values(by=['_y', '_m'])
-            latest_pvd_row = _df_pvd_latest.iloc[-1]
-
-            member_saving = _pvd_num(latest_pvd_row, 'Member_Saving')
-            member_benefit = _pvd_num(latest_pvd_row, 'Member_Benefit')
-            member_total = _pvd_num(latest_pvd_row, 'Member_Total') or (member_saving + member_benefit)
-            employer_matching = _pvd_num(latest_pvd_row, 'Employer_Matching')
-            employer_benefit = _pvd_num(latest_pvd_row, 'Employer_Benefit')
-            employer_total = _pvd_num(latest_pvd_row, 'Employer_Total') or (employer_matching + employer_benefit)
-            grand_total = _pvd_num(latest_pvd_row, 'Grand_Total') or (member_total + employer_total)
-            total_benefit = member_benefit + employer_benefit
-
-            # 1) % เติบโต ฐาน = เงินสะสมส่วนลูกจ้างเท่านั้น (เงินสมทบนายจ้างทั้งก้อน + ผลประโยชน์ทั้งหมด นับเป็นการเติบโต)
-            growth_pct_member_base = ((grand_total - member_saving) / member_saving * 100) if member_saving > 0 else 0.0
-            # 2) % เติบโต ฐาน = เงินต้นของทั้งลูกจ้างและนายจ้างรวมกัน (นับเฉพาะผลประโยชน์ที่เกิดขึ้นจริงเป็นการเติบโต)
-            combined_base = member_saving + employer_matching
-            growth_pct_combined_base = ((grand_total - combined_base) / combined_base * 100) if combined_base > 0 else 0.0
-
-            st.markdown("---")
-            st.markdown("##### 📌 สรุปภาพรวมกองทุน PVD (ข้อมูลเดือนล่าสุด)")
-            c1, c2, c3 = st.columns(3)
-            render_metric_card(c1, "ยอดเงินรวมทั้งสิ้น", f"{grand_total:,.2f} ฿", icon="💰")
-            render_metric_card(c2, "ยอดเงินรวมส่วนของลูกจ้าง", f"{member_total:,.2f} ฿", icon="🧑‍💼")
-            render_metric_card(c3, "ยอดเงินรวมส่วนของนายจ้าง", f"{employer_total:,.2f} ฿", icon="🏢")
-
-            c4, c5, c6 = st.columns(3)
-            render_metric_card(
-                c4, "ยอดเงินส่วนผลประโยชน์", f"{total_benefit:,.2f} ฿", icon="🌱",
-                caption="ผลประโยชน์ของลูกจ้าง + นายจ้างรวมกัน (ไม่รวมเงินต้น)"
-            )
-            render_metric_card(
-                c5, "% เติบโต (ฐาน: เงินสะสมลูกจ้างเท่านั้น)", f"{growth_pct_member_base:,.2f}%", icon="🚀",
-                caption="นับเงินสมทบนายจ้างทั้งหมด + ผลประโยชน์ทุกส่วนเป็นการเติบโต"
-            )
-            render_metric_card(
-                c6, "% เติบโต (ฐาน: เงินต้นลูกจ้าง+นายจ้างรวมกัน)", f"{growth_pct_combined_base:,.2f}%", icon="📈",
-                caption="นับเฉพาะผลประโยชน์ที่เกิดขึ้นจริงเป็นการเติบโต"
-            )
-
-        # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
-        st.markdown("---")
-        st.subheader("📊 กราฟแสดง % ผลตอบแทนรายบุคคล (YTD Net Return %)")
-
-        if not df_pvd_history.empty:
-            try:
-                def clean_num(series):
-                    if series is None:
-                        return pd.Series(0.0, index=df_pvd_history.index)
-                    return pd.to_numeric(
-                        series.astype(str)
-                        .str.replace(',', '', regex=False)
-                        .str.replace(' ', '', regex=False)
-                        .str.replace('%', '', regex=False),
-                        errors='coerce'
-                    ).fillna(0.0)
-
-                # ดึงข้อมูลจากคอลัมน์ YTD_Net_Return_Pct โดยตรง
-                if 'YTD_Net_Return_Pct' in df_pvd_history.columns:
-                    chart_col = 'YTD_Net_Return_Pct'
-                    df_pvd_history[chart_col] = clean_num(df_pvd_history[chart_col])
-                else:
-                    # เผื่อกรณียังไม่มีคอลัมน์นี้ในชีต ให้สร้างเป็น 0 ไปก่อนเพื่อกัน error
-                    df_pvd_history['YTD_Net_Return_Pct'] = 0.0
-                    chart_col = 'YTD_Net_Return_Pct'
-
-            except Exception as e:
-                st.warning(f"⚠️ เกิดข้อผิดพลาดในการอ่านข้อมูลกราฟ: {e}")
-                chart_col = None
-
-            if chart_col and chart_col in df_pvd_history.columns:
-                if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
-                    # 🔧 แก้บั๊ก: เรียงลำดับข้อมูลตามปี พ.ศ. และเดือนจริงๆ ก่อนสร้างกราฟ
-                    # (เดิมกราฟแสดงตามลำดับแถวที่กรอกใน Google Sheets ทำให้เดือนสลับกัน)
-                    thai_month_order = {
-                        "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4,
-                        "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8,
-                        "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
-                    }
-                    df_pvd_sorted = df_pvd_history.copy()
-                    df_pvd_sorted['_Month_Num'] = df_pvd_sorted['Month'].map(thai_month_order).fillna(0).astype(int)
-                    df_pvd_sorted['_Year_Num'] = pd.to_numeric(df_pvd_sorted['Year_BE'], errors='coerce').fillna(0).astype(int)
-                    df_pvd_sorted = df_pvd_sorted.sort_values(by=['_Year_Num', '_Month_Num'])
-
-                    df_pvd_sorted['Period'] = df_pvd_sorted['Month'].astype(str) + " " + df_pvd_sorted['Year_BE'].astype(str)
-                    chart_data = df_pvd_sorted.set_index('Period')[chart_col]
-                else:
-                    chart_data = df_pvd_history[chart_col]
-
-                chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
-
-                # แสดงกราฟแท่ง (เปลี่ยนมาใช้ Plotly เพื่อกำหนดสีแยกตามค่าบวก/ลบได้)
-                # 🎨 บวก = เขียว, ลบ = แดง
-                bar_colors = ['#2ECC71' if v >= 0 else '#E74C3C' for v in chart_data]
-                fig_pvd = go.Figure(data=[
-                    go.Bar(
-                        x=chart_data.index.tolist(),
-                        y=chart_data.values.tolist(),
-                        marker_color=bar_colors
-                    )
-                ])
-                fig_pvd.update_layout(
-                    height=400,
-                    margin=dict(l=20, r=20, t=20, b=20),
-                    yaxis_title="YTD Net Return (%)"
-                )
-                st.plotly_chart(style_plotly(fig_pvd), use_container_width=True)
-            else:
-                st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
-        else:
-            st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลก่อนครับ")
-
-        # --- 3. ส่วนแสดงตารางสรุปการเติบโต ---
-        st.markdown("---")
-        st.subheader("📈 ตารางสรุปการเติบโตและผลตอบแทนกองทุน PVD")
-        if not df_pvd_history.empty:
-            # 🔧 แก้บั๊ก: ข้อมูลจาก Google Sheets มาเป็น "ข้อความ" ไม่ใช่ตัวเลขจริง แม้หน้าตาจะเหมือนตัวเลข
-            # ทำให้เช็ค dtype ตัวเลขไม่เจอ ต้อง "บังคับแปลง" เป็นตัวเลขก่อนเสมอ ถึงจะใส่ comma ได้ถูกต้อง
-            df_display_pvd = df_pvd_history.copy()
-            skip_cols = ['Month']  # คอลัมน์ที่เป็นข้อความล้วน ไม่ต้องแปลง
-            numeric_cols = []
-            for col in df_display_pvd.columns:
-                if col in skip_cols:
-                    continue
-                converted = pd.to_numeric(
-                    df_display_pvd[col].astype(str).str.replace(',', '', regex=False),
+            def clean_num(series):
+                if series is None:
+                    return pd.Series(0.0, index=df_pvd_history.index)
+                return pd.to_numeric(
+                    series.astype(str)
+                    .str.replace(',', '', regex=False)
+                    .str.replace(' ', '', regex=False)
+                    .str.replace('%', '', regex=False),
                     errors='coerce'
+                ).fillna(0.0)
+
+            # ดึงข้อมูลจากคอลัมน์ YTD_Net_Return_Pct โดยตรง
+            if 'YTD_Net_Return_Pct' in df_pvd_history.columns:
+                chart_col = 'YTD_Net_Return_Pct'
+                df_pvd_history[chart_col] = clean_num(df_pvd_history[chart_col])
+            else:
+                # เผื่อกรณียังไม่มีคอลัมน์นี้ในชีต ให้สร้างเป็น 0 ไปก่อนเพื่อกัน error
+                df_pvd_history['YTD_Net_Return_Pct'] = 0.0
+                chart_col = 'YTD_Net_Return_Pct'
+
+        except Exception as e:
+            st.warning(f"⚠️ เกิดข้อผิดพลาดในการอ่านข้อมูลกราฟ: {e}")
+            chart_col = None
+
+        if chart_col and chart_col in df_pvd_history.columns:
+            if 'Month' in df_pvd_history.columns and 'Year_BE' in df_pvd_history.columns:
+                # 🔧 แก้บั๊ก: เรียงลำดับข้อมูลตามปี พ.ศ. และเดือนจริงๆ ก่อนสร้างกราฟ
+                # (เดิมกราฟแสดงตามลำดับแถวที่กรอกใน Google Sheets ทำให้เดือนสลับกัน)
+                thai_month_order = {
+                    "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4,
+                    "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8,
+                    "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
+                }
+                df_pvd_sorted = df_pvd_history.copy()
+                df_pvd_sorted['_Month_Num'] = df_pvd_sorted['Month'].map(thai_month_order).fillna(0).astype(int)
+                df_pvd_sorted['_Year_Num'] = pd.to_numeric(df_pvd_sorted['Year_BE'], errors='coerce').fillna(0).astype(int)
+                df_pvd_sorted = df_pvd_sorted.sort_values(by=['_Year_Num', '_Month_Num'])
+
+                df_pvd_sorted['Period'] = df_pvd_sorted['Month'].astype(str) + " " + df_pvd_sorted['Year_BE'].astype(str)
+                chart_data = df_pvd_sorted.set_index('Period')[chart_col]
+            else:
+                chart_data = df_pvd_history[chart_col]
+
+            chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
+
+            # แสดงกราฟแท่ง (เปลี่ยนมาใช้ Plotly เพื่อกำหนดสีแยกตามค่าบวก/ลบได้)
+            # 🎨 บวก = เขียว, ลบ = แดง
+            bar_colors = ['#2ECC71' if v >= 0 else '#E74C3C' for v in chart_data]
+            fig_pvd = go.Figure(data=[
+                go.Bar(
+                    x=chart_data.index.tolist(),
+                    y=chart_data.values.tolist(),
+                    marker_color=bar_colors
                 )
-                if converted.notna().any():
-                    df_display_pvd[col] = converted
-                    numeric_cols.append(col)
-            
-            # ปี พ.ศ./ค.ศ. ไม่ต้องมี comma คั่น (ใส่ทศนิยม 0 ตำแหน่งแทน)
-            format_dict = {}
-            for col in numeric_cols:
-                if col in ('Year_BE', 'Year_CE'):
-                    format_dict[col] = '{:.0f}'
-                else:
-                    format_dict[col] = '{:,.2f}'
-            
-            st.dataframe(df_display_pvd.style.format(format_dict), use_container_width=True, hide_index=True)
+            ])
+            fig_pvd.update_layout(
+                height=400,
+                margin=dict(l=20, r=20, t=20, b=20),
+                yaxis_title="YTD Net Return (%)"
+            )
+            st.plotly_chart(style_plotly(fig_pvd), use_container_width=True)
         else:
-            st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund")
+            st.info("💡 ไม่สามารถสร้างกราฟได้ เนื่องจากข้อมูลคอลัมน์ไม่เพียงพอ")
+    else:
+        st.info("💡 ยังไม่มีข้อมูลสำหรับแสดงกราฟ กรุณาอัปโหลดข้อมูลก่อนครับ")
+
+    # --- 4. ส่วนแสดงตารางสรุปการเติบโต ---
+    st.markdown("---")
+    st.subheader("📈 ตารางสรุปการเติบโตและผลตอบแทนกองทุน PVD")
+    if not df_pvd_history.empty:
+        # 🔧 แก้บั๊ก: ข้อมูลจาก Google Sheets มาเป็น "ข้อความ" ไม่ใช่ตัวเลขจริง แม้หน้าตาจะเหมือนตัวเลข
+        # ทำให้เช็ค dtype ตัวเลขไม่เจอ ต้อง "บังคับแปลง" เป็นตัวเลขก่อนเสมอ ถึงจะใส่ comma ได้ถูกต้อง
+        df_display_pvd = df_pvd_history.copy()
+        skip_cols = ['Month']  # คอลัมน์ที่เป็นข้อความล้วน ไม่ต้องแปลง
+        numeric_cols = []
+        for col in df_display_pvd.columns:
+            if col in skip_cols:
+                continue
+            converted = pd.to_numeric(
+                df_display_pvd[col].astype(str).str.replace(',', '', regex=False),
+                errors='coerce'
+            )
+            if converted.notna().any():
+                df_display_pvd[col] = converted
+                numeric_cols.append(col)
+
+        # ปี พ.ศ./ค.ศ. ไม่ต้องมี comma คั่น (ใส่ทศนิยม 0 ตำแหน่งแทน)
+        format_dict = {}
+        for col in numeric_cols:
+            if col in ('Year_BE', 'Year_CE'):
+                format_dict[col] = '{:.0f}'
+            else:
+                format_dict[col] = '{:,.2f}'
+
+        st.dataframe(df_display_pvd.style.format(format_dict), use_container_width=True, hide_index=True)
+    else:
+        st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund")
 
 
 def render_tab_manual_records():
