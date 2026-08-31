@@ -9,10 +9,10 @@ from datetime import date
 import plotly.graph_objects as go
 import plotly.express as px
 from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history, generate_net_worth_pdf_report, get_net_worth_trend_data, compute_live_net_worth
-from theme import style_plotly
+from theme import style_plotly, format_updated_badge
 
 
-def _asset_card(col, icon, label, value, pct_base=None):
+def _asset_card(col, icon, label, value, pct_base=None, updated_date=None):
     """
     การ์ดแสดงสินทรัพย์แต่ละประเภทแบบทันสมัย (แทนที่ st.metric เดิม)
     มีไอคอนที่ตรงกับประเภทสินทรัพย์ + แถบเปอร์เซ็นต์เทียบสัดส่วน ให้เห็นน้ำหนักของแต่ละ
@@ -20,6 +20,8 @@ def _asset_card(col, icon, label, value, pct_base=None):
     🔧 แก้บั๊ก: เดิมเขียน HTML แบบหลายบรรทัดมีการเว้นวรรคหน้าบรรทัด (indent) ตามสไตล์โค้ด Python
     ทำให้ Markdown parser ของ Streamlit เข้าใจผิดว่าเป็น "โค้ดบล็อก" แล้วโชว์เป็นข้อความดิบ
     แทนที่จะแปลงเป็น HTML จริง ตอนนี้เขียนเป็นสตริงต่อเนื่องบรรทัดเดียว ไม่มีการเว้นวรรคนำหน้าเลย
+    - updated_date: วันที่บันทึกข้อมูลล่าสุดของสินทรัพย์ประเภทนี้ (ถ้ามี) โชว์เป็น badge เล็กๆ
+      "@DD/MM/YY" มุมขวาบนของการ์ด ให้รู้ว่าตัวเลขนี้กรอกมือไว้ตั้งแต่เมื่อไหร่
     """
     pct_html = ""
     if pct_base and pct_base > 0:
@@ -29,9 +31,16 @@ def _asset_card(col, icon, label, value, pct_base=None):
             f'<div style="background:#7C9885;height:100%;width:{min(pct, 100):.1f}%;"></div></div>'
             f'<div style="color:#9CA3AF;font-size:0.72em;margin-top:4px;font-family:\'Sarabun\',sans-serif;">{pct:.1f}%</div>'
         )
+    updated_html = ""
+    if updated_date:
+        updated_html = (
+            f'<span style="position:absolute;top:12px;right:16px;color:#9CA3AF;font-size:0.68em;'
+            f'font-family:\'Sarabun\',sans-serif;">{format_updated_badge(updated_date)}</span>'
+        )
     card_html = (
-        '<div style="background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
+        '<div style="position:relative;background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
         'padding:16px 18px;box-shadow:0 2px 10px rgba(45,49,66,0.06);margin-bottom:14px;">'
+        f'{updated_html}'
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
         f'<span style="font-size:22px;line-height:1;">{icon}</span>'
         f'<span style="color:#6B7280;font-size:0.85em;font-family:\'Sarabun\',sans-serif;">{label}</span>'
@@ -102,11 +111,62 @@ def render_tab_overview():
             "pension": get_ws_records_safe('Pension'),
             "mutual_fund": get_ws_records_safe('Fund_History'),
             "real_estate": get_ws_records_safe('Real_Estate'),
+            "gold": get_ws_records_safe('Gold_Portfolio'),
             "portfolio_hist": get_ws_records_safe('Stock_TFEX_History')
         }
 
     # เรียกใช้งานข้อมูลทั้งหมดรอบเดียวจบ
     all_data = fetch_all_wealth_overview_data()
+
+    # 🆕 หาว่าแต่ละหมวดสินทรัพย์ (ที่กรอกข้อมูลด้วยมือ) บันทึกล่าสุดไว้เมื่อไหร่ ใช้โชว์เป็น
+    # badge เล็กๆ "@DD/MM/YY" มุมขวาบนของการ์ดแต่ละใบด้านล่าง ให้รู้ว่าตัวเลขไหนอาจจะเก่าแล้ว
+    _THAI_MONTHS = {
+        'มกราคม': '01', 'กุมภาพันธ์': '02', 'มีนาคม': '03', 'เมษายน': '04',
+        'พฤษภาคม': '05', 'มิถุนายน': '06', 'กรกฎาคม': '07', 'สิงหาคม': '08',
+        'กันยายน': '09', 'ตุลาคม': '10', 'พฤศจิกายน': '11', 'ธันวาคม': '12',
+    }
+
+    def _last_row_date(rows, field='Date'):
+        if not rows:
+            return None
+        val = rows[-1].get(field)
+        return val if val not in (None, '') else None
+
+    def _pvd_last_date(rows):
+        if not rows:
+            return None
+        last = rows[-1]
+        month_num = _THAI_MONTHS.get(last.get('Month'))
+        year_ce = last.get('Year_CE')
+        if month_num and year_ce:
+            try:
+                return f"{int(year_ce)}-{month_num}-01"
+            except (ValueError, TypeError):
+                return None
+        return None
+
+    def _max_field(rows, *fields):
+        """หาค่าวันที่ล่าสุด (สตริงมากสุดตามลำดับตัวอักษร ใช้ได้กับฟอร์แมต YYYY-MM-DD) จากหลายแถว
+        โดยลองหลายชื่อคอลัมน์ตามลำดับต่อแถว (คอลัมน์แรกที่มีค่าไม่ว่างของแต่ละแถว)"""
+        dates = []
+        for row in rows:
+            for field in fields:
+                v = row.get(field)
+                if v not in (None, ''):
+                    dates.append(str(v))
+                    break
+        return max(dates) if dates else None
+
+    pvd_updated = _pvd_last_date(all_data["pvd"])
+    insurance_updated = _last_row_date(all_data["insurance"])
+    coop_updated = _last_row_date(all_data["coop"])
+    sso_updated = _last_row_date(all_data["sso"])
+    bank_updated = _last_row_date(all_data["bank"])
+    mutual_fund_updated = _max_field(
+        [r for r in all_data["mutual_fund"] if r.get('Status', 'Holding') == 'Holding'],
+        'Price_Updated_Date', 'Date_Buy'
+    )
+    gold_updated = _max_field(all_data["gold"], 'วันที่บันทึก')
 
     # --- 2. ดึงและคำนวณมูลค่าสินทรัพย์แต่ละส่วนจาก Cache ---
 
@@ -234,6 +294,7 @@ def render_tab_overview():
             house1_value += net_val
 
     total_real_estate = house1_value + house2_value + condo_value
+    real_estate_updated = _max_field(real_estate_items, 'วันที่บันทึก')
 
     # 🆕 บันทึกยอดอสังหาริมทรัพย์สิ้นเดือนอัตโนมัติ (ทำครั้งเดียวต่อเดือน) เพื่อใช้วาดกราฟแนวโน้ม
     # ด้านล่าง (จุดนี้เดิมไม่มีการบันทึกประวัติเลย ทำให้กราฟแนวโน้มไม่มีเส้นอสังหาฯ แสดงมาตลอด)
@@ -286,18 +347,18 @@ def render_tab_overview():
         # 👥 ประกันสังคม, 🏦 ธนาคาร, 🌅 บำนาญ, 🥇 ทองคำ)
         row1_col1, row1_col2, row1_col3 = st.columns(3)
         _asset_card(row1_col1, "📈", "พอร์ตหุ้น + TFEX", total_stock_and_tfex, net_worth_total)
-        _asset_card(row1_col2, "🧺", "กองทุนรวม", mutual_fund_value, net_worth_total)
-        _asset_card(row1_col3, "🏛️", "กองทุนสำรองเลี้ยงชีพ", pvd_value, net_worth_total)
+        _asset_card(row1_col2, "🧺", "กองทุนรวม", mutual_fund_value, net_worth_total, updated_date=mutual_fund_updated)
+        _asset_card(row1_col3, "🏛️", "กองทุนสำรองเลี้ยงชีพ", pvd_value, net_worth_total, updated_date=pvd_updated)
 
         row2_col1, row2_col2, row2_col3 = st.columns(3)
-        _asset_card(row2_col1, "🛡️", "ประกัน Unit Linked", insurance_value, net_worth_total)
-        _asset_card(row2_col2, "🤝", "สหกรณ์ฯ", coop_value, net_worth_total)
-        _asset_card(row2_col3, "👥", "ประกันสังคม", sso_value, net_worth_total)
+        _asset_card(row2_col1, "🛡️", "ประกัน Unit Linked", insurance_value, net_worth_total, updated_date=insurance_updated)
+        _asset_card(row2_col2, "🤝", "สหกรณ์ฯ", coop_value, net_worth_total, updated_date=coop_updated)
+        _asset_card(row2_col3, "👥", "ประกันสังคม", sso_value, net_worth_total, updated_date=sso_updated)
 
         row3_col1, row3_col2, row3_col3 = st.columns(3)
-        _asset_card(row3_col1, "🏦", "บัญชีธนาคาร", bank_balance, net_worth_total)
+        _asset_card(row3_col1, "🏦", "บัญชีธนาคาร", bank_balance, net_worth_total, updated_date=bank_updated)
         _asset_card(row3_col2, "🌅", "ประกันบำนาญ", pension_insurance_value, net_worth_total)
-        _asset_card(row3_col3, "🥇", "พอร์ตทองคำ", total_gold_value, net_worth_total)
+        _asset_card(row3_col3, "🥇", "พอร์ตทองคำ", total_gold_value, net_worth_total, updated_date=gold_updated)
 
         # ย้าย Note มาไว้ใต้การ์ดประกันบำนาญ (ตอนนี้อยู่แถว 3 คอลัมน์ 2)
         if all_data["pension"]:
@@ -324,7 +385,7 @@ def render_tab_overview():
         # --- 5. แสดงผลอสังหาริมทรัพย์ ---
         st.markdown("#### 🏡 อสังหาริมทรัพย์")
         row_re1, row_re2, row_re3, row_re4 = st.columns(4)
-        _asset_card(row_re1, "🏘️", "รวมอสังหาริมทรัพย์", total_real_estate, net_worth_total)
+        _asset_card(row_re1, "🏘️", "รวมอสังหาริมทรัพย์", total_real_estate, net_worth_total, updated_date=real_estate_updated)
         _asset_card(row_re2, "🏠", "บ้าน (ปัจจุบัน)", house1_value, total_real_estate)
         _asset_card(row_re3, "🏡", "บ้าน (พ่อแม่อยู่)", house2_value, total_real_estate)
         _asset_card(row_re4, "🏢", "คอนโด", condo_value, total_real_estate)

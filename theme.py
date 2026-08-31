@@ -81,7 +81,7 @@ h1, h2, h3, h4, h5, h6 {
 """
 
 
-def render_metric_card(col, label, value, icon="", delta=None, delta_positive=None, caption=None):
+def render_metric_card(col, label, value, icon="", delta=None, delta_positive=None, caption=None, updated_date=None):
     """
     🆕 การ์ดตัวเลขสไตล์เดียวกับหน้าภาพรวม Net Worth (กรอบมน/เงา/ฟอนต์) ใช้แทน st.metric()
     ธรรมดาได้ทุกจุดในแอป เพื่อให้หน้าตาไปในทิศทางเดียวกันทั้งหมด
@@ -89,8 +89,16 @@ def render_metric_card(col, label, value, icon="", delta=None, delta_positive=No
     - value: ค่าที่ต้องการโชว์ตัวใหญ่ (ใส่เป็นข้อความที่จัดรูปแบบมาแล้ว เช่น "1,234.00 ฿")
     - delta + delta_positive: badge เล็กๆ ใต้ตัวเลข (True=เขียว, False=แดง, None=เทาเฉยๆ)
     - caption: ข้อความหมายเหตุเล็กๆ สีเทา ต่อท้ายล่างสุด
+    - updated_date: วันที่บันทึกข้อมูลล่าสุด (datetime/date หรือสตริง) โชว์เป็นข้อความเล็กๆ
+      มุมขวาบนของการ์ด รูปแบบ "@DD/MM/YY" ใช้กับการ์ดที่มาจากข้อมูลกรอกมือ ให้รู้ว่าข้อมูลเก่าแค่ไหน
     """
     icon_html = f'<span style="font-size:18px;margin-right:6px;">{icon}</span>' if icon else ''
+    updated_html = ""
+    if updated_date:
+        updated_html = (
+            f'<span style="position:absolute;top:12px;right:16px;color:#9CA3AF;font-size:0.68em;'
+            f'font-family:\'Sarabun\',sans-serif;">{format_updated_badge(updated_date)}</span>'
+        )
     delta_html = ""
     if delta is not None:
         if delta_positive is True:
@@ -109,9 +117,10 @@ def render_metric_card(col, label, value, icon="", delta=None, delta_positive=No
     # ทำให้แถวเดียวกันสูงไม่เท่ากัน (ดูไม่เรียบร้อย) ตอนนี้กำหนด min-height ให้ทุกการ์ดสูงเท่ากัน
     # เสมอ (สูงพอสำหรับการ์ดที่มีทั้งแบดจ์และหมายเหตุ) การ์ดที่เนื้อหาน้อยกว่าจะมีที่ว่างด้านล่างแทน
     card_html = (
-        '<div style="background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
+        '<div style="position:relative;background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
         'padding:16px 18px;box-shadow:0 2px 10px rgba(45,49,66,0.06);margin-bottom:14px;'
         'min-height:128px;box-sizing:border-box;">'
+        f'{updated_html}'
         f'<div style="color:#6B7280;font-size:0.85em;font-family:\'Sarabun\',sans-serif;margin-bottom:6px;">{icon_html}{label}</div>'
         f'<div style="font-family:\'Prompt\',sans-serif;font-size:1.55em;font-weight:600;color:#2D3142;">{value}</div>'
         f'{delta_html}'
@@ -119,6 +128,25 @@ def render_metric_card(col, label, value, icon="", delta=None, delta_positive=No
         '</div>'
     )
     col.markdown(card_html, unsafe_allow_html=True)
+
+
+def format_updated_badge(updated_date):
+    """
+    แปลงวันที่ (datetime/date/สตริง หลายรูปแบบ) ให้เป็นข้อความ "@DD/MM/YY" สำหรับ badge มุมขวาบน
+    ของการ์ด ถ้าแปลงไม่ได้ (เช่นสตริงรูปแบบแปลกๆ) จะโชว์ค่าที่ส่งมาตรงๆ แทน ไม่ทำให้การ์ดพัง
+    """
+    import datetime as _dt
+
+    if isinstance(updated_date, (_dt.datetime, _dt.date)):
+        return f"@{updated_date.strftime('%d/%m/%y')}"
+
+    text = str(updated_date).strip()
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d", "%d/%m/%Y", "%d/%m/%y"):
+        try:
+            return f"@{_dt.datetime.strptime(text, fmt).strftime('%d/%m/%y')}"
+        except ValueError:
+            continue
+    return f"@{text}"
 
 
 def get_theme_colors():

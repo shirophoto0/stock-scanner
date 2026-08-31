@@ -202,6 +202,7 @@ def render_tab_funds():
                     total_portfolio_cost = 0
                     total_portfolio_value = 0
                     display_data = []
+                    _latest_price_update = None
                     for _, row in active_df.iterrows():
                         cost_p = float(row['Cost_Price'])
                         curr_p = float(row['Current_Price'])
@@ -218,6 +219,10 @@ def render_tab_funds():
                             try:
                                 price_updated_date = datetime.strptime(price_updated_str, '%Y-%m-%d').date()
                                 days_since_update = (date.today() - price_updated_date).days
+                                # 🆕 ไล่หาวันที่อัปเดตราคาล่าสุดสุดในบรรดากองทุนทั้งหมด ใช้โชว์เป็น
+                                # badge บนการ์ด "มูลค่าปัจจุบันรวม" ด้านล่าง
+                                if _latest_price_update is None or price_updated_date > _latest_price_update:
+                                    _latest_price_update = price_updated_date
                             except ValueError:
                                 pass
 
@@ -241,7 +246,10 @@ def render_tab_funds():
                     # 🆕 (1) การ์ดสรุปภาพรวม — ใช้การ์ดสไตล์เดียวกับหน้าอื่นในแอปแทน st.metric เดิม
                     m1, m2, m3 = st.columns(3)
                     render_metric_card(m1, "มูลค่าต้นทุนรวม", f"{total_portfolio_cost:,.2f} บาท", icon="📥")
-                    render_metric_card(m2, "มูลค่าปัจจุบันรวม", f"{total_portfolio_value:,.2f} บาท", icon="📈")
+                    render_metric_card(
+                        m2, "มูลค่าปัจจุบันรวม", f"{total_portfolio_value:,.2f} บาท", icon="📈",
+                        updated_date=_latest_price_update
+                    )
                     render_metric_card(
                         m3, "กำไร/ขาดทุนรวม", f"{total_profit:,.2f} บาท", icon="💹",
                         delta=f"{total_profit_pct:.2f}%", delta_positive=(total_profit >= 0)

@@ -74,6 +74,8 @@ def render_tab_real_estate():
 
                     # เคลียร์ Cache ทันทีที่มีการเปลี่ยนแปลงข้อมูล เพื่อให้ดึงข้อมูลล่าสุดรอบหน้า
                     fetch_real_estate_data_cached.clear()
+                    # 🆕 อัปเดต badge "บันทึกล่าสุด" บนการ์ดสรุปทันที ไม่ต้องรอโหลดจากชีตใหม่รอบหน้า
+                    st.session_state['real_estate_last_updated'] = current_date if rows_to_append else None
                     return True
             except Exception:
                 time.sleep((2 ** (attempt + 1)) + random.uniform(0.5, 2.5))
@@ -117,6 +119,9 @@ def render_tab_real_estate():
                     })
             # ตั้งค่า session_state ก็ต่อเมื่อโหลดสำเร็จเท่านั้น (ไม่ว่าจะมีข้อมูลจริงหรือว่างเปล่าจริงๆ ก็ตาม)
             st.session_state['real_estate_portfolio'] = loaded_items
+            # 🆕 เก็บวันที่บันทึกล่าสุดไว้แสดงเป็น badge บนการ์ดสรุปด้านล่าง (ทุกแถวมีวันที่เดียวกัน
+            # เพราะระบบ clear() แล้วเขียนทับทั้งชีตทุกครั้งที่บันทึก จึงดูจากแถวสุดท้ายพอ)
+            st.session_state['real_estate_last_updated'] = records[-1].get("วันที่บันทึก") if records else None
         except Exception as e:
             st.warning(f"⚠️ ไม่สามารถโหลดข้อมูลอสังหาฯ จาก Google Sheets ได้ กำลังจะลองใหม่อัตโนมัติ: {e}")
 
@@ -127,7 +132,10 @@ def render_tab_real_estate():
         for item in st.session_state.get('real_estate_portfolio', [])
     )
     st.session_state['total_real_estate_value'] = _total_re_value_top
-    render_metric_card(st, "มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{_total_re_value_top:,.2f} ฿", icon="🏡")
+    render_metric_card(
+        st, "มูลค่าสุทธิอสังหาริมทรัพย์รวม (Equity)", f"{_total_re_value_top:,.2f} ฿", icon="🏡",
+        updated_date=st.session_state.get('real_estate_last_updated')
+    )
 
     st.markdown("---")
     st.markdown("#### 📝 เพิ่ม / แก้ไขข้อมูลอสังหาริมทรัพย์")

@@ -108,6 +108,9 @@ def render_tab_gold(client):
             sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
             if sheet_gold is not None:
                 records = sheet_gold.get_all_records()
+                # 🆕 เก็บวันที่บันทึกล่าสุดไว้แสดงเป็น badge บนการ์ดสรุปมูลค่าตลาดพอร์ตทองด้านล่าง
+                _gold_dates = [str(r.get("วันที่บันทึก")) for r in records if r.get("วันที่บันทึก")]
+                st.session_state['gold_last_updated'] = max(_gold_dates) if _gold_dates else None
                 for row in records:
                     g_type = str(row.get("ประเภท", "")).strip()
                     if g_type != "":
@@ -237,6 +240,7 @@ def render_tab_gold(client):
                                 current_date
                             ])
                         sheet_gold.append_rows(rows_to_append)
+                        st.session_state['gold_last_updated'] = current_date
                 except Exception as e:
                     st.error(f"⚠️ บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
 
@@ -288,6 +292,7 @@ def render_tab_gold(client):
                                         current_date
                                     ])
                                 sheet_gold.append_rows(rows_to_append)
+                                st.session_state['gold_last_updated'] = current_date
                         except Exception as e:
                             st.error(f"⚠️ บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
 
@@ -403,7 +408,10 @@ def render_tab_gold(client):
         # 🔧 ปรับปรุง: เติมเนื้อหาลงใน placeholder ที่จองที่ไว้แล้วตั้งแต่แถวบนสุด (ใต้การ์ด
         # ราคาทองคำแท่ง/ทองรูปพรรณ) แทนที่จะวาดการ์ดใหม่ตรงนี้ ตำแหน่งที่เห็นจริงบนจอจะอยู่
         # แถว 2 ต่อจากราคาทองทันที ตามที่ขอ ถึงแม้โค้ดคำนวณจะอยู่ตรงนี้ก็ตาม
-        render_metric_card(gold_summary_placeholder_1, "มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿", icon="💰")
+        render_metric_card(
+            gold_summary_placeholder_1, "มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿", icon="💰",
+            updated_date=st.session_state.get('gold_last_updated')
+        )
         render_metric_card(gold_summary_placeholder_2, "มูลค่าตั้งต้นรวม", f"{total_cost_value:,.2f} ฿", icon="📦")
         render_metric_card(gold_summary_placeholder_3, "กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿", icon="📈",
                             delta=f"{total_pl_pct:,.2f}%", delta_positive=(total_pl >= 0))
