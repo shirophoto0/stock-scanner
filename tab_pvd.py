@@ -8,7 +8,7 @@ import time
 import plotly.graph_objects as go
 from datetime import date, datetime
 from backend_functions import extract_pvd_from_image, get_cached_spreadsheet, get_gsheet_client, get_worksheet_safely, get_active_sheet_name
-from theme import style_plotly
+from theme import style_plotly, render_metric_card
 
 
 def render_tab_pvd():
@@ -112,6 +112,59 @@ def render_tab_pvd():
                 df_pvd_history = pd.DataFrame(pvd_records)
         except Exception as e:
             pass
+
+        # --- 🆕 การ์ดสรุปภาพรวมกองทุน PVD (ข้อมูลเดือนล่าสุด) แสดงเหนือกราฟ % ผลตอบแทน ---
+        if not df_pvd_history.empty:
+            def _pvd_num(row, col):
+                raw = row.get(col, 0)
+                try:
+                    return float(str(raw).replace(',', '').strip() or 0)
+                except (ValueError, TypeError):
+                    return 0.0
+
+            # หาแถวของเดือนล่าสุดจริงๆ ตามปี พ.ศ. + เดือน (กันกรณีลำดับแถวในชีตไม่เรียงตามเวลา)
+            _thai_month_order = {
+                "มกราคม": 1, "กุมภาพันธ์": 2, "มีนาคม": 3, "เมษายน": 4,
+                "พฤษภาคม": 5, "มิถุนายน": 6, "กรกฎาคม": 7, "สิงหาคม": 8,
+                "กันยายน": 9, "ตุลาคม": 10, "พฤศจิกายน": 11, "ธันวาคม": 12
+            }
+            _df_pvd_latest = df_pvd_history.copy()
+            if 'Month' in _df_pvd_latest.columns and 'Year_BE' in _df_pvd_latest.columns:
+                _df_pvd_latest['_m'] = _df_pvd_latest['Month'].map(_thai_month_order).fillna(0)
+                _df_pvd_latest['_y'] = pd.to_numeric(_df_pvd_latest['Year_BE'], errors='coerce').fillna(0)
+                _df_pvd_latest = _df_pvd_latest.sort_values(by=['_y', '_m'])
+            latest_pvd_row = _df_pvd_latest.iloc[-1]
+
+            member_saving = _pvd_num(latest_pvd_row, 'Member_Saving')
+            member_benefit = _pvd_num(latest_pvd_row, 'Member_Benefit')
+            member_total = _pvd_num(latest_pvd_row, 'Member_Total') or (member_saving + member_benefit)
+            employer_matching = _pvd_num(latest_pvd_row, 'Employer_Matching')
+            employer_benefit = _pvd_num(latest_pvd_row, 'Employer_Benefit')
+            employer_total = _pvd_num(latest_pvd_row, 'Employer_Total') or (employer_matching + employer_benefit)
+            grand_total = _pvd_num(latest_pvd_row, 'Grand_Total') or (member_total + employer_total)
+
+            # 1) % เติบโต ฐาน = เงินสะสมส่วนลูกจ้างเท่านั้น (เงินสมทบนายจ้างทั้งก้อน + ผลประโยชน์ทั้งหมด นับเป็นการเติบโต)
+            growth_pct_member_base = ((grand_total - member_saving) / member_saving * 100) if member_saving > 0 else 0.0
+            # 2) % เติบโต ฐาน = เงินต้นของทั้งลูกจ้างและนายจ้างรวมกัน (นับเฉพาะผลประโยชน์ที่เกิดขึ้นจริงเป็นการเติบโต)
+            combined_base = member_saving + employer_matching
+            growth_pct_combined_base = ((grand_total - combined_base) / combined_base * 100) if combined_base > 0 else 0.0
+
+            st.markdown("---")
+            st.markdown("##### 📌 สรุปภาพรวมกองทุน PVD (ข้อมูลเดือนล่าสุด)")
+            c1, c2, c3 = st.columns(3)
+            render_metric_card(c1, "ยอดเงินรวมทั้งสิ้น", f"{grand_total:,.2f} ฿", icon="💰")
+            render_metric_card(c2, "ยอดเงินรวมส่วนของลูกจ้าง", f"{member_total:,.2f} ฿", icon="🧑‍💼")
+            render_metric_card(c3, "ยอดเงินรวมส่วนของนายจ้าง", f"{employer_total:,.2f} ฿", icon="🏢")
+
+            c4, c5 = st.columns(2)
+            render_metric_card(
+                c4, "% เติบโต (ฐาน: เงินสะสมลูกจ้างเท่านั้น)", f"{growth_pct_member_base:,.2f}%", icon="🚀",
+                caption="นับเงินสมทบนายจ้างทั้งหมด + ผลประโยชน์ทุกส่วนเป็นการเติบโต"
+            )
+            render_metric_card(
+                c5, "% เติบโต (ฐาน: เงินต้นลูกจ้าง+นายจ้างรวมกัน)", f"{growth_pct_combined_base:,.2f}%", icon="📈",
+                caption="นับเฉพาะผลประโยชน์ที่เกิดขึ้นจริงเป็นการเติบโต"
+            )
 
         # --- ส่วนแสดงกราฟแท่ง % ผลตอบแทน (% Benefit) คำนวณอัตโนมัติจากข้อมูลที่มี ---
         st.markdown("---")
