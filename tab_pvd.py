@@ -147,12 +147,19 @@ def render_tab_pvd():
                             is_duplicate = True
                             row_number_to_update = match_idx[0] + 2
 
-                            values_to_write = list(df_to_save.iloc[0].values)
+                            # 🔧 แก้บั๊ก: df.iloc[0].values (ดึงมาแค่แถวเดียว) คืนค่าช่องตัวเลขเป็น
+                            # numpy.int64/float64 อยู่ (ต่างจาก df.values.tolist() ทั้งตารางที่ pandas
+                            # แปลงเป็น int/float ธรรมดาให้อัตโนมัติ) gspread ส่งค่าไป Google Sheets API
+                            # ด้วย json.dumps ซึ่งไม่รู้จัก numpy scalar เลย error
+                            # "Object of type int64 is not JSON serializable" ตอนนี้แปลงแต่ละช่องเป็น
+                            # ชนิดข้อมูลพื้นฐานของ Python ก่อนเสมอ (.item() ของ numpy scalar คืนค่า native type)
+                            values_to_write = [v.item() if hasattr(v, 'item') else v for v in df_to_save.iloc[0].values]
                             sheet.update(f"A{row_number_to_update}", [values_to_write])
                             st.success(f"✅ อัปเดตข้อมูลของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว")
 
                     if not is_duplicate:
                         for row in df_to_save.values.tolist():
+                            row = [v.item() if hasattr(v, 'item') else v for v in row]
                             sheet.append_row(row)
                         st.success(f"✅ บันทึกข้อมูลใหม่ของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
 
