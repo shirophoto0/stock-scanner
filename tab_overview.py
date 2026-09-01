@@ -9,64 +9,13 @@ from datetime import date
 import plotly.graph_objects as go
 import plotly.express as px
 from backend_functions import get_gsheet_client, get_cached_spreadsheet, get_active_sheet_name, check_and_auto_stamp_fund_value, check_and_auto_stamp_value_history, generate_net_worth_pdf_report, get_net_worth_trend_data, compute_live_net_worth
-from theme import style_plotly, format_updated_badge
+from theme import style_plotly, format_updated_badge, render_asset_card, render_hero_card, THEME_COLORS
 
-
-def _asset_card(col, icon, label, value, pct_base=None, updated_date=None):
-    """
-    การ์ดแสดงสินทรัพย์แต่ละประเภทแบบทันสมัย (แทนที่ st.metric เดิม)
-    มีไอคอนที่ตรงกับประเภทสินทรัพย์ + แถบเปอร์เซ็นต์เทียบสัดส่วน ให้เห็นน้ำหนักของแต่ละ
-    ก้อนสินทรัพย์ได้เร็วๆ โดยไม่ต้องเลื่อนไปดูกราฟโดนัทด้านล่าง
-    🔧 แก้บั๊ก: เดิมเขียน HTML แบบหลายบรรทัดมีการเว้นวรรคหน้าบรรทัด (indent) ตามสไตล์โค้ด Python
-    ทำให้ Markdown parser ของ Streamlit เข้าใจผิดว่าเป็น "โค้ดบล็อก" แล้วโชว์เป็นข้อความดิบ
-    แทนที่จะแปลงเป็น HTML จริง ตอนนี้เขียนเป็นสตริงต่อเนื่องบรรทัดเดียว ไม่มีการเว้นวรรคนำหน้าเลย
-    - updated_date: วันที่บันทึกข้อมูลล่าสุดของสินทรัพย์ประเภทนี้ (ถ้ามี) โชว์เป็น badge เล็กๆ
-      "@DD/MM/YY" มุมขวาบนของการ์ด ให้รู้ว่าตัวเลขนี้กรอกมือไว้ตั้งแต่เมื่อไหร่
-    """
-    pct_html = ""
-    if pct_base and pct_base > 0:
-        pct = (value / pct_base) * 100
-        pct_html = (
-            '<div style="background:#F1EEE8;border-radius:6px;height:5px;margin-top:10px;overflow:hidden;">'
-            f'<div style="background:#7C9885;height:100%;width:{min(pct, 100):.1f}%;"></div></div>'
-            f'<div style="color:#9CA3AF;font-size:0.72em;margin-top:4px;font-family:\'Sarabun\',sans-serif;">{pct:.1f}%</div>'
-        )
-    updated_html = ""
-    if updated_date:
-        updated_html = (
-            f'<span style="position:absolute;top:12px;right:16px;color:#9CA3AF;font-size:0.68em;'
-            f'font-family:\'Sarabun\',sans-serif;">{format_updated_badge(updated_date)}</span>'
-        )
-    card_html = (
-        '<div style="position:relative;background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
-        'padding:16px 18px;box-shadow:0 2px 10px rgba(45,49,66,0.06);margin-bottom:14px;">'
-        f'{updated_html}'
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
-        f'<span style="font-size:22px;line-height:1;">{icon}</span>'
-        f'<span style="color:#6B7280;font-size:0.85em;font-family:\'Sarabun\',sans-serif;">{label}</span>'
-        '</div>'
-        '<div style="font-family:\'Prompt\',sans-serif;font-size:1.55em;font-weight:600;color:#2D3142;">'
-        f'{value:,.0f} ฿</div>'
-        f'{pct_html}'
-        '</div>'
-    )
-    col.markdown(card_html, unsafe_allow_html=True)
-
-
-def _hero_card(col, icon, label, value):
-    """
-    การ์ดตัวเลข Net Worth หลัก (ใหญ่กว่าการ์ดสินทรัพย์ย่อยด้านล่าง เพราะเป็นตัวเลขสำคัญสุด)
-    ใช้สไตล์เดียวกับ _asset_card (กรอบ/เงา/ฟอนต์) ให้ไปในโทนเดียวกันทั้งหน้า จัดกึ่งกลางกล่อง
-    """
-    card_html = (
-        '<div style="background:#FFFFFF;border:1px solid #E5E1D8;border-radius:14px;'
-        'padding:26px;box-shadow:0 2px 10px rgba(45,49,66,0.06);text-align:center;">'
-        f'<div style="font-size:34px;margin-bottom:8px;line-height:1;">{icon}</div>'
-        f'<div style="color:#6B7280;font-size:0.95em;font-family:\'Sarabun\',sans-serif;margin-bottom:8px;">{label}</div>'
-        f'<div style="font-family:\'Prompt\',sans-serif;font-size:2.2em;font-weight:700;color:#4E9A6E;">{value:,.0f} ฿</div>'
-        '</div>'
-    )
-    col.markdown(card_html, unsafe_allow_html=True)
+# 🔧 _asset_card / _hero_card เดิมของไฟล์นี้ถูกย้ายไปรวมศูนย์ที่ theme.py แล้ว
+# (เป็น render_asset_card / render_hero_card) เพื่อให้แท็บอื่นเรียกใช้การ์ดสไตล์เดียวกันได้โดยไม่ต้อง
+# คัดลอกโค้ด HTML/CSS ซ้ำ — ปรับสไตล์การ์ดในอนาคตแก้ที่ theme.py จุดเดียวพอ ไฟล์นี้เหลือแค่เรียกใช้
+_asset_card = render_asset_card
+_hero_card = render_hero_card
 
 
 def render_tab_overview():
@@ -371,7 +320,7 @@ def render_tab_overview():
 
                 if clean_money > 0:
                     pension_notes_html += (
-                        f'<p style="color: #888888; font-size: 0.75em; margin: 0px;">'
+                        f'<p style="color: {THEME_COLORS["text_secondary"]}; font-size: 0.75em; margin: 0px;">'
                         f'• ถอนออก ณ อายุ {age_val} ปี: {clean_money:,.0f} ฿'
                         f'</p>'
                     )

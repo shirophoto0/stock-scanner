@@ -366,26 +366,29 @@ def render_tab_stock():
     
                                 st.markdown(f"**📊 ผลงานรายเดือน ประจำปี {selected_year}**")
     
+                                # 🎨 สีแท่งกำไร/ขาดทุนและป้ายกำกับ ใช้โทนสีจากธีมกลาง (theme.py) ให้สอดคล้อง
+                                # กับส่วนอื่นของแอป แทนสีเขียว/แดงสดและสีเทาที่ฮาร์ดโค้ดไว้เดิม
+                                _tc = get_theme_colors()
                                 chart_bar = alt.Chart(df_monthly).mark_bar(width=25).encode(
-                                    x=alt.X('Month_Label:O', title='เดือน (ตามวันที่ขาย)', sort=None), 
+                                    x=alt.X('Month_Label:O', title='เดือน (ตามวันที่ขาย)', sort=None),
                                     y=alt.Y('Profit_Sum:Q', title='กำไร/ขาดทุน (บาท)'),
-                                    color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=['#2ecc71', '#e74c3c']), legend=None),
+                                    color=alt.Color('Color', scale=alt.Scale(domain=['Profit', 'Loss'], range=[_tc['positive'], _tc['negative']]), legend=None),
                                     tooltip=['Month_Label', 'Profit_Sum', alt.Tooltip('Monthly_ROI:Q', format='.2f', title='% ROI เดือน')]
                                 )
-    
+
                                 text_labels = alt.Chart(df_monthly).mark_text(
                                     align='center',
-                                    baseline='bottom', 
-                                    dy=-5, 
-                                    color='#888888', 
+                                    baseline='bottom',
+                                    dy=-5,
+                                    color=_tc['text_secondary'],
                                     fontSize=10
                                 ).encode(
                                     x=alt.X('Month_Label:O', sort=None),
                                     y=alt.Y('Profit_Sum:Q'),
                                     text='ROI_Text:N'
                                 )
-    
-                                rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color='#666666', strokeDash=[3,3]).encode(y='y')
+
+                                rule = alt.Chart(pd.DataFrame({'y': [0]})).mark_rule(color=_tc['border'], strokeDash=[3,3]).encode(y='y')
     
                                 st.altair_chart(style_altair((chart_bar + text_labels + rule).properties(height=350)), use_container_width=True)
     
@@ -462,7 +465,9 @@ def render_tab_stock():
                                         y_upper_limit = y_max * 1.15 if y_max > 0 else y_max * 0.85
     
                                         # สร้างกราฟเส้นพร้อมกำหนด Scale แกน Y และเปิด Interactive Zoom & Pan
-                                        chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color='#3498db', strokeWidth=3).encode(
+                                        # 🎨 ใช้สี accent ของธีมกลาง (theme.py) แทนสีฟ้าที่ฮาร์ดโค้ดไว้เดิม
+                                        _tc_line = get_theme_colors()
+                                        chart_line = alt.Chart(df_line_grouped).mark_line(point=True, color=_tc_line['accent'], strokeWidth=3).encode(
                                             x=alt.X('Time_Label:O', title='ช่วงเวลาที่มีการเคลื่อนไหว', sort=list(df_line_grouped['Time_Label'])),
                                             y=alt.Y('Cumulative_Profit:Q', title='กำไรสะสม (บาท)', scale=alt.Scale(domain=[y_min, y_upper_limit], nice=True)),
                                             tooltip=['Time_Label', 'Cumulative_Profit']
@@ -538,23 +543,25 @@ def render_tab_stock():
                             optimal_cutloss_pct = -(wins['Profit_Pct'].mean() / 2.0) if not wins.empty else None
     
                             # 2. แสดง Metric ด้วย HTML เพื่อคุมสีให้ตรงกับสีเส้นในกราฟ
+                            # 🎨 ใช้สีจากธีมกลาง (theme.py) แทนสีเขียว/ม่วง/แดงสดที่ฮาร์ดโค้ดไว้เดิม
+                            _tc_hist = get_theme_colors()
                             col_m1, col_m2, col_m3 = st.columns(3)
-                            col_m1.markdown(f"<div style='text-align: center; color: #12da58; font-size: 20px; font-weight: bold;'>Mean</div><div style='text-align: center; font-size: 24px;'>{mean_val:.1f}%</div>", unsafe_allow_html=True)
-                            col_m2.markdown(f"<div style='text-align: center; color: #9b59b6; font-size: 20px; font-weight: bold;'>Avg Loss</div><div style='text-align: center; font-size: 24px;'>{avg_loss_pct:.1f}%</div>", unsafe_allow_html=True)
+                            col_m1.markdown(f"<div style='text-align: center; color: {_tc_hist['positive']}; font-size: 20px; font-weight: bold;'>Mean</div><div style='text-align: center; font-size: 24px;'>{mean_val:.1f}%</div>", unsafe_allow_html=True)
+                            col_m2.markdown(f"<div style='text-align: center; color: {_tc_hist['accent']}; font-size: 20px; font-weight: bold;'>Avg Loss</div><div style='text-align: center; font-size: 24px;'>{avg_loss_pct:.1f}%</div>", unsafe_allow_html=True)
                             if optimal_cutloss_pct is not None:
-                                col_m3.markdown(f"<div style='text-align: center; color: #f21d2b; font-size: 20px; font-weight: bold;'>Target Cut</div><div style='text-align: center; font-size: 24px;'>{optimal_cutloss_pct:.1f}%</div>", unsafe_allow_html=True)
-    
+                                col_m3.markdown(f"<div style='text-align: center; color: {_tc_hist['negative']}; font-size: 20px; font-weight: bold;'>Target Cut</div><div style='text-align: center; font-size: 24px;'>{optimal_cutloss_pct:.1f}%</div>", unsafe_allow_html=True)
+
                             # 3. วาดกราฟ (เรียกผ่าน plotly.express โดยตรง ป้องกัน Error ซ้ำซ้อน)
-                            fig = plotly.express.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=['#3498db'])
-    
+                            fig = plotly.express.histogram(df_filtered, x='Profit_Pct', nbins=20, opacity=0.6, color_discrete_sequence=[_tc_hist['accent']])
+
                             # 🔧 แก้บั๊ก: เดิมมีป้ายข้อความ (annotation_text) ลอยอยู่ในกราฟด้วย ซึ่งซ้ำกับ
                             # ตัวเลข Mean/Avg Loss/Target Cut ที่แสดงเป็นกล่องสีด้านบนอยู่แล้ว พอจอแคบ
                             # (เช่น มือถือ) เส้นทั้ง 3 เส้นอยู่ใกล้กันในข้อมูล ป้ายข้อความเลยไปทับกันจนอ่านไม่ออก
                             # ตอนนี้ตัดป้ายข้อความในกราฟออก เหลือแค่เส้นสีอ้างอิง ไม่เสียข้อมูลเพราะมีกล่องด้านบนอยู่แล้ว
-                            fig.add_vline(x=mean_val, line_dash="dash", line_color="#12da58")
-                            fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color="#9b59b6")
+                            fig.add_vline(x=mean_val, line_dash="dash", line_color=_tc_hist['positive'])
+                            fig.add_vline(x=avg_loss_pct, line_dash="dot", line_color=_tc_hist['accent'])
                             if optimal_cutloss_pct is not None:
-                                fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color="#f21d2b")
+                                fig.add_vline(x=optimal_cutloss_pct, line_dash="dashdot", line_color=_tc_hist['negative'])
     
                             # เพิ่ม margin top เพื่อให้มีพื้นที่เหลือให้ป้ายข้อความด้านบนไม่ถูกตัด
                             fig.update_layout(margin=dict(t=50, b=20, l=20, r=20), height=350, plot_bgcolor='rgba(0,0,0,0)')

@@ -8,7 +8,7 @@ import time
 import plotly.graph_objects as go
 from datetime import date, datetime
 from backend_functions import extract_pvd_from_image, get_cached_spreadsheet, get_gsheet_client, get_worksheet_safely, get_active_sheet_name
-from theme import style_plotly, render_metric_card
+from theme import style_plotly, render_metric_card, get_theme_colors
 
 
 def render_tab_pvd():
@@ -224,8 +224,9 @@ def render_tab_pvd():
             chart_data = pd.to_numeric(chart_data, errors='coerce').fillna(0.0)
 
             # แสดงกราฟแท่ง (เปลี่ยนมาใช้ Plotly เพื่อกำหนดสีแยกตามค่าบวก/ลบได้)
-            # 🎨 บวก = เขียว, ลบ = แดง
-            bar_colors = ['#2ECC71' if v >= 0 else '#E74C3C' for v in chart_data]
+            # 🎨 บวก/ลบ ใช้สีจากธีมกลาง (theme.py) ให้โทนเดียวกับส่วนอื่นของแอป แทนสีเขียว/แดงสดทั่วไป
+            _tc = get_theme_colors()
+            bar_colors = [_tc['positive'] if v >= 0 else _tc['negative'] for v in chart_data]
             fig_pvd = go.Figure(data=[
                 go.Bar(
                     x=chart_data.index.tolist(),
