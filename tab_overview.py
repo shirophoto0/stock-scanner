@@ -390,6 +390,54 @@ def render_tab_overview():
         _asset_card(row_re3, "🏡", "บ้าน (พ่อแม่อยู่)", house2_value, total_real_estate)
         _asset_card(row_re4, "🏢", "คอนโด", condo_value, total_real_estate)
 
+        # --- 5.5 รายได้เสริม (Stock Photo Income) — การ์ดข้อมูลแยกต่างหาก ไม่นับรวมใน Net Worth ---
+        # 🆕 ดึงจาก Google Sheet "PhotoStockIncome" (คนละสเปรดชีตกับข้อมูลความมั่งคั่งหลัก แต่ใช้
+        # service account เดียวกัน) แสดงเฉพาะตอน login เป็นบัญชีเจ้าของข้อมูล (MyStockData) เท่านั้น
+        # เพราะเป็นรายได้ส่วนตัว ไม่เกี่ยวกับพาร์ทเนอร์ (Nujiwealth) — ตัวเลขนี้เป็นข้อมูลอ้างอิงเฉยๆ
+        # ไม่ถูกบวกเข้า net_worth_excl_re หรือ net_worth_total เลย
+        if get_active_sheet_name() == "MyStockData":
+            @st.cache_data(ttl=600, show_spinner=False)
+            def _fetch_photo_income_records():
+                client = get_gsheet_client()
+                sheet = client.open("PhotoStockIncome").worksheet("Income")
+                return sheet.get_all_records()
+    
+            try:
+                _income_records = _fetch_photo_income_records()
+            except Exception:
+                _income_records = []
+    
+            if _income_records:
+                _today = date.today()
+                _window_keys = set()
+                for _i in range(12):
+                    _m = _today.month - _i
+                    _y = _today.year
+                    while _m <= 0:
+                        _m += 12
+                        _y -= 1
+                    _window_keys.add((_y, _m))
+    
+                _total_thb = 0.0
+                _active_months = set()
+                for _row in _income_records:
+                    try:
+                        _y = int(_row.get("Year"))
+                        _m = int(_row.get("Month"))
+                        _thb = float(_row.get("Amount_THB") or 0)
+                    except (ValueError, TypeError):
+                        continue
+                    if (_y, _m) in _window_keys and _thb:
+                        _total_thb += _thb
+                        _active_months.add((_y, _m))
+    
+                _avg_per_month_12m = (_total_thb / len(_active_months)) if _active_months else 0.0
+    
+                st.markdown("#### 💵 รายได้เสริม")
+                row_income1, row_income2 = st.columns(2)
+                _asset_card(row_income1, "📷", "รายได้ขายภาพสต็อก (รวม 12 เดือนล่าสุด)", _total_thb)
+                _asset_card(row_income2, "📊", "เฉลี่ยต่อเดือน (12 เดือนล่าสุด)", _avg_per_month_12m)
+                st.caption("💡 ยอดรายได้เสริมนี้เป็นข้อมูลอ้างอิงเท่านั้น **ไม่ถูกนับรวม** ในยอด Net Worth ด้านบน")
 
     st.subheader("📈 วิเคราะห์สัดส่วนสินทรัพย์สภาพคล่องและการลงทุน")
 
