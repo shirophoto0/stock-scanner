@@ -52,14 +52,27 @@ def render_tab_funds():
             date_buy = col2.date_input("วันที่ซื้อ:", date.today())
 
             col3, col4 = st.columns(2)
-            cost_price = col3.number_input("ราคาต้นทุนเฉลี่ยต่อหน่วย:", min_value=0.0, step=0.01, format="%.4f")
+            cost_price = col3.number_input("ราคาต้นทุนเฉลี่ยต่อหน่วย (มูลค่าตลาด):", min_value=0.0, step=0.01, format="%.4f")
             units = col4.number_input("จำนวนหน่วย (Units):", min_value=0.0001, step=1.0, format="%.4f")
+
+            # 🆕 ช่องกรอกทางเลือก: กรอก "ราคาต้นทุนเฉลี่ยต่อหน่วย" ด้านบน หรือ "มูลค่าเงินลงทุนรวม"
+            # ด้านล่างนี้ อย่างใดอย่างหนึ่งก็ได้ ถ้าไม่กรอกราคาต่อหน่วย ระบบจะคำนวณราคาต่อหน่วยให้เอง
+            # จาก มูลค่ารวม ÷ จำนวนหน่วย
+            total_cost_value = st.number_input(
+                "หรือกรอกมูลค่าเงินลงทุนรวม (มูลค่าปัจจุบัน) แทน:",
+                min_value=0.0, step=1.0, format="%.2f",
+                help="กรอกอย่างใดอย่างหนึ่งพอครับ: ราคาต้นทุนเฉลี่ยต่อหน่วยด้านบน หรือมูลค่าเงินลงทุนรวมช่องนี้ ระบบจะคำนวณอีกค่าให้อัตโนมัติจากจำนวนหน่วย"
+            )
 
             submitted = st.form_submit_button("บันทึกการซื้อกองทุน", use_container_width=True, type="primary")
             if submitted:
                 if not fund_name:
                     st.warning("กรุณากรอกชื่อกองทุนครับ")
+                elif cost_price <= 0 and total_cost_value <= 0:
+                    st.warning("กรุณากรอกราคาต้นทุนเฉลี่ยต่อหน่วย หรือ มูลค่าเงินลงทุนรวม อย่างใดอย่างหนึ่งครับ")
                 else:
+                    if cost_price <= 0:
+                        cost_price = total_cost_value / units
                     try:
                         client = get_gsheet_client()
                         # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ (ไม่ใช่ชื่อ "MyStockData")
@@ -146,10 +159,22 @@ def render_tab_funds():
                         # กองทุนที่เลือก, สลับช่องกรอกตาม action ที่เลือก)
                         if action_type == "อัปเดตราคาปัจจุบัน":
                             with st.form("fund_update_price_form"):
-                                new_price = st.number_input("ราคาปัจจุบันใหม่:", min_value=0.0, step=0.01, format="%.4f", key="new_price_input")
+                                col_p1, col_p2 = st.columns(2)
+                                new_price = col_p1.number_input("ราคาปัจจุบันใหม่ (มูลค่าตลาดต่อหน่วย):", min_value=0.0, step=0.01, format="%.4f", key="new_price_input")
+                                # 🆕 ช่องกรอกทางเลือก: กรอก "ราคาปัจจุบันใหม่" ด้านซ้าย หรือ "มูลค่าปัจจุบันรวม"
+                                # ด้านนี้ อย่างใดอย่างหนึ่งก็ได้ ถ้าไม่กรอกราคาต่อหน่วย ระบบจะคำนวณราคาต่อหน่วย
+                                # ให้เองจาก มูลค่ารวม ÷ จำนวนหน่วยที่ถืออยู่ (units_val)
+                                new_total_value = col_p2.number_input(
+                                    "หรือมูลค่าปัจจุบันรวม:", min_value=0.0, step=1.0, format="%.2f", key="new_total_value_input",
+                                    help="กรอกอย่างใดอย่างหนึ่งพอครับ: ราคาต่อหน่วยด้านซ้าย หรือมูลค่ารวมช่องนี้ ระบบจะคำนวณอีกค่าให้อัตโนมัติจากจำนวนหน่วยที่ถืออยู่"
+                                )
                                 update_price_submitted = st.form_submit_button("💾 บันทึกราคาอัปเดต")
 
-                            if update_price_submitted:
+                            if update_price_submitted and new_price <= 0 and new_total_value <= 0:
+                                st.warning("กรุณากรอกราคาปัจจุบันใหม่ หรือ มูลค่าปัจจุบันรวม อย่างใดอย่างหนึ่งครับ")
+                            elif update_price_submitted:
+                                if new_price <= 0:
+                                    new_price = new_total_value / units_val
                                 sheet.update_cell(selected_row_index, 6, new_price)
                                 # 🆕 บันทึกวันที่อัปเดตราคาล่าสุดไว้ที่คอลัมน์ 9 (Price_Updated_Date)
                                 # ด้วย ใช้เตือน "ราคาเก่า" ในหน้าภาพรวมพอร์ตถ้าไม่ได้อัปเดตนานเกินไป

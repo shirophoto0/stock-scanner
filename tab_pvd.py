@@ -87,16 +87,22 @@ def render_tab_pvd():
     # --- 2. ฟอร์มเพิ่ม/อัปเดตข้อมูล PVD รายเดือน (ซ่อนใน Expander เพื่อประหยัดพื้นที่หน้าจอ) ---
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลกองทุนสำรองเลี้ยงชีพ (PVD) รายเดือน", expanded=False):
         with st.form("pvd_upload_form"):
-            col_y1, col_y2, col_m = st.columns(3)
+            col_d1, col_d2 = st.columns(2)
 
-            with col_y1:
-                input_year_be = st.number_input("ปี พ.ศ.", min_value=2500, max_value=2570, value=2569)
-            with col_y2:
-                st.info(f"ค.ศ.: **{int(input_year_be) - 543}**")
-            with col_m:
-                months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-                               "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
-                selected_month = st.selectbox("เลือกเดือน", months_list)
+            with col_d1:
+                selected_pvd_date = st.date_input(
+                    "เลือกวันที่ของรายงาน PVD (วัน/เดือน/ปี)",
+                    value=date.today(),
+                    key="pvd_date_input"
+                )
+            with col_d2:
+                input_year_be = selected_pvd_date.year + 543
+                st.info(f"ปี พ.ศ.: **{input_year_be}**  /  ค.ศ.: **{selected_pvd_date.year}**")
+
+            months_list = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                           "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+            selected_month = months_list[selected_pvd_date.month - 1]
+            selected_day = selected_pvd_date.day
 
             uploaded_pvd_file = st.file_uploader("อัปโหลดรูปภาพรายงาน PVD รายเดือน (JPG, PNG)", type=["jpg", "jpeg", "png"])
 
@@ -110,6 +116,8 @@ def render_tab_pvd():
                         if df_extracted is not None and not df_extracted.empty:
                             if 'Month' not in df_extracted.columns:
                                 df_extracted.insert(0, 'Month', selected_month)
+                            if 'Day' not in df_extracted.columns:
+                                df_extracted.insert(0, 'Day', selected_day)
 
                             st.success("อ่านข้อมูลสำเร็จ! ตรวจสอบความถูกต้องด้านล่าง:")
                             st.dataframe(df_extracted, use_container_width=True)
@@ -131,10 +139,34 @@ def render_tab_pvd():
                     client = get_gsheet_client()
                     sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Provident_Fund')
 
+                    # 🆕 ชีตเดิมยังไม่มีคอลัมน์ 'Day' (เพิ่งเพิ่มระบบเลือกวันที่แบบเต็ม วัน/เดือน/ปี)
+                    # เพิ่ม header คอลัมน์ใหม่ต่อท้ายคอลัมน์ที่มีอยู่ เพื่อไม่กระทบตำแหน่งคอลัมน์เดิม
+                    header_row = sheet.row_values(1)
+                    if 'Day' not in header_row:
+                        sheet.update_cell(1, len(header_row) + 1, 'Day')
+                        header_row.append('Day')
+
                     existing_data = sheet.get_all_records()
                     df_existing = pd.DataFrame(existing_data) if existing_data else pd.DataFrame()
 
                     df_to_save = st.session_state['temp_pvd_df'].fillna(0)
+                    df_to_save['Day'] = selected_day
+                    df_to_save['Month'] = selected_month
+                    df_to_save['Year_BE'] = input_year_be
+
+                    # 🔧 แก้บั๊ก: df.iloc[0].values (ดึงมาแค่แถวเดียว) คืนค่าช่องตัวเลขเป็น
+                    # numpy.int64/float64 อยู่ (ต่างจาก df.values.tolist() ทั้งตารางที่ pandas
+                    # แปลงเป็น int/float ธรรมดาให้อัตโนมัติ) gspread ส่งค่าไป Google Sheets API
+                    # ด้วย json.dumps ซึ่งไม่รู้จัก numpy scalar เลย error
+                    # "Object of type int64 is not JSON serializable" จึงแปลงแต่ละช่องเป็น
+                    # ชนิดข้อมูลพื้นฐานของ Python ก่อนเสมอ (.item() ของ numpy scalar คืนค่า native type)
+                    # และเรียงค่าตามลำดับ header จริงในชีต (กันคอลัมน์เพี้ยนกรณี AI ส่งคอลัมน์มาไม่ครบ/ไม่ตรงลำดับ)
+                    def _row_values(row):
+                        row_dict = row.to_dict()
+                        return [
+                            v.item() if hasattr(v, 'item') else v
+                            for v in (row_dict.get(h, 0) for h in header_row)
+                        ]
 
                     is_duplicate = False
                     if not df_existing.empty and 'Month' in df_existing.columns and 'Year_BE' in df_existing.columns:
@@ -147,21 +179,14 @@ def render_tab_pvd():
                             is_duplicate = True
                             row_number_to_update = match_idx[0] + 2
 
-                            # 🔧 แก้บั๊ก: df.iloc[0].values (ดึงมาแค่แถวเดียว) คืนค่าช่องตัวเลขเป็น
-                            # numpy.int64/float64 อยู่ (ต่างจาก df.values.tolist() ทั้งตารางที่ pandas
-                            # แปลงเป็น int/float ธรรมดาให้อัตโนมัติ) gspread ส่งค่าไป Google Sheets API
-                            # ด้วย json.dumps ซึ่งไม่รู้จัก numpy scalar เลย error
-                            # "Object of type int64 is not JSON serializable" ตอนนี้แปลงแต่ละช่องเป็น
-                            # ชนิดข้อมูลพื้นฐานของ Python ก่อนเสมอ (.item() ของ numpy scalar คืนค่า native type)
-                            values_to_write = [v.item() if hasattr(v, 'item') else v for v in df_to_save.iloc[0].values]
+                            values_to_write = _row_values(df_to_save.iloc[0])
                             sheet.update(f"A{row_number_to_update}", [values_to_write])
-                            st.success(f"✅ อัปเดตข้อมูลของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว")
+                            st.success(f"✅ อัปเดตข้อมูลของวันที่ **{selected_day} {selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว")
 
                     if not is_duplicate:
-                        for row in df_to_save.values.tolist():
-                            row = [v.item() if hasattr(v, 'item') else v for v in row]
-                            sheet.append_row(row)
-                        st.success(f"✅ บันทึกข้อมูลใหม่ของ **{selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
+                        for _, row in df_to_save.iterrows():
+                            sheet.append_row(_row_values(row))
+                        st.success(f"✅ บันทึกข้อมูลใหม่ของวันที่ **{selected_day} {selected_month} พ.ศ. {input_year_be}** เรียบร้อยแล้ว!")
 
                     del st.session_state['temp_pvd_df']
 
@@ -275,12 +300,12 @@ def render_tab_pvd():
         # ปี พ.ศ./ค.ศ. ไม่ต้องมี comma คั่น (ใส่ทศนิยม 0 ตำแหน่งแทน)
         format_dict = {}
         for col in numeric_cols:
-            if col in ('Year_BE', 'Year_CE'):
+            if col in ('Year_BE', 'Year_CE', 'Day'):
                 format_dict[col] = '{:.0f}'
             else:
                 format_dict[col] = '{:,.2f}'
 
-        st.dataframe(df_display_pvd.style.format(format_dict), use_container_width=True, hide_index=True)
+        st.dataframe(df_display_pvd.style.format(format_dict, na_rep='-'), use_container_width=True, hide_index=True)
     else:
         st.info("ยังไม่มีข้อมูลประวัติในชีต Provident_Fund")
 
