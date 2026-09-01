@@ -391,15 +391,20 @@ def render_tab_overview():
         _asset_card(row_re4, "🏢", "คอนโด", condo_value, total_real_estate)
 
         # --- 5.5 รายได้เสริม (Stock Photo Income) — การ์ดข้อมูลแยกต่างหาก ไม่นับรวมใน Net Worth ---
-        # 🆕 ดึงจาก Google Sheet "PhotoStockIncome" (คนละสเปรดชีตกับข้อมูลความมั่งคั่งหลัก แต่ใช้
-        # service account เดียวกัน) แสดงเฉพาะตอน login เป็นบัญชีเจ้าของข้อมูล (MyStockData) เท่านั้น
-        # เพราะเป็นรายได้ส่วนตัว ไม่เกี่ยวกับพาร์ทเนอร์ (Nujiwealth) — ตัวเลขนี้เป็นข้อมูลอ้างอิงเฉยๆ
-        # ไม่ถูกบวกเข้า net_worth_excl_re หรือ net_worth_total เลย
         if get_active_sheet_name() == "MyStockData":
-            @st.cache_data(ttl=600, show_spinner=False)
-            def _fetch_photo_income_records():
+            # 🔧 แก้บั๊ก: เดิมค้นหาสเปรดชีตด้วยชื่อ (client.open) ทุกครั้งที่แคชข้อมูลหมดอายุ (10 นาที)
+            # ซึ่งเป็นการค้นหาผ่าน Google Drive API ที่ช้ากว่าการเปิดตรงพอสมควร ทำให้การ์ดขึ้นช้า
+            # ตอนแคชหมดอายุพอดี ตอนนี้แยกเป็น 2 ชั้น: จำตำแหน่งชีต (ค้นหาแค่ครั้งเดียวตลอดอายุแอพ
+            # ด้วย cache_resource) กับแคชข้อมูลตัวเลข (cache_data อายุ 30 นาที ยาวขึ้นจากเดิม
+            # เพราะรายได้เปลี่ยนไม่บ่อยเท่าราคาหุ้น) พร้อมใส่ spinner ให้เห็นว่ากำลังโหลดอยู่
+            @st.cache_resource(show_spinner=False)
+            def _get_photo_income_sheet():
                 client = get_gsheet_client()
-                sheet = client.open("PhotoStockIncome").worksheet("Income")
+                return client.open("PhotoStockIncome").worksheet("Income")
+    
+            @st.cache_data(ttl=1800, show_spinner="กำลังโหลดข้อมูลรายได้เสริม...")
+            def _fetch_photo_income_records():
+                sheet = _get_photo_income_sheet()
                 return sheet.get_all_records()
     
             try:
