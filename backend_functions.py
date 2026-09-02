@@ -39,13 +39,31 @@ from theme import style_plotly
 def get_active_sheet_name():
     return st.session_state.get('active_sheet_name', 'MyStockData')
 
+
+# 🧪 Phase D: สวิตช์สลับไป Firestore ทีละบัญชี — ต้องเพิ่มชื่อ sheet_name (เช่น "MyStockData")
+# เข้า _FIRESTORE_ENABLED_SHEETS ใน secrets ถึงจะสลับไปใช้ Firestore สำหรับบัญชีนั้น บัญชีที่ไม่ได้
+# อยู่ในลิสต์ (หรือถ้าไม่ได้ตั้งค่า _FIRESTORE_ENABLED_SHEETS เลย) จะยังใช้ Google Sheets เหมือนเดิม
+# เสมอ — ทำให้สลับ umwealth/nujiwealth แยกกันได้ ไม่ต้องสลับพร้อมกันทั้งแอป และ rollback ได้ทันที
+# แค่เอาชื่อบัญชีออกจากลิสต์บน Streamlit Cloud secrets
+def _use_firestore():
+    try:
+        enabled_sheets = set(st.secrets.get("_FIRESTORE_ENABLED_SHEETS", []))
+        return get_active_sheet_name() in enabled_sheets
+    except Exception:
+        return False
+
+
 def get_gsheet_client():
+    if _use_firestore():
+        from firestore_functions import get_firestore_client
+        return get_firestore_client()
+
     scope = [
         "https://spreadsheets.google.com/feeds",
         'https://www.googleapis.com/auth/spreadsheets',
         "https://www.googleapis.com/auth/drive"
     ]
-    
+
     try:
         # 1. เช็คจาก GitHub Actions (Environment Variable)
         if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
@@ -67,8 +85,26 @@ def get_gsheet_client():
 # (ทุกฟังก์ชันที่ต้องใช้ชีต จะเปิดสเปรดชีตด้วยชื่อใหม่ทุกครั้ง ซึ่งกิน API quota เยอะมาก)
 # ตอนนี้ "จำ" สเปรดชีตที่เปิดไว้แล้วไว้ 5 นาที ทุกฟังก์ชันที่เรียกชื่อเดียวกันจะใช้ตัวที่จำไว้แทน
 # การเปิดซ้ำ ลดจำนวนครั้งที่ยิง API ลงได้มาก โดยไม่กระทบพฤติกรรมการทำงานของแอปเลย
+class _FirestoreSpreadsheetProxy:
+    """
+    เลียนแบบ gspread Spreadsheet แค่พอให้ .worksheet(name) ใช้งานได้ — บางไฟล์ (tab_overview.py,
+    tab_pvd.py, tab_stock.py) เรียก get_cached_spreadsheet(client, name).worksheet(ws_name) ตรงๆ
+    โดยไม่ผ่าน get_cached_worksheet() ที่มีสวิตช์ _use_firestore() อยู่แล้ว proxy นี้ทำให้จุดเหล่านั้น
+    ใช้งานกับ Firestore ได้เหมือนกันโดยไม่ต้องไปตามแก้ทีละไฟล์
+    """
+    def __init__(self, client, spreadsheet_name):
+        self._client = client
+        self._spreadsheet_name = spreadsheet_name
+
+    def worksheet(self, worksheet_name):
+        from firestore_functions import get_cached_worksheet as _fs_get_cached_worksheet
+        return _fs_get_cached_worksheet(self._client, self._spreadsheet_name, worksheet_name)
+
+
 @st.cache_resource(ttl=300, show_spinner=False)
 def get_cached_spreadsheet(_client, spreadsheet_name):
+    if _use_firestore():
+        return _FirestoreSpreadsheetProxy(_client, spreadsheet_name)
     return _client.open(spreadsheet_name)
 
 
@@ -81,11 +117,17 @@ def get_cached_spreadsheet(_client, spreadsheet_name):
 # get_worksheet_safely() จะได้ประโยชน์นี้โดยอัตโนมัติ ไม่ต้องแก้ทีละแท็บ
 @st.cache_resource(ttl=300, show_spinner=False)
 def get_cached_worksheet(_client, spreadsheet_name, worksheet_name):
+    if _use_firestore():
+        from firestore_functions import get_cached_worksheet as _fs_get_cached_worksheet
+        return _fs_get_cached_worksheet(_client, spreadsheet_name, worksheet_name)
     return get_cached_spreadsheet(_client, spreadsheet_name).worksheet(worksheet_name)
 
 
 def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=4, delay=2):
     """ฟังก์ชันเปิด Google Sheet พร้อมระบบป้องกันและลองใหม่เมื่อติดปัญหา Quota Exceeded (429)"""
+    if _use_firestore():
+        from firestore_functions import get_worksheet_safely as _fs_get_worksheet_safely
+        return _fs_get_worksheet_safely(client, spreadsheet_name, worksheet_name)
     for attempt in range(retries):
         try:
             sheet = get_cached_worksheet(client, spreadsheet_name, worksheet_name)
@@ -687,13 +729,12 @@ def update_trade_close(trade_id, close_price, date_close):
             str(trade_row['Status'])
         )
         
-        # คำนวณ Points
-        if str(trade_row['Status']) == 'Long':
-            points = float(close_price) - open_price_val
-        else:
-            points = open_price_val - float(close_price)
-        
         # ⭐️ สำคัญมาก: แปลงข้อมูลทั้งหมดให้เป็น Python Native Type (ป้องกัน TypeError จาก gspread)
+        # 🔧 แก้บั๊ก: เดิมมี "M: Points" ต่อท้ายแล้วเขียนทับด้วย range C:M แต่คอลัมน์ M จริงในตาราง
+        # (ตาม cols ของ save_data_to_sheet) คือ "Reason" ไม่ใช่ Points ทำให้ทุกครั้งที่ปิดสถานะ
+        # ค่า Reason ที่ผู้ใช้กรอกไว้ตอนเปิดสถานะถูกเขียนทับด้วยตัวเลข points ไปโดยไม่ตั้งใจ (เกิด
+        # เหมือนกันทั้งบน Google Sheets เดิมและ Firestore เพราะเป็นบั๊กเดิมของโค้ด ไม่เกี่ยวกับการย้าย
+        # ระบบ) ตอนนี้ตัดคอลัมน์ M ออกจากการอัปเดต ให้ค่า Reason เดิมไม่ถูกแตะเลยตอนปิดสถานะ
         data_to_update = [
             str(date_close),                 # C: Date_Close
             str(trade_row['Series']),        # D: Series
@@ -705,11 +746,10 @@ def update_trade_close(trade_id, close_price, date_close):
             float(comm_val),                 # J: Comm
             float(calc['Net_Profit']),       # K: Net_Profit
             str(calc['Win_Lose']),           # L: Win_Lose
-            round(float(points), 2)          # M: Points
         ]
-        
+
         # อัปเดตข้อมูลลง Google Sheets แบบระบุ Range
-        sheet.update(range_name=f'C{row_index}:M{row_index}', values=[data_to_update])
+        sheet.update(range_name=f'C{row_index}:L{row_index}', values=[data_to_update])
         
         return True
     except Exception as e:
@@ -848,7 +888,10 @@ def save_cash_to_gsheet(df):
     try:
         client = get_gsheet_client()
         sheet = get_cached_worksheet(client, get_active_sheet_name(), "Cash_Flow")
-        sheet.append_rows(df.values.tolist())
+        # FirestoreWorksheet.append_rows() ต้องรู้ชื่อคอลัมน์ (Firestore ไม่มี "หัวตาราง" แบบ
+        # Sheets) ส่วน gspread เวอร์ชันจริงไม่รับ kwarg นี้ จึงส่งเฉพาะตอนใช้ Firestore เท่านั้น
+        kwargs = {'columns': df.columns.tolist()} if _use_firestore() else {}
+        sheet.append_rows(df.values.tolist(), **kwargs)
         return True
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการบันทึก Cash_Flow: {e}")
@@ -865,8 +908,9 @@ def save_data_to_sheet(new_df, sheet_name):
                 "Close_Price", "Realized", "Comm", "Net_Profit", "Win_Lose", "Reason"]
         
         new_df = new_df.reindex(columns=cols)
-        sheet.append_rows(new_df.values.tolist())
-        
+        kwargs = {'columns': cols} if _use_firestore() else {}
+        sheet.append_rows(new_df.values.tolist(), **kwargs)
+
         st.cache_data.clear() 
         st.success("เปิดสถานะสำเร็จ!")
         st.rerun()            
