@@ -19,12 +19,37 @@
         --worksheets Watchlist,PortfolioData --apply                 # เขียนจริงเฉพาะบาง worksheet (ทดสอบทีละตัวก่อนได้)
 """
 import argparse
+import json
+import os
 import random
 import sys
 import time
 
-from backend_functions import get_gsheet_client
+import gspread
+import streamlit as st
+from google.oauth2.service_account import Credentials
+
 from firestore_functions import get_firestore_client, get_cached_worksheet
+
+
+def get_real_gsheet_client():
+    """
+    ใช้ตัวนี้แทน backend_functions.get_gsheet_client() เสมอ — ฟังก์ชันนั้นถูกแก้ให้มีสวิตช์
+    _FIRESTORE_ENABLED_SHEETS แล้ว (คืน Firestore client แทนถ้าบัญชีนั้นเปิดสวิตช์ไว้) ซึ่งอันตราย
+    มากสำหรับสคริปต์นี้ที่ต้อง "อ่านจาก Google Sheets จริงเสมอ" ไม่ว่าสวิตช์จะตั้งค่าไว้ยังไงก็ตาม
+    เพราะถ้าอ่านผิดจะเข้าใจผิดว่า Firestore ว่างเปล่า แล้วเขียนทับข้อมูลจริงใน Firestore ให้หายไป
+    """
+    scope = [
+        "https://spreadsheets.google.com/feeds",
+        'https://www.googleapis.com/auth/spreadsheets',
+        "https://www.googleapis.com/auth/drive"
+    ]
+    if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+        creds_dict = json.loads(os.environ['GOOGLE_APPLICATION_CREDENTIALS'])
+    else:
+        creds_dict = dict(st.secrets["gcp_service_account"])
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
+    return gspread.authorize(creds)
 
 
 def _retry_sheets_call(fn, *args, retries=6, **kwargs):
@@ -116,9 +141,13 @@ def main():
     print()
 
     try:
-        gs_client = get_gsheet_client()
+        gs_client = get_real_gsheet_client()
     except Exception as e:
         print(f"❌ เชื่อมต่อ Google Sheets ไม่สำเร็จ: {e}")
+        sys.exit(1)
+
+    if not hasattr(gs_client, "open"):
+        print("❌ client ที่ได้ไม่ใช่ gspread client จริง (ไม่มี .open) — หยุดทันทีกันเขียนทับ Firestore ผิดพลาด")
         sys.exit(1)
 
     fs_client = None
