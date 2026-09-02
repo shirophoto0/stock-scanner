@@ -14,3 +14,4 @@ reportlab
 anthropic
 python-docx
 streamlit-option-menu
+firebase-admin
