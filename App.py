@@ -52,6 +52,7 @@ from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
 from tab_stock import render_tab_stock
 from tab_watchlist import render_tab_watchlist
+from tab_export import render_tab_export
 
 # 🆕 ระบบ Login แยกผู้ใช้
 from auth import check_login, show_user_bar
@@ -292,22 +293,29 @@ def main():
                 "Fundamental Watchlist": "clipboard-data",
             },
         },
-        "ระบบเทรด": {
-            "icon": "bar-chart-line",
-            "sub": {
-                "หุ้น (Stock)": "bar-chart",
-                "TFEX": "graph-up-arrow",
-                "ทองคำ (Gold)": "circle",
-                "Sector Rotation": "arrow-repeat",
-                "Backtest": "clock-history",
-                "Correlation": "diagram-3",
-                "Risk Management": "shield-check",
-            },
-        },
-        "เกษียณอายุ": {"icon": "bullseye", "sub": None},
     }
+    # 🆕 เมนู Export Excel — ซ่อน/แสดงได้ผ่านสวิตช์ในแถบด้านข้าง (ค่าเริ่มต้นแสดง) แทรกเป็นเมนู
+    # หลักอันดับ 3 (ใส่ทีหลังสองอันบน ก่อน "ระบบเทรด" เพราะ dict ใน Python จำลำดับที่ใส่ไว้)
+    if st.session_state.get("show_export_menu", True):
+        MENU_STRUCTURE["Export Excel"] = {"icon": "file-earmark-excel", "sub": None}
+    MENU_STRUCTURE["ระบบเทรด"] = {
+        "icon": "bar-chart-line",
+        "sub": {
+            "หุ้น (Stock)": "bar-chart",
+            "TFEX": "graph-up-arrow",
+            "ทองคำ (Gold)": "circle",
+            "Sector Rotation": "arrow-repeat",
+            "Backtest": "clock-history",
+            "Correlation": "diagram-3",
+            "Risk Management": "shield-check",
+        },
+    }
+    MENU_STRUCTURE["เกษียณอายุ"] = {"icon": "bullseye", "sub": None}
 
     with st.sidebar:
+        with st.expander("⚙️ ตั้งค่าเมนู", expanded=False):
+            st.checkbox("แสดงเมนู Export Excel", key="show_export_menu", value=st.session_state.get("show_export_menu", True))
+
         selected_main = option_menu(
             menu_title=None,
             options=list(MENU_STRUCTURE.keys()),
@@ -355,6 +363,12 @@ def main():
             render_tab_document_analysis()
         elif selected_sub == "Fundamental Watchlist":
             render_tab_fundamental_watchlist()
+
+    # ==========================================================
+    # 🆕 กลุ่ม: 📥 Export Excel (ซ่อน/แสดงได้ผ่านสวิตช์ในแถบด้านข้าง)
+    # ==========================================================
+    elif selected_main == "Export Excel":
+        render_tab_export()
 
     # ==========================================================
     # กลุ่ม 3: 💹 ระบบเทรด (เดิม แยกออกมาจาก "ระบบเทรด & สแกนหุ้น")

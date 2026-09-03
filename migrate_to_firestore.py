@@ -52,19 +52,22 @@ def get_real_gsheet_client():
     return gspread.authorize(creds)
 
 
+_RETRYABLE_MARKERS = ("429", "Quota exceeded", "503", "currently unavailable", "500", "Internal error")
+
+
 def _retry_sheets_call(fn, *args, retries=6, **kwargs):
     """
-    ห่อการเรียก Google Sheets API ด้วย retry กันโดน 429 — โควตา 'Read requests per minute'
-    ของ Google Sheets API ค่อนข้างจำกัด (เป็นโควตาต่อนาที) เวลาไล่อ่านหลายสิบ worksheet รวด
-    จึงต้องรอนานพอที่โควตาจะรีเซ็ตในรอบถัดไป ไม่ใช่แค่รอสั้นๆ แบบสุ่ม
+    ห่อการเรียก Google Sheets API ด้วย retry กันโดนปัญหาชั่วคราว — ทั้งโดนโควตา 'Read requests
+    per minute' (429) และ error ฝั่งเซิร์ฟเวอร์ Google เองที่ตอบชั่วคราว (503/500) ซึ่งเจอได้เวลา
+    ไล่อ่านหลายสิบ worksheet รวด จึงต้องรอนานพอที่จะลองใหม่สำเร็จ ไม่ใช่แค่รอสั้นๆ แบบสุ่ม
     """
     for attempt in range(retries):
         try:
             return fn(*args, **kwargs)
         except Exception as e:
-            if attempt < retries - 1 and ("429" in str(e) or "Quota exceeded" in str(e)):
+            if attempt < retries - 1 and any(m in str(e) for m in _RETRYABLE_MARKERS):
                 wait = 15 * (attempt + 1) + random.uniform(1, 5)
-                print(f"    ⏳ โดน rate limit รอ {wait:.1f}s แล้วลองใหม่ (ครั้งที่ {attempt + 1}/{retries})...")
+                print(f"    ⏳ โดนปัญหาชั่วคราว ({e}) รอ {wait:.1f}s แล้วลองใหม่ (ครั้งที่ {attempt + 1}/{retries})...")
                 time.sleep(wait)
                 continue
             raise
