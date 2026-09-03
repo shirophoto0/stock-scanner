@@ -11,6 +11,7 @@
 # ได้ตั้งค่า Chat ID จะข้ามการส่งรายงานให้บัญชีนั้นไปเงียบๆ (บัญชีอื่นยังได้รับตามปกติ)
 # =============================================================
 import os
+import streamlit as st
 from datetime import date
 from backend_functions import (
     get_net_worth_trend_data,
@@ -46,6 +47,7 @@ def main():
             continue
 
         print(f"📊 กำลังสร้างรายงานสำหรับ {spreadsheet_name}...")
+        st.session_state['active_sheet_name'] = spreadsheet_name
 
         # 🔧 แก้บั๊ก: เดิมใช้ยอดที่ "สแตมป์ไว้รายเดือน" (จากชีต History ต่างๆ) มาสร้างสรุป/ตาราง
         # ในรายงาน แต่แต่ละหมวดสแตมป์คนละวันกัน (ตามแต่ว่าใครไปเปิดหน้าเว็บ/ทำธุรกรรมวันไหน) ทำให้

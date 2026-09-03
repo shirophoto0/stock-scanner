@@ -17,6 +17,7 @@
 # เพราะ Bot หนึ่งตัวส่งข้อความหาคนละ Chat ID ได้อยู่แล้ว)
 # =============================================================
 import os
+import streamlit as st
 from backend_functions import (
     check_portfolio_sl_tp_alerts_realtime,
     check_watchlist_price_alerts_realtime,
@@ -72,6 +73,7 @@ def main():
             print(f"ℹ️ ยังไม่ได้ตั้งค่า Telegram Chat ID ของ {spreadsheet_name} ข้ามการเช็คบัญชีนี้")
             continue
 
+        st.session_state['active_sheet_name'] = spreadsheet_name
         sl_tp_alerts = check_portfolio_sl_tp_alerts_realtime(spreadsheet_name)
         watchlist_alerts = check_watchlist_price_alerts_realtime(spreadsheet_name)
 

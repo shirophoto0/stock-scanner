@@ -24,6 +24,7 @@
 import os
 import numpy as np
 import pandas as pd
+import streamlit as st
 from backend_functions import (
     load_and_calculate_stock_data_optimized,
     get_gsheet_client,
@@ -59,6 +60,7 @@ def load_previous_scan(spreadsheet_name):
     ใหม่วันนี้ คืนค่าเป็น DataFrame ว่างเปล่าถ้าโหลดไม่สำเร็จ (เช่น รันครั้งแรกยังไม่เคยมีข้อมูลเก่า)
     """
     try:
+        st.session_state['active_sheet_name'] = spreadsheet_name
         client = get_gsheet_client()
         sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('StockData')
         data = sheet.get_all_records()
@@ -203,6 +205,7 @@ def save_scan_result(df, spreadsheet_name):
     แปลงข้อมูลเป็น dict โดยอิงจาก Ticker พังทันที (ValueError: index must be unique) ตอนนี้ล้าง
     ชีตทั้งหมดก่อนเขียนข้อมูลใหม่ทุกครั้ง รับประกันว่าไม่มีแถวเก่าตกค้างอีกต่อไป
     """
+    st.session_state['active_sheet_name'] = spreadsheet_name
     client = get_gsheet_client()
     sheet = get_cached_spreadsheet(client, spreadsheet_name).worksheet('StockData')
     df_clean = df.replace([np.inf, -np.inf], 0).fillna("")
@@ -235,6 +238,7 @@ def send_daily_alert(df_result, notable):
             continue
 
         print(f"🎯 กำลังเช็คราคาเป้าหมาย Watchlist + จุด SL/TP ของ {spreadsheet_name}...")
+        st.session_state['active_sheet_name'] = spreadsheet_name
         watchlist_alerts = check_watchlist_price_alerts(spreadsheet_name, df_result)
         sl_tp_alerts = check_portfolio_sl_tp_alerts(spreadsheet_name, df_result)
         personal_message = build_personal_alerts_message(watchlist_alerts, sl_tp_alerts)
@@ -268,6 +272,7 @@ def main():
     # ที่เก็บกลางเพียงที่เดียว เพราะเป็นข้อมูลตลาดหุ้นทั่วไป ไม่ใช่ข้อมูลส่วนตัวของใครคนใดคนหนึ่ง
     # เหมือนกับ StockData)
     print("📝 กำลังบันทึกประวัติสัญญาณสำหรับ Backtest...")
+    st.session_state['active_sheet_name'] = REFERENCE_SPREADSHEET
     price_map = dict(zip(df_result['Ticker'], df_result['ราคาล่าสุด']))
     _logged = log_signal_history(REFERENCE_SPREADSHEET, notable, price_map)
     print(f"✅ บันทึกสัญญาณใหม่ {_logged} รายการ")

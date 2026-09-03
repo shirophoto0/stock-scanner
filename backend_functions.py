@@ -45,12 +45,31 @@ def get_active_sheet_name():
 # อยู่ในลิสต์ (หรือถ้าไม่ได้ตั้งค่า _FIRESTORE_ENABLED_SHEETS เลย) จะยังใช้ Google Sheets เหมือนเดิม
 # เสมอ — ทำให้สลับ umwealth/nujiwealth แยกกันได้ ไม่ต้องสลับพร้อมกันทั้งแอป และ rollback ได้ทันที
 # แค่เอาชื่อบัญชีออกจากลิสต์บน Streamlit Cloud secrets
+#
+# 🔧 แก้บั๊ก: st.secrets ด้านบนอ่านได้เฉพาะตอนรันบน Streamlit Cloud (หรือมีไฟล์
+# .streamlit/secrets.toml อยู่ในเครื่อง) เท่านั้น — ตอนรันผ่าน GitHub Actions (daily_scan.py,
+# monthly_report.py, realtime_sl_tp_check.py) ไม่มีไฟล์นี้เลย (ถูก .gitignore ไว้ไม่ให้ push ขึ้น
+# repo) ทำให้ st.secrets.get(...) โยน StreamlitSecretNotFoundError ทุกครั้ง ตกไปเข้า except แล้ว
+# คืนค่า False เสมอ ทั้ง 3 สคริปต์จึงยังคงใช้ Google Sheets (gspread) อยู่ตลอด ต่อให้ตั้งค่า
+# _FIRESTORE_ENABLED_SHEETS ครบทั้งสองบัญชีบน Streamlit Cloud secrets แล้วก็ตาม เพิ่มการอ่านจาก
+# Environment Variable FIRESTORE_ENABLED_SHEETS (ตั้งค่าผ่าน workflow .yml ได้เลย ไม่ใช่ข้อมูลลับ
+# จึงไม่ต้องเก็บเป็น GitHub Secret) เป็นทางเลือกสำรองไว้ด้วย
 def _use_firestore():
+    enabled_sheets = set()
     try:
-        enabled_sheets = set(st.secrets.get("_FIRESTORE_ENABLED_SHEETS", []))
-        return get_active_sheet_name() in enabled_sheets
+        enabled_sheets |= set(st.secrets.get("_FIRESTORE_ENABLED_SHEETS", []))
     except Exception:
-        return False
+        pass
+
+    env_list = os.environ.get("FIRESTORE_ENABLED_SHEETS", "")
+    enabled_sheets |= {name.strip() for name in env_list.split(",") if name.strip()}
+
+    try:
+        active_sheet = get_active_sheet_name()
+    except Exception:
+        active_sheet = "MyStockData"
+
+    return active_sheet in enabled_sheets
 
 
 def get_gsheet_client():
