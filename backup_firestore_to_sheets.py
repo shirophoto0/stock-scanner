@@ -1,6 +1,6 @@
 """
 สคริปต์ backup ข้อมูลจาก Firestore (ฐานข้อมูลจริงที่แอปใช้งานอยู่) กลับไปที่ Google Sheets
-รันอัตโนมัติทุกวันเที่ยงคืนผ่าน GitHub Actions (.github/workflows/backup_firestore_to_sheets.yml)
+รันอัตโนมัติทุกสัปดาห์ (เที่ยงคืนวันจันทร์) ผ่าน GitHub Actions (.github/workflows/backup_firestore_to_sheets.yml)
 
 หลักการความปลอดภัย:
 - อ่านจาก Firestore แบบ "อ่านอย่างเดียว" เท่านั้น (ไม่มีการเขียน/แก้ไข/ลบ Firestore เด็ดขาด)

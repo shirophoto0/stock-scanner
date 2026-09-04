@@ -1,7 +1,7 @@
-name: Daily Firestore to Sheets Backup
+name: Weekly Firestore to Sheets Backup
 on:
   schedule:
-    - cron: '0 17 * * *'  # เที่ยงคืนเวลาประเทศไทย (00:00 ICT = 17:00 UTC ของวันก่อนหน้า)
+    - cron: '0 17 * * 0'  # เที่ยงคืนวันจันทร์เวลาประเทศไทย (00:00 ICT จันทร์ = 17:00 UTC อาทิตย์)
   workflow_dispatch:        # ให้กดรันเองได้ด้วย
 jobs:
   backup:
