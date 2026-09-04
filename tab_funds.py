@@ -8,7 +8,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import date, datetime
 from backend_functions import calculate_fund_result, get_gsheet_client, get_cached_worksheet, get_active_sheet_name
-from theme import style_plotly, render_metric_card
+from theme import style_plotly, render_metric_card, get_theme_colors
 
 
 # 🆕 แก้บั๊ก 429 Rate Limit: เดิมทุก sub-tab (ภาพรวมพอร์ต/ซื้อกองทุนเพิ่ม/อัปเดตราคา) ต่างเรียก
@@ -595,13 +595,47 @@ def render_tab_funds():
 
                     st.divider()
 
-                    # 🆕 (2) เปรียบเทียบผลงานรายกองทุน — เรียงจากกำไรมากไปน้อย หนึ่งบรรทัดต่อกองทุน
-                    # แม้จะซื้อมาหลายรอบก็ตาม (ดูคอมเมนต์การรวมยอดด้านบน) เปลี่ยนจากตาราง st.dataframe
-                    # เดิมมาเป็น st.expander ต่อกองทุนแทน — คลิกที่ชื่อกองทุนเพื่อกางดูรายละเอียด
-                    # แต่ละ "ไม้" (แต่ละครั้ง) ที่ซื้อกองทุนนั้นได้เลย
-                    st.markdown("##### 📋 เปรียบเทียบผลงานรายกองทุน")
-                    st.caption("💡 คลิกที่แถบกองทุนแต่ละอันเพื่อดูรายละเอียดทุกครั้งที่ซื้อ (กรณีซื้อกองทุนเดียวกันหลายรอบ)")
                     df_table = df_display.drop(columns=['_is_stale', '_lot_count', '_lots']).sort_values('% กำไร/ขาดทุน', ascending=False)
+
+                    # 🆕 (2) ตารางสรุปพอร์ต — เอากลับมาตามที่ขอ (รูปแบบเดิมก่อนเปลี่ยนเป็นแถบคลิกกาง
+                    # ด้านล่าง) ไว้ดูภาพรวมทุกกองทุนรวดเดียวแบบตารางเทียบกันได้ง่าย ส่วนรายละเอียด
+                    # แต่ละไม้ที่ซื้อ/ปันผล ยังคงดูได้จากแถบคลิกกางด้านล่างตารางนี้เหมือนเดิม
+                    st.markdown("##### 📊 ตารางสรุปพอร์ต")
+                    _tc = get_theme_colors()
+
+                    def _color_pl(val):
+                        if isinstance(val, (int, float)):
+                            return f"color: {'#26A69A' if val > 0 else '#EF5350' if val < 0 else _tc['text']}"
+                        return None
+
+                    _df_table_basic = df_table[[
+                        "ชื่อกองทุน", "วันที่ซื้อ", "ต้นทุนเฉลี่ย", "ราคาปัจจุบัน", "จำนวนหน่วย",
+                        "มูลค่าต้นทุน", "มูลค่าปัจจุบัน", "กำไร/ขาดทุน", "% กำไร/ขาดทุน",
+                    ]]
+                    st.dataframe(
+                        _df_table_basic.style.format({
+                            "ต้นทุนเฉลี่ย": "{:.4f}", "ราคาปัจจุบัน": "{:.4f}", "จำนวนหน่วย": "{:,.4f}",
+                            "มูลค่าต้นทุน": "{:,.4f}", "มูลค่าปัจจุบัน": "{:,.4f}",
+                            "กำไร/ขาดทุน": "{:,.4f}", "% กำไร/ขาดทุน": "{:+.4f}%"
+                        })
+                        .set_properties(**{'text-align': 'right', 'background-color': _tc['bg']})
+                        .map(_color_pl, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
+                        .set_table_styles([
+                            {'selector': 'th', 'props': [('background-color', '#F1EEE8'), ('color', _tc['text']),
+                                                          ('font-family', "'Prompt',sans-serif"), ('font-weight', '600'),
+                                                          ('border-color', _tc['border'])]},
+                            {'selector': 'td', 'props': [('border-color', _tc['border'])]},
+                        ]),
+                        use_container_width=True, hide_index=True
+                    )
+
+                    st.divider()
+
+                    # 🆕 (2b) เปรียบเทียบผลงานรายกองทุนแบบละเอียด — หนึ่งบรรทัดต่อกองทุน แม้จะซื้อมา
+                    # หลายรอบก็ตาม (ดูคอมเมนต์การรวมยอดด้านบน) ใช้ st.expander ต่อกองทุน คลิกที่ชื่อ
+                    # กองทุนเพื่อกางดูรายละเอียดแต่ละ "ไม้" (แต่ละครั้ง) ที่ซื้อกองทุนนั้นได้เลย
+                    st.markdown("##### 📋 เปรียบเทียบผลงานรายกองทุน (รายละเอียด)")
+                    st.caption("💡 คลิกที่แถบกองทุนแต่ละอันเพื่อดูรายละเอียดทุกครั้งที่ซื้อ (กรณีซื้อกองทุนเดียวกันหลายรอบ)")
                     _sorted_display = sorted(display_data, key=lambda d: d["% กำไร/ขาดทุน"], reverse=True)
 
                     for d in _sorted_display:
@@ -612,20 +646,19 @@ def render_tab_funds():
                             f"มูลค่าปัจจุบัน {d['มูลค่าปัจจุบัน']:,.4f} บาท  ({d['% กำไร/ขาดทุน']:+.4f}%)"
                         )
                         with st.expander(_label):
-                            c1, c2, c3 = st.columns(3)
+                            c1, c2, c3, c4 = st.columns(4)
                             c1.metric("ต้นทุนเฉลี่ย/หน่วย", f"{d['ต้นทุนเฉลี่ย']:,.4f}")
                             c2.metric("ราคาปัจจุบัน/หน่วย", f"{d['ราคาปัจจุบัน']:,.4f}")
                             c3.metric("จำนวนหน่วยรวม", f"{d['จำนวนหน่วย']:,.4f}")
-
-                            c4, c5, c6 = st.columns(3)
                             c4.metric("มูลค่าต้นทุน", f"{d['มูลค่าต้นทุน']:,.4f}")
-                            c5.metric("กำไร/ขาดทุน (จากราคา)", f"{d['กำไร/ขาดทุน']:,.4f}", delta=f"{d['% กำไร/ขาดทุน']:+.4f}%")
-                            c6.metric("ปันผลสะสม", f"{d['ปันผลสะสม']:,.4f}")
 
-                            st.caption(
-                                f"🎯 ผลตอบแทนรวม (ทุน + ปันผล): {d['ผลตอบแทนรวม']:,.4f} บาท "
-                                f"({d['% ผลตอบแทนรวม']:+.4f}%)"
-                            )
+                            c5, c6, c7, c8 = st.columns(4)
+                            c5.metric("มูลค่าปัจจุบัน", f"{d['มูลค่าปัจจุบัน']:,.4f}")
+                            c6.metric("กำไร/ขาดทุน (จากราคา)", f"{d['กำไร/ขาดทุน']:,.4f}", delta=f"{d['% กำไร/ขาดทุน']:+.4f}%")
+                            c7.metric("ปันผลสะสม", f"{d['ปันผลสะสม']:,.4f}")
+                            # 🆕 การ์ด % กำไร/ขาดทุนของ "ผลตอบแทนรวม" (ราคา + ปันผล) เทียบกับต้นทุน —
+                            # ตามที่ขอเพิ่ม แยกจากการ์ด "กำไร/ขาดทุน (จากราคา)" อย่างเดียวด้านบน
+                            c8.metric("ผลตอบแทนรวม (ทุน+ปันผล)", f"{d['ผลตอบแทนรวม']:,.4f}", delta=f"{d['% ผลตอบแทนรวม']:+.4f}%")
 
                             st.markdown(f"**รายละเอียดแต่ละครั้งที่ซื้อ ({d['_lot_count']} รายการ):**")
                             df_lots = pd.DataFrame(d['_lots']).sort_values("วันที่ซื้อ")
