@@ -485,7 +485,7 @@ def render_tab_funds():
                             'units': 0.0, 'total_cost': 0.0, 'total_value': 0.0,
                             'date_buy_first': str(row['Date_Buy']),
                             'lot_count': 0, 'max_days': None, 'any_missing': False,
-                            'lots': [],
+                            'lots': [], 'price_updated_latest': None,
                         })
                         g['units'] += units
                         g['total_cost'] += res['Total_Cost']
@@ -514,6 +514,10 @@ def render_tab_funds():
                                 # badge บนการ์ด "มูลค่าปัจจุบันรวม" ด้านล่าง
                                 if _latest_price_update is None or price_updated_date > _latest_price_update:
                                     _latest_price_update = price_updated_date
+                                # 🆕 เก็บวันที่อัปเดตราคาล่าสุดสุดของกองทุนนี้โดยเฉพาะไว้ด้วย ใช้แสดงใน
+                                # คอลัมน์ "วันที่อัปเดตราคา" ของตารางสรุปพอร์ต (แทนที่คอลัมน์วันที่ซื้อเดิม)
+                                if g['price_updated_latest'] is None or price_updated_date > g['price_updated_latest']:
+                                    g['price_updated_latest'] = price_updated_date
                             except ValueError:
                                 pass
 
@@ -537,9 +541,16 @@ def render_tab_funds():
                         total_return = profit + fund_dividend
                         total_return_pct = (total_return / g_cost * 100) if g_cost > 0 else 0.0
 
+                        # 🆕 วันที่อัปเดตราคาล่าสุด (แทนที่คอลัมน์ "วันที่ซื้อ" เดิมในตารางสรุปพอร์ต
+                        # ตามที่ขอ) ถ้ายังไม่เคยอัปเดตราคาเลย (เช่น รายการเก่าก่อนมีฟีเจอร์นี้) ให้
+                        # โชว์เป็น "-" แทน
+                        price_updated_display = (
+                            g['price_updated_latest'].strftime('%Y-%m-%d') if g['price_updated_latest'] else "-"
+                        )
+
                         display_data.append({
                             "ชื่อกองทุน": fname,
-                            "วันที่ซื้อ": g['date_buy_first'],
+                            "วันที่อัปเดตราคา": price_updated_display,
                             "ต้นทุนเฉลี่ย": round(avg_cost_price, 4),
                             "ราคาปัจจุบัน": round(avg_curr_price, 4),
                             "จำนวนหน่วย": round(g_units, 4),
@@ -609,7 +620,7 @@ def render_tab_funds():
                         return None
 
                     _df_table_basic = df_table[[
-                        "ชื่อกองทุน", "วันที่ซื้อ", "ต้นทุนเฉลี่ย", "ราคาปัจจุบัน", "จำนวนหน่วย",
+                        "ชื่อกองทุน", "วันที่อัปเดตราคา", "ต้นทุนเฉลี่ย", "ราคาปัจจุบัน", "จำนวนหน่วย",
                         "มูลค่าต้นทุน", "มูลค่าปัจจุบัน", "กำไร/ขาดทุน", "% กำไร/ขาดทุน",
                     ]]
                     st.dataframe(
