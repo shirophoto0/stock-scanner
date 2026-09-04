@@ -294,10 +294,6 @@ def main():
             },
         },
     }
-    # 🆕 เมนู Export Excel — ซ่อน/แสดงได้ผ่านสวิตช์ในแถบด้านข้าง (ค่าเริ่มต้นแสดง) แทรกเป็นเมนู
-    # หลักอันดับ 3 (ใส่ทีหลังสองอันบน ก่อน "ระบบเทรด" เพราะ dict ใน Python จำลำดับที่ใส่ไว้)
-    if st.session_state.get("show_export_menu", True):
-        MENU_STRUCTURE["Export Excel"] = {"icon": "file-earmark-excel", "sub": None}
     MENU_STRUCTURE["ระบบเทรด"] = {
         "icon": "bar-chart-line",
         "sub": {
@@ -311,11 +307,9 @@ def main():
         },
     }
     MENU_STRUCTURE["เกษียณอายุ"] = {"icon": "bullseye", "sub": None}
+    MENU_STRUCTURE["Export Excel"] = {"icon": "file-earmark-excel", "sub": None}
 
     with st.sidebar:
-        with st.expander("⚙️ ตั้งค่าเมนู", expanded=False):
-            st.checkbox("แสดงเมนู Export Excel", key="show_export_menu", value=st.session_state.get("show_export_menu", True))
-
         selected_main = option_menu(
             menu_title=None,
             options=list(MENU_STRUCTURE.keys()),
@@ -365,7 +359,7 @@ def main():
             render_tab_fundamental_watchlist()
 
     # ==========================================================
-    # 🆕 กลุ่ม: 📥 Export Excel (ซ่อน/แสดงได้ผ่านสวิตช์ในแถบด้านข้าง)
+    # กลุ่ม: 📥 Export Excel
     # ==========================================================
     elif selected_main == "Export Excel":
         render_tab_export()
