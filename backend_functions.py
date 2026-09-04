@@ -120,11 +120,26 @@ class _FirestoreSpreadsheetProxy:
         return _fs_get_cached_worksheet(self._client, self._spreadsheet_name, worksheet_name)
 
 
+# 🔧 แก้บั๊ก (สำคัญ): เดิม cache key ของ st.cache_resource มีแค่ spreadsheet_name (ไม่รวมผลลัพธ์
+# ของ _use_firestore()) เพราะ _use_firestore() ถูกเช็คแค่ "ข้างใน" ฟังก์ชัน ซึ่งจะถูกเรียกอีกครั้ง
+# ก็ต่อเมื่อ cache miss เท่านั้น — ถ้ามีจังหวะไหนก็ตามที่ค่านี้เคยถูก cache ไว้เป็น Google Sheets
+# object จริง (เช่น ตอนแอปเพิ่ง boot/redeploy ก่อน secrets โหลดครบ) object นั้นจะค้างอยู่แบบผิดๆ
+# ไปอีกนานสุด 5 นาที (ttl) ไม่ว่า _use_firestore() ตอนนี้จะตอบว่าอะไรก็ตาม — และเวลาโค้ดที่เรียก
+# ใช้มี retry loop (เช่น load_fundamental_watchlist) การ retry ก็จะเจอ object เดิมที่ผิดซ้ำๆ ทุกครั้ง
+# ไม่มีทางหลุดจนกว่า cache จะหมดอายุเอง ตอนนี้ย้าย _use_firestore() ไปเป็นพารามิเตอร์ตรงๆ ของ
+# ฟังก์ชันที่แคชจริง (_get_cached_spreadsheet_impl) ให้มันเป็นส่วนหนึ่งของ cache key ด้วย ถ้าค่า
+# เปลี่ยน (เช่น หลัง redeploy ที่ secrets โหลดครบแล้ว) จะได้ cache entry ใหม่ทันที ไม่ใช้ของเก่าผิดๆ
+# ต่อ — ฟังก์ชัน get_cached_spreadsheet() ที่ไฟล์อื่นเรียกอยู่แล้วยังใช้ signature เดิมทุกประการ
+# ไม่ต้องแก้ที่เรียกใช้เลย
 @st.cache_resource(ttl=300, show_spinner=False)
-def get_cached_spreadsheet(_client, spreadsheet_name):
-    if _use_firestore():
+def _get_cached_spreadsheet_impl(_client, spreadsheet_name, use_firestore_flag):
+    if use_firestore_flag:
         return _FirestoreSpreadsheetProxy(_client, spreadsheet_name)
     return _client.open(spreadsheet_name)
+
+
+def get_cached_spreadsheet(_client, spreadsheet_name):
+    return _get_cached_spreadsheet_impl(_client, spreadsheet_name, _use_firestore())
 
 
 # 🔧 แก้บั๊ก (สำคัญ): เดิม "จำ" แค่ตัวไฟล์สเปรดชีตทั้งไฟล์ไว้เท่านั้น (get_cached_spreadsheet ด้านบน)
@@ -134,12 +149,18 @@ def get_cached_spreadsheet(_client, spreadsheet_name):
 # แท็บเรียกเปิดชีตย่อยพร้อมกันในจังหวะเดียว โควตาต่อนาทีจึงหมดเร็วผิดปกติ ตอนนี้จำชีตย่อยที่เปิด
 # ไว้แล้วด้วย (5 นาที เหมือนกับตัวสเปรดชีต) ช่วยลดจำนวนครั้งที่ยิง API ลงได้อีกมาก ทุกแท็บที่ใช้
 # get_worksheet_safely() จะได้ประโยชน์นี้โดยอัตโนมัติ ไม่ต้องแก้ทีละแท็บ
+# 🔧 แก้บั๊กเดียวกับ get_cached_spreadsheet ด้านบน: ย้าย _use_firestore() มาเป็นพารามิเตอร์ของ
+# ฟังก์ชันที่แคชจริง ให้เป็นส่วนหนึ่งของ cache key ด้วย กัน object ผิด backend ค้างอยู่ข้าม 5 นาที
 @st.cache_resource(ttl=300, show_spinner=False)
-def get_cached_worksheet(_client, spreadsheet_name, worksheet_name):
-    if _use_firestore():
+def _get_cached_worksheet_impl(_client, spreadsheet_name, worksheet_name, use_firestore_flag):
+    if use_firestore_flag:
         from firestore_functions import get_cached_worksheet as _fs_get_cached_worksheet
         return _fs_get_cached_worksheet(_client, spreadsheet_name, worksheet_name)
     return get_cached_spreadsheet(_client, spreadsheet_name).worksheet(worksheet_name)
+
+
+def get_cached_worksheet(_client, spreadsheet_name, worksheet_name):
+    return _get_cached_worksheet_impl(_client, spreadsheet_name, worksheet_name, _use_firestore())
 
 
 def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=4, delay=2):
