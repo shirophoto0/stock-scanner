@@ -2977,16 +2977,30 @@ def load_document_analysis_history(spreadsheet_name):
 # Watchlist) ลง Google Sheets แทนที่จะแสดงแค่บนหน้าจอตอนนั้นแล้วหายไปเมื่อรีเฟรช เรียกดูย้อนหลังได้
 # โดยไม่ต้องเรียก AI ซ้ำ ประหยัดโควต้า API
 # =============================================================
-def save_trend_analysis(spreadsheet_name, ticker, analysis_text, quarters_count):
-    """บันทึกผลวิเคราะห์แนวโน้มของหุ้นตัวหนึ่งลงชีต 'Trend_Analysis_History' (เขียนทับของเดิมถ้ามีอยู่แล้ว เก็บแค่ผลล่าสุดต่อหุ้น)"""
+TREND_ANALYSIS_COLUMNS = ["Ticker", "Date_Analyzed", "Quarters_Count", "Analysis_Text", "Mark_Status"]
+
+
+def save_trend_analysis(spreadsheet_name, ticker, analysis_text, quarters_count, mark_status=""):
+    """
+    บันทึกผลวิเคราะห์แนวโน้มของหุ้นตัวหนึ่งลงชีต 'Trend_Analysis_History' (เขียนทับของเดิมถ้ามีอยู่แล้ว
+    เก็บแค่ผลล่าสุดต่อหุ้น)
+    🆕 เพิ่มคอลัมน์ Mark_Status (GREEN/YELLOW/RED) เก็บผลสรุปว่าหุ้นตัวนี้เข้าเกณฑ์ Mark Minervini
+    แค่ไหน ใช้แสดงเป็นวงกลมสีต่อท้ายชื่อหุ้นในหน้า Watchlist — ชีต/collection เดิมที่มีอยู่แล้วก่อน
+    ฟีเจอร์นี้จะมีแค่ 4 คอลัมน์ จึงต้อง "อัปเกรด" หัวตาราง/schema ให้มีคอลัมน์ที่ 5 ก่อนเขียนข้อมูลทุก
+    ครั้ง (เขียนซ้ำก็ไม่เป็นไร เทียบแล้วตรงกันอยู่แล้วจะข้าม) วิธีนี้ใช้ได้ทั้ง Google Sheets จริง (แก้
+    แถวหัวตาราง) และ Firestore (แก้ _meta.columns) โดยผ่าน sheet.update() ตัวเดียวกัน ไม่ต้องแยกเคส
+    """
     try:
         client = get_gsheet_client()
         sheet = get_cached_worksheet(client, spreadsheet_name, 'Trend_Analysis_History')
+
+        current_headers = sheet.row_values(1)
+        if current_headers != TREND_ANALYSIS_COLUMNS:
+            sheet.update(range_name='A1', values=[TREND_ANALYSIS_COLUMNS])
+
         records = sheet.get_all_records()
         ticker_clean = ticker.strip().upper()
-
-        headers = sheet.row_values(1) or ["Ticker", "Date_Analyzed", "Quarters_Count", "Analysis_Text"]
-        new_row = [ticker_clean, str(date.today()), quarters_count, analysis_text]
+        new_row = [ticker_clean, str(date.today()), quarters_count, analysis_text, mark_status]
 
         # หาว่าหุ้นตัวนี้เคยมีผลวิเคราะห์บันทึกไว้แล้วหรือยัง (แถวไหน) ถ้ามีให้เขียนทับแถวเดิม
         # (เก็บแค่ผลล่าสุดต่อหุ้นพอ ไม่สะสมประวัติซ้อนกันไปเรื่อยๆ)

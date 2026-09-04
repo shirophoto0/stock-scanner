@@ -9,6 +9,7 @@ import streamlit as st
 import pandas as pd
 import base64
 import json
+import re
 from backend_functions import (
     get_active_sheet_name,
     get_set_financial_statement_url,
@@ -53,8 +54,32 @@ TREND_ANALYSIS_PROMPT = """คุณเป็นนักวิเคราะ�
 2. **จุดที่ควรจับตา** — สัญญาณเปลี่ยนแปลงที่เห็นจากการเทียบไตรมาสต่อไตรมาส
 3. **ควรถือต่อหรือไม่** — ให้มุมมองประกอบการตัดสินใจ (ไม่ใช่คำแนะนำการลงทุนโดยตรง แค่สรุปสิ่งที่ตัวเลขบอก)
 
+หลังจากตอบครบทั้ง 3 หัวข้อแล้ว ให้เพิ่มบรรทัดสุดท้ายแยกต่างหาก (บรรทัดเดียว ไม่มีข้อความอื่นปนอยู่ในบรรทัด
+นั้นเลย) สรุปว่าหุ้นตัวนี้เข้าเกณฑ์ Superstock สไตล์ Mark Minervini แค่ไหน โดยพิมพ์ตรงตามรูปแบบนี้เป๊ะๆ
+(ห้ามมีเครื่องหมาย ** หรือสัญลักษณ์อื่นแทรกในบรรทัดนี้):
+MARK_STATUS: GREEN
+หรือ
+MARK_STATUS: YELLOW
+หรือ
+MARK_STATUS: RED
+
+เกณฑ์การให้สถานะ:
+- GREEN = เข้าเกณฑ์ Mark Minervini ชัดเจน (รายได้/กำไรโตต่อเนื่องหลายไตรมาสติดกัน อัตรากำไรทรงตัวหรือ
+  ขยายตัว ไม่มีสัญญาณเตือนสำคัญ)
+- YELLOW = ยังไม่ฟันธง ต้องรองบไตรมาสถัดไปมายืนยันแนวโน้มก่อน (สัญญาณผสม เพิ่งเริ่มโตแค่ไตรมาสเดียว
+  หรือโตแต่ยังไม่แน่ใจว่าต่อเนื่องจริง)
+- RED = ไม่เข้าเกณฑ์เลย (แนวโน้มชะลอตัว/ถดถอยชัดเจน หรือมีสัญญาณเตือนสำคัญ)
+
 ข้อมูลย้อนหลัง:
 {history_text}"""
+
+# 🆕 mapping สำหรับแปลงสถานะที่ AI ตอบ (GREEN/YELLOW/RED) เป็นวงกลมสีต่อท้ายชื่อหุ้นในหน้า Watchlist
+_MARK_STATUS_EMOJI = {"GREEN": "🟢", "YELLOW": "🟡", "RED": "🔴"}
+_MARK_STATUS_LABEL = {
+    "GREEN": "🟢 เข้าเกณฑ์ Mark Minervini",
+    "YELLOW": "🟡 ยังต้องเฝ้าระวังงบไตรมาสถัดไป",
+    "RED": "🔴 ไม่เข้าเกณฑ์ Mark Minervini",
+}
 
 
 def _call_claude_document_analysis(api_key, file_bytes, file_ext, prompt_text):
@@ -179,14 +204,22 @@ def render_tab_fundamental_watchlist():
 
     st.divider()
     st.markdown("#### 📋 หุ้นในการติดตาม")
+    # 🆕 คำอธิบายวงกลมสี — สรุปจากผลวิเคราะห์แนวโน้ม AI ล่าสุดของแต่ละหุ้น (ต้องกดวิเคราะห์แนวโน้ม
+    # อย่างน้อย 1 ครั้งก่อนถึงจะขึ้น ถ้ายังไม่เคยวิเคราะห์จะไม่มีวงกลมต่อท้ายชื่อหุ้น)
+    st.caption("🟢 เข้าเกณฑ์ Mark   🟡 ยังต้องเฝ้าระวังงบไตรมาสถัดไป   🔴 ไม่เข้าเกณฑ์ Mark   (มาจากผลวิเคราะห์แนวโน้ม AI ล่าสุด)")
 
     for item in watchlist:
         ticker = str(item.get('Ticker', '')).strip().upper()
         set_url = get_set_financial_statement_url(ticker)
+        # 🆕 โหลดผลวิเคราะห์แนวโน้มล่าสุดไว้ตั้งแต่ต้น loop (ย้ายขึ้นมาจากเดิมที่โหลดทีหลังตอนแสดง
+        # ประวัติย้อนหลัง) เพราะต้องใช้ Mark_Status ตั้งแต่ตอนแสดงหัวข้อชื่อหุ้นด้านล่างนี้แล้ว
+        _saved_trend = load_trend_analysis(spreadsheet_name, ticker)
+        _mark_status = str((_saved_trend or {}).get('Mark_Status', '')).strip().upper()
+        _mark_circle = f" {_MARK_STATUS_EMOJI[_mark_status]}" if _mark_status in _MARK_STATUS_EMOJI else ""
 
         with st.container(border=True):
             h1, h2, h3 = st.columns([2, 1, 1])
-            h1.markdown(f"### {ticker}")
+            h1.markdown(f"### {ticker}{_mark_circle}")
             h2.markdown(f"[📥 ดาวน์โหลดงบจาก SET]({set_url})")
             if h3.button("🗑️ ลบออกจาก Watchlist", key=f"del_fund_{ticker}"):
                 success, msg = remove_from_fundamental_watchlist(spreadsheet_name, ticker)
@@ -223,7 +256,6 @@ def render_tab_fundamental_watchlist():
                                 # เนื้อหาจริง) จะแกะไม่ออกทันที เปลี่ยนมาใช้ Regex ค้นหาตำแหน่ง { แรก
                                 # และ } สุดท้ายในข้อความทั้งหมดแทน ทนทานกว่ามาก ไม่สนใจว่าจะมีข้อความ
                                 # อื่นล้อมรอบ JSON อยู่หรือไม่
-                                import re
                                 _json_match = re.search(r'\{.*\}', result_text, re.DOTALL)
                                 if not _json_match:
                                     raise json.JSONDecodeError("ไม่พบโครงสร้าง JSON ในคำตอบเลย", result_text, 0)
@@ -270,10 +302,15 @@ def render_tab_fundamental_watchlist():
                 # 🔧 ปรับปรุง: ครอบด้วย st.expander() แทนการแสดงยาวเหยียดตลอดเวลา เพราะเนื้อหาที่
                 # AI วิเคราะห์มักยาวมาก (มีหัวข้อย่อย 3 ส่วน) พอมีหลายหุ้นใน Watchlist หน้าจะยาว
                 # เกินไป ปิดไว้เป็นค่าเริ่มต้น กดเปิดดูเองได้เมื่อต้องการ
-                _saved_trend = load_trend_analysis(spreadsheet_name, ticker)
+                # (🆕 _saved_trend ถูกโหลดไว้แล้วตั้งแต่ต้น loop ด้านบน เพื่อใช้โชว์วงกลมสีที่หัวข้อ
+                # ชื่อหุ้น ไม่ต้องโหลดซ้ำตรงนี้อีก)
                 if _saved_trend:
                     with st.expander(f"🤖 ผลวิเคราะห์แนวโน้มล่าสุด — {ticker} (วิเคราะห์เมื่อ {_saved_trend.get('Date_Analyzed', '-')})", expanded=False):
-                        st.caption(f"📅 วิเคราะห์เมื่อ {_saved_trend.get('Date_Analyzed', '-')} (จากข้อมูล {_saved_trend.get('Quarters_Count', '-')} ไตรมาส)")
+                        _status_line = _MARK_STATUS_LABEL.get(_mark_status)
+                        st.caption(
+                            f"📅 วิเคราะห์เมื่อ {_saved_trend.get('Date_Analyzed', '-')} (จากข้อมูล {_saved_trend.get('Quarters_Count', '-')} ไตรมาส)"
+                            + (f" — {_status_line}" if _status_line else "")
+                        )
                         st.markdown(_saved_trend.get('Analysis_Text', ''))
 
                 if len(df_history) >= 2:
@@ -295,20 +332,34 @@ def render_tab_fundamental_watchlist():
                                 prompt = TREND_ANALYSIS_PROMPT.replace("{ticker}", ticker).replace("{history_text}", history_text)
                                 result_text, usage = _call_claude_text_analysis(api_key, prompt)
 
+                                # 🆕 แกะบรรทัด "MARK_STATUS: GREEN/YELLOW/RED" ที่ AI แนบมาท้ายคำตอบ
+                                # ออกมาต่างหาก ใช้ทำวงกลมสีต่อท้ายชื่อหุ้น แล้วตัดบรรทัดนี้ออกจากเนื้อหา
+                                # ที่จะบันทึก/แสดงผล ไม่ให้ปนกับข้อความวิเคราะห์ 3 หัวข้อที่อ่านจริง
+                                _status_match = re.search(r'MARK_STATUS:\s*(GREEN|YELLOW|RED)', result_text, re.IGNORECASE)
+                                mark_status = _status_match.group(1).upper() if _status_match else ""
+                                display_text = re.sub(
+                                    r'\n*\**MARK_STATUS:\s*(GREEN|YELLOW|RED)\**\s*', '', result_text, flags=re.IGNORECASE
+                                ).strip()
+
                                 # 🆕 บันทึกผลลง Google Sheets ทันที ก่อนหน้านี้แสดงแค่บนหน้าจอตอนนั้น
                                 # พอรีเฟรชหน้าเว็บ ผลลัพธ์จะหายไปเลย ไม่มีทางเรียกดูย้อนหลังได้
                                 _save_success, _save_msg = save_trend_analysis(
-                                    spreadsheet_name, ticker, result_text, len(df_history)
+                                    spreadsheet_name, ticker, display_text, len(df_history), mark_status
                                 )
                                 st.cache_data.clear()  # ล้างแคชผลวิเคราะห์เก่า ให้เห็นผลใหม่ทันที
 
-                                # 🔧 ปรับปรุง: ครอบผลลัพธ์ใหม่ด้วย st.expander() ด้วยเช่นกัน (เปิดไว้
-                                # ก่อนตอนเพิ่งวิเคราะห์เสร็จใหม่ๆ เพราะน่าจะอยากอ่านทันที)
-                                with st.expander(f"🤖 ผลวิเคราะห์แนวโน้ม — {ticker} (ผลลัพธ์ล่าสุด)", expanded=True):
-                                    st.markdown(result_text)
                                 st.caption(f"💰 token: อินพุต {usage.input_tokens:,} / เอาต์พุต {usage.output_tokens:,}")
                                 if _save_success:
                                     st.success("✅ บันทึกผลวิเคราะห์นี้ไว้แล้ว เรียกดูซ้ำได้โดยไม่ต้องเสียโควต้า API อีก")
+                                    # 🆕 rerun ทันทีให้วงกลมสีที่หัวข้อชื่อหุ้นด้านบน (โหลดจาก
+                                    # _saved_trend ตั้งแต่ต้น loop) อัปเดตตามผลวิเคราะห์ล่าสุดทันที
+                                    # ไม่ต้องรอ interaction รอบถัดไป — ผลลัพธ์จะไปโผล่ในกล่อง "ผลวิเคราะห์
+                                    # แนวโน้มล่าสุด" ด้านบนแทนกล่องนี้ (เพราะโหลดจากที่บันทึกไว้แล้ว)
+                                    st.rerun()
+                                else:
+                                    with st.expander(f"🤖 ผลวิเคราะห์แนวโน้ม — {ticker} (ผลลัพธ์ล่าสุด บันทึกไม่สำเร็จ)", expanded=True):
+                                        st.markdown(display_text)
+                                    st.warning(_save_msg)
                             except Exception as e:
                                 st.error(f"❌ เกิดข้อผิดพลาด: {e}")
                 else:
