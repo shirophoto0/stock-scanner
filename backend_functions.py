@@ -695,8 +695,9 @@ def get_latest_coop_value():
     return 0.0
 
 def calculate_fund_result(cost_price, current_price, units):
-    # 🔧 ปรับความละเอียดจาก 2 เป็น 4 ตำแหน่งทศนิยม ให้ตรงกับหน่วยกองทุนรวม (NAV/หน่วยลงทุน
-    # มักมีทศนิยมละเอียดถึง 4 ตำแหน่ง) ตามที่ใช้แสดงผล/บันทึกในแท็บกองทุนรวมทั้งหมด
+    # 🔧 ทศนิยม: ต้นทุน/มูลค่า (ราคาต่อหน่วย x จำนวนหน่วย) ใช้ 4 ตำแหน่ง ให้ตรงกับหน่วยกองทุนรวม
+    # (NAV/หน่วยลงทุน มักมีทศนิยมละเอียดถึง 4 ตำแหน่ง) ส่วนกำไร/ขาดทุนใช้ 2 ตำแหน่งเหมือนตัวเลข
+    # เงินบาททั่วไป — ตามที่ใช้แสดงผล/บันทึกในแท็บกองทุนรวมทั้งหมด
     total_cost = cost_price * units
     current_value = current_price * units
     profit_loss = current_value - total_cost
@@ -704,8 +705,8 @@ def calculate_fund_result(cost_price, current_price, units):
     return {
         "Total_Cost": round(total_cost, 4),
         "Current_Value": round(current_value, 4),
-        "Profit_Loss": round(profit_loss, 4),
-        "Profit_Loss_Pct": round(profit_loss_pct, 4)
+        "Profit_Loss": round(profit_loss, 2),
+        "Profit_Loss_Pct": round(profit_loss_pct, 2)
     }
     
 # =============================================================

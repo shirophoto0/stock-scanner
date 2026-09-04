@@ -384,7 +384,7 @@ def render_tab_funds():
                 div_date = col_d1.date_input("วันที่ได้รับปันผล:", date.today(), key=f"fund_div_date_{_dnonce}")
                 div_amount = col_d2.number_input(
                     "จำนวนเงินปันผลที่ได้รับ (บาท):",
-                    min_value=0.0, step=0.0001, format="%.4f", key=f"fund_div_amount_{_dnonce}",
+                    min_value=0.0, step=0.01, format="%.2f", key=f"fund_div_amount_{_dnonce}",
                 )
                 div_note = st.text_input("หมายเหตุ (ถ้ามี):", key=f"fund_div_note_{_dnonce}")
 
@@ -398,7 +398,7 @@ def render_tab_funds():
                             sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Fund_Dividend')
                             existing_div = _load_fund_dividend_cached(get_active_sheet_name())
                             new_div_id = len(existing_div)
-                            row_data = [new_div_id, div_fund, str(div_date), round(div_amount, 4), div_note]
+                            row_data = [new_div_id, div_fund, str(div_date), round(div_amount, 2), div_note]
                             _append_row_with_columns(sheet, row_data, _FUND_DIVIDEND_COLUMNS)
 
                             st.cache_data.clear()
@@ -426,10 +426,10 @@ def render_tab_funds():
             }).sort_values("วันที่ได้รับ", ascending=False)
 
             st.dataframe(
-                df_div_display.style.format({"จำนวนเงิน (บาท)": "{:,.4f}"}),
+                df_div_display.style.format({"จำนวนเงิน (บาท)": "{:,.2f}"}),
                 use_container_width=True, hide_index=True
             )
-            st.caption(f"รวมปันผลที่บันทึกไว้ทั้งหมด: {df_div_display['จำนวนเงิน (บาท)'].sum():,.4f} บาท")
+            st.caption(f"รวมปันผลที่บันทึกไว้ทั้งหมด: {df_div_display['จำนวนเงิน (บาท)'].sum():,.2f} บาท")
         else:
             st.info("ยังไม่มีประวัติปันผลที่บันทึกไว้ครับ")
 
@@ -556,11 +556,11 @@ def render_tab_funds():
                             "จำนวนหน่วย": round(g_units, 4),
                             "มูลค่าต้นทุน": round(g_cost, 4),
                             "มูลค่าปัจจุบัน": round(g_value, 4),
-                            "กำไร/ขาดทุน": round(profit, 4),
-                            "% กำไร/ขาดทุน": round(profit_pct, 4),
-                            "ปันผลสะสม": round(fund_dividend, 4),
-                            "ผลตอบแทนรวม": round(total_return, 4),
-                            "% ผลตอบแทนรวม": round(total_return_pct, 4),
+                            "กำไร/ขาดทุน": round(profit, 2),
+                            "% กำไร/ขาดทุน": round(profit_pct, 2),
+                            "ปันผลสะสม": round(fund_dividend, 2),
+                            "ผลตอบแทนรวม": round(total_return, 2),
+                            "% ผลตอบแทนรวม": round(total_return_pct, 2),
                             "_is_stale": is_stale,
                             "_lot_count": g['lot_count'],
                             "_lots": g['lots'],
@@ -578,20 +578,20 @@ def render_tab_funds():
                         updated_date=_latest_price_update
                     )
                     render_metric_card(
-                        m3, "กำไร/ขาดทุนรวม", f"{total_profit:,.4f} บาท", icon="💹",
-                        delta=f"{total_profit_pct:.4f}%", delta_positive=(total_profit >= 0)
+                        m3, "กำไร/ขาดทุนรวม", f"{total_profit:,.2f} บาท", icon="💹",
+                        delta=f"{total_profit_pct:.2f}%", delta_positive=(total_profit >= 0)
                     )
                     # 🆕 (1b) การ์ดปันผลสะสม + ผลตอบแทนรวม (ทุน+ปันผล) — ปันผลนับรวมกองที่ขายไปแล้ว
                     # ด้วย เพราะเป็นเงินสดที่ได้รับจริงไม่ว่าจะยังถือกองทุนนั้นอยู่หรือไม่ก็ตาม
                     _total_return_all = total_profit + total_dividends_all
                     _total_return_all_pct = (_total_return_all / total_portfolio_cost * 100) if total_portfolio_cost > 0 else 0.0
                     render_metric_card(
-                        m4, "ปันผลสะสมทั้งหมด", f"{total_dividends_all:,.4f} บาท", icon="💵",
+                        m4, "ปันผลสะสมทั้งหมด", f"{total_dividends_all:,.2f} บาท", icon="💵",
                         caption="รวมกองที่ขายไปแล้วด้วย"
                     )
                     st.caption(
-                        f"🎯 **ผลตอบแทนรวม (ทุน + ปันผล) ของทั้งพอร์ต:** {_total_return_all:,.4f} บาท "
-                        f"({_total_return_all_pct:+.4f}%)"
+                        f"🎯 **ผลตอบแทนรวม (ทุน + ปันผล) ของทั้งพอร์ต:** {_total_return_all:,.2f} บาท "
+                        f"({_total_return_all_pct:+.2f}%)"
                     )
 
                     # 🆕 (4) เตือนราคาเก่า — ถ้ากองไหนไม่ได้อัปเดตราคาเกิน 35 วัน (หรือไม่มีข้อมูลวันที่
@@ -627,7 +627,7 @@ def render_tab_funds():
                         _df_table_basic.style.format({
                             "ต้นทุนเฉลี่ย": "{:.4f}", "ราคาปัจจุบัน": "{:.4f}", "จำนวนหน่วย": "{:,.4f}",
                             "มูลค่าต้นทุน": "{:,.4f}", "มูลค่าปัจจุบัน": "{:,.4f}",
-                            "กำไร/ขาดทุน": "{:,.4f}", "% กำไร/ขาดทุน": "{:+.4f}%"
+                            "กำไร/ขาดทุน": "{:,.2f}", "% กำไร/ขาดทุน": "{:+.2f}%"
                         })
                         .set_properties(**{'text-align': 'right', 'background-color': _tc['bg']})
                         .map(_color_pl, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
@@ -654,7 +654,7 @@ def render_tab_funds():
                         _pl_sign = "📈" if d["% กำไร/ขาดทุน"] > 0 else "📉" if d["% กำไร/ขาดทุน"] < 0 else "➖"
                         _label = (
                             f"{_pl_sign} **{d['ชื่อกองทุน']}**{_lot_suffix}  —  "
-                            f"มูลค่าปัจจุบัน {d['มูลค่าปัจจุบัน']:,.4f} บาท  ({d['% กำไร/ขาดทุน']:+.4f}%)"
+                            f"มูลค่าปัจจุบัน {d['มูลค่าปัจจุบัน']:,.4f} บาท  ({d['% กำไร/ขาดทุน']:+.2f}%)"
                         )
                         with st.expander(_label):
                             c1, c2, c3, c4 = st.columns(4)
@@ -665,11 +665,11 @@ def render_tab_funds():
 
                             c5, c6, c7, c8 = st.columns(4)
                             c5.metric("มูลค่าปัจจุบัน", f"{d['มูลค่าปัจจุบัน']:,.4f}")
-                            c6.metric("กำไร/ขาดทุน (จากราคา)", f"{d['กำไร/ขาดทุน']:,.4f}", delta=f"{d['% กำไร/ขาดทุน']:+.4f}%")
-                            c7.metric("ปันผลสะสม", f"{d['ปันผลสะสม']:,.4f}")
+                            c6.metric("กำไร/ขาดทุน (จากราคา)", f"{d['กำไร/ขาดทุน']:,.2f}", delta=f"{d['% กำไร/ขาดทุน']:+.2f}%")
+                            c7.metric("ปันผลสะสม", f"{d['ปันผลสะสม']:,.2f}")
                             # 🆕 การ์ด % กำไร/ขาดทุนของ "ผลตอบแทนรวม" (ราคา + ปันผล) เทียบกับต้นทุน —
                             # ตามที่ขอเพิ่ม แยกจากการ์ด "กำไร/ขาดทุน (จากราคา)" อย่างเดียวด้านบน
-                            c8.metric("ผลตอบแทนรวม (ทุน+ปันผล)", f"{d['ผลตอบแทนรวม']:,.4f}", delta=f"{d['% ผลตอบแทนรวม']:+.4f}%")
+                            c8.metric("ผลตอบแทนรวม (ทุน+ปันผล)", f"{d['ผลตอบแทนรวม']:,.2f}", delta=f"{d['% ผลตอบแทนรวม']:+.2f}%")
 
                             st.markdown(f"**รายละเอียดแต่ละครั้งที่ซื้อ ({d['_lot_count']} รายการ):**")
                             df_lots = pd.DataFrame(d['_lots']).sort_values("วันที่ซื้อ")
@@ -687,8 +687,8 @@ def render_tab_funds():
                     _best = df_table.iloc[0]
                     _worst = df_table.iloc[-1]
                     _b1, _b2 = st.columns(2)
-                    _b1.success(f"🏆 **ผลงานดีสุด:** {_best['ชื่อกองทุน']} ({_best['% กำไร/ขาดทุน']:+.4f}%)")
-                    _b2.error(f"📉 **ผลงานแย่สุด:** {_worst['ชื่อกองทุน']} ({_worst['% กำไร/ขาดทุน']:+.4f}%)")
+                    _b1.success(f"🏆 **ผลงานดีสุด:** {_best['ชื่อกองทุน']} ({_best['% กำไร/ขาดทุน']:+.2f}%)")
+                    _b2.error(f"📉 **ผลงานแย่สุด:** {_worst['ชื่อกองทุน']} ({_worst['% กำไร/ขาดทุน']:+.2f}%)")
 
                     st.divider()
 
@@ -696,7 +696,7 @@ def render_tab_funds():
                     st.markdown("##### 📊 เปรียบเทียบ % ผลตอบแทนระหว่างกองทุน")
                     fig_compare = px.bar(
                         df_table, x='ชื่อกองทุน', y='% กำไร/ขาดทุน',
-                        text=df_table['% กำไร/ขาดทุน'].apply(lambda x: f"{x:+.4f}%"),
+                        text=df_table['% กำไร/ขาดทุน'].apply(lambda x: f"{x:+.2f}%"),
                         color='% กำไร/ขาดทุน', color_continuous_scale=['#EF5350', '#26A69A'],
                         color_continuous_midpoint=0
                     )
