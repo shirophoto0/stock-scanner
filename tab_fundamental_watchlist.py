@@ -291,11 +291,13 @@ def render_tab_fundamental_watchlist():
                 continue
 
             if not df_history.empty:
-                st.markdown(f"##### 📈 ประวัติย้อนหลัง — {ticker} ({len(df_history)} ไตรมาส)")
-
-                display_cols = [c for c in ['Quarter', 'Year', 'Revenue', 'Net_Profit', 'EPS', 'Net_Margin_Pct'] if c in df_history.columns]
-                if display_cols:
-                    st.dataframe(df_history[display_cols], use_container_width=True, hide_index=True)
+                # 🆕 ครอบด้วย st.expander() ให้ซ่อน/เปิดได้เหมือนกล่องผลวิเคราะห์ AI ด้านล่าง —
+                # เดิมตารางนี้แสดงยาวตลอดเวลา พอมีหลายหุ้นใน Watchlist หน้าจะยาวเกินไป ปิดไว้เป็น
+                # ค่าเริ่มต้น กดเปิดดูเองได้เมื่อต้องการ
+                with st.expander(f"📈 ประวัติย้อนหลัง — {ticker} ({len(df_history)} ไตรมาส)", expanded=False):
+                    display_cols = [c for c in ['Quarter', 'Year', 'Revenue', 'Net_Profit', 'EPS', 'Net_Margin_Pct'] if c in df_history.columns]
+                    if display_cols:
+                        st.dataframe(df_history[display_cols], use_container_width=True, hide_index=True)
 
                 # --- 🆕 แสดงผลวิเคราะห์แนวโน้มล่าสุดที่เคยบันทึกไว้ (ถ้ามี) ก่อนปุ่มวิเคราะห์ใหม่
                 # ไม่ต้องเรียก AI ซ้ำถ้าแค่อยากอ่านผลเดิม ประหยัดโควต้า API ---
