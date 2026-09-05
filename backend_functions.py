@@ -29,6 +29,7 @@ from PIL import Image
 import time
 import re
 import random
+from contextlib import contextmanager
 from gspread.exceptions import APIError, WorksheetNotFound
 from bs4 import BeautifulSoup
 from constants import SET100_TICKERS
@@ -70,6 +71,33 @@ def _use_firestore():
         active_sheet = "MyStockData"
 
     return active_sheet in enabled_sheets
+
+
+# 🔧 แก้บั๊ก: _use_firestore() ด้านบน (และทุกฟังก์ชันที่พึ่งมันอยู่ เช่น get_gsheet_client(),
+# get_cached_worksheet(), get_cached_spreadsheet()) ตัดสินใจ Sheets vs Firestore จาก "บัญชีที่
+# login อยู่ตอนนี้" (get_active_sheet_name()) เท่านั้น ไม่ได้ดูค่า spreadsheet_name ที่ส่งเข้ามา
+# จริงๆ เลย ปกติไม่มีปัญหาเพราะทุกคนอ่าน/เขียนสเปรดชีตของตัวเอง (spreadsheet_name ที่ส่งเข้ามาก็คือ
+# บัญชีที่ login อยู่พอดี) แต่ฟังก์ชันที่อ่าน/เขียนข้อมูล "กลาง" ที่ผูกกับสเปรดชีตตายตัวเสมอไม่ว่าใคร
+# จะ login อยู่ก็ตาม (เช่น Signal_History ผูกกับ "MyStockData" เพียงที่เดียว ดู
+# SIGNAL_HISTORY_SPREADSHEET ใน tab_backtest.py) จะเจอบั๊ก: ถ้าบัญชีที่ login อยู่ (เช่น
+# Nujiwealth) ยังไม่ถูกย้ายไป Firestore แต่ "MyStockData" ถูกย้ายไปแล้ว (ย้ายทีละบัญชีได้ตามที่
+# ออกแบบไว้) การอ่าน Signal_History จะดันไปเช็ค Firestore-หรือ-Sheets จากสถานะของ Nujiwealth
+# (ผิดบัญชี) แทนที่จะเช็คจาก "MyStockData" ที่ข้อมูลจริงอยู่ ทำให้อ่านได้ข้อมูลเก่า/ไม่ตรงกับที่
+# บัญชี MyStockData เห็น ทั้งที่ตั้งใจให้ทุกบัญชีเห็นข้อมูลชุดเดียวกันเป๊ะ ใช้ context manager นี้
+# ครอบโค้ดที่เรียก get_gsheet_client()/get_cached_worksheet() ของข้อมูลกลางเหล่านั้น เพื่อ "บังคับ"
+# ให้ _use_firestore() เช็คจากสเปรดชีตที่ระบุจริงๆ ชั่วคราว (แล้วคืนค่า active_sheet_name เดิมกลับ
+# หลังจบเสมอ ไม่กระทบ session ของผู้ใช้ที่ login อยู่จริง)
+@contextmanager
+def _force_active_sheet_for_backend_routing(spreadsheet_name):
+    prev = st.session_state.get('active_sheet_name')
+    st.session_state['active_sheet_name'] = spreadsheet_name
+    try:
+        yield
+    finally:
+        if prev is None:
+            st.session_state.pop('active_sheet_name', None)
+        else:
+            st.session_state['active_sheet_name'] = prev
 
 
 def get_gsheet_client():
@@ -2329,30 +2357,31 @@ def log_signal_history(spreadsheet_name, notable, price_map):
     Date, Ticker, Signal_Type, Price_At_Signal, Return_30D, Return_60D, Return_90D)
     คืนค่าเป็นจำนวนแถวที่บันทึกสำเร็จ
     """
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
-        today_str = str(date.today())
-        rows_to_add = []
-        for signal_type, tickers in [
-            ('Trend_Template', notable.get('trend_template', [])),
-            ('RS_Cross_Up', notable.get('rs_cross_up', [])),
-            ('New_52W_High', notable.get('new_52w_high', [])),
-            ('Volume_Spike', notable.get('volume_spike', [])),
-            ('Golden_Cross', notable.get('golden_cross', [])),
-            ('RSI_Oversold_Bounce', notable.get('rsi_oversold_bounce', [])),
-            ('VCP_Breakout', notable.get('vcp_breakout', [])),
-        ]:
-            for t in tickers:
-                price = price_map.get(t, '')
-                if price:
-                    rows_to_add.append([today_str, t, signal_type, price, '', '', ''])
-        if rows_to_add:
-            sheet.append_rows(rows_to_add)
-        return len(rows_to_add)
-    except Exception as e:
-        print(f"⚠️ บันทึกประวัติสัญญาณไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
-        return 0
+    with _force_active_sheet_for_backend_routing(spreadsheet_name):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+            today_str = str(date.today())
+            rows_to_add = []
+            for signal_type, tickers in [
+                ('Trend_Template', notable.get('trend_template', [])),
+                ('RS_Cross_Up', notable.get('rs_cross_up', [])),
+                ('New_52W_High', notable.get('new_52w_high', [])),
+                ('Volume_Spike', notable.get('volume_spike', [])),
+                ('Golden_Cross', notable.get('golden_cross', [])),
+                ('RSI_Oversold_Bounce', notable.get('rsi_oversold_bounce', [])),
+                ('VCP_Breakout', notable.get('vcp_breakout', [])),
+            ]:
+                for t in tickers:
+                    price = price_map.get(t, '')
+                    if price:
+                        rows_to_add.append([today_str, t, signal_type, price, '', '', ''])
+            if rows_to_add:
+                sheet.append_rows(rows_to_add)
+            return len(rows_to_add)
+        except Exception as e:
+            print(f"⚠️ บันทึกประวัติสัญญาณไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+            return 0
 
 
 def resolve_pending_signals(spreadsheet_name):
@@ -2361,128 +2390,140 @@ def resolve_pending_signals(spreadsheet_name):
     เฉพาะหุ้นที่จำเป็นต้องใช้ (ไม่ใช่ทั้ง 472 ตัว ประหยัด API มาก) มาคำนวณ % เปลี่ยนแปลงจากวันที่
     สัญญาณเกิด แล้วอัปเดตกลับเข้าไปในชีต คืนค่าเป็นจำนวนช่องที่อัปเดตสำเร็จ
     """
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
-        records = sheet.get_all_records()
-        if not records:
-            return 0
+    with _force_active_sheet_for_backend_routing(spreadsheet_name):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+            records = sheet.get_all_records()
+            if not records:
+                return 0
 
-        today = date.today()
-        pending_tickers = set()
-        rows_needing_update = []
+            today = date.today()
+            pending_tickers = set()
+            rows_needing_update = []
 
-        for idx, row in enumerate(records):
-            try:
-                signal_date = datetime.strptime(str(row.get('Date', '')), '%Y-%m-%d').date()
-            except ValueError:
-                continue
-            days_elapsed = (today - signal_date).days
-            needs = []
-            if days_elapsed >= 30 and not str(row.get('Return_30D', '')).strip():
-                needs.append(30)
-            if days_elapsed >= 60 and not str(row.get('Return_60D', '')).strip():
-                needs.append(60)
-            if days_elapsed >= 90 and not str(row.get('Return_90D', '')).strip():
-                needs.append(90)
-            if needs:
-                pending_tickers.add(str(row.get('Ticker', '')).strip())
-                rows_needing_update.append((idx, row, signal_date, needs))
-
-        if not rows_needing_update:
-            return 0
-
-        tickers_list = [t for t in pending_tickers if t]
-        if not tickers_list:
-            return 0
-
-        # ดึงราคาย้อนหลังเฉพาะหุ้นที่จำเป็นต้องใช้เท่านั้น (คนละก้อนกับการสแกนหลักทั้ง 472 ตัว)
-        raw_data = yf.download(tickers_list, period="1y", group_by='ticker', threads=True)
-
-        updated_count = 0
-        col_index_map = {30: 5, 60: 6, 90: 7}  # ตำแหน่งคอลัมน์ Return_30D/60D/90D (นับจาก 1)
-
-        for idx, row, signal_date, needs in rows_needing_update:
-            ticker = str(row.get('Ticker', '')).strip()
-            try:
-                price_at_signal = float(row.get('Price_At_Signal', 0) or 0)
-            except (ValueError, TypeError):
-                continue
-            if price_at_signal <= 0:
-                continue
-
-            try:
-                ticker_hist = raw_data['Close'] if len(tickers_list) == 1 else raw_data[ticker]['Close']
-            except (KeyError, TypeError):
-                continue
-            ticker_hist = ticker_hist.dropna()
-            if ticker_hist.empty:
-                continue
-
-            for days in needs:
-                target_date = signal_date + timedelta(days=days)
-                future_prices = ticker_hist[ticker_hist.index.date >= target_date]
-                if future_prices.empty:
-                    continue  # ยังไม่ถึงวันซื้อขายที่มีราคาหลังจากวันเป้าหมาย รอรอบถัดไป
-                price_at_target = float(future_prices.iloc[0])
-                pct_return = ((price_at_target - price_at_signal) / price_at_signal) * 100
+            for idx, row in enumerate(records):
                 try:
-                    sheet.update_cell(idx + 2, col_index_map[days], round(pct_return, 2))
-                    updated_count += 1
-                except Exception:
-                    pass
+                    signal_date = datetime.strptime(str(row.get('Date', '')), '%Y-%m-%d').date()
+                except ValueError:
+                    continue
+                days_elapsed = (today - signal_date).days
+                needs = []
+                if days_elapsed >= 30 and not str(row.get('Return_30D', '')).strip():
+                    needs.append(30)
+                if days_elapsed >= 60 and not str(row.get('Return_60D', '')).strip():
+                    needs.append(60)
+                if days_elapsed >= 90 and not str(row.get('Return_90D', '')).strip():
+                    needs.append(90)
+                if needs:
+                    pending_tickers.add(str(row.get('Ticker', '')).strip())
+                    rows_needing_update.append((idx, row, signal_date, needs))
 
-        return updated_count
-    except Exception as e:
-        print(f"⚠️ อัปเดตผลตอบแทนสัญญาณเก่าไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
-        return 0
+            if not rows_needing_update:
+                return 0
+
+            tickers_list = [t for t in pending_tickers if t]
+            if not tickers_list:
+                return 0
+
+            # ดึงราคาย้อนหลังเฉพาะหุ้นที่จำเป็นต้องใช้เท่านั้น (คนละก้อนกับการสแกนหลักทั้ง 472 ตัว)
+            raw_data = yf.download(tickers_list, period="1y", group_by='ticker', threads=True)
+
+            updated_count = 0
+            col_index_map = {30: 5, 60: 6, 90: 7}  # ตำแหน่งคอลัมน์ Return_30D/60D/90D (นับจาก 1)
+
+            for idx, row, signal_date, needs in rows_needing_update:
+                ticker = str(row.get('Ticker', '')).strip()
+                try:
+                    price_at_signal = float(row.get('Price_At_Signal', 0) or 0)
+                except (ValueError, TypeError):
+                    continue
+                if price_at_signal <= 0:
+                    continue
+
+                try:
+                    ticker_hist = raw_data['Close'] if len(tickers_list) == 1 else raw_data[ticker]['Close']
+                except (KeyError, TypeError):
+                    continue
+                ticker_hist = ticker_hist.dropna()
+                if ticker_hist.empty:
+                    continue
+
+                for days in needs:
+                    target_date = signal_date + timedelta(days=days)
+                    future_prices = ticker_hist[ticker_hist.index.date >= target_date]
+                    if future_prices.empty:
+                        continue  # ยังไม่ถึงวันซื้อขายที่มีราคาหลังจากวันเป้าหมาย รอรอบถัดไป
+                    price_at_target = float(future_prices.iloc[0])
+                    pct_return = ((price_at_target - price_at_signal) / price_at_signal) * 100
+                    try:
+                        sheet.update_cell(idx + 2, col_index_map[days], round(pct_return, 2))
+                        updated_count += 1
+                    except Exception:
+                        pass
+
+            return updated_count
+        except Exception as e:
+            print(f"⚠️ อัปเดตผลตอบแทนสัญญาณเก่าไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+            return 0
 
 
 def cleanup_old_signals(spreadsheet_name, retention_years=5):
     """ลบสัญญาณที่เก่าเกินระยะเวลาที่กำหนด (ค่าเริ่มต้น 5 ปี) ออกจากชีต Signal_History เพื่อไม่ให้ข้อมูลสะสมมากเกินไป"""
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
-        records = sheet.get_all_records()
-        if not records:
+    with _force_active_sheet_for_backend_routing(spreadsheet_name):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+            records = sheet.get_all_records()
+            if not records:
+                return 0
+
+            cutoff_date = date.today() - timedelta(days=retention_years * 365)
+            headers = sheet.row_values(1)
+            rows_to_keep = [headers]
+            removed_count = 0
+
+            for row in records:
+                try:
+                    signal_date = datetime.strptime(str(row.get('Date', '')), '%Y-%m-%d').date()
+                except ValueError:
+                    rows_to_keep.append([row.get(h, '') for h in headers])
+                    continue
+                if signal_date >= cutoff_date:
+                    rows_to_keep.append([row.get(h, '') for h in headers])
+                else:
+                    removed_count += 1
+
+            if removed_count > 0:
+                sheet.clear()
+                sheet.update(range_name='A1', values=rows_to_keep)
+
+            return removed_count
+        except Exception as e:
+            print(f"⚠️ ล้างข้อมูลสัญญาณเก่าไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
             return 0
-
-        cutoff_date = date.today() - timedelta(days=retention_years * 365)
-        headers = sheet.row_values(1)
-        rows_to_keep = [headers]
-        removed_count = 0
-
-        for row in records:
-            try:
-                signal_date = datetime.strptime(str(row.get('Date', '')), '%Y-%m-%d').date()
-            except ValueError:
-                rows_to_keep.append([row.get(h, '') for h in headers])
-                continue
-            if signal_date >= cutoff_date:
-                rows_to_keep.append([row.get(h, '') for h in headers])
-            else:
-                removed_count += 1
-
-        if removed_count > 0:
-            sheet.clear()
-            sheet.update(range_name='A1', values=rows_to_keep)
-
-        return removed_count
-    except Exception as e:
-        print(f"⚠️ ล้างข้อมูลสัญญาณเก่าไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
-        return 0
 
 
 @st.cache_data(ttl=600, show_spinner=False)
 def load_signal_history(spreadsheet_name):
-    """โหลดประวัติสัญญาณทั้งหมดจากชีต Signal_History มาเป็น DataFrame (จำผลลัพธ์ไว้ 10 นาที กันยิง API ซ้ำ)"""
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
-        records = sheet.get_all_records()
-        return pd.DataFrame(records) if records else pd.DataFrame()
-    except Exception:
-        return pd.DataFrame()
+    """
+    โหลดประวัติสัญญาณทั้งหมดจากชีต Signal_History มาเป็น DataFrame (จำผลลัพธ์ไว้ 10 นาที กันยิง API ซ้ำ)
+    🔧 แก้บั๊ก: ครอบด้วย _force_active_sheet_for_backend_routing() เพราะ Signal_History เป็น
+    ข้อมูลตลาดกลาง ผูกกับสเปรดชีตที่ระบุ (spreadsheet_name) ตายตัวเสมอไม่ว่าใครจะ login อยู่ก็ตาม
+    (ดู SIGNAL_HISTORY_SPREADSHEET ใน tab_backtest.py) แต่เดิม get_cached_worksheet() ข้างในจะ
+    ตัดสินใจ Sheets vs Firestore จาก "บัญชีที่ login อยู่ตอนนี้" ไม่ใช่จาก spreadsheet_name ที่ส่ง
+    เข้ามา ทำให้ถ้าบัญชีที่ login อยู่ยังไม่ถูกย้ายไป Firestore แต่สเปรดชีตที่ Signal_History อยู่จริง
+    ถูกย้ายไปแล้ว จะอ่านผิดที่ (ได้ข้อมูลเก่า/ไม่ตรงกับที่บัญชีอื่นเห็น) ดูรายละเอียดที่คอมเมนต์ของ
+    _force_active_sheet_for_backend_routing() ด้านบน
+    """
+    with _force_active_sheet_for_backend_routing(spreadsheet_name):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+            records = sheet.get_all_records()
+            return pd.DataFrame(records) if records else pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
 
 
 # =============================================================
