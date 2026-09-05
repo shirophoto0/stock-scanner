@@ -113,12 +113,22 @@ def render_tab_sector_rotation(df_sector_map=None):
     st.markdown("#### 🏆 อันดับความแข็งแกร่งของแต่ละกลุ่มอุตสาหกรรม")
     st.caption("RS_Line เฉลี่ย > 0 หมายถึงกลุ่มนี้แข็งแรงกว่าตลาดโดยรวม (SET Index) ในตอนนี้")
     if sector_to_portfolio:
-        st.caption("📌 = กลุ่มที่มีหุ้นในพอร์ตของคุณถืออยู่ตอนนี้ (เลขในวงเล็บ = จำนวนหุ้น, เลื่อนเมาส์ชี้แท่งเพื่อดูรายชื่อ)")
+        st.caption("📌 = กลุ่มที่มีหุ้นในพอร์ตของคุณถืออยู่ตอนนี้ — ชื่อหุ้นกำกับไว้ข้างแท่งเลย ดูง่ายๆ ว่าหุ้นที่ถือ เงินไหลเข้าหรือออกอยู่")
+
+    # 🆕 ตามที่ขอ: วางชื่อหุ้นในพอร์ตไว้ข้างแท่งกราฟโดยตรง (ไม่ต้องเลื่อนเมาส์ชี้ดู) — ต่อท้ายด้วย
+    # ตัวเลข RS_Line เฉลี่ยเดิม คั่นด้วยขึ้นบรรทัดใหม่ กันข้อความยาวจนล้นชิดแกน Y (โดยเฉพาะแท่งฝั่งลบ
+    # ที่ข้อความ "outside" จะไปโผล่ทางซ้าย ใกล้ป้ายชื่อกลุ่มอยู่แล้ว)
+    def _bar_text(row):
+        base = f"{row['RS_Line_เฉลี่ย']:+.2f}"
+        tickers = sector_to_portfolio.get(row['Sector'], [])
+        return f"{base}<br>📌 {', '.join(tickers)}" if tickers else base
+
+    sector_summary['_bar_text'] = sector_summary.apply(_bar_text, axis=1)
 
     _tc = get_theme_colors()
     fig = px.bar(
         sector_summary, x='RS_Line_เฉลี่ย', y='Sector_Label', orientation='h',
-        text=sector_summary['RS_Line_เฉลี่ย'].apply(lambda x: f"{x:+.2f}"),
+        text=sector_summary['_bar_text'],
         color='RS_Line_เฉลี่ย', color_continuous_scale=['#EF5350', '#26A69A'], color_continuous_midpoint=0,
         custom_data=['หุ้นในพอร์ต']
     )
@@ -127,7 +137,7 @@ def render_tab_sector_rotation(df_sector_map=None):
         hovertemplate="<b>%{y}</b><br>RS_Line เฉลี่ย: %{x:+.2f}<br>หุ้นในพอร์ต: %{customdata[0]}<extra></extra>"
     )
     fig.update_layout(
-        height=max(350, 40 * len(sector_summary)), xaxis_title="RS_Line เฉลี่ย", yaxis_title="",
+        height=max(350, 46 * len(sector_summary)), xaxis_title="RS_Line เฉลี่ย", yaxis_title="",
         yaxis=dict(categoryorder='total ascending'), margin=dict(l=20, r=60, t=20, b=20),
         coloraxis_showscale=False
     )
