@@ -18,7 +18,9 @@ EXPORT_CATEGORIES = {
     "ประวัติซื้อขาย TFEX": "TFEX_History",
     "ประวัติ PVD": "Provident_Fund",
     "ประวัติซื้อขายกองทุน": "Fund_History",
-    "ประวัติซื้อขายทอง": "Gold_Portfolio",
+    "ทองคำ - ถือครองจริง": "Gold_Physical",
+    "ทองคำ - เทรด Short/Long": "Gold_Trades",
+    "ทองคำ - ซื้อสะสม (DCA)": "Gold_DCA",
 }
 
 

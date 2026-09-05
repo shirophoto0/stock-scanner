@@ -60,7 +60,10 @@ def render_tab_overview():
             "pension": get_ws_records_safe('Pension'),
             "mutual_fund": get_ws_records_safe('Fund_History'),
             "real_estate": get_ws_records_safe('Real_Estate'),
-            "gold": get_ws_records_safe('Gold_Portfolio'),
+            # 🔧 ปรับปรุง: หลังจัดระเบียบ tab_gold.py ใหม่ ข้อมูลทองย้ายจาก Gold_Portfolio เดิม
+            # ไปเก็บคนละชีต (Gold_Physical/Gold_Trades/Gold_DCA) ใช้ Gold_Physical + Gold_DCA
+            # รวมกันหาวันที่บันทึกล่าสุด (มูลค่าจริงคำนวณแยกอยู่แล้วใน compute_live_net_worth)
+            "gold": get_ws_records_safe('Gold_Physical') + get_ws_records_safe('Gold_DCA'),
             "portfolio_hist": get_ws_records_safe('Stock_TFEX_History')
         }
 
@@ -115,7 +118,7 @@ def render_tab_overview():
         [r for r in all_data["mutual_fund"] if r.get('Status', 'Holding') == 'Holding'],
         'Price_Updated_Date', 'Date_Buy'
     )
-    gold_updated = _max_field(all_data["gold"], 'วันที่บันทึก')
+    gold_updated = _max_field(all_data["gold"], 'Date')
 
     # --- 2. ดึงและคำนวณมูลค่าสินทรัพย์แต่ละส่วนจาก Cache ---
 

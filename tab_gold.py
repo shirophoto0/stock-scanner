@@ -1,64 +1,65 @@
 # =============================================================
 # tab_gold.py
-# แท็บจัดการพอร์ตทองคำ (Phase 2 ของการแยกไฟล์)
+# แท็บจัดการพอร์ตทองคำ
+# 🆕 จัดระเบียบใหม่ทั้งหมด (เดิมมีหน้าเดียว ปนกันทั้งทองจริง/เทรด/สะสม ไม่รองรับการเปิด-ปิด
+# สถานะเทรดจริงแบบ Long/Short และต้นทุนเฉลี่ยทองคำแท่งคำนวณผิด เพราะทุกครั้งที่ซื้อเพิ่มจะเซ็ต
+# ต้นทุนใหม่จากราคาตลาด ณ ตอนนั้นทับของเดิม ไม่ใช่ต้นทุนถัวเฉลี่ยจริง):
+# แยกเป็น 4 แท็บย่อยตามแบบเดียวกับ TFEX (Dashboard ขึ้นก่อน ตามด้วยแท็บใช้งานจริง)
+#   - 📊 Dashboard: ภาพรวมทุกประเภท (มูลค่ารวม, สัดส่วน, กำไรสะสมจากเทรด, สถานะที่เปิดอยู่)
+#   - 🪙 ทองคำแท่ง/รูปพรรณ (ถือครองจริง): ล็อกซื้อ/ขายทีละรายการ คำนวณต้นทุนเฉลี่ยถ่วงน้ำหนักจริง
+#   - 📈 เทรด Short/Long: เปิด/ปิดสถานะแบบเดียวกับ TFEX (มีกำไร/ขาดทุนตามจริงเมื่อปิดสถานะ)
+#   - 🐷 ซื้อสะสม (DCA): บันทึกซื้อสะสมเป็นงวดๆ เทียบต้นทุนเฉลี่ย DCA กับราคาตลาด
+# ข้อมูลเก็บคนละชีตกัน (Gold_Physical, Gold_Trades, Gold_DCA) แยกจาก Gold_Portfolio เดิม
 # =============================================================
 import streamlit as st
 import pandas as pd
-import requests
-from datetime import datetime, timedelta
-from backend_functions import get_worksheet_safely, get_active_sheet_name, fetch_live_gold_price
-from theme import render_metric_card
+import plotly.graph_objects as go
+import plotly.express as px
+from datetime import datetime
+from gspread.exceptions import WorksheetNotFound
+from backend_functions import (
+    get_gsheet_client, get_cached_spreadsheet, get_worksheet_safely,
+    get_active_sheet_name, load_data, fetch_live_gold_price,
+)
+from theme import render_metric_card, style_plotly
+
+GOLD_BAHT_TO_GRAM = 15.244  # 1 บาททองคำ = 15.244 กรัม (มาตรฐานสมาคมค้าทองคำไทย)
 
 
-def render_tab_gold(client):
-    st.markdown("### 🟡 จัดการพอร์ตการลงทุนทองคำ")
-    st.markdown("เลือกประเภทการลงทุน: ทองคำแท่ง/ทองรูปพรรณ หรือ เทรดทอง/กองทุนทอง (ระบบดึงข้อมูลแบบ Web Scraping สดจากเว็บอ้างอิง)")
+# =============================================================
+# ส่วนที่ 1: ราคาทองอ้างอิงสด (ย้ายมาจากโค้ดเดิม ไม่เปลี่ยน logic)
+# =============================================================
+def _get_gold_price_by_scraping():
+    if 'scraped_gold_date' in st.session_state:
+        last_update = st.session_state['scraped_gold_date']
+        _cached_bar = st.session_state.get('scraped_gold_bar')
+        _cached_jewelry = st.session_state.get('scraped_gold_jewelry')
+        _looks_like_stale_fallback = _cached_bar == 68300.0 or _cached_jewelry == 69100.0
+        if (
+            isinstance(last_update, datetime) and (datetime.now() - last_update) < pd.Timedelta(hours=3)
+            and _cached_bar is not None and _cached_jewelry is not None
+            and not _looks_like_stale_fallback
+        ):
+            st.session_state['gold_price_status'] = f"✅ ใช้ราคาที่แคชไว้ (ดึงสดล่าสุดเมื่อ {last_update.strftime('%H:%M:%S')})"
+            return _cached_bar, _cached_jewelry
 
-    from datetime import datetime, timedelta
+    bar_val, jewelry_val, debug_msg = fetch_live_gold_price()
 
-    # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ดึงราคาจาก www.goldtraders.or.th ไม่สำเร็จเลยสักครั้ง เพราะเว็บ
-    # ย้ายไปเป็น React App ที่โหลดราคาผ่าน JavaScript หลังโหลดหน้าเสร็จ (ราคาไม่ได้ฝังมาใน HTML
-    # ตอนโหลดครั้งแรก) ทำให้ตกไปใช้ราคาสำรอง (68,300/69,100) ตลอดเวลา ไม่เคยอัปเดตจริงเลย ตอนนี้
-    # เปลี่ยนไปเรียกใช้ fetch_live_gold_price() ฟังก์ชันกลางใน backend_functions.py ที่แก้ไปแล้ว
-    # (ดึงจากเว็บ classic.goldtraders.or.th ซึ่งยังเป็น HTML แบบดั้งเดิม + ค้นหาด้วย Regex ที่
-    # ทนทานกว่าเดิม) ใช้ร่วมกับฟังก์ชันคำนวณ Net Worth สดในรายงานอัตโนมัติรายเดือนด้วย
-    def get_gold_price_by_scraping():
-        # ตรวจสอบ Cache ใน Session ไม่ให้ยิงถี่เกินไป (ภายใน 3 ชม.)
-        # 🔧 กันเผื่อเพิ่ม: ถ้าค่าที่แคชไว้ดันตรงกับราคาสำรอง (Fallback) เป๊ะๆ (68,300 หรือ 69,100)
-        # ถือว่าน่าสงสัยว่าอาจเป็นค่าค้างจากตอนที่ดึงสดไม่สำเร็จมาก่อนหน้านี้ ให้ข้ามแคชแล้วลองดึง
-        # สดใหม่ทันที แทนที่จะเชื่อค่าที่แคชไว้ตรงๆ
-        if 'scraped_gold_date' in st.session_state:
-            last_update = st.session_state['scraped_gold_date']
-            _cached_bar = st.session_state.get('scraped_gold_bar')
-            _cached_jewelry = st.session_state.get('scraped_gold_jewelry')
-            _looks_like_stale_fallback = _cached_bar == 68300.0 or _cached_jewelry == 69100.0
-            if (
-                isinstance(last_update, datetime) and (datetime.now() - last_update) < timedelta(hours=3)
-                and _cached_bar is not None and _cached_jewelry is not None
-                and not _looks_like_stale_fallback
-            ):
-                st.session_state['gold_price_status'] = f"✅ ใช้ราคาที่แคชไว้ (ดึงสดล่าสุดเมื่อ {last_update.strftime('%H:%M:%S')})"
-                return _cached_bar, _cached_jewelry
+    if bar_val is not None and jewelry_val is not None:
+        st.session_state['scraped_gold_date'] = datetime.now()
+        st.session_state['scraped_gold_bar'] = bar_val
+        st.session_state['scraped_gold_jewelry'] = jewelry_val
+        st.session_state['gold_price_status'] = f"✅ ดึงราคาสดสำเร็จ ({datetime.now().strftime('%H:%M:%S')})"
+        return bar_val, jewelry_val
 
-        bar_val, jewelry_val, debug_msg = fetch_live_gold_price()
+    st.session_state['gold_price_status'] = f"⚠️ ดึงราคาสดไม่สำเร็จ (สาเหตุ: {debug_msg}) กำลังใช้ราคาสำรอง/ราคาเก่าที่มีอยู่แทน"
+    fallback_bar = st.session_state.get('scraped_gold_bar', 68300.0)
+    fallback_jewelry = st.session_state.get('scraped_gold_jewelry', 69100.0)
+    return fallback_bar, fallback_jewelry
 
-        if bar_val is not None and jewelry_val is not None:
-            st.session_state['scraped_gold_date'] = datetime.now()
-            st.session_state['scraped_gold_bar'] = bar_val
-            st.session_state['scraped_gold_jewelry'] = jewelry_val
-            st.session_state['gold_price_status'] = f"✅ ดึงราคาสดสำเร็จ ({datetime.now().strftime('%H:%M:%S')})"
-            return bar_val, jewelry_val
 
-        # Fallback: ถ้า Scrape ไม่สำเร็จ ดึงค่าเดิมมาใช้ หรือใช้ค่าสำรองปัจจุบัน
-        # 🔧 แก้บั๊ก: เดิมโชว์แค่ข้อความทั่วไป ไม่บอกสาเหตุจริง ตอนนี้แนบข้อความ debug_msg ที่ได้
-        # จาก fetch_live_gold_price() มาแสดงต่อท้ายด้วยเลย เห็นสาเหตุจริงตรงในหน้าเว็บทันที
-        st.session_state['gold_price_status'] = f"⚠️ ดึงราคาสดไม่สำเร็จ (สาเหตุ: {debug_msg}) กำลังใช้ราคาสำรอง/ราคาเก่าที่มีอยู่แทน"
-        fallback_bar = st.session_state.get('scraped_gold_bar', 68300.0)
-        fallback_jewelry = st.session_state.get('scraped_gold_jewelry', 69100.0)
-        return fallback_bar, fallback_jewelry
-
-    # 🆕 ปุ่มบังคับรีเฟรชราคาทองทันที (เคลียร์แคชแล้วดึงสดใหม่) ใช้ทดสอบ/วินิจฉัยปัญหาได้ตรงจุด
-    # โดยไม่ต้องพึ่งการเช็ค log ฝั่งเซิร์ฟเวอร์ เพราะเห็นผลตรงในหน้าเว็บทันที
+def _render_gold_price_ticker():
+    """แสดงราคาทองอ้างอิงสด + ปุ่มรีเฟรช คืนค่า (ราคาทองคำแท่ง, ราคาทองรูปพรรณ) ต่อบาททองคำ"""
     _refresh_col1, _refresh_col2 = st.columns([3, 1])
     with _refresh_col2:
         if st.button("🔄 รีเฟรชราคาทองคำ", use_container_width=True):
@@ -66,13 +67,8 @@ def render_tab_gold(client):
                 st.session_state.pop(_k, None)
             st.rerun()
 
-    # เรียกใช้งานฟังก์ชัน Scraping
-    ref_gold_bar, ref_gold_jewelry = get_gold_price_by_scraping()
+    ref_gold_bar, ref_gold_jewelry = _get_gold_price_by_scraping()
 
-    # 🆕 แสดงสถานะจริงของการดึงราคาไว้ให้เห็นตรงในหน้าเว็บ (แทนการต้องเช็ค log ฝั่งเซิร์ฟเวอร์
-    # ซึ่งบางครั้งอาจไม่แสดงผลตามที่คาดไว้) เห็นผลได้ทันทีว่าดึงสดสำเร็จหรือใช้ราคาสำรองอยู่
-    # 🔧 ปรับปรุง: ข้อความยาวขึ้น (มีตัวอย่างเนื้อหาที่ดึงได้จริงแนบมาด้วย) แยกส่วนสั้นๆ ไว้บน
-    # และเนื้อหายาวๆ ไว้ในกล่องโค้ด (st.code) อ่านง่ายกว่าโยนไว้ในบรรทัดเดียวยาวๆ
     with _refresh_col1:
         _status_msg = st.session_state.get('gold_price_status', "✅ ดึงราคาสดสำเร็จล่าสุด")
         if "⚠️" in _status_msg and "| ตัวอย่างเนื้อหาที่ได้จริง:" in _status_msg:
@@ -84,348 +80,504 @@ def render_tab_gold(client):
         else:
             st.success(_status_msg)
 
+    c1, c2 = st.columns(2)
+    render_metric_card(c1, "ราคาทองคำแท่ง (Scraped)", f"{ref_gold_bar:,.2f} ฿ / บาททอง", icon="📌")
+    render_metric_card(c2, "ราคาทองรูปพรรณ (Scraped)", f"{ref_gold_jewelry:,.2f} ฿ / บาททอง", icon="📌")
+    return ref_gold_bar, ref_gold_jewelry
 
-    # แสดงผลราคาอ้างอิง
-    # 🔧 ปรับปรุง: จัดเป็นตาราง 2x3 (2 แถว x 3 คอลัมน์) ให้กล่องขนาดเท่ากันทั้งหมด
-    # แถวแรกใส่ราคาทอง 2 กล่อง จัดกึ่งกลางด้วยการเว้นช่องว่างครึ่งหนึ่งไว้ทั้งซ้าย-ขวา
-    # (สัดส่วน 0.5:1:1:0.5 ทำให้การ์ดตรงกลางกว้างเท่ากับ 1 ใน 3 ส่วน พอดีกับการ์ดในแถว 2)
-    # แถวสองจอง "ที่ว่าง" ไว้ล่วงหน้าสำหรับการ์ดสรุปยอดพอร์ต 3 อัน (ที่จริงๆ คำนวณได้ทีหลังมาก
-    # หลังประมวลผลตารางพอร์ตเสร็จแล้ว แต่อยากให้แสดงตำแหน่งนี้ จึงใช้ placeholder จองที่ไว้ก่อน)
-    _sp1, row1_col1, row1_col2, _sp2 = st.columns([0.5, 1, 1, 0.5])
-    render_metric_card(row1_col1, "ราคาทองคำแท่ง (Scraped)", f"{ref_gold_bar:,.2f} ฿ / บาททอง", icon="📌")
-    render_metric_card(row1_col2, "ราคาทองรูปพรรณ (Scraped)", f"{ref_gold_jewelry:,.2f} ฿ / บาททอง", icon="📌")
 
-    row2_col1, row2_col2, row2_col3 = st.columns(3)
-    gold_summary_placeholder_1 = row2_col1.empty()
-    gold_summary_placeholder_2 = row2_col2.empty()
-    gold_summary_placeholder_3 = row2_col3.empty()
+def _spot_price_per_unit(gold_type, ref_gold_bar, ref_gold_jewelry):
+    """ราคาต่อ 'หน่วยที่ใช้กรอกน้ำหนัก' ของประเภททองนั้นๆ (ทองคำแท่งกรอกเป็นกรัม เลยต้องแปลงจาก
+    ราคาต่อบาททองคำ /15.244 ก่อน ส่วนทองรูปพรรณกรอกเป็นบาททองคำอยู่แล้วใช้ราคาตรงๆ ได้เลย)"""
+    if gold_type == "ทองคำแท่ง":
+        return ref_gold_bar / GOLD_BAHT_TO_GRAM
+    return ref_gold_jewelry
+
+
+# =============================================================
+# ส่วนที่ 2: เขียนข้อมูลลง Google Sheets (สร้างชีต+หัวตารางให้อัตโนมัติถ้ายังไม่มี)
+# =============================================================
+def _get_or_create_worksheet(sheet_name, columns):
+    client = get_gsheet_client()
+    spreadsheet = get_cached_spreadsheet(client, get_active_sheet_name())
+    try:
+        return spreadsheet.worksheet(sheet_name)
+    except WorksheetNotFound:
+        sheet = spreadsheet.add_worksheet(title=sheet_name, rows=1000, cols=max(10, len(columns)))
+        sheet.append_row(columns)
+        return sheet
+
+
+def _append_rows(sheet_name, columns, rows):
+    try:
+        sheet = _get_or_create_worksheet(sheet_name, columns)
+        if not sheet.row_values(1):
+            sheet.append_row(columns)
+        sheet.append_rows(rows)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"⚠️ บันทึกข้อมูลไม่สำเร็จ: {e}")
+        return False
+
+
+# =============================================================
+# ส่วนที่ 3: 🪙 ทองคำแท่ง/รูปพรรณ (ถือครองจริง) — ล็อกซื้อ/ขาย + ต้นทุนเฉลี่ยถ่วงน้ำหนักจริง
+# =============================================================
+GOLD_PHYSICAL_COLS = ["Txn_ID", "Date", "Gold_Type", "Action", "Weight", "Unit", "Price_Per_Unit", "Total_Value", "Note"]
+
+
+def _compute_physical_summary(physical_df, ref_gold_bar, ref_gold_jewelry):
+    """เดินไล่ทีละรายการตามลำดับวันที่ (ซื้อ = ถัวเฉลี่ยต้นทุนใหม่ / ขาย = รับรู้กำไรจากส่วนต่างกับ
+    ต้นทุนเฉลี่ย ณ ตอนนั้น ไม่แตะต้นทุนเฉลี่ยของที่เหลือ) แยกกลุ่มตาม (ประเภททอง, หมายเหตุ)"""
+    groups = {}
+    if not physical_df.empty:
+        df = physical_df.copy()
+        df["Weight"] = pd.to_numeric(df.get("Weight", 0), errors="coerce").fillna(0.0)
+        df["Price_Per_Unit"] = pd.to_numeric(df.get("Price_Per_Unit", 0), errors="coerce").fillna(0.0)
+        if "Date" in df.columns:
+            df["_sort_date"] = pd.to_datetime(df["Date"], errors="coerce")
+            df = df.sort_values("_sort_date")
+        for _, row in df.iterrows():
+            g_type = str(row.get("Gold_Type", "")).strip()
+            note = str(row.get("Note", "")).strip()
+            action = str(row.get("Action", "")).strip()
+            unit = str(row.get("Unit", "")).strip()
+            weight = float(row["Weight"])
+            price = float(row["Price_Per_Unit"])
+            key = (g_type, note)
+            g = groups.setdefault(key, {"weight": 0.0, "avg_cost": 0.0, "realized": 0.0, "unit": unit})
+            if action == "ซื้อ":
+                new_weight = g["weight"] + weight
+                if new_weight > 0:
+                    g["avg_cost"] = (g["weight"] * g["avg_cost"] + weight * price) / new_weight
+                g["weight"] = new_weight
+            elif action == "ขาย":
+                sell_w = min(weight, g["weight"])
+                g["realized"] += (price - g["avg_cost"]) * sell_w
+                g["weight"] -= sell_w
+            if unit:
+                g["unit"] = unit
+
+    rows = []
+    total_market = total_cost = total_realized = total_unrealized = 0.0
+    for (g_type, note), g in groups.items():
+        if g["weight"] <= 0.0001 and g["realized"] == 0.0:
+            continue
+        spot = _spot_price_per_unit(g_type, ref_gold_bar, ref_gold_jewelry)
+        market_val = g["weight"] * spot
+        cost_val = g["weight"] * g["avg_cost"]
+        unrealized = market_val - cost_val
+        rows.append({
+            "ประเภท": g_type, "หมายเหตุ": note, "น้ำหนักคงเหลือ": g["weight"], "หน่วย": g["unit"],
+            "ต้นทุนเฉลี่ย/หน่วย": g["avg_cost"], "มูลค่าตลาด": market_val,
+            "กำไร/ขาดทุน (ยังไม่ขาย)": unrealized, "กำไร/ขาดทุน (รับรู้แล้ว)": g["realized"],
+        })
+        total_market += market_val
+        total_cost += cost_val
+        total_unrealized += unrealized
+        total_realized += g["realized"]
+
+    return {
+        "holdings_df": pd.DataFrame(rows),
+        "total_market_value": total_market,
+        "total_cost_value": total_cost,
+        "total_unrealized_pl": total_unrealized,
+        "total_realized_pl": total_realized,
+    }
+
+
+def _render_physical_tab(physical_df, ref_gold_bar, ref_gold_jewelry, summary):
+    st.subheader("🪙 ทองคำแท่ง/ทองรูปพรรณ (ถือครองจริง)")
+    st.caption("บันทึกทุกครั้งที่ซื้อ/ขายทองจริง ระบบคำนวณต้นทุนเฉลี่ยแบบถ่วงน้ำหนักให้อัตโนมัติ "
+               "(ราคาต่อหน่วยกรอกได้เอง เผื่อบันทึกย้อนหลังหรือซื้อคนละราคากับตลาดวันนี้)")
+
+    with st.form("gold_physical_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            g_date = st.date_input("วันที่ทำรายการ", key="gp_date")
+            g_type = st.selectbox("ประเภททอง", ["ทองคำแท่ง", "ทองรูปพรรณ"], key="gp_type")
+            action = st.selectbox("รายการ", ["ซื้อ", "ขาย"], key="gp_action")
+        with c2:
+            is_bar = g_type == "ทองคำแท่ง"
+            unit_label = "น้ำหนัก (กรัม)" if is_bar else "น้ำหนัก (บาททองคำ)"
+            weight = st.number_input(unit_label, min_value=0.0, step=(1.0 if is_bar else 0.25), key="gp_weight")
+            default_price = _spot_price_per_unit(g_type, ref_gold_bar, ref_gold_jewelry)
+            price = st.number_input(
+                f"ราคาต่อหน่วย ({'บาท/กรัม' if is_bar else 'บาท/บาททองคำ'})",
+                min_value=0.0, value=round(default_price, 2), step=1.0, key="gp_price",
+                help="ค่าเริ่มต้นคือราคาตลาดสดวันนี้ แก้ไขได้ถ้าซื้อ/ขายไปคนละราคา หรือบันทึกย้อนหลัง",
+            )
+        with c3:
+            note = st.text_input("หมายเหตุ / ร้าน", placeholder="เช่น ฮั่วเซ่งเฮง", key="gp_note")
+            st.metric("มูลค่ารวมโดยประมาณ", f"{weight * price:,.2f} ฿")
+
+        if st.form_submit_button("➕ บันทึกรายการ"):
+            if weight <= 0:
+                st.error("กรุณากรอกน้ำหนักมากกว่า 0")
+            else:
+                unit = "กรัม" if g_type == "ทองคำแท่ง" else "บาททองคำ"
+                new_row = [
+                    f"GP-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}", str(g_date), g_type, action,
+                    weight, unit, price, weight * price, note,
+                ]
+                if _append_rows("Gold_Physical", GOLD_PHYSICAL_COLS, [new_row]):
+                    st.toast("บันทึกรายการทองจริงเรียบร้อย!", icon="✅")
+                    st.rerun()
+
+    st.divider()
+    st.subheader("📊 สรุปการถือครองปัจจุบัน (แยกตามประเภท+หมายเหตุ)")
+    holdings_df = summary["holdings_df"]
+    if not holdings_df.empty:
+        st.dataframe(
+            holdings_df.style.format({
+                "น้ำหนักคงเหลือ": "{:,.2f}", "ต้นทุนเฉลี่ย/หน่วย": "{:,.2f}", "มูลค่าตลาด": "{:,.2f}",
+                "กำไร/ขาดทุน (ยังไม่ขาย)": "{:+,.2f}", "กำไร/ขาดทุน (รับรู้แล้ว)": "{:+,.2f}",
+            }),
+            use_container_width=True, hide_index=True,
+        )
+    else:
+        st.info("ยังไม่มีรายการถือครองทองจริง")
+
+    c1, c2, c3 = st.columns(3)
+    render_metric_card(c1, "มูลค่าตลาดรวม", f"{summary['total_market_value']:,.2f} ฿", icon="💰")
+    render_metric_card(c2, "กำไร/ขาดทุนที่ยังไม่ขาย", f"{summary['total_unrealized_pl']:,.2f} ฿", icon="📈",
+                        delta_positive=(summary['total_unrealized_pl'] >= 0))
+    render_metric_card(c3, "กำไร/ขาดทุนที่รับรู้แล้ว", f"{summary['total_realized_pl']:,.2f} ฿", icon="✅",
+                        delta_positive=(summary['total_realized_pl'] >= 0))
+
+    st.divider()
+    st.write("ประวัติรายการทั้งหมด:")
+    st.dataframe(physical_df, use_container_width=True, hide_index=True)
+
+
+# =============================================================
+# ส่วนที่ 4: 📈 เทรด Short/Long — เปิด/ปิดสถานะแบบเดียวกับ TFEX
+# =============================================================
+GOLD_TRADES_COLS = ["Trade_ID", "Date_Open", "Date_Close", "Instrument", "Unit", "Status", "Size",
+                     "Open_Price", "Close_Price", "Realized", "Comm", "Net_Profit", "Win_Lose", "Reason"]
+
+
+def calculate_gold_trade_result(entry, close, size, comm, status):
+    """กำไร/ขาดทุนทองคำคำนวณตรงๆ จากส่วนต่างราคา x ขนาด (ต่างจาก TFEX ที่มี multiplier 200 บาท/จุด
+    เพราะราคาทองคำที่กรอกเป็นราคาต่อหน่วยเป็นบาทอยู่แล้ว ไม่มีหน่วยจุดแบบสัญญา TFEX)"""
+    diff = (close - entry) if status == "Long" else (entry - close)
+    realized = diff * size
+    net_profit = realized - comm
+    win_lose = "Win" if net_profit > 0 else "Lose"
+    return {"Realized": round(realized, 2), "Net_Profit": round(net_profit, 2), "Win_Lose": win_lose}
+
+
+def _update_gold_trade_close(trade_id, close_price, close_date, calc):
+    try:
+        sheet = _get_or_create_worksheet("Gold_Trades", GOLD_TRADES_COLS)
+        records = sheet.get_all_records()
+        df = pd.DataFrame(records)
+        if "Trade_ID" not in df.columns:
+            st.error("ไม่พบข้อมูลในตาราง Gold_Trades")
+            return False
+        idx_list = df.index[df["Trade_ID"] == trade_id].tolist()
+        if not idx_list:
+            st.error("ไม่พบ Trade_ID นี้")
+            return False
+        row_index = idx_list[0] + 2
+        trade_row = df.loc[idx_list[0]]
+
+        # C:M = Date_Close, Instrument, Unit, Status, Size, Open_Price, Close_Price, Realized, Comm, Net_Profit, Win_Lose
+        # (ไม่แตะคอลัมน์ N "Reason" เพื่อไม่ให้ทับข้อความเหตุผลเดิมที่กรอกไว้ตอนเปิดสถานะ)
+        data_to_update = [
+            str(close_date), str(trade_row.get("Instrument", "")), str(trade_row.get("Unit", "")),
+            str(trade_row.get("Status", "")), float(trade_row.get("Size", 0)), float(trade_row.get("Open_Price", 0)),
+            float(close_price), float(calc["Realized"]), float(trade_row.get("Comm", 0)),
+            float(calc["Net_Profit"]), str(calc["Win_Lose"]),
+        ]
+        sheet.update(range_name=f"C{row_index}:M{row_index}", values=[data_to_update])
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"⚠️ ปิดสถานะไม่สำเร็จ: {e}")
+        return False
+
+
+def _compute_trades_summary(trades_df):
+    if trades_df.empty:
+        return {"open_positions": pd.DataFrame(), "closed_trades": pd.DataFrame(),
+                "total_realized": 0.0, "win_rate": 0.0}
+
+    df = trades_df.copy()
+    df["Close_Price_Cleaned"] = pd.to_numeric(df.get("Close_Price", 0), errors="coerce").fillna(0.0)
+    open_positions = df[df["Close_Price_Cleaned"] == 0].copy()
+    closed_trades = df[df["Close_Price_Cleaned"] > 0].copy()
+
+    total_realized = 0.0
+    if "Net_Profit" in closed_trades.columns:
+        total_realized = float(pd.to_numeric(closed_trades["Net_Profit"], errors="coerce").fillna(0).sum())
+
+    win_count = 0
+    if "Win_Lose" in closed_trades.columns:
+        win_count = int((closed_trades["Win_Lose"] == "Win").sum())
+    win_rate = (win_count / len(closed_trades) * 100) if len(closed_trades) > 0 else 0.0
+
+    return {"open_positions": open_positions, "closed_trades": closed_trades,
+            "total_realized": total_realized, "win_rate": win_rate}
+
+
+def _render_trade_tab(trades_df, summary):
+    st.subheader("📈 เทรด Short / Long (ทองคำ Spot / CFD / ฟิวเจอร์ส)")
+
+    sub_open, sub_close = st.tabs(["➕ เปิดสถานะใหม่", "🏁 ปิดสถานะ"])
+
+    with sub_open:
+        st.markdown("##### 🛡 คำนวณขนาดสถานะจากความเสี่ยง (ไม่บังคับ ใช้เป็นตัวช่วยตัดสินใจ)")
+        c1, c2, c3 = st.columns(3)
+        risk_pct = c1.slider("ความเสี่ยงที่ยอมรับ (% ของพอร์ตทอง)", 0.0, 5.0, 1.0, 0.25, key="gt_risk_pct")
+        entry_preview = c2.number_input("ราคาเข้าโดยประมาณ", min_value=0.0, value=40000.0, step=100.0, key="gt_entry_preview")
+        sl_preview = c3.number_input("ราคา Stop Loss โดยประมาณ", min_value=0.0, value=39500.0, step=100.0, key="gt_sl_preview")
+
+        portfolio_ref = st.session_state.get('gold_net_worth', 0.0)
+        risk_amount = portfolio_ref * (risk_pct / 100.0)
+        sl_distance = abs(entry_preview - sl_preview)
+        max_size = (risk_amount / sl_distance) if sl_distance > 0 else 0
+        st.caption(f"ยอมขาดทุนได้ {risk_amount:,.2f} ฿ ({risk_pct}% ของมูลค่าพอร์ตทองรวม {portfolio_ref:,.2f} ฿) "
+                   f"ที่ระยะ SL {sl_distance:,.2f} บาท/หน่วย → เปิดได้ไม่เกิน **{max_size:,.2f} หน่วย**")
+
+        st.divider()
+
+        with st.form("gold_trade_open_form", clear_on_submit=True):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                date_open = st.date_input("วันที่เปิด")
+                instrument = st.text_input("สินค้า", value="Gold Spot", help="เช่น XAUUSD, Gold Spot, GF (ฟิวเจอร์สทองคำ)")
+                unit = st.selectbox("หน่วย", ["บาททองคำ", "ออนซ์ (oz)", "กรัม", "สัญญา"])
+            with c2:
+                status_dir = st.selectbox("ทิศทาง", ["Long", "Short"])
+                entry = st.number_input("ราคาเปิด (บาท/หน่วย)", min_value=0.0, step=10.0, value=40000.0)
+                size = st.number_input("ขนาด (จำนวนหน่วย)", min_value=0.0, step=0.1, value=1.0)
+            with c3:
+                comm = st.number_input("ค่าคอมมิชชัน/ค่าธรรมเนียม (บาท)", min_value=0.0, step=10.0, value=0.0)
+                reason = st.text_area("เหตุผลที่เข้าเทรด")
+
+            if st.form_submit_button("เปิดสถานะเทรด"):
+                trade_id = f"GT-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}"
+                new_row = [
+                    trade_id, str(date_open), "", instrument, unit, status_dir, size,
+                    entry, 0, 0, comm, 0, "", reason,
+                ]
+                if _append_rows("Gold_Trades", GOLD_TRADES_COLS, [new_row]):
+                    st.toast("เปิดสถานะเทรดทองเรียบร้อย!", icon="✅")
+                    st.rerun()
+
+    with sub_close:
+        open_positions = summary["open_positions"]
+        if open_positions.empty or "Trade_ID" not in open_positions.columns:
+            st.info("ไม่มีสถานะที่ถือครองอยู่ในปัจจุบัน")
+        else:
+            selected_id = st.selectbox("เลือก Trade ที่จะปิด", open_positions["Trade_ID"].tolist())
+            detail = open_positions[open_positions["Trade_ID"] == selected_id].iloc[0]
+            st.info(f"🔍 {detail.get('Instrument', '')} | {detail.get('Status', '')} | ขนาด {detail.get('Size', '')} "
+                    f"{detail.get('Unit', '')} | ราคาเปิด {detail.get('Open_Price', '')}")
+
+            default_open = pd.to_numeric(detail.get("Open_Price", 0), errors="coerce")
+            default_open = float(default_open) if pd.notna(default_open) else 0.0
+
+            with st.form("gold_trade_close_form"):
+                close_price = st.number_input("ราคาปิด", value=default_open, step=10.0, format="%.2f")
+                close_date = st.date_input("วันที่ปิด")
+                if st.form_submit_button("ยืนยันปิดสถานะ", type="primary", use_container_width=True):
+                    size_val = float(pd.to_numeric(detail.get("Size", 0), errors="coerce") or 0.0)
+                    comm_val = float(pd.to_numeric(detail.get("Comm", 0), errors="coerce") or 0.0)
+                    calc = calculate_gold_trade_result(default_open, float(close_price), size_val,
+                                                        comm_val, str(detail.get("Status", "Long")))
+                    with st.spinner("⏳ กำลังบันทึกการปิดสถานะ..."):
+                        if _update_gold_trade_close(selected_id, close_price, str(close_date), calc):
+                            st.toast("ปิดสถานะเรียบร้อย! 🏆", icon="🏆")
+                            st.rerun()
+
+    st.divider()
+    st.write("ประวัติการเทรดทั้งหมด:")
+    st.dataframe(trades_df, use_container_width=True, hide_index=True)
+
+
+# =============================================================
+# ส่วนที่ 5: 🐷 ซื้อสะสม (DCA) — บันทึกซื้อสะสมเป็นงวดๆ เทียบต้นทุนเฉลี่ยกับราคาตลาด
+# =============================================================
+GOLD_DCA_COLS = ["DCA_ID", "Date", "Amount_Invested", "Price_Per_Unit", "Weight_Bought", "Note"]
+
+
+def _compute_dca_summary(dca_df, ref_gold_bar):
+    if dca_df.empty:
+        return {"total_invested": 0.0, "total_weight": 0.0, "avg_cost": 0.0,
+                "market_value": 0.0, "unrealized_pl": 0.0, "history_df": pd.DataFrame()}
+
+    df = dca_df.copy()
+    df["Amount_Invested"] = pd.to_numeric(df.get("Amount_Invested", 0), errors="coerce").fillna(0.0)
+    df["Price_Per_Unit"] = pd.to_numeric(df.get("Price_Per_Unit", 0), errors="coerce").fillna(0.0)
+    df["Weight_Bought"] = pd.to_numeric(df.get("Weight_Bought", 0), errors="coerce").fillna(0.0)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.sort_values("Date")
+    df["Cum_Invested"] = df["Amount_Invested"].cumsum()
+    df["Cum_Weight"] = df["Weight_Bought"].cumsum()
+    df["Avg_Cost"] = df["Cum_Invested"] / df["Cum_Weight"].replace(0, pd.NA)
+
+    total_invested = float(df["Amount_Invested"].sum())
+    total_weight = float(df["Weight_Bought"].sum())
+    avg_cost = (total_invested / total_weight) if total_weight > 0 else 0.0
+    market_value = total_weight * ref_gold_bar
+    unrealized = market_value - total_invested
+
+    return {"total_invested": total_invested, "total_weight": total_weight, "avg_cost": avg_cost,
+            "market_value": market_value, "unrealized_pl": unrealized, "history_df": df}
+
+
+def _render_dca_tab(dca_df, ref_gold_bar, summary):
+    st.subheader("🐷 ซื้อสะสม (DCA) — ทองคำออมทรัพย์ / กองทุนทอง")
+    st.caption("บันทึกการซื้อสะสมเป็นงวดๆ หน่วยเป็น 'บาททองคำ' เสมอ (ให้เทียบต้นทุนเฉลี่ยข้ามงวดกันได้) "
+               "ระบบคำนวณต้นทุนเฉลี่ยแบบถัวเฉลี่ยต้นทุน (DCA) ให้อัตโนมัติ")
+
+    with st.form("gold_dca_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            d_date = st.date_input("วันที่ซื้อ", key="dca_date")
+        with c2:
+            amount = st.number_input("จำนวนเงินที่ซื้อ (บาท)", min_value=0.0, step=500.0, value=1000.0, key="dca_amount")
+            price = st.number_input("ราคาทองคำ ณ วันนั้น (บาท/บาททองคำ)", min_value=0.0,
+                                     value=round(ref_gold_bar, 2), step=10.0, key="dca_price")
+        with c3:
+            note = st.text_input("หมายเหตุ / แพลตฟอร์ม", placeholder="เช่น GSB Gold, กองทุน T-GOLD", key="dca_note")
+            weight_preview = (amount / price) if price > 0 else 0.0
+            st.metric("น้ำหนักที่ได้โดยประมาณ", f"{weight_preview:.4f} บาททองคำ")
+
+        if st.form_submit_button("➕ บันทึกการซื้อสะสม"):
+            if amount <= 0 or price <= 0:
+                st.error("กรุณากรอกจำนวนเงินและราคาให้มากกว่า 0")
+            else:
+                new_row = [
+                    f"DCA-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}", str(d_date),
+                    amount, price, amount / price, note,
+                ]
+                if _append_rows("Gold_DCA", GOLD_DCA_COLS, [new_row]):
+                    st.toast("บันทึกการซื้อสะสมเรียบร้อย!", icon="✅")
+                    st.rerun()
+
+    st.divider()
+    c1, c2, c3 = st.columns(3)
+    render_metric_card(c1, "น้ำหนักสะสมรวม", f"{summary['total_weight']:.4f} บาททองคำ", icon="⚖️")
+    render_metric_card(c2, "ต้นทุนเฉลี่ย (DCA)", f"{summary['avg_cost']:,.2f} ฿/บาททอง", icon="📐")
+    unrealized_pct = (summary['unrealized_pl'] / summary['total_invested'] * 100) if summary['total_invested'] > 0 else 0.0
+    render_metric_card(c3, "กำไร/ขาดทุน (Mark-to-Market)", f"{summary['unrealized_pl']:,.2f} ฿", icon="📈",
+                        delta=f"{unrealized_pct:+.2f}%", delta_positive=(summary['unrealized_pl'] >= 0))
+
+    history_df = summary["history_df"]
+    if not history_df.empty:
+        st.divider()
+        st.subheader("📈 ต้นทุนเฉลี่ยสะสมเทียบกับราคาตลาด ณ แต่ละงวด")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=history_df["Date"], y=history_df["Price_Per_Unit"], mode="lines+markers",
+                                  name="ราคาตลาด ณ วันซื้อ", line=dict(color="#FFA500")))
+        fig.add_trace(go.Scatter(x=history_df["Date"], y=history_df["Avg_Cost"], mode="lines+markers",
+                                  name="ต้นทุนเฉลี่ยสะสม (DCA)", line=dict(color="#26A69A")))
+        fig.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20), hovermode="x unified",
+                           yaxis_title="บาท/บาททองคำ")
+        st.plotly_chart(style_plotly(fig), use_container_width=True)
+
+    st.divider()
+    st.write("ประวัติการซื้อสะสมทั้งหมด:")
+    st.dataframe(dca_df, use_container_width=True, hide_index=True)
+
+
+# =============================================================
+# ส่วนที่ 6: 📊 Dashboard — ภาพรวมทุกประเภท
+# =============================================================
+def _render_dashboard_tab(physical_summary, trades_summary, dca_summary):
+    # มูลค่าพอร์ตรวมนับเฉพาะทองที่ถือ mark-to-market ได้จริง (ถือจริง + DCA) ส่วนสถานะเทรด
+    # Short/Long ที่เปิดอยู่ยังไม่นับรวมตรงนี้ เพราะเป็นสัญญา/margin ไม่ใช่การถือทองจริง และยังไม่ realize
+    total_value = physical_summary["total_market_value"] + dca_summary["market_value"]
+    total_pl = (physical_summary["total_unrealized_pl"] + physical_summary["total_realized_pl"]
+                + dca_summary["unrealized_pl"] + trades_summary["total_realized"])
+
+    # แชร์มูลค่าพอร์ตทองไปให้แท็บ "เทรด Short/Long" ใช้คำนวณขนาดสถานะจากความเสี่ยง
+    # และให้หน้าภาพรวม Net Worth ดึงไปใช้ได้เหมือนที่ TFEX/Fund ทำไว้
+    st.session_state['gold_net_worth'] = total_value
+
+    c1, c2, c3 = st.columns(3)
+    render_metric_card(c1, "มูลค่าพอร์ตทองรวม (ถือจริง + DCA)", f"{total_value:,.2f} ฿", icon="💰")
+    render_metric_card(c2, "กำไร/ขาดทุนรวมทุกประเภท", f"{total_pl:,.2f} ฿", icon="💹",
+                        delta_positive=(total_pl >= 0))
+    render_metric_card(c3, "กำไรจากเทรด Short/Long (รับรู้แล้ว)", f"{trades_summary['total_realized']:,.2f} ฿",
+                        icon="📈", delta=f"Win rate {trades_summary['win_rate']:.1f}%",
+                        delta_positive=(trades_summary['total_realized'] >= 0))
+
+    st.divider()
+    st.subheader("🥧 สัดส่วนมูลค่าพอร์ตทองคำ")
+    pie_labels, pie_values = [], []
+    if physical_summary["total_market_value"] > 0:
+        pie_labels.append("ทองคำแท่ง/รูปพรรณ (ถือจริง)")
+        pie_values.append(physical_summary["total_market_value"])
+    if dca_summary["market_value"] > 0:
+        pie_labels.append("ซื้อสะสม (DCA)")
+        pie_values.append(dca_summary["market_value"])
+    if pie_values:
+        fig_pie = go.Figure(go.Pie(labels=pie_labels, values=pie_values, hole=0.5))
+        fig_pie.update_layout(height=300, margin=dict(l=20, r=20, t=20, b=20))
+        st.plotly_chart(style_plotly(fig_pie), use_container_width=True)
+    else:
+        st.info("ยังไม่มีข้อมูลพอร์ตทองคำให้แสดงสัดส่วน")
+
+    st.divider()
+    st.subheader("📈 กำไรสะสมจากเทรด Short/Long")
+    closed = trades_summary["closed_trades"]
+    if not closed.empty and "Date_Close" in closed.columns and "Net_Profit" in closed.columns:
+        closed = closed.copy()
+        closed["Date_Close"] = pd.to_datetime(closed["Date_Close"], errors="coerce")
+        closed = closed.dropna(subset=["Date_Close"]).sort_values("Date_Close")
+        closed["Cumulative"] = pd.to_numeric(closed["Net_Profit"], errors="coerce").fillna(0).cumsum()
+        fig_growth = px.line(closed, x="Date_Close", y="Cumulative", markers=True)
+        fig_growth.update_traces(line=dict(color="#26A69A", width=3))
+        fig_growth.update_layout(height=300, margin=dict(l=20, r=20, t=20, b=20), yaxis_title="กำไรสะสม (บาท)")
+        st.plotly_chart(style_plotly(fig_growth), use_container_width=True)
+    else:
+        st.info("ยังไม่มีการปิดสถานะเทรดทองที่จะแสดงกราฟกำไรสะสม")
+
+    st.divider()
+    st.subheader("📋 สถานะเทรดที่เปิดอยู่")
+    open_pos = trades_summary["open_positions"]
+    if not open_pos.empty:
+        cols_show = [c for c in ["Trade_ID", "Date_Open", "Instrument", "Status", "Size", "Unit", "Open_Price"]
+                     if c in open_pos.columns]
+        st.dataframe(open_pos[cols_show], use_container_width=True, hide_index=True)
+    else:
+        st.info("ไม่มีสถานะเทรดทองที่เปิดอยู่ในปัจจุบัน")
+
+
+# =============================================================
+# ส่วนที่ 7: จุดเข้าใช้งานหลักของแท็บ
+# =============================================================
+def render_tab_gold(client):
+    st.markdown("### 🟡 จัดการพอร์ตการลงทุนทองคำ")
+    st.caption("แยกเป็น 3 รูปแบบการลงทุนทองคำ: ถือครองจริง / เทรด Short-Long / ซื้อสะสม (DCA) "
+               "ดู Dashboard สำหรับภาพรวมทั้งหมด")
+
+    ref_gold_bar, ref_gold_jewelry = _render_gold_price_ticker()
     st.markdown("---")
 
-    # 🔄 โหลดข้อมูลจาก Google Sheets และคำนวณพอร์ตทองคำต่อ
-    if 'gold_portfolio' not in st.session_state:
-        st.session_state['gold_portfolio'] = []
-        try:
-            sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
-            if sheet_gold is not None:
-                records = sheet_gold.get_all_records()
-                # 🆕 เก็บวันที่บันทึกล่าสุดไว้แสดงเป็น badge บนการ์ดสรุปมูลค่าตลาดพอร์ตทองด้านล่าง
-                _gold_dates = [str(r.get("วันที่บันทึก")) for r in records if r.get("วันที่บันทึก")]
-                st.session_state['gold_last_updated'] = max(_gold_dates) if _gold_dates else None
-                for row in records:
-                    g_type = str(row.get("ประเภท", "")).strip()
-                    if g_type != "":
-                        raw_weight = row.get("น้ำหนัก/มูลค่าซื้อ", row.get("น้ำหนัก", 0))
-                        val_weight = float(str(raw_weight).replace(',', '')) if raw_weight else 0.0
-                        unit_str = str(row.get("หน่วย", ""))
-                        cost_avg = float(str(row.get("ราคาต้นทุนเฉลี่ย", 0)).replace(',', '')) if row.get("ราคาต้นทุนเฉลี่ย") else 0.0
-                        cost_val = float(str(row.get("มูลค่าตั้งต้น", 0)).replace(',', '')) if row.get("มูลค่าตั้งต้น") else 0.0
-                        market_price = float(str(row.get("ราคาตลาดปัจจุบัน", 0)).replace(',', '')) if row.get("ราคาตลาดปัจจุบัน") else 0.0
-                        market_val = float(str(row.get("มูลค่าตลาด", 0)).replace(',', '')) if row.get("มูลค่าตลาด") else 0.0
-                        note_str = str(row.get("หมายเหตุ", ""))
+    physical_df = load_data("Gold_Physical", get_active_sheet_name())
+    trades_df = load_data("Gold_Trades", get_active_sheet_name())
+    dca_df = load_data("Gold_DCA", get_active_sheet_name())
 
-                        if g_type == "ทองคำแท่ง":
-                            if market_price == 0: market_price = ref_gold_bar
-                            if market_val == 0 and val_weight > 0: market_val = (val_weight / 15.244) * ref_gold_bar
-                            if cost_val == 0: cost_val = market_val  
-                            if cost_avg == 0: cost_avg = ref_gold_bar
+    physical_summary = _compute_physical_summary(physical_df, ref_gold_bar, ref_gold_jewelry)
+    trades_summary = _compute_trades_summary(trades_df)
+    dca_summary = _compute_dca_summary(dca_df, ref_gold_bar)
 
-                        elif g_type == "ทองรูปพรรณ":
-                            if market_price == 0: market_price = ref_gold_jewelry
-                            if market_val == 0 and val_weight > 0: market_val = val_weight * ref_gold_jewelry
-                            if cost_val == 0: cost_val = market_val
-                            if cost_avg == 0: cost_avg = ref_gold_jewelry
+    sub_dash, sub_physical, sub_trade, sub_dca = st.tabs([
+        "📊 Dashboard", "🪙 ทองคำแท่ง/รูปพรรณ", "📈 เทรด Short/Long", "🐷 ซื้อสะสม (DCA)",
+    ])
 
-                        else:  
-                            if cost_val == 0: cost_val = val_weight
-                            if market_val == 0: market_val = cost_val
-                            if market_price == 0: market_price = market_val
-
-                        st.session_state['gold_portfolio'].append({
-                            "ประเภท": g_type,
-                            "น้ำหนัก/มูลค่าซื้อ": val_weight,
-                            "หน่วย": unit_str,
-                            "ราคาต้นทุนเฉลี่ย": cost_avg,
-                            "มูลค่าตั้งต้น": cost_val,
-                            "ราคาตลาดปัจจุบัน": market_price,
-                            "มูลค่าตลาด": market_val,
-                            "หมายเหตุ": note_str
-                        })
-        except Exception as e:
-            st.error(f"⚠️ โหลดข้อมูลพอร์ตทองคำไม่สำเร็จ: {e}")
-
-    st.markdown("#### 📝 บันทึกข้อมูลการถือครองทองคำ")
-
-    gold_type = st.selectbox(
-        "ประเภททองคำ / การลงทุน", 
-        ["ทองคำแท่ง", "ทองรูปพรรณ", "เทรดทอง / กองทุนทอง"],
-        key="form_gold_type_select"
-    )
-
-    with st.form("gold_investment_form"):
-        col_f1, col_f2 = st.columns(2)
-
-        with col_f1:
-            if gold_type == "ทองคำแท่ง":
-                weight_input = st.number_input("น้ำหนัก (กรัม)", min_value=0.0, step=1.0, value=0.0, key="weight_gram")
-            elif gold_type == "ทองรูปพรรณ":
-                weight_input = st.number_input("น้ำหนัก (บาททองคำ)", min_value=0.0, step=0.25, value=1.0, key="weight_baht")
-            else:
-                weight_input = st.number_input("👉 มูลค่าเงินทุนที่ซื้อเพิ่ม (บาท):", min_value=0.0, step=1000.0, value=0.0, help="หากซื้อเพิ่ม ให้กรอกจำนวนเงินที่ซื้อเพิ่ม ระบบจะนำไปบวกทบเข้ากับต้นทุนเดิมให้อัตโนมัติ", key="trade_cap_input")
-                market_val_input = st.number_input("👉 มูลค่าตลาดปัจจุบัน (บาท) [อัปเดตรายเดือน]:", min_value=0.0, step=1000.0, value=0.0, help="กรอกมูลค่าตลาดล่าสุดจากการประเมินประจำเดือน", key="trade_market_input")
-
-        with col_f2:
-            note_input = st.text_input("หมายเหตุ / ชื่อกองทุน / สาขา", placeholder="เช่น กองทุนทองคำ T-GOLD, ฮั่วเซ่งเฮง", key="gold_note")
-
-        submitted = st.form_submit_button("➕ บันทึก / เพิ่มรายการเข้าพอร์ต")
-
-        if submitted:
-            if 'gold_portfolio' not in st.session_state:
-                st.session_state['gold_portfolio'] = []
-
-            if gold_type != "เทรดทอง / กองทุนทอง" and weight_input > 0:
-                if gold_type == "ทองคำแท่ง":
-                    unit_name = "กรัม"
-                    p_unit = ref_gold_bar
-                    init_m_val = (weight_input / 15.244) * ref_gold_bar
-                    cost_val = init_m_val 
-                else:
-                    unit_name = "บาททองคำ"
-                    p_unit = ref_gold_jewelry
-                    init_m_val = weight_input * ref_gold_jewelry
-                    cost_val = init_m_val
-
-                found = False
-                for item in st.session_state['gold_portfolio']:
-                    if item["ประเภท"] == gold_type and item["หมายเหตุ"] == note_input:
-                        item["น้ำหนัก/มูลค่าซื้อ"] += weight_input
-                        if gold_type == "ทองคำแท่ง":
-                            item["มูลค่าตั้งต้น"] = (item["น้ำหนัก/มูลค่าซื้อ"] / 15.244) * ref_gold_bar
-                            item["มูลค่าตลาด"] = item["มูลค่าตั้งต้น"]
-                        else:
-                            item["มูลค่าตั้งต้น"] = item["น้ำหนัก/มูลค่าซื้อ"] * ref_gold_jewelry
-                            item["มูลค่าตลาด"] = item["มูลค่าตั้งต้น"]
-                        found = True
-                        break
-
-                if not found:
-                    st.session_state['gold_portfolio'].append({
-                        "ประเภท": gold_type,
-                        "น้ำหนัก/มูลค่าซื้อ": weight_input,
-                        "หน่วย": unit_name,
-                        "ราคาต้นทุนเฉลี่ย": p_unit,
-                        "มูลค่าตั้งต้น": init_m_val,
-                        "ราคาตลาดปัจจุบัน": p_unit,
-                        "มูลค่าตลาด": init_m_val,
-                        "หมายเหตุ": note_input
-                    })
-
-                # บันทึกลง Google Sheets
-                try:
-                    sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
-                    if sheet_gold is not None:
-                        sheet_gold.clear()
-                        sheet_gold.append_row(["ประเภท", "น้ำหนัก/มูลค่าซื้อ", "หน่วย", "ราคาต้นทุนเฉลี่ย", "มูลค่าตั้งต้น", "ราคาตลาดปัจจุบัน", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
-                        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        rows_to_append = []
-                        for item in st.session_state['gold_portfolio']:
-                            rows_to_append.append([
-                                item["ประเภท"],
-                                item["น้ำหนัก/มูลค่าซื้อ"],
-                                item["หน่วย"],
-                                item["ราคาต้นทุนเฉลี่ย"],
-                                item["มูลค่าตั้งต้น"],
-                                item["ราคาตลาดปัจจุบัน"],
-                                item["มูลค่าตลาด"],
-                                item["หมายเหตุ"],
-                                current_date
-                            ])
-                        sheet_gold.append_rows(rows_to_append)
-                        st.session_state['gold_last_updated'] = current_date
-                except Exception as e:
-                    st.error(f"⚠️ บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
-
-                st.success(f"บันทึกข้อมูล {gold_type} สำเร็จ!")
-                st.rerun()
-
-            elif gold_type == "เทรดทอง / กองทุนทอง":
-                if weight_input > 0 or market_val_input > 0:
-                    found = False
-                    for item in st.session_state['gold_portfolio']:
-                        if item["ประเภท"] == gold_type and item["หมายเหตุ"] == note_input:
-                            item["น้ำหนัก/มูลค่าซื้อ"] += weight_input
-                            item["มูลค่าตั้งต้น"] += weight_input
-                            if market_val_input > 0:
-                                item["มูลค่าตลาด"] = market_val_input
-                            found = True
-                            break
-
-                    if not found:
-                        m_final = market_val_input if market_val_input > 0 else weight_input
-                        st.session_state['gold_portfolio'].append({
-                            "ประเภท": gold_type,
-                            "น้ำหนัก/มูลค่าซื้อ": weight_input,
-                            "หน่วย": "บาท (THB)",
-                            "ราคาต้นทุนเฉลี่ย": 1.0,
-                            "มูลค่าตั้งต้น": weight_input,
-                            "ราคาตลาดปัจจุบัน": m_final,
-                            "มูลค่าตลาด": m_final,
-                            "หมายเหตุ": note_input if note_input else "เทรดทองทั่วไป"
-                        })
-
-                        try:
-                            sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
-                            if sheet_gold is not None:
-                                sheet_gold.clear()
-                                sheet_gold.append_row(["ประเภท", "น้ำหนัก/มูลค่าซื้อ", "หน่วย", "ราคาต้นทุนเฉลี่ย", "มูลค่าตั้งต้น", "ราคาตลาดปัจจุบัน", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
-                                current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                rows_to_append = []
-                                for item in st.session_state['gold_portfolio']:
-                                    rows_to_append.append([
-                                        item["ประเภท"],
-                                        item["น้ำหนัก/มูลค่าซื้อ"],
-                                        item["หน่วย"],
-                                        item["ราคาต้นทุนเฉลี่ย"],
-                                        item["มูลค่าตั้งต้น"],
-                                        item["ราคาตลาดปัจจุบัน"],
-                                        item["มูลค่าตลาด"],
-                                        item["หมายเหตุ"],
-                                        current_date
-                                    ])
-                                sheet_gold.append_rows(rows_to_append)
-                                st.session_state['gold_last_updated'] = current_date
-                        except Exception as e:
-                            st.error(f"⚠️ บันทึกลง Google Sheets ไม่สำเร็จ: {e}")
-
-                        st.success(f"บันทึกข้อมูลการเทรดทอง/กองทุนทองสำเร็จ!")
-                        st.rerun()
-                else:
-                    st.error("กรุณากรอกข้อมูลให้มากกว่า 0")
-
-    if 'gold_portfolio' in st.session_state and len(st.session_state['gold_portfolio']) > 0:
-        st.markdown("#### 📊 สรุปมูลค่าพอร์ตการลงทุนทองคำทั้งหมด")
-
-        df_gold = pd.DataFrame(st.session_state['gold_portfolio'])
-
-        calculated_cost = []
-        calculated_market = []
-        profit_losses = []
-        profit_loss_pcts = []
-
-        for idx, row in df_gold.iterrows():
-            g_type = row.get("ประเภท", "")
-            weight_val = row.get("น้ำหนัก/มูลค่าซื้อ", row.get("น้ำหนัก", 0.0))
-
-            try:
-                weight_val = float(str(weight_val).replace(',', '').strip())
-            except:
-                weight_val = 0.0
-
-            # ดึงต้นทุนตั้งต้นเดิม (ถ้ามี)
-            c_val = row.get("มูลค่าตั้งต้น", 0.0)
-            try:
-                c_val = float(str(c_val).replace(',', '').strip())
-            except:
-                c_val = 0.0
-
-            # ดึงราคาต้นทุนเฉลี่ย (กรณีใช้คำนวณกลับ)
-            cost_avg_val = row.get("ราคาต้นทุนเฉลี่ย", 0.0)
-            try:
-                cost_avg_val = float(str(cost_avg_val).replace(',', '').strip())
-            except:
-                cost_avg_val = 0.0
-
-            # 1. คำนวณ "มูลค่าตลาดปัจจุบัน" ตามเรทราคาอ้างอิงล่าสุด
-            if g_type == "ทองคำแท่ง":
-                market_val = (weight_val / 15.244) * ref_gold_bar
-            elif g_type == "ทองรูปพรรณ":
-                market_val = weight_val * ref_gold_jewelry
-            else:
-                m_val = row.get("มูลค่าตลาด", 0.0)
-                try:
-                    m_val = float(str(m_val).replace(',', '').strip())
-                except:
-                    m_val = 0.0
-                market_val = m_val if m_val > 0 else weight_val
-
-            # 2. กำหนด "มูลค่าตั้งต้น" ให้คงที่ (ไม่เปลี่ยนตามราคาตลาด)
-            if c_val > 0:
-                cost_val = c_val
-            elif cost_avg_val > 0:
-                # คำนวณต้นทุนจากราคาเฉลี่ยต่อบาททอง
-                if g_type == "ทองคำแท่ง":
-                    cost_val = (weight_val / 15.244) * cost_avg_val
-                elif g_type == "ทองรูปพรรณ":
-                    cost_val = weight_val * cost_avg_val
-                else:
-                    cost_val = weight_val
-            else:
-                # ถ้าไม่มีต้นทุนเลยจริงๆ ให้ใช้มูลค่าตลาดตอนนั้นเป็นฐานไว้ครั้งแรกครั้งเดียว
-                cost_val = market_val
-
-            # 3. คำนวณกำไร/ขาดทุน
-            p_l = market_val - cost_val
-            p_l_pct = (p_l / cost_val * 100) if cost_val > 0 else 0.0
-
-            calculated_cost.append(cost_val)
-            calculated_market.append(market_val)
-            profit_losses.append(p_l)
-            profit_loss_pcts.append(p_l_pct)
-
-        df_gold["มูลค่าตั้งต้น"] = calculated_cost
-        df_gold["มูลค่าตลาด"] = calculated_market
-        df_gold["กำไร/ขาดทุน (บาท)"] = profit_losses
-        df_gold["% กำไร/ขาดทุน"] = profit_loss_pcts
-
-        # เพิ่มคอลัมน์สำหรับลบ
-        df_gold.insert(0, "ลบ", False)
-
-        display_columns = ["ลบ", "ประเภท", "น้ำหนัก/มูลค่าซื้อ", "หน่วย", "มูลค่าตั้งต้น", "มูลค่าตลาด", "กำไร/ขาดทุน (บาท)", "% กำไร/ขาดทุน", "หมายเหตุ"]
-        df_display = df_gold[[col for col in display_columns if col in df_gold.columns]]
-
-        edited_df = st.data_editor(
-            df_display,
-            column_config={
-                "ลบ": st.column_config.CheckboxColumn("🗑️ ลบ", help="ติ๊กเพื่อเลือกรายการที่ต้องการลบ", default=False),
-                "น้ำหนัก/มูลค่าซื้อ": st.column_config.NumberColumn("น้ำหนัก/มูลค่าซื้อ", format="%.2f"),
-                "มูลค่าตั้งต้น": st.column_config.NumberColumn(format="%.2f", disabled=True),
-                "มูลค่าตลาด": st.column_config.NumberColumn(format="%.2f", disabled=True),
-                "กำไร/ขาดทุน (บาท)": st.column_config.NumberColumn(format="%.2f", disabled=True),
-                "% กำไร/ขาดทุน": st.column_config.NumberColumn(format="%.2f%%", disabled=True),
-            },
-            disabled=[col for col in df_display.columns if col != "ลบ"],
-            hide_index=True,
-            use_container_width=True
-        )
-
-        st.markdown("---")
-        total_market_value = sum(calculated_market)
-        total_cost_value = sum(calculated_cost)
-        total_pl = sum(profit_losses)
-        total_pl_pct = (total_pl / total_cost_value * 100) if total_cost_value > 0 else 0.0
-
-        st.session_state['total_gold_portfolio_value'] = total_market_value
-
-        # 🔧 ปรับปรุง: เติมเนื้อหาลงใน placeholder ที่จองที่ไว้แล้วตั้งแต่แถวบนสุด (ใต้การ์ด
-        # ราคาทองคำแท่ง/ทองรูปพรรณ) แทนที่จะวาดการ์ดใหม่ตรงนี้ ตำแหน่งที่เห็นจริงบนจอจะอยู่
-        # แถว 2 ต่อจากราคาทองทันที ตามที่ขอ ถึงแม้โค้ดคำนวณจะอยู่ตรงนี้ก็ตาม
-        render_metric_card(
-            gold_summary_placeholder_1, "มูลค่าตลาดพอร์ตทองรวม", f"{total_market_value:,.2f} ฿", icon="💰",
-            updated_date=st.session_state.get('gold_last_updated')
-        )
-        render_metric_card(gold_summary_placeholder_2, "มูลค่าตั้งต้นรวม", f"{total_cost_value:,.2f} ฿", icon="📦")
-        render_metric_card(gold_summary_placeholder_3, "กำไร/ขาดทุนรวม", f"{total_pl:,.2f} ฿", icon="📈",
-                            delta=f"{total_pl_pct:,.2f}%", delta_positive=(total_pl >= 0))
-
-        if st.button("🗑️ ล้างข้อมูลพอร์ตทองคำทั้งหมด"):
-            st.session_state['gold_portfolio'] = []
-            st.session_state['total_gold_portfolio_value'] = 0.0
-            try:
-                sheet_gold = get_worksheet_safely(client, get_active_sheet_name(), 'Gold_Portfolio')
-                if sheet_gold is not None:
-                    sheet_gold.clear()
-                    sheet_gold.append_row(["ประเภท", "น้ำหนัก/มูลค่าซื้อ", "หน่วย", "ราคาต้นทุนเฉลี่ย", "มูลค่าตั้งต้น", "ราคาตลาดปัจจุบัน", "มูลค่าตลาด", "หมายเหตุ", "วันที่บันทึก"])
-            except:
-                pass
-            st.rerun()
-    else:
-        st.info("ยังไม่มีข้อมูลในพอร์ตทองคำ กรุณากรอกฟอร์มด้านบนเพื่อเพิ่มรายการ")
+    with sub_physical:
+        _render_physical_tab(physical_df, ref_gold_bar, ref_gold_jewelry, physical_summary)
+    with sub_trade:
+        _render_trade_tab(trades_df, trades_summary)
+    with sub_dca:
+        _render_dca_tab(dca_df, ref_gold_bar, dca_summary)
+    with sub_dash:
+        _render_dashboard_tab(physical_summary, trades_summary, dca_summary)

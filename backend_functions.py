@@ -2686,23 +2686,34 @@ def compute_live_net_worth(spreadsheet_name):
 
     # --- ทองคำ: ดึงราคาสดจากเว็บสมาคมค้าทองคำ (ใช้ฟังก์ชันกลาง fetch_live_gold_price() ที่แก้
     # ไปแล้ว ดึงจากเว็บ classic แทนเว็บใหม่ที่โหลดราคาผ่าน JavaScript) ---
-    gold_records = get_records_safe('Gold_Portfolio')
+    # 🔧 ปรับปรุง: หลังจัดระเบียบ tab_gold.py ใหม่ (แยกเป็น Dashboard + ถือครองจริง/เทรด Short-Long/
+    # ซื้อสะสม DCA) ข้อมูลทองย้ายจากชีต Gold_Portfolio เดิมไปเก็บคนละชีต (Gold_Physical, Gold_Trades,
+    # Gold_DCA) แล้ว นับเฉพาะทองที่ถือจริง+ซื้อสะสมเข้า Net Worth เหมือนเดิม ไม่นับสถานะเทรด Short/Long
+    # ที่เปิดอยู่ (เป็นสัญญา/margin ไม่ใช่ทองที่ถือครองจริง)
+    physical_records = get_records_safe('Gold_Physical')
+    dca_records = get_records_safe('Gold_DCA')
     _live_bar, _live_jewelry, _ = fetch_live_gold_price()
     ref_gold_bar = _live_bar if _live_bar is not None else 68300.0
     ref_gold_jewelry = _live_jewelry if _live_jewelry is not None else 69100.0
 
-    total_gold_value = 0.0
-    for row in gold_records:
-        g_type = row.get("ประเภท", "")
-        weight_val = safe_float(row.get("น้ำหนัก/มูลค่าซื้อ", row.get("น้ำหนัก", 0.0)))
+    bar_weight_g = 0.0
+    jewelry_weight_baht = 0.0
+    for row in physical_records:
+        g_type = row.get("Gold_Type", "")
+        weight_val = safe_float(row.get("Weight", 0))
+        sign = 1 if row.get("Action") == "ซื้อ" else (-1 if row.get("Action") == "ขาย" else 0)
         if g_type == "ทองคำแท่ง":
-            market_val = (weight_val / 15.244) * ref_gold_bar
+            bar_weight_g += sign * weight_val
         elif g_type == "ทองรูปพรรณ":
-            market_val = weight_val * ref_gold_jewelry
-        else:
-            m_val = safe_float(row.get("มูลค่าตลาด", 0.0))
-            market_val = m_val if m_val > 0 else weight_val
-        total_gold_value += market_val
+            jewelry_weight_baht += sign * weight_val
+
+    dca_weight_baht = sum(safe_float(row.get("Weight_Bought", 0)) for row in dca_records)
+
+    total_gold_value = (
+        (max(bar_weight_g, 0.0) / 15.244) * ref_gold_bar
+        + max(jewelry_weight_baht, 0.0) * ref_gold_jewelry
+        + max(dca_weight_baht, 0.0) * ref_gold_bar
+    )
 
     net_worth_excl_re = (
         total_stock_and_tfex + pvd_value + insurance_value + coop_value + sso_value
