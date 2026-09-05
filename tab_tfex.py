@@ -15,7 +15,7 @@ def render_tab_tfex():
     st.subheader("📝 ระบบเทรด TFEX")
 
     # 1. โหลดข้อมูล
-    tfex_df = load_data("TFEX_History", get_active_sheet_name()) 
+    tfex_df = load_data("TFEX_History", get_active_sheet_name())
     cash_df = load_data("Cash_Flow", get_active_sheet_name())
     # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์กำไร/ขาดทุนให้เป็น 'Net_Profit' ตั้งแต่จุดโหลดข้อมูลเลย
     # (บางบัญชีบันทึกเป็น 'กำไรสุทธิ' แทน) เพื่อให้โค้ดทั้งหมดที่ใช้ tfex_df ต่อจากนี้ทำงานถูกต้อง
@@ -57,116 +57,27 @@ def render_tab_tfex():
     # ⭐️ เพิ่มบรรทัดนี้ เพื่อแชร์ค่าพอร์ต TFEX ไปให้หน้าหลักใช้งาน
     st.session_state['tfex_net_worth'] = net_worth
 
-    # แสดง Dashboard
-    # 🔧 ปรับปรุง: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดสไตล์เดียวกับหน้าอื่นในแอป
-    c1, c2, c3 = st.columns(3)
-    render_metric_card(c1, "มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท", icon="💰")
-    render_metric_card(c2, "กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท", icon="💹")
-    render_metric_card(c3, "การเติบโต", f"{growth_pct:.2f} %", icon="🚀",
-                        delta=f"{growth_pct:.2f}%", delta_positive=(growth_pct >= 0))
-    st.divider()
-
-    # --- เริ่มแถวที่ 2: Performance Metrics (รวมเชิงลึก) ---
-    st.subheader("📊 Performance Monitor")
-
-    # 1. สร้าง Filter ช่วงเวลา
-    period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
-    selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
-
-    # 2. กรองข้อมูลตามช่วงเวลา
-    perf_df = closed_trades.copy()
-    # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์ให้เป็น 'Net_Profit' ตั้งแต่ต้นเลย (เผื่อบางบัญชีบันทึกเป็น
-    # 'กำไรสุทธิ' แทน) เพราะโค้ดด้านล่างหลายจุดอ้างอิงชื่อ 'Net_Profit' ตรงๆ โดยไม่มีการเช็คซ้ำ
-    # เดิมมีการป้องกันไว้แค่บางจุด (บรรทัด win_trades) แต่จุดอื่นๆ ยังพังอยู่ถ้าคอลัมน์ชื่อไม่ตรง
-    if 'Net_Profit' not in perf_df.columns and 'กำไรสุทธิ' in perf_df.columns:
-        perf_df = perf_df.rename(columns={'กำไรสุทธิ': 'Net_Profit'})
-    if 'Net_Profit' not in perf_df.columns:
-        perf_df['Net_Profit'] = 0.0
-    if 'Date_Close' in perf_df.columns:
-        perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
+    # 🆕 จัดระเบียบหน้าใหม่: หา "สถานะที่ถืออยู่" (Open Positions) แบบพื้นฐานไว้ตรงนี้จุดเดียว
+    # (ไม่ผูกกับค่า ATR ของฟอร์มคำนวณขนาดสัญญาในแท็บ "บันทึกเทรดใหม่" อีกต่อไป) ให้ทั้งตาราง
+    # "สถานะที่ถืออยู่" ในแท็บ Dashboard และกราฟ Margin Utilization ใช้ตัวเดียวกันได้เลย
+    if not tfex_df.empty and 'Close_Price_Cleaned' in tfex_df.columns:
+        open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
     else:
-        # ถ้าไม่มีคอลัมน์ Date_Close ให้ลองเช็คว่ามีคอลัมน์วันที่ชื่ออื่นไหม เช่น 'Date' หรือข้ามไปก่อน
-        if 'Date' in perf_df.columns:
-            perf_df['Date_Close'] = pd.to_datetime(perf_df['Date'])
-    days_ago = period_options[selected_period]
-    if days_ago != 9999:
-        cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
-        if 'Date_Close' in perf_df.columns:
-            perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
-        elif 'Date' in perf_df.columns:
-            perf_df = perf_df[perf_df['Date'] >= cutoff_date]
+        open_positions = pd.DataFrame()
 
-    # 3. คำนวณ Metrics ทั้งหมดจาก perf_df ที่กรองแล้ว
-    total_trades = len(perf_df)
-    # ป้องกัน KeyError กรณีไม่มีคอลัมน์ Net_Profit
-    if 'Net_Profit' in perf_df.columns:
-        win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
-    elif 'กำไรสุทธิ' in perf_df.columns:
-        win_trades = len(perf_df[perf_df['กำไรสุทธิ'] > 0])
-    else:
-        win_trades = 0
-    win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
-
-    avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
-    avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if (total_trades - win_trades) > 0 else 0
-    rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
-
-    gross_profit = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum()
-    gross_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()
-    profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
-
-    expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
-
-    # คำนวณเชิงลึก (Efficiency Analysis)
-    perf_df['Points'] = perf_df['Net_Profit'] / 200
-    avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
-    avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
-
-    # Max Drawdown (คำนวณจากช่วงที่กรอง)
-    # 🔧 แก้บั๊ก: ถ้าตารางว่างสนิท (ไม่มีแม้แต่แถวเทรดเดียว) จะไม่มีคอลัมน์ Date_Close/Date_Open
-    # ให้ใช้เลย ต้องเช็คก่อนเสมอ ไม่งั้น sort_values('Date_Close') จะ error ทันที
-    if not perf_df.empty and 'Date_Close' in perf_df.columns:
-        temp_df = perf_df.sort_values('Date_Close')
-        temp_df['Cumulative'] = temp_df['Net_Profit'].cumsum()
-        max_drawdown = (temp_df['Cumulative'] - temp_df['Cumulative'].cummax()).min() if not temp_df.empty else 0
-    else:
-        max_drawdown = 0
-
-    # ระยะเวลาถือครอง
-    if not perf_df.empty and 'Date_Open' in perf_df.columns and 'Date_Close' in perf_df.columns:
-        perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
-        perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
-        avg_hold = perf_df['Hold_Days'].mean()
-    else:
-        avg_hold = 0
-
-    # 4. แสดงผลแบบ Grid
-    # แถวแรก
-    # 🔧 ปรับปรุง: เปลี่ยนเป็นการ์ดสไตล์เดียวกัน พร้อมไอคอนที่ตรงกับความหมายแต่ละตัว
-    c1, c2, c3, c4 = st.columns(4)
-    render_metric_card(c1, "Win Rate", f"{win_rate:.1f}%", icon="🎯")
-    render_metric_card(c2, "R:R Ratio", f"{rr_ratio:.2f}", icon="📏")
-    render_metric_card(c3, "Profit Factor", f"{profit_factor:.2f}", icon="⚖️")
-    render_metric_card(c4, "Expectancy", f"{expectancy:,.0f}", icon="🧮")
-
-    st.write("---") # เส้นคั่น
-
-    # แถวสอง (เชิงลึก)
-    e1, e2, e3, e4 = st.columns(4)
-    render_metric_card(e1, "กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts", icon="📈")
-    render_metric_card(e2, "ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts", icon="📉")
-    render_metric_card(e3, "Max Drawdown", f"{max_drawdown:,.0f} บาท", icon="⚠️")
-    render_metric_card(e4, "ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน", icon="⏱️")
-
-    st.divider()
-
-    # 3. สร้าง 3 Tabs
-    sub_tfex_input, sub_tfex_close, sub_tfex_cash, sub_tfex_history = st.tabs([
-    "➕ บันทึกเทรดใหม่", 
-    "🏁 ปิดสถานะเทรด", 
-    "➕ บันทึกเติม/ถอนเงิน", 
-    "📜 ประวัติและ Portfolio"
+    # 🆕 จัดระเบียบหน้าใหม่ตามที่ขอ (เดิมรกเพราะการ์ดสรุป + Performance Monitor ลอยอยู่นอกแท็บ
+    # ด้านบนสุด ต้องเลื่อนผ่านของเยอะก่อนจะถึงแท็บย่อยที่ใช้งานจริง): ย้ายแท็บย่อยขึ้นมาไว้บนสุด
+    # และเพิ่มแท็บ "📊 Dashboard" เป็นแท็บแรก รวมการ์ดสรุป, Performance Monitor, สถานะที่ถืออยู่,
+    # สถิติแพ้/ชนะ, Margin Utilization และเนื้อหาทั้งหมดของแท็บ "ประวัติและ Portfolio" เดิม
+    # (ยกเลิกแท็บนั้น ย้ายมารวมไว้ในนี้แทน) ส่วน "คำนวณขนาดสัญญา (Position Size)" + ระบบ ATR
+    # Stop Loss ยังอยู่ในแท็บ "บันทึกเทรดใหม่" เหมือนเดิมตามที่ขอ
+    sub_tfex_dashboard, sub_tfex_input, sub_tfex_close, sub_tfex_cash = st.tabs([
+        "📊 Dashboard",
+        "➕ บันทึกเทรดใหม่",
+        "🏁 ปิดสถานะเทรด",
+        "➕ บันทึกเติม/ถอนเงิน",
     ])
+
     with sub_tfex_input:
         st.subheader("🛡 คำนวณขนาดสัญญา (Position Size)")
 
@@ -191,7 +102,7 @@ def render_tab_tfex():
         risk_amount = net_worth * (risk_pct / 100.0)
 
         # ใช้ตัวแปร Global ที่เราตั้งค่าไว้
-        im_per_contract = IM_PER_CONTRACT 
+        im_per_contract = IM_PER_CONTRACT
 
         # คำนวณสัญญา (สมมติ 1 จุด TFEX = 200 บาท)
         contract_by_risk = risk_amount / (stop_loss_points * 200) if (stop_loss_points * 200) > 0 else 0
@@ -209,108 +120,6 @@ def render_tab_tfex():
             st.error("⚠️ เงินในพอร์ตไม่เพียงพอที่จะเปิดสัญญาภายใต้เงื่อนไขความเสี่ยงนี้")
         else:
             st.success(f"✅ **สรุป: คุณควรเปิดสถานะไม่เกิน {max_contracts} สัญญา**")
-
-        # 1. แสดงรายการที่ถืออยู่ (Open Positions)
-        st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
-
-        # 🔧 แก้บั๊ก: กันเหนียวเพิ่ม เผื่อ load_data() ลองใหม่ครบ 3 ครั้งแล้วยังพลาด (เช่นโควตาติดยาว)
-        # จะได้ตารางว่างสนิทไม่มีคอลัมน์เลย ป้องกันไม่ให้เข้าถึงคอลัมน์ 'Close_Price'/'Size' ตรงๆ
-        if not tfex_df.empty and 'Close_Price' in tfex_df.columns:
-            tfex_df['Close_Price_Cleaned'] = pd.to_numeric(tfex_df['Close_Price'], errors='coerce').fillna(0)
-            open_positions = tfex_df[tfex_df['Close_Price_Cleaned'] == 0].copy()
-        else:
-            open_positions = pd.DataFrame()
-
-        if not open_positions.empty:
-            # ⭐️ เชื่อมโยงค่า ATR และ Multiplier ที่ผู้ใช้ใช้งานล่าสุด (จากฟอร์มด้านบน) มาแสดงและคำนวณในตาราง
-            open_positions['ATR'] = user_atr 
-
-            # แปลงข้อมูลราคาเปิดและ ATR ให้เป็นตัวเลขเพื่อความปลอดภัย
-            open_positions['Open_Price'] = pd.to_numeric(open_positions['Open_Price'], errors='coerce')
-            open_positions['ATR'] = pd.to_numeric(open_positions['ATR'], errors='coerce')
-
-            # คำนวณจุด Stop Loss จาก ATR แยกตามสถานะ Long / Short ของแต่ละไม้
-            # Long: ราคาเปิด - (ATR * Multiplier)
-            # Short: ราคาเปิด + (ATR * Multiplier)
-            open_positions['ATR_Stop_Loss'] = open_positions.apply(
-                lambda row: (row['Open_Price'] - (row['ATR'] * atr_multiplier)) if row['Status'] == 'Long' 
-                else (row['Open_Price'] + (row['ATR'] * atr_multiplier)), 
-                axis=1
-            )
-
-            # แสดงผลตารางพร้อมคอลัมน์ ATR และ Stop Loss ที่คำนวณสดๆ ตรงกัน
-            st.dataframe(
-                open_positions[['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price', 'ATR', 'ATR_Stop_Loss']], 
-                use_container_width=True
-            )
-        else:
-            st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
-
-        # คำนวณ Margin Utilization
-        # 🔧 กันเหนียว: ถ้า open_positions ว่างสนิทไม่มีคอลัมน์ Size ให้ถือว่ายังไม่ได้ใช้ margin เลย
-        if not open_positions.empty and 'Size' in open_positions.columns:
-            total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT
-        else:
-            total_margin_used = 0
-        utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
-
-        # --- แบ่งหน้าจอเป็น 2 คอลัมน์ เพื่อวางกราฟคู่กัน ---
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            st.subheader("🎯 สถิติแพ้ / ชนะ (Win / Loss)")
-            # กรองเฉพาะรายการที่ปิดสถานะแล้ว (Close_Price > 0) มาคำนวณ Win/Loss
-            # 🔧 แก้บั๊ก: เช็คว่ามีคอลัมน์ Close_Price_Cleaned จริงก่อนใช้ (จะไม่มีถ้าตารางว่างสนิท)
-            if not tfex_df.empty and 'Close_Price_Cleaned' in tfex_df.columns:
-                closed_positions = tfex_df[tfex_df['Close_Price_Cleaned'] > 0]
-            else:
-                closed_positions = pd.DataFrame()
-
-            if not closed_positions.empty and 'Win_Lose' in closed_positions.columns:
-                win_count = len(closed_positions[closed_positions['Win_Lose'] == 'Win'])
-                lose_count = len(closed_positions[closed_positions['Win_Lose'] == 'Lose'])
-            else:
-                win_count, lose_count = 0, 0
-
-            # สร้างกราฟโดนัทแสดง Win/Loss ด้วย Plotly
-            fig_winloss = go.Figure(go.Pie(
-                labels=['Win (ชนะ)', 'Lose (แพ้)'],
-                values=[win_count, lose_count],
-                hole=0.5,
-                marker_colors=['#26A69A', '#EF5350']
-            ))
-            fig_winloss.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), showlegend=True)
-            st.plotly_chart(style_plotly(fig_winloss), use_container_width=True)
-
-        with col_right:
-            # 2. สร้าง Gauge Chart (กราฟ Margin เดิมของคุณ)
-            fig_gauge = go.Figure(go.Indicator(
-                mode = "gauge+number",
-                value = utilization,
-                domain = {'x': [0, 1], 'y': [0, 1]},
-                title = {'text': "Margin Utilization (%)"},
-                gauge = {
-                    'axis': {'range': [0, 100]},
-                    'bar': {'color': "darkblue"},
-                    'steps': [
-                        {'range': [0, 50], 'color': "#26A69A"},
-                        {'range': [50, 80], 'color': "#FBC02D"},
-                        {'range': [80, 100], 'color': "#EF5350"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "white", 'width': 4},
-                        'thickness': 0.75,
-                        'value': utilization
-                    }
-                }
-            ))
-
-            # 🔧 แก้บั๊ก: เดิมกราฟ Gauge นี้ขยับขนาดตามพื้นที่ว่าง (use_container_width=True)
-            # ทำให้พอเปิด/ปิดแถบตัวกรองด้านข้าง พื้นที่กว้าง-แคบเปลี่ยน สัดส่วนกราฟเปลี่ยนตาม
-            # ตัวเลขตรงกลางเลยเยื้องออกจากจุดกึ่งกลางของครึ่งวงกลม ตอนนี้กำหนดขนาดคงที่แทน
-            # เพื่อให้ตำแหน่งตัวเลขนิ่งอยู่ตรงกลางเสมอไม่ว่าจะเปิด/ปิดแถบตัวกรองก็ตาม
-            fig_gauge.update_layout(height=250, width=350, margin=dict(l=20, r=20, t=50, b=20))
-            st.plotly_chart(style_plotly(fig_gauge), use_container_width=False)
 
         st.divider()
 
@@ -341,7 +150,7 @@ def render_tab_tfex():
             with col2:
                 entry = st.number_input("ราคา Open:", format="%.2f", value=950.0)
                 size = st.number_input("จำนวนสัญญา:", min_value=1, value=1)
-                trade_id_input = st.text_input("Trade ID (เว้นว่างเพื่อรันอัตโนมัติ):")  
+                trade_id_input = st.text_input("Trade ID (เว้นว่างเพื่อรันอัตโนมัติ):")
             with col3:
                 comm_input = st.number_input("ค่าคอมมิชชัน + ค่าธรรมเนียม (บาท):", min_value=0.0, step=10.0, value=50.0)
 
@@ -369,8 +178,8 @@ def render_tab_tfex():
                 calculated_sl_price = (entry - calculated_sl_pts) if Status == "Long" else (entry + calculated_sl_pts)
 
                 required_columns = [
-                    "Trade_ID", "Date_Open", "Date_Close", "Series", "Status", 
-                    "Size", "Open_Price", "Close_Price", "Realized", 
+                    "Trade_ID", "Date_Open", "Date_Close", "Series", "Status",
+                    "Size", "Open_Price", "Close_Price", "Realized",
                     "Comm", "Net_Profit", "Win_Lose", "Points", "Reason"
                 ]
 
@@ -493,7 +302,193 @@ def render_tab_tfex():
         st.write("รายการล่าสุด:")
         st.dataframe(cash_df, use_container_width=True)
 
-    with sub_tfex_history:
+    with sub_tfex_dashboard:
+        # แสดง Dashboard
+        # 🔧 ปรับปรุง: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดสไตล์เดียวกับหน้าอื่นในแอป
+        c1, c2, c3 = st.columns(3)
+        render_metric_card(c1, "มูลค่าพอร์ตสุทธิ (Cash Basis)", f"{net_worth:,.2f} บาท", icon="💰")
+        render_metric_card(c2, "กำไรรวมสุทธิ (Realized)", f"{total_pnl:,.2f} บาท", icon="💹")
+        render_metric_card(c3, "การเติบโต", f"{growth_pct:.2f} %", icon="🚀",
+                            delta=f"{growth_pct:.2f}%", delta_positive=(growth_pct >= 0))
+        st.divider()
+
+        # --- Performance Metrics (รวมเชิงลึก) ---
+        st.subheader("📊 Performance Monitor")
+
+        # 1. สร้าง Filter ช่วงเวลา
+        period_options = {"3 เดือน": 90, "6 เดือน": 180, "1 ปี": 365, "ทั้งหมด": 9999}
+        selected_period = st.radio("เลือกช่วงเวลา:", list(period_options.keys()), horizontal=True, key="perf_filter")
+
+        # 2. กรองข้อมูลตามช่วงเวลา
+        perf_df = closed_trades.copy()
+        # 🔧 แก้บั๊ก: มาตรฐานชื่อคอลัมน์ให้เป็น 'Net_Profit' ตั้งแต่ต้นเลย (เผื่อบางบัญชีบันทึกเป็น
+        # 'กำไรสุทธิ' แทน) เพราะโค้ดด้านล่างหลายจุดอ้างอิงชื่อ 'Net_Profit' ตรงๆ โดยไม่มีการเช็คซ้ำ
+        # เดิมมีการป้องกันไว้แค่บางจุด (บรรทัด win_trades) แต่จุดอื่นๆ ยังพังอยู่ถ้าคอลัมน์ชื่อไม่ตรง
+        if 'Net_Profit' not in perf_df.columns and 'กำไรสุทธิ' in perf_df.columns:
+            perf_df = perf_df.rename(columns={'กำไรสุทธิ': 'Net_Profit'})
+        if 'Net_Profit' not in perf_df.columns:
+            perf_df['Net_Profit'] = 0.0
+        if 'Date_Close' in perf_df.columns:
+            perf_df['Date_Close'] = pd.to_datetime(perf_df['Date_Close'])
+        else:
+            # ถ้าไม่มีคอลัมน์ Date_Close ให้ลองเช็คว่ามีคอลัมน์วันที่ชื่ออื่นไหม เช่น 'Date' หรือข้ามไปก่อน
+            if 'Date' in perf_df.columns:
+                perf_df['Date_Close'] = pd.to_datetime(perf_df['Date'])
+        days_ago = period_options[selected_period]
+        if days_ago != 9999:
+            cutoff_date = pd.Timestamp.now() - pd.Timedelta(days=days_ago)
+            if 'Date_Close' in perf_df.columns:
+                perf_df = perf_df[perf_df['Date_Close'] >= cutoff_date]
+            elif 'Date' in perf_df.columns:
+                perf_df = perf_df[perf_df['Date'] >= cutoff_date]
+
+        # 3. คำนวณ Metrics ทั้งหมดจาก perf_df ที่กรองแล้ว
+        total_trades = len(perf_df)
+        # ป้องกัน KeyError กรณีไม่มีคอลัมน์ Net_Profit
+        if 'Net_Profit' in perf_df.columns:
+            win_trades = len(perf_df[perf_df['Net_Profit'] > 0])
+        elif 'กำไรสุทธิ' in perf_df.columns:
+            win_trades = len(perf_df[perf_df['กำไรสุทธิ'] > 0])
+        else:
+            win_trades = 0
+        win_rate = (win_trades / total_trades * 100) if total_trades > 0 else 0
+
+        avg_win = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].mean() if win_trades > 0 else 0
+        avg_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().mean() if (total_trades - win_trades) > 0 else 0
+        rr_ratio = (avg_win / avg_loss) if avg_loss > 0 else 0
+
+        gross_profit = perf_df[perf_df['Net_Profit'] > 0]['Net_Profit'].sum()
+        gross_loss = perf_df[perf_df['Net_Profit'] <= 0]['Net_Profit'].abs().sum()
+        profit_factor = (gross_profit / gross_loss) if gross_loss > 0 else (gross_profit if gross_profit > 0 else 0)
+
+        expectancy = (win_rate/100 * avg_win) - ((1 - win_rate/100) * avg_loss)
+
+        # คำนวณเชิงลึก (Efficiency Analysis)
+        perf_df['Points'] = perf_df['Net_Profit'] / 200
+        avg_win_pts = perf_df[perf_df['Points'] > 0]['Points'].mean() if len(perf_df[perf_df['Points'] > 0]) > 0 else 0
+        avg_loss_pts = perf_df[perf_df['Points'] <= 0]['Points'].abs().mean() if len(perf_df[perf_df['Points'] <= 0]) > 0 else 0
+
+        # Max Drawdown (คำนวณจากช่วงที่กรอง)
+        # 🔧 แก้บั๊ก: ถ้าตารางว่างสนิท (ไม่มีแม้แต่แถวเทรดเดียว) จะไม่มีคอลัมน์ Date_Close/Date_Open
+        # ให้ใช้เลย ต้องเช็คก่อนเสมอ ไม่งั้น sort_values('Date_Close') จะ error ทันที
+        if not perf_df.empty and 'Date_Close' in perf_df.columns:
+            temp_df = perf_df.sort_values('Date_Close')
+            temp_df['Cumulative'] = temp_df['Net_Profit'].cumsum()
+            max_drawdown = (temp_df['Cumulative'] - temp_df['Cumulative'].cummax()).min() if not temp_df.empty else 0
+        else:
+            max_drawdown = 0
+
+        # ระยะเวลาถือครอง
+        if not perf_df.empty and 'Date_Open' in perf_df.columns and 'Date_Close' in perf_df.columns:
+            perf_df['Date_Open'] = pd.to_datetime(perf_df['Date_Open'])
+            perf_df['Hold_Days'] = (perf_df['Date_Close'] - perf_df['Date_Open']).dt.days
+            avg_hold = perf_df['Hold_Days'].mean()
+        else:
+            avg_hold = 0
+
+        # 4. แสดงผลแบบ Grid
+        # แถวแรก
+        # 🔧 ปรับปรุง: เปลี่ยนเป็นการ์ดสไตล์เดียวกัน พร้อมไอคอนที่ตรงกับความหมายแต่ละตัว
+        c1, c2, c3, c4 = st.columns(4)
+        render_metric_card(c1, "Win Rate", f"{win_rate:.1f}%", icon="🎯")
+        render_metric_card(c2, "R:R Ratio", f"{rr_ratio:.2f}", icon="📏")
+        render_metric_card(c3, "Profit Factor", f"{profit_factor:.2f}", icon="⚖️")
+        render_metric_card(c4, "Expectancy", f"{expectancy:,.0f}", icon="🧮")
+
+        st.write("---") # เส้นคั่น
+
+        # แถวสอง (เชิงลึก)
+        e1, e2, e3, e4 = st.columns(4)
+        render_metric_card(e1, "กำไรเฉลี่ย (จุด)", f"{avg_win_pts:.1f} pts", icon="📈")
+        render_metric_card(e2, "ขาดทุนเฉลี่ย (จุด)", f"{avg_loss_pts:.1f} pts", icon="📉")
+        render_metric_card(e3, "Max Drawdown", f"{max_drawdown:,.0f} บาท", icon="⚠️")
+        render_metric_card(e4, "ระยะเวลาถือเฉลี่ย", f"{avg_hold:.1f} วัน", icon="⏱️")
+
+        st.divider()
+
+        # 🆕 ย้ายมาจากแท็บ "บันทึกเทรดใหม่" ตามที่ขอ: ตารางสถานะที่ถือครองอยู่ (แสดงข้อมูลพื้นฐาน
+        # เท่านั้น ไม่รวมคอลัมน์ ATR Stop Loss แล้ว เพราะค่า ATR/Multiplier ตอนนี้เป็นส่วนหนึ่งของ
+        # ฟอร์ม "คำนวณขนาดสัญญา" ในแท็บ "บันทึกเทรดใหม่" โดยเฉพาะ)
+        st.subheader("📊 สถานะที่ถืออยู่ (Open Positions)")
+        if not open_positions.empty:
+            _open_pos_cols = [c for c in ['Trade_ID', 'Date_Open', 'Series', 'Status', 'Size', 'Open_Price'] if c in open_positions.columns]
+            st.dataframe(open_positions[_open_pos_cols], use_container_width=True)
+        else:
+            st.info("ไม่มีรายการที่ถืออยู่ในปัจจุบัน")
+
+        st.divider()
+
+        # --- แบ่งหน้าจอเป็น 2 คอลัมน์ เพื่อวางกราฟคู่กัน ---
+        # 🆕 ย้ายมาจากแท็บ "บันทึกเทรดใหม่" ตามที่ขอ (สถิติแพ้/ชนะ + Margin Utilization เป็นข้อมูล
+        # ภาพรวมของพอร์ต เหมาะกับหน้า Dashboard มากกว่า)
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.subheader("🎯 สถิติแพ้ / ชนะ (Win / Loss)")
+            # กรองเฉพาะรายการที่ปิดสถานะแล้ว (Close_Price > 0) มาคำนวณ Win/Loss
+            # 🔧 แก้บั๊ก: เช็คว่ามีคอลัมน์ Close_Price_Cleaned จริงก่อนใช้ (จะไม่มีถ้าตารางว่างสนิท)
+            if not tfex_df.empty and 'Close_Price_Cleaned' in tfex_df.columns:
+                closed_positions = tfex_df[tfex_df['Close_Price_Cleaned'] > 0]
+            else:
+                closed_positions = pd.DataFrame()
+
+            if not closed_positions.empty and 'Win_Lose' in closed_positions.columns:
+                win_count = len(closed_positions[closed_positions['Win_Lose'] == 'Win'])
+                lose_count = len(closed_positions[closed_positions['Win_Lose'] == 'Lose'])
+            else:
+                win_count, lose_count = 0, 0
+
+            # สร้างกราฟโดนัทแสดง Win/Loss ด้วย Plotly
+            fig_winloss = go.Figure(go.Pie(
+                labels=['Win (ชนะ)', 'Lose (แพ้)'],
+                values=[win_count, lose_count],
+                hole=0.5,
+                marker_colors=['#26A69A', '#EF5350']
+            ))
+            fig_winloss.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), showlegend=True)
+            st.plotly_chart(style_plotly(fig_winloss), use_container_width=True)
+
+        with col_right:
+            # คำนวณ Margin Utilization (ใช้ open_positions พื้นฐานที่หาไว้ต้นฟังก์ชัน)
+            if not open_positions.empty and 'Size' in open_positions.columns:
+                total_margin_used = open_positions['Size'].sum() * IM_PER_CONTRACT
+            else:
+                total_margin_used = 0
+            utilization = (total_margin_used / net_worth) * 100 if net_worth > 0 else 0
+
+            # สร้าง Gauge Chart (กราฟ Margin)
+            fig_gauge = go.Figure(go.Indicator(
+                mode = "gauge+number",
+                value = utilization,
+                domain = {'x': [0, 1], 'y': [0, 1]},
+                title = {'text': "Margin Utilization (%)"},
+                gauge = {
+                    'axis': {'range': [0, 100]},
+                    'bar': {'color': "darkblue"},
+                    'steps': [
+                        {'range': [0, 50], 'color': "#26A69A"},
+                        {'range': [50, 80], 'color': "#FBC02D"},
+                        {'range': [80, 100], 'color': "#EF5350"}
+                    ],
+                    'threshold': {
+                        'line': {'color': "white", 'width': 4},
+                        'thickness': 0.75,
+                        'value': utilization
+                    }
+                }
+            ))
+
+            # 🔧 แก้บั๊ก: เดิมกราฟ Gauge นี้ขยับขนาดตามพื้นที่ว่าง (use_container_width=True)
+            # ทำให้พอเปิด/ปิดแถบตัวกรองด้านข้าง พื้นที่กว้าง-แคบเปลี่ยน สัดส่วนกราฟเปลี่ยนตาม
+            # ตัวเลขตรงกลางเลยเยื้องออกจากจุดกึ่งกลางของครึ่งวงกลม ตอนนี้กำหนดขนาดคงที่แทน
+            # เพื่อให้ตำแหน่งตัวเลขนิ่งอยู่ตรงกลางเสมอไม่ว่าจะเปิด/ปิดแถบตัวกรองก็ตาม
+            fig_gauge.update_layout(height=250, width=350, margin=dict(l=20, r=20, t=50, b=20))
+            st.plotly_chart(style_plotly(fig_gauge), use_container_width=False)
+
+        st.divider()
+
+        # 🆕 ย้ายเนื้อหาทั้งหมดของแท็บ "📜 ประวัติและ Portfolio" เดิมมารวมไว้ในแท็บ Dashboard นี้
+        # (ยกเลิกแท็บนั้นไปตามที่ขอ)
         st.subheader("📜 ประวัติการเทรดและกำไรสะสม")
 
         if not tfex_df.empty and 'Net_Profit' in tfex_df.columns and 'Close_Price' in tfex_df.columns:
@@ -578,8 +573,8 @@ def render_tab_tfex():
                     # เพิ่มจุดเริ่มต้น (Start Point) ให้กราฟเริ่มสวยงามที่ฐานเงินต้น
                     start_date_point = growth_df['Sort_Time'].min() - pd.Timedelta(days=1)
                     start_row = pd.DataFrame({
-                        'Sort_Time': [start_date_point], 
-                        'Time_Label': ['จุดเริ่มต้น'], 
+                        'Sort_Time': [start_date_point],
+                        'Time_Label': ['จุดเริ่มต้น'],
                         'Portfolio_Value': [initial_capital_base]
                     })
                     growth_df = pd.concat([start_row, growth_df[['Sort_Time', 'Time_Label', 'Portfolio_Value']]], ignore_index=True)
@@ -587,8 +582,8 @@ def render_tab_tfex():
 
                     # 3. สร้างกราฟเส้นด้วย Plotly
                     fig_growth = px.line(
-                        growth_df, 
-                        x='Time_Label', 
+                        growth_df,
+                        x='Time_Label',
                         y='Portfolio_Value',
                         markers=True,
                         line_shape='spline'
@@ -685,9 +680,9 @@ def render_tab_tfex():
                     fig.add_trace(go.Scatter(x=monthly_perf['Month'], y=monthly_perf['Cumulative_Pct'], name="% สะสม", mode='lines+markers', line=dict(color='#FFA500', width=3)), secondary_y=True)
 
                     fig.update_layout(
-                        title_text=f"Monthly Performance ({monthly_view_range})", 
-                        height=400, 
-                        margin=dict(l=20, r=20, t=40, b=20), 
+                        title_text=f"Monthly Performance ({monthly_view_range})",
+                        height=400,
+                        margin=dict(l=20, r=20, t=40, b=20),
                         showlegend=True
                     )
 
@@ -710,7 +705,7 @@ def render_tab_tfex():
                     # --- CSS สำหรับจัดตารางให้ชิดขวา ---
                     styled_df = monthly_df.style.format({
                         'กำไร/ขาดทุน (บาท)': '{:,.2f}',
-                        '% รายเดือน': '{:+.2f} %', 
+                        '% รายเดือน': '{:+.2f} %',
                         'มูลค่าพอร์ต (บาท)': '{:,.2f}',
                         '% สะสม': '{:+.2f} %'
                     }) \
