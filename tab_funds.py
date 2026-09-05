@@ -710,22 +710,35 @@ def render_tab_funds():
 
                     st.divider()
 
-                    # 🆕 (5) กราฟเปรียบเทียบผลงานระหว่างกองทุน (% กำไร/ขาดทุน)
+                    # 🆕 (5) กราฟเปรียบเทียบผลงานระหว่างกองทุน (% กำไร/ขาดทุน) — ตามที่ขอเพิ่ม แสดง
+                    # เทียบกัน 2 แท่งต่อกองทุน: "ไม่รวมปันผล" (จากราคาอย่างเดียว) กับ "รวมปันผล"
+                    # (% ผลตอบแทนรวม ที่คำนวณไว้แล้วด้านบน) แทนที่เดิมที่มีแค่แท่งเดียวไม่รวมปันผล
                     st.markdown("##### 📊 เปรียบเทียบ % ผลตอบแทนระหว่างกองทุน")
+                    st.caption("เทียบ % กำไร/ขาดทุนจากราคาอย่างเดียว กับ % ผลตอบแทนรวม (รวมปันผลที่ได้รับด้วย) ของแต่ละกองทุน")
+                    df_compare = df_table[['ชื่อกองทุน', '% กำไร/ขาดทุน', '% ผลตอบแทนรวม']].melt(
+                        id_vars='ชื่อกองทุน', var_name='ประเภท', value_name='ค่า'
+                    )
+                    df_compare['ประเภท'] = df_compare['ประเภท'].map({
+                        '% กำไร/ขาดทุน': 'ไม่รวมปันผล', '% ผลตอบแทนรวม': 'รวมปันผล',
+                    })
                     fig_compare = px.bar(
-                        df_table, x='ชื่อกองทุน', y='% กำไร/ขาดทุน',
-                        text=df_table['% กำไร/ขาดทุน'].apply(lambda x: f"{x:+.2f}%"),
-                        color='% กำไร/ขาดทุน', color_continuous_scale=['#EF5350', '#26A69A'],
-                        color_continuous_midpoint=0
+                        df_compare, x='ชื่อกองทุน', y='ค่า', color='ประเภท', barmode='group',
+                        text=df_compare['ค่า'].apply(lambda x: f"{x:+.2f}%"),
+                        color_discrete_map={'ไม่รวมปันผล': _tc['text_muted'], 'รวมปันผล': _tc['accent']},
+                        category_orders={'ประเภท': ['ไม่รวมปันผล', 'รวมปันผล']},
                     )
                     fig_compare.update_traces(textposition='outside')
                     fig_compare.update_layout(
-                        xaxis_title="", yaxis_title="% กำไร/ขาดทุน", height=380,
-                        margin=dict(l=20, r=20, t=30, b=80), coloraxis_showscale=False, xaxis=dict(tickangle=-30),
-                        # 🆕 แก้แท่งกราฟกว้างเกินไปตอนมีกองทุนน้อย (bargap เดิม = ค่า default ของ Plotly
-                        # ~0.2 ทำให้แท่งขยายเต็มพื้นที่จนดูอ้วนเทอะทะ) เพิ่มช่องว่างระหว่างแท่งให้กว้างขึ้น
-                        # แท่งจะได้ดูสมส่วนไม่ว่าจะมีกองทุนกี่กองก็ตาม
-                        bargap=0.55,
+                        xaxis_title="", yaxis_title="% ผลตอบแทน", height=380,
+                        margin=dict(l=20, r=20, t=30, b=80), xaxis=dict(tickangle=-30),
+                        legend_title_text="",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        # 🔧 แก้บั๊ก: แท่งกราฟกว้างเกินไปตอนมีกองทุนน้อย (bargap เดิม = ค่า default ของ
+                        # Plotly ~0.2 ทำให้แท่งขยายเต็มพื้นที่จนดูอ้วนเทอะทะ) เพิ่ม bargap ให้กว้างขึ้น
+                        # อีก (0.55 -> 0.65) เพราะตอนนี้มี 2 แท่งต่อกองทุนแล้ว ยิ่งต้องคุมความกว้างให้
+                        # สมส่วน ไม่ให้แท่งรวมกันแน่นจนดูเป็นแท่งเดียว ส่วน bargroupgap คุมช่องว่าง
+                        # ระหว่าง 2 แท่งภายในกองทุนเดียวกันให้แนบกันพอดี ไม่ห่างจนดูหลุดจากกลุ่ม
+                        bargap=0.65, bargroupgap=0.08,
                     )
                     st.plotly_chart(style_plotly(fig_compare), use_container_width=True)
 
