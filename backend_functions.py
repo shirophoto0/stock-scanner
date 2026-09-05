@@ -29,7 +29,7 @@ from PIL import Image
 import time
 import re
 import random
-from gspread.exceptions import APIError
+from gspread.exceptions import APIError, WorksheetNotFound
 from bs4 import BeautifulSoup
 from constants import SET100_TICKERS
 from theme import style_plotly
@@ -1064,6 +1064,13 @@ def load_data(sheet_name, active_sheet_name):
             # ตอนนี้ดึงแค่แถวหัวตารางมาสร้างตารางเปล่าที่ยังมีชื่อคอลัมน์ครบแทน เพื่อให้จุดอื่นๆ ทำงานได้ปกติ
             headers = sheet.row_values(1)
             return pd.DataFrame(columns=headers) if headers else pd.DataFrame()
+        except WorksheetNotFound:
+            # 🔧 แก้บั๊ก: เดิมชีตที่ยังไม่เคยถูกสร้างเลย (เช่น แท็บที่เพิ่งแยกออกมาใหม่ อย่าง
+            # Gold_Physical/Gold_Trades/Gold_DCA ที่ผู้ใช้ยังไม่เคยบันทึกรายการแรก) ตกไปเข้า
+            # except Exception ด้านล่าง แล้วโชว์ st.error สีแดงตกใจผู้ใช้ ทั้งที่ "ชีตยังไม่เคยถูก
+            # สร้าง" เป็นสถานะปกติมาก (ฟังก์ชันที่เขียนข้อมูล เช่น _get_or_create_worksheet ใน
+            # tab_gold.py จะสร้างชีตนี้ให้เองตอนบันทึกรายการแรก) ตอนนี้คืนตารางเปล่าเงียบๆ แทน
+            return pd.DataFrame()
         except Exception as e:
             last_error = e
             if "429" in str(e) or "Quota exceeded" in str(e):

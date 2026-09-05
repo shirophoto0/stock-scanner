@@ -127,6 +127,65 @@ def _append_rows(sheet_name, columns, rows):
 GOLD_PHYSICAL_COLS = ["Txn_ID", "Date", "Gold_Type", "Action", "Weight", "Unit", "Price_Per_Unit", "Total_Value", "Note"]
 
 
+def _migrate_legacy_physical_gold_if_needed(physical_df):
+    """
+    🆕 แก้บั๊ก: หลังจัดระเบียบแท็บนี้ใหม่ ข้อมูลทองคำแท่ง/ทองรูปพรรณที่ผู้ใช้เคยบันทึกไว้จริงในชีต
+    Gold_Portfolio เดิม (ก่อนแยกเป็น Gold_Physical/Gold_Trades/Gold_DCA) หายไปจากหน้าจอทันที เพราะ
+    แท็บนี้เปลี่ยนไปอ่านจากชีตใหม่ล้วนๆ ที่ยังไม่เคยมีข้อมูลเลย — ไม่ใช่ข้อมูลหายจริง แค่ยังไม่ได้
+    ย้ายมาเก็บที่ใหม่ ตอนนี้ถ้า Gold_Physical ยังว่างสนิท (ยังไม่เคยย้าย/ยังไม่เคยบันทึกในระบบใหม่)
+    แต่ Gold_Portfolio เดิมยังมีแถวประเภท "ทองคำแท่ง"/"ทองรูปพรรณ" อยู่ จะย้ายเข้ามาให้อัตโนมัติ
+    ครั้งเดียว (แต่ละแถวเดิมคือ "ยอดสุทธิ" ที่ถือรวมอยู่แล้ว ไม่ใช่ประวัติทีละรายการซื้อ จึงแปลงเป็น
+    1 รายการ "ซื้อ" ต่อแถว โดยใช้ราคาต้นทุนเฉลี่ยเดิมเป็นราคาต่อหน่วย น้ำหนัก/ต้นทุนเฉลี่ยรวมที่ได้
+    จึงตรงกับของเดิมเป๊ะ) ส่วนประเภท "เทรดทอง / กองทุนทอง" เดิม ไม่ย้ายอัตโนมัติ เพราะระบบใหม่แยก
+    เป็นเทรด Short/Long (มีทิศทาง ต้องรู้ราคาเปิด) กับ DCA (คำนวณเทียบราคาทองสดโดยตรง) ซึ่งเดา intent
+    จากข้อมูลเดิม (ที่เก็บแค่มูลค่าเงินลงทุน+มูลค่าตลาด ไม่มีทิศทาง/น้ำหนักทอง) ไม่ได้ชัดเจนพอ ผู้ใช้
+    ต้องกรอกกลับเข้าไปเองในแท็บที่ตรงกับที่ตั้งใจไว้ (เทรด Short/Long หรือ DCA)
+    """
+    if not physical_df.empty or st.session_state.get('_gold_physical_migration_checked'):
+        return physical_df
+    st.session_state['_gold_physical_migration_checked'] = True
+
+    try:
+        client = get_gsheet_client()
+        legacy_sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Gold_Portfolio')
+        legacy_records = legacy_sheet.get_all_records()
+    except Exception:
+        return physical_df
+
+    new_rows = []
+    for row in legacy_records:
+        g_type = str(row.get('ประเภท', '')).strip()
+        if g_type not in ('ทองคำแท่ง', 'ทองรูปพรรณ'):
+            continue
+        raw_weight = row.get('น้ำหนัก/มูลค่าซื้อ', row.get('น้ำหนัก', 0))
+        try:
+            weight = float(str(raw_weight).replace(',', '').strip() or 0)
+        except (ValueError, TypeError):
+            weight = 0.0
+        if weight <= 0:
+            continue
+        raw_price = row.get('ราคาต้นทุนเฉลี่ย', 0)
+        try:
+            price = float(str(raw_price).replace(',', '').strip() or 0)
+        except (ValueError, TypeError):
+            price = 0.0
+        unit = str(row.get('หน่วย', '')).strip() or ('กรัม' if g_type == 'ทองคำแท่ง' else 'บาททองคำ')
+        note = str(row.get('หมายเหตุ', '')).strip()
+        date_str = str(row.get('วันที่บันทึก', '')).split(' ')[0] or datetime.now().strftime('%Y-%m-%d')
+        new_rows.append([
+            f"GP-MIGRATED-{len(new_rows) + 1}", date_str, g_type, "ซื้อ", weight, unit, price, round(weight * price, 2),
+            f"{note} (ย้ายมาจากระบบเดิม)".strip(),
+        ])
+
+    if not new_rows:
+        return physical_df
+
+    if _append_rows("Gold_Physical", GOLD_PHYSICAL_COLS, new_rows):
+        st.info(f"📦 นำเข้าข้อมูลทองคำแท่ง/รูปพรรณที่เคยบันทึกไว้ {len(new_rows)} รายการจากระบบเดิมให้อัตโนมัติแล้วครับ")
+        return load_data("Gold_Physical", get_active_sheet_name())
+    return physical_df
+
+
 def _compute_physical_summary(physical_df, ref_gold_bar, ref_gold_jewelry):
     """เดินไล่ทีละรายการตามลำดับวันที่ (ซื้อ = ถัวเฉลี่ยต้นทุนใหม่ / ขาย = รับรู้กำไรจากส่วนต่างกับ
     ต้นทุนเฉลี่ย ณ ตอนนั้น ไม่แตะต้นทุนเฉลี่ยของที่เหลือ) แยกกลุ่มตาม (ประเภททอง, หมายเหตุ)"""
@@ -562,6 +621,7 @@ def render_tab_gold(client):
     st.markdown("---")
 
     physical_df = load_data("Gold_Physical", get_active_sheet_name())
+    physical_df = _migrate_legacy_physical_gold_if_needed(physical_df)
     trades_df = load_data("Gold_Trades", get_active_sheet_name())
     dca_df = load_data("Gold_DCA", get_active_sheet_name())
 
