@@ -1883,35 +1883,44 @@ def _save_set_index_cache(set_market, spreadsheet_name="MyStockData"):
     🆕 บันทึกข้อมูลดัชนี SET Index ที่เพิ่งดึงสดสำเร็จ ไว้เป็นข้อมูลสำรองในชีต 'SET_Index_Cache'
     (ต้องมีชีตนี้อยู่ใน Google Sheet ของ MyStockData ก่อน — คอลัมน์ Date, Close) เผื่อวันไหน
     Yahoo Finance มีปัญหา ดึงสดไม่สำเร็จ จะได้มีข้อมูลสำรองมาใช้แทนได้ (ไม่ต้องตั้ง RS_Line เป็น 0)
+    🔧 แก้บั๊ก: ครอบด้วย _force_active_sheet_for_backend_routing() เหมือนกับฟังก์ชันของ
+    Signal_History เพราะ SET_Index_Cache ก็ผูกกับสเปรดชีต "MyStockData" ตายตัวเสมอไม่ว่าใครจะ
+    login อยู่ก็ตาม (ค่า default ของพารามิเตอร์ spreadsheet_name เอง) ดูรายละเอียดที่คอมเมนต์ของ
+    _force_active_sheet_for_backend_routing()
     """
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'SET_Index_Cache')
-        df_to_save = set_market.reset_index()
-        df_to_save.columns = ['Date', 'Close']
-        df_to_save['Date'] = df_to_save['Date'].astype(str)
-        data_to_write = [df_to_save.columns.tolist()] + df_to_save.values.tolist()
-        sheet.update(range_name='A1', values=data_to_write)
-    except Exception as e:
-        print(f"⚠️ บันทึกข้อมูลสำรอง SET Index ไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+    with _force_active_sheet_for_backend_routing(spreadsheet_name):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'SET_Index_Cache')
+            df_to_save = set_market.reset_index()
+            df_to_save.columns = ['Date', 'Close']
+            df_to_save['Date'] = df_to_save['Date'].astype(str)
+            data_to_write = [df_to_save.columns.tolist()] + df_to_save.values.tolist()
+            sheet.update(range_name='A1', values=data_to_write)
+        except Exception as e:
+            print(f"⚠️ บันทึกข้อมูลสำรอง SET Index ไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
 
 
 def _load_cached_set_index(spreadsheet_name="MyStockData"):
-    """โหลดข้อมูลดัชนี SET Index ที่เคยบันทึกสำรองไว้ล่าสุด (ใช้ตอนดึงสดจาก Yahoo Finance ไม่สำเร็จ)"""
-    try:
-        client = get_gsheet_client()
-        sheet = get_cached_worksheet(client, spreadsheet_name, 'SET_Index_Cache')
-        records = sheet.get_all_records()
-        if not records:
+    """โหลดข้อมูลดัชนี SET Index ที่เคยบันทึกสำรองไว้ล่าสุด (ใช้ตอนดึงสดจาก Yahoo Finance ไม่สำเร็จ)
+    🔧 แก้บั๊ก: ครอบด้วย _force_active_sheet_for_backend_routing() เหมือนกับด้านบน (ดู
+    _save_set_index_cache) เพื่อให้ตัดสินใจ Sheets vs Firestore ถูกต้องตามสเปรดชีต "MyStockData"
+    ที่ข้อมูลนี้อยู่จริง ไม่ใช่ตามบัญชีที่ login อยู่ตอนนี้"""
+    with _force_active_sheet_for_backend_routing(spreadsheet_name):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'SET_Index_Cache')
+            records = sheet.get_all_records()
+            if not records:
+                return pd.Series(dtype=float)
+            df = pd.DataFrame(records)
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
+            df = df.dropna(subset=['Date', 'Close']).set_index('Date').sort_index()
+            return df['Close']
+        except Exception as e:
+            print(f"⚠️ โหลดข้อมูลสำรอง SET Index ไม่สำเร็จ: {e}")
             return pd.Series(dtype=float)
-        df = pd.DataFrame(records)
-        df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
-        df['Close'] = pd.to_numeric(df['Close'], errors='coerce')
-        df = df.dropna(subset=['Date', 'Close']).set_index('Date').sort_index()
-        return df['Close']
-    except Exception as e:
-        print(f"⚠️ โหลดข้อมูลสำรอง SET Index ไม่สำเร็จ: {e}")
-        return pd.Series(dtype=float)
 
 
 @st.cache_data(ttl=86400) # เก็บข้อมูลไว้วันละครั้งเพื่อความเร็ว
