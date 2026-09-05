@@ -2764,12 +2764,35 @@ def compute_live_net_worth(spreadsheet_name):
         elif g_type == "ทองรูปพรรณ":
             jewelry_weight_baht += sign * weight_val
 
-    dca_weight_baht = sum(safe_float(row.get("Weight_Bought", 0)) for row in dca_records)
+    # 🔧 แก้บั๊ก: DCA บางรายการเป็นกองทุนที่มีราคา NAV ของตัวเอง ไม่ใช่ทองคำจริง (มีคอลัมน์
+    # Reference_Price ระบุไว้ — ดูคอมเมนต์ GOLD_DCA_COLS ใน tab_gold.py) เดิมโค้ดนี้เอา
+    # Weight_Bought ทุกแถวมาคูณกับ ref_gold_bar (ราคาทองคำแท่งสด) รวมกันหมดโดยไม่แยกแยะ ทำให้ถ้ามี
+    # กองทุน (หน่วยเป็นหน่วยกองทุน ไม่ใช่บาททองคำ เช่น กองทุน SCBGOLDH ที่มี 2,763 หน่วย) ปนอยู่
+    # จะได้มูลค่าผิดเพี้ยนมหาศาล (เอาจำนวนหน่วยกองทุนไปคูณราคาทองคำแท่งเป็นบาท/บาททองคำตรงๆ)
+    # ตอนนี้แยกกลุ่มตาม Note แล้วตีมูลค่าแต่ละกลุ่มด้วยตรรกะเดียวกับ _compute_dca_summary() ใน
+    # tab_gold.py ทุกประการ: กลุ่มไหนเคยระบุ Reference_Price ไว้ (>0) ใช้ราคาล่าสุด (เรียงตามวันที่)
+    # ของกลุ่มนั้นแทนราคาทองสด ไม่มีเลยถือเป็นทองจริง ใช้ราคาทองสดตามปกติ
+    dca_groups = {}
+    for row in dca_records:
+        note = str(row.get("Note", "")).strip()
+        date_str = str(row.get("Date", ""))
+        weight = safe_float(row.get("Weight_Bought", 0))
+        ref_price = safe_float(row.get("Reference_Price", 0))
+        g = dca_groups.setdefault(note, {"weight": 0.0, "latest_ref_date": "", "latest_ref_price": 0.0})
+        g["weight"] += weight
+        if ref_price > 0 and date_str >= g["latest_ref_date"]:
+            g["latest_ref_date"] = date_str
+            g["latest_ref_price"] = ref_price
+
+    dca_market_value = 0.0
+    for g in dca_groups.values():
+        price = g["latest_ref_price"] if g["latest_ref_price"] > 0 else ref_gold_bar
+        dca_market_value += max(g["weight"], 0.0) * price
 
     total_gold_value = (
         (max(bar_weight_g, 0.0) / 15.244) * ref_gold_bar
         + max(jewelry_weight_baht, 0.0) * ref_gold_jewelry
-        + max(dca_weight_baht, 0.0) * ref_gold_bar
+        + dca_market_value
     )
 
     net_worth_excl_re = (
