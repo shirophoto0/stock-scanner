@@ -188,16 +188,15 @@ def render_tab_stock():
         else:
             st.markdown("### 📊 Trading Performance Dashboard")
     
-            # 1. ตรวจสอบและดึงข้อมูลจาก Google Sheets ชีต 'JournalData' ถ้า session_state ยังไม่มี
+            # 1. ตรวจสอบและดึงข้อมูลชีต 'JournalData' ถ้า session_state ยังไม่มี
+            # 🔧 แก้บั๊ก: เดิมเรียก .worksheet() ตรงๆ ครั้งเดียว ไม่มีระบบลองใหม่เลย พอเจอโควตา
+            # ชั่วคราว (429 ทั้งฝั่ง Google Sheets และ Firestore) จะพังทันทีโดยไม่ลองใหม่ ตอนนี้
+            # เปลี่ยนมาใช้ load_data() ที่มี retry + backoff อัตโนมัติในตัวอยู่แล้ว (ฟังก์ชันเดียวกับ
+            # ที่จุดอื่นในไฟล์นี้ เช่น _render_market_comparison ใช้อยู่)
             if 'journal_data' not in st.session_state or not st.session_state['journal_data']:
-                try:
-                    client = get_gsheet_client()
-                    sheet_journal = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('JournalData') 
-                    raw_journal_data = sheet_journal.get_all_records()
-                    if raw_journal_data:
-                        st.session_state['journal_data'] = raw_journal_data
-                except Exception as e:
-                    st.error(f"❌ ไม่สามารถดึงข้อมูลประวัติการเทรดจาก Google Sheets ได้: {e}")
+                df_journal_fetch = load_data('JournalData', get_active_sheet_name())
+                if not df_journal_fetch.empty:
+                    st.session_state['journal_data'] = df_journal_fetch.to_dict('records')
     
             # 2. ตรวจสอบข้อมูลใน session_state เพื่อนำมาแสดงผล
             if not st.session_state.get('journal_data'):
@@ -1244,6 +1243,13 @@ def render_tab_stock():
                     total_invest += cost_value
                     total_value += market_value
 
+            # 🔧 แก้บั๊ก: เดิม df_p ถูกสร้างเฉพาะข้างใน "if portfolio_list:" ด้านล่างเท่านั้น
+            # ถ้าโหลดพอร์ตไม่สำเร็จ (เช่น Google Sheets/Firestore โควตาเต็มชั่วคราว) portfolio_list
+            # จะว่างเปล่า ทำให้ df_p ไม่เคยถูกสร้างเลย แต่ส่วนกราฟสรุปพอร์ตด้านล่าง (กราฟโดนัท/แท่ง)
+            # ยังอ้างอิงตัวแปร df_p อยู่แบบไม่มีเงื่อนไข ทำให้พัง UnboundLocalError ทันที ตอนนี้ตั้งค่า
+            # เริ่มต้นเป็นตารางเปล่าไว้ก่อนเสมอ กันปัญหานี้
+            df_p = pd.DataFrame()
+
             if portfolio_list:
                 # ดึงยอดเงินสดคงเหลือจาก session_state (ถ้ามี ถ้าไม่มีให้เป็น 0)
                 cash_bal = st.session_state.get('cash_balance', 0.0)
@@ -1388,51 +1394,57 @@ def render_tab_stock():
         # --- ส่วนแสดงกราฟสรุปพอร์ต ---
         st.divider()
 
-        # แบ่งคอลัมน์สัดส่วน 25% : 25% : 50%
-        col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
+        # 🔧 แก้บั๊ก: เดิมส่วนนี้ใช้ df_p แบบไม่มีเงื่อนไข พอ df_p ว่าง/ไม่เคยถูกสร้าง (โหลดพอร์ต
+        # ไม่สำเร็จ) จะพัง UnboundLocalError/KeyError ตอนนี้ครอบด้วยเงื่อนไขเดียวกับส่วน Sector
+        # Allocation ด้านล่าง (if not df_p.empty) ให้สอดคล้องกัน
+        if not df_p.empty:
+            # แบ่งคอลัมน์สัดส่วน 25% : 25% : 50%
+            col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
 
-        # 1. Pie Chart: มูลค่าตลาด (25%)
-        with col_p1:
-            st.subheader("🥧 มูลค่าตลาด")
-            fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4)
-            fig_pie1.update_traces(
-                textposition='outside', 
-                textinfo='label+percent',
-                textfont=dict(size=9),
-                automargin=True
-            )
-            fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
-            st.plotly_chart(style_plotly(fig_pie1), use_container_width=True)
-            st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
+            # 1. Pie Chart: มูลค่าตลาด (25%)
+            with col_p1:
+                st.subheader("🥧 มูลค่าตลาด")
+                fig_pie1 = px.pie(df_p, values='มูลค่าตลาด', names='หุ้น', hole=0.4)
+                fig_pie1.update_traces(
+                    textposition='outside', 
+                    textinfo='label+percent',
+                    textfont=dict(size=9),
+                    automargin=True
+                )
+                fig_pie1.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
+                st.plotly_chart(style_plotly(fig_pie1), use_container_width=True)
+                st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนมูลค่าตลาดปัจจุบัน</p>", unsafe_allow_html=True)
 
-        # 2. Pie Chart: มูลค่าต้นทุน (25%)
-        with col_p2:
-            st.subheader("🥧 มูลค่าต้นทุน")
-            fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4)
-            fig_pie2.update_traces(
-                textposition='outside', 
-                textinfo='label+percent',
-                textfont=dict(size=9),
-                automargin=True
-            )
-            fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
-            st.plotly_chart(style_plotly(fig_pie2), use_container_width=True)
-            st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
+            # 2. Pie Chart: มูลค่าต้นทุน (25%)
+            with col_p2:
+                st.subheader("🥧 มูลค่าต้นทุน")
+                fig_pie2 = px.pie(df_p, values='มูลค่าต้นทุน', names='หุ้น', hole=0.4)
+                fig_pie2.update_traces(
+                    textposition='outside', 
+                    textinfo='label+percent',
+                    textfont=dict(size=9),
+                    automargin=True
+                )
+                fig_pie2.update_layout(height=300, margin=dict(l=0, r=0, t=20, b=20), showlegend=False)
+                st.plotly_chart(style_plotly(fig_pie2), use_container_width=True)
+                st.markdown("<p style='text-align: center; font-size: 13px;'>สัดส่วนเงินลงทุนต้นทุน</p>", unsafe_allow_html=True)
 
-        # 3. Bar Chart: กำไร/ขาดทุน (50%)
-        with col_p3:
-            st.subheader("📈 กำไร/ขาดทุนรายตัว")
-            text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} / {row['% กำไร/ขาดทุน']:.1f}%" for _, row in df_p.iterrows()]
-            bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in df_p['กำไร/ขาดทุน']]
+            # 3. Bar Chart: กำไร/ขาดทุน (50%)
+            with col_p3:
+                st.subheader("📈 กำไร/ขาดทุนรายตัว")
+                text_labels = [f"{row['กำไร/ขาดทุน']:,.0f} / {row['% กำไร/ขาดทุน']:.1f}%" for _, row in df_p.iterrows()]
+                bar_colors = ['#26A69A' if val >= 0 else '#EF5350' for val in df_p['กำไร/ขาดทุน']]
 
-            fig_bar = go.Figure(data=[go.Bar(
-                x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
-                marker_color=bar_colors, text=text_labels, textposition='auto'
-            )])
-            fig_bar.update_traces(textfont_size=10)
-            fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(style_plotly(fig_bar), use_container_width=True)
-            st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
+                fig_bar = go.Figure(data=[go.Bar(
+                    x=df_p['หุ้น'], y=df_p['กำไร/ขาดทุน'],
+                    marker_color=bar_colors, text=text_labels, textposition='auto'
+                )])
+                fig_bar.update_traces(textfont_size=10)
+                fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
+                st.plotly_chart(style_plotly(fig_bar), use_container_width=True)
+                st.markdown("<p style='text-align: center; font-size: 13px;'>กำไร/ขาดทุน เป็น THB และ %</p>", unsafe_allow_html=True)
+        else:
+            st.info("ยังไม่มีข้อมูลพอร์ตให้แสดงกราฟสรุปครับ")
 
         # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
         # --- ส่วนแดชบอร์ดวิเคราะห์ Sector Allocation ใน Tab Portfolio ---
