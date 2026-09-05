@@ -147,10 +147,8 @@ def _migrate_legacy_physical_gold_if_needed(physical_df):
     แต่ Gold_Portfolio เดิมยังมีแถวประเภท "ทองคำแท่ง"/"ทองรูปพรรณ" อยู่ จะย้ายเข้ามาให้อัตโนมัติ
     ครั้งเดียว (แต่ละแถวเดิมคือ "ยอดสุทธิ" ที่ถือรวมอยู่แล้ว ไม่ใช่ประวัติทีละรายการซื้อ จึงแปลงเป็น
     1 รายการ "ซื้อ" ต่อแถว โดยใช้ราคาต้นทุนเฉลี่ยเดิมเป็นราคาต่อหน่วย น้ำหนัก/ต้นทุนเฉลี่ยรวมที่ได้
-    จึงตรงกับของเดิมเป๊ะ) ส่วนประเภท "เทรดทอง / กองทุนทอง" เดิม ไม่ย้ายอัตโนมัติ เพราะระบบใหม่แยก
-    เป็นเทรด Short/Long (มีทิศทาง ต้องรู้ราคาเปิด) กับ DCA (คำนวณเทียบราคาทองสดโดยตรง) ซึ่งเดา intent
-    จากข้อมูลเดิม (ที่เก็บแค่มูลค่าเงินลงทุน+มูลค่าตลาด ไม่มีทิศทาง/น้ำหนักทอง) ไม่ได้ชัดเจนพอ ผู้ใช้
-    ต้องกรอกกลับเข้าไปเองในแท็บที่ตรงกับที่ตั้งใจไว้ (เทรด Short/Long หรือ DCA)
+    จึงตรงกับของเดิมเป๊ะ) ส่วนประเภท "เทรดทอง / กองทุนทอง" เดิม ดูฟังก์ชัน
+    _migrate_legacy_fund_gold_if_needed() ด้านล่างแทน (ย้ายเข้า Gold_DCA แยกต่างหาก)
     """
     if not physical_df.empty or st.session_state.get('_gold_physical_migration_checked'):
         return physical_df
@@ -197,6 +195,66 @@ def _migrate_legacy_physical_gold_if_needed(physical_df):
         st.info(f"📦 นำเข้าข้อมูลทองคำแท่ง/รูปพรรณที่เคยบันทึกไว้ {len(new_rows)} รายการจากระบบเดิมให้อัตโนมัติแล้วครับ")
         return load_data("Gold_Physical", get_active_sheet_name())
     return physical_df
+
+
+def _migrate_legacy_fund_gold_if_needed(dca_df):
+    """
+    🆕 แก้บั๊ก: แถวประเภทเดิม "เทรดทอง / กองทุนทอง" (เช่น กองทุนทองคำ SCBGOLDH — มีจำนวนหน่วยสะสม,
+    ต้นทุนเฉลี่ย/หน่วย, ราคาตลาดปัจจุบัน/หน่วย แต่ไม่มีทิศทาง Long/Short) ตรงกับความหมายของ
+    "ซื้อสะสม (DCA)" มากกว่าเทรด Short/Long จึงย้ายเข้า Gold_DCA แทน (ตอนแรกไม่ได้ย้ายอัตโนมัติ
+    เพราะกลัวเดา intent ผิด แต่ทบทวนแล้วเห็นว่าตรงกับ DCA ชัดเจนกว่า) — ปัญหาคือกองทุนพวกนี้มีราคา
+    NAV ของตัวเอง ไม่ได้ผูกกับราคาทองสดเหมือนทองคำแท่ง/รูปพรรณจริง ถ้าใช้ราคาทองสดตีมูลค่าจะผิดมหาศาล
+    จึงย้ายมาพร้อมตั้งค่าคอลัมน์ Reference_Price ด้วย (จากราคาตลาดปัจจุบันเดิม) ให้ _compute_dca_summary()
+    รู้ว่าต้องตีมูลค่ากลุ่มนี้จากราคานี้แทนราคาทองสด (ดูคอมเมนต์ที่ GOLD_DCA_COLS ด้านล่าง)
+    """
+    if not dca_df.empty or st.session_state.get('_gold_dca_migration_checked'):
+        return dca_df
+    st.session_state['_gold_dca_migration_checked'] = True
+
+    try:
+        client = get_gsheet_client()
+        legacy_sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Gold_Portfolio')
+        legacy_records = legacy_sheet.get_all_records()
+    except Exception:
+        return dca_df
+
+    new_rows = []
+    for row in legacy_records:
+        g_type = str(row.get('ประเภท', '')).strip()
+        if g_type != 'เทรดทอง / กองทุนทอง':
+            continue
+        raw_units = row.get('น้ำหนัก/มูลค่าซื้อ', 0)
+        try:
+            units = float(str(raw_units).replace(',', '').strip() or 0)
+        except (ValueError, TypeError):
+            units = 0.0
+        if units <= 0:
+            continue
+        raw_cost = row.get('ราคาต้นทุนเฉลี่ย', 0)
+        try:
+            cost_per_unit = float(str(raw_cost).replace(',', '').strip() or 0)
+        except (ValueError, TypeError):
+            cost_per_unit = 0.0
+        raw_current = row.get('ราคาตลาดปัจจุบัน', 0)
+        try:
+            current_price = float(str(raw_current).replace(',', '').strip() or 0)
+        except (ValueError, TypeError):
+            current_price = 0.0
+        note = str(row.get('หมายเหตุ', '')).strip() or 'กองทุนทอง'
+        date_str = str(row.get('วันที่บันทึก', '')).split(' ')[0] or datetime.now().strftime('%Y-%m-%d')
+        amount_invested = round(units * cost_per_unit, 2)
+        new_rows.append([
+            f"DCA-MIGRATED-{len(new_rows) + 1}", date_str, amount_invested, cost_per_unit, units,
+            f"{note} (ย้ายมาจากระบบเดิม)", current_price,
+        ])
+
+    if not new_rows:
+        return dca_df
+
+    if _append_rows("Gold_DCA", GOLD_DCA_COLS, new_rows):
+        st.info(f"📦 นำเข้าข้อมูลกองทุนทอง/เทรดทองที่เคยบันทึกไว้ {len(new_rows)} รายการจากระบบเดิมเป็นข้อมูล DCA ให้อัตโนมัติแล้วครับ")
+        return load_data("Gold_DCA", get_active_sheet_name())
+    return dca_df
 
 
 def _compute_physical_summary(physical_df, ref_gold_bar, ref_gold_jewelry):
@@ -473,52 +531,94 @@ def _render_trade_tab(trades_df, summary):
 # =============================================================
 # ส่วนที่ 5: 🐷 ซื้อสะสม (DCA) — บันทึกซื้อสะสมเป็นงวดๆ เทียบต้นทุนเฉลี่ยกับราคาตลาด
 # =============================================================
-GOLD_DCA_COLS = ["DCA_ID", "Date", "Amount_Invested", "Price_Per_Unit", "Weight_Bought", "Note"]
+# 🔧 แก้บั๊ก: เพิ่มคอลัมน์ Reference_Price ท้ายสุด — DCA เดิมสมมติว่าทุกแถวเป็น "ทองคำจริง" หน่วย
+# บาททองคำ ตีมูลค่าปัจจุบันจากราคาทองสดเสมอ (ref_gold_bar) แต่บางรายการ (เช่น กองทุนทองคำ
+# SCBGOLDH) เป็นหน่วยลงทุนของกองทุนที่มีราคา NAV ของตัวเอง ไม่ได้เกาะราคาทองสดตรงๆ ถ้าตีราคาด้วย
+# ref_gold_bar จะได้มูลค่าผิดเพี้ยนมหาศาล (เอาจำนวนหน่วยกองทุนไปคูณราคาทองคำแท่งเป็นบาท/บาททองคำ)
+# ตอนนี้ถ้าแถวไหนระบุ Reference_Price ไว้ (>0) จะถือว่าเป็น "กองทุน/สินทรัพย์ที่มีราคาของตัวเอง"
+# ใช้ราคานี้ตีมูลค่าแทนราคาทองสด — ปล่อยว่างไว้ (ไม่เคยตั้งเลย) จะตีราคาจากราคาทองสดตามปกติเหมือนเดิม
+GOLD_DCA_COLS = ["DCA_ID", "Date", "Amount_Invested", "Price_Per_Unit", "Weight_Bought", "Note", "Reference_Price"]
 
 
 def _compute_dca_summary(dca_df, ref_gold_bar):
+    """
+    🔧 แก้บั๊ก: เดิมรวมทุกแถวเป็นก้อนเดียว (total_weight/avg_cost เดียว) ทำให้ถ้ามีทั้งทองคำจริง
+    (หน่วยบาททองคำ) กับกองทุน (หน่วยของกองทุนเอง) ปนกัน ตัวเลขจะปนกันมั่วผิดหน่วย ตอนนี้แยกกลุ่ม
+    ตาม "Note" (ชื่อกองทุน/แพลตฟอร์ม) ก่อน แล้วค่อยตีมูลค่าแต่ละกลุ่มแยกกัน (ดูคอมเมนต์
+    Reference_Price ด้านบน) ก่อนรวมเป็นยอดรวมทั้งหมด (บาทไทยรวมกันได้ปกติ ไม่มีปัญหาเรื่องหน่วย)
+    """
     if dca_df.empty:
-        return {"total_invested": 0.0, "total_weight": 0.0, "avg_cost": 0.0,
-                "market_value": 0.0, "unrealized_pl": 0.0, "history_df": pd.DataFrame()}
+        return {"groups": [], "total_invested": 0.0, "market_value": 0.0, "unrealized_pl": 0.0}
 
     df = dca_df.copy()
     df["Amount_Invested"] = pd.to_numeric(df.get("Amount_Invested", 0), errors="coerce").fillna(0.0)
     df["Price_Per_Unit"] = pd.to_numeric(df.get("Price_Per_Unit", 0), errors="coerce").fillna(0.0)
     df["Weight_Bought"] = pd.to_numeric(df.get("Weight_Bought", 0), errors="coerce").fillna(0.0)
+    df["Reference_Price"] = pd.to_numeric(df.get("Reference_Price", 0), errors="coerce").fillna(0.0)
+    df["Note"] = df.get("Note", "").fillna("").astype(str)
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
         df = df.sort_values("Date")
-    df["Cum_Invested"] = df["Amount_Invested"].cumsum()
-    df["Cum_Weight"] = df["Weight_Bought"].cumsum()
-    df["Avg_Cost"] = df["Cum_Invested"] / df["Cum_Weight"].replace(0, pd.NA)
 
-    total_invested = float(df["Amount_Invested"].sum())
-    total_weight = float(df["Weight_Bought"].sum())
-    avg_cost = (total_invested / total_weight) if total_weight > 0 else 0.0
-    market_value = total_weight * ref_gold_bar
-    unrealized = market_value - total_invested
+    groups = []
+    total_invested = total_market = 0.0
+    for note, g in df.groupby("Note", sort=False):
+        g_invested = float(g["Amount_Invested"].sum())
+        g_weight = float(g["Weight_Bought"].sum())
+        g_avg_cost = (g_invested / g_weight) if g_weight > 0 else 0.0
 
-    return {"total_invested": total_invested, "total_weight": total_weight, "avg_cost": avg_cost,
-            "market_value": market_value, "unrealized_pl": unrealized, "history_df": df}
+        # ราคาที่ใช้ตีมูลค่าปัจจุบันของกลุ่มนี้: ถ้าเคยมีการระบุ Reference_Price ไว้ (>0) ในแถวใด
+        # แถวหนึ่งของกลุ่มนี้ ถือว่าเป็นกองทุน/สินทรัพย์ที่มีราคาของตัวเอง ใช้ค่าล่าสุดที่บันทึกไว้
+        # (เรียงตามวันที่แล้ว จึงหยิบแถวสุดท้ายที่มีค่า) แทนราคาทองสด — ถ้าไม่เคยระบุเลยสักแถว
+        # ถือเป็นทองคำจริง ใช้ราคาทองสดตามปกติ
+        ref_rows = g[g["Reference_Price"] > 0]
+        is_fund_style = not ref_rows.empty
+        current_price = float(ref_rows.iloc[-1]["Reference_Price"]) if is_fund_style else ref_gold_bar
+
+        g_market = g_weight * current_price
+        if g_weight <= 0 and g_invested <= 0:
+            continue  # แถวที่เป็นแค่ "อัปเดตราคา" ล้วนๆ (ไม่มีเงินลงทุน/หน่วยใหม่) ไม่ต้องนับเป็นกลุ่มแยก
+        groups.append({
+            "note": note or "(ไม่ระบุ)", "invested": g_invested, "weight": g_weight,
+            "avg_cost": g_avg_cost, "current_price": current_price, "market_value": g_market,
+            "unrealized": g_market - g_invested, "is_fund_style": is_fund_style,
+        })
+        total_invested += g_invested
+        total_market += g_market
+
+    return {
+        "groups": groups, "total_invested": total_invested,
+        "market_value": total_market, "unrealized_pl": total_market - total_invested,
+    }
 
 
 def _render_dca_tab(dca_df, ref_gold_bar, summary):
     st.subheader("🐷 ซื้อสะสม (DCA) — ทองคำออมทรัพย์ / กองทุนทอง")
-    st.caption("บันทึกการซื้อสะสมเป็นงวดๆ หน่วยเป็น 'บาททองคำ' เสมอ (ให้เทียบต้นทุนเฉลี่ยข้ามงวดกันได้) "
-               "ระบบคำนวณต้นทุนเฉลี่ยแบบถัวเฉลี่ยต้นทุน (DCA) ให้อัตโนมัติ")
+    st.caption(
+        "บันทึกการซื้อสะสมเป็นงวดๆ แยกกลุ่มตาม \"หมายเหตุ\" (เช่น ชื่อกองทุน/แพลตฟอร์ม) — ถ้าเป็น"
+        "ทองคำจริง (หน่วยบาททองคำ) ระบบตีมูลค่าปัจจุบันจากราคาทองสดให้อัตโนมัติ ถ้าเป็นกองทุนที่มี"
+        "ราคา NAV ของตัวเอง (ไม่ผูกกับราคาทองสดตรงๆ เช่น SCBGOLDH) ให้กรอก \"ราคาปัจจุบันของกองทุน\" "
+        "ในฟอร์มด้านล่างด้วย ระบบจะใช้ราคานั้นตีมูลค่าแทน"
+    )
 
     with st.form("gold_dca_form", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         with c1:
             d_date = st.date_input("วันที่ซื้อ", key="dca_date")
+            note = st.text_input("หมายเหตุ / ชื่อกองทุน / แพลตฟอร์ม", placeholder="เช่น GSB Gold, กองทุน T-GOLD, SCBGOLDH", key="dca_note")
         with c2:
             amount = st.number_input("จำนวนเงินที่ซื้อ (บาท)", min_value=0.0, step=500.0, value=1000.0, key="dca_amount")
-            price = st.number_input("ราคาทองคำ ณ วันนั้น (บาท/บาททองคำ)", min_value=0.0,
-                                     value=round(ref_gold_bar, 2), step=10.0, key="dca_price")
+            price = st.number_input("ราคา ณ วันที่ซื้อ (บาท/หน่วย)", min_value=0.0,
+                                     value=round(ref_gold_bar, 2), step=10.0, key="dca_price",
+                                     help="ทองคำจริงใช้หน่วยบาททองคำ กองทุนใช้ราคา NAV/หน่วยของกองทุนนั้น")
         with c3:
-            note = st.text_input("หมายเหตุ / แพลตฟอร์ม", placeholder="เช่น GSB Gold, กองทุน T-GOLD", key="dca_note")
             weight_preview = (amount / price) if price > 0 else 0.0
-            st.metric("น้ำหนักที่ได้โดยประมาณ", f"{weight_preview:.4f} บาททองคำ")
+            st.metric("จำนวนหน่วยที่ได้โดยประมาณ", f"{weight_preview:.4f}")
+            ref_price_input = st.number_input(
+                "ราคาปัจจุบันของกองทุน (กรอกเฉพาะกองทุนที่ไม่ผูกราคาทองสด)",
+                min_value=0.0, step=1.0, value=0.0, key="dca_ref_price",
+                help="เว้นว่างไว้ถ้าเป็นทองคำจริง (ตีมูลค่าจากราคาทองสดอัตโนมัติ) กรอกถ้าเป็นกองทุนที่มีราคา NAV ของตัวเอง",
+            )
 
         if st.form_submit_button("➕ บันทึกการซื้อสะสม"):
             if amount <= 0 or price <= 0:
@@ -526,7 +626,7 @@ def _render_dca_tab(dca_df, ref_gold_bar, summary):
             else:
                 new_row = [
                     f"DCA-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}", str(d_date),
-                    amount, price, amount / price, note,
+                    amount, price, amount / price, note, ref_price_input,
                 ]
                 if _append_rows("Gold_DCA", GOLD_DCA_COLS, [new_row]):
                     st.toast("บันทึกการซื้อสะสมเรียบร้อย!", icon="✅")
@@ -534,24 +634,54 @@ def _render_dca_tab(dca_df, ref_gold_bar, summary):
 
     st.divider()
     c1, c2, c3 = st.columns(3)
-    render_metric_card(c1, "น้ำหนักสะสมรวม", f"{summary['total_weight']:.4f} บาททองคำ", icon="⚖️")
-    render_metric_card(c2, "ต้นทุนเฉลี่ย (DCA)", f"{summary['avg_cost']:,.2f} ฿/บาททอง", icon="📐")
+    render_metric_card(c1, "เงินลงทุนสะสมรวม", f"{summary['total_invested']:,.2f} ฿", icon="💵")
+    render_metric_card(c2, "มูลค่าปัจจุบันรวม", f"{summary['market_value']:,.2f} ฿", icon="💰")
     unrealized_pct = (summary['unrealized_pl'] / summary['total_invested'] * 100) if summary['total_invested'] > 0 else 0.0
     render_metric_card(c3, "กำไร/ขาดทุน (Mark-to-Market)", f"{summary['unrealized_pl']:,.2f} ฿", icon="📈",
                         delta=f"{unrealized_pct:+.2f}%", delta_positive=(summary['unrealized_pl'] >= 0))
 
-    history_df = summary["history_df"]
-    if not history_df.empty:
-        st.divider()
-        st.subheader("📈 ต้นทุนเฉลี่ยสะสมเทียบกับราคาตลาด ณ แต่ละงวด")
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=history_df["Date"], y=history_df["Price_Per_Unit"], mode="lines+markers",
-                                  name="ราคาตลาด ณ วันซื้อ", line=dict(color="#FFA500")))
-        fig.add_trace(go.Scatter(x=history_df["Date"], y=history_df["Avg_Cost"], mode="lines+markers",
-                                  name="ต้นทุนเฉลี่ยสะสม (DCA)", line=dict(color="#26A69A")))
-        fig.update_layout(height=350, margin=dict(l=20, r=20, t=30, b=20), hovermode="x unified",
-                           yaxis_title="บาท/บาททองคำ")
-        st.plotly_chart(style_plotly(fig), use_container_width=True)
+    st.divider()
+    st.subheader("📊 สรุปแยกตามรายการ (หมายเหตุ)")
+    groups = summary["groups"]
+    if groups:
+        df_groups = pd.DataFrame([{
+            "หมายเหตุ": g["note"],
+            "เงินลงทุนสะสม": g["invested"],
+            "จำนวนหน่วยสะสม": g["weight"],
+            "ต้นทุนเฉลี่ย/หน่วย": g["avg_cost"],
+            "ราคาปัจจุบัน/หน่วย": g["current_price"],
+            "มูลค่าปัจจุบัน": g["market_value"],
+            "กำไร/ขาดทุน": g["unrealized"],
+            "อ้างอิงราคา": "ราคาที่กรอกเอง (กองทุน)" if g["is_fund_style"] else "ราคาทองสด",
+        } for g in groups])
+        st.dataframe(
+            df_groups.style.format({
+                "เงินลงทุนสะสม": "{:,.2f}", "จำนวนหน่วยสะสม": "{:,.4f}",
+                "ต้นทุนเฉลี่ย/หน่วย": "{:,.4f}", "ราคาปัจจุบัน/หน่วย": "{:,.4f}",
+                "มูลค่าปัจจุบัน": "{:,.2f}", "กำไร/ขาดทุน": "{:+,.2f}",
+            }),
+            use_container_width=True, hide_index=True,
+        )
+
+        # 🆕 กองทุนที่ไม่มีราคาทองสดให้อ้างอิงอัตโนมัติ ต้องมีทางอัปเดตราคาล่าสุดเป็นระยะ แยกจาก
+        # ฟอร์มซื้อเพิ่มด้านบน (ไม่นับเป็นเงินลงทุน/หน่วยใหม่ แค่ปักหมุดราคาล่าสุดของกลุ่มนั้น)
+        fund_notes = [g["note"] for g in groups if g["is_fund_style"]]
+        if fund_notes:
+            st.caption("💡 กองทุนที่ไม่มีราคาทองสดอัตโนมัติ อัปเดตราคาล่าสุดได้ที่นี่ (ไม่นับเป็นการซื้อเพิ่ม)")
+            with st.form("gold_dca_update_price_form", clear_on_submit=True):
+                uc1, uc2 = st.columns(2)
+                update_note = uc1.selectbox("เลือกรายการ (หมายเหตุ)", fund_notes, key="dca_update_note")
+                update_price = uc2.number_input("ราคาปัจจุบันใหม่ (บาท/หน่วย)", min_value=0.01, step=1.0, key="dca_update_price")
+                if st.form_submit_button("💾 อัปเดตราคาปัจจุบัน"):
+                    new_row = [
+                        f"DCA-PRICE-{pd.Timestamp.now().strftime('%Y%m%d%H%M%S')}", str(datetime.now().strftime('%Y-%m-%d')),
+                        0, 0, 0, update_note, update_price,
+                    ]
+                    if _append_rows("Gold_DCA", GOLD_DCA_COLS, [new_row]):
+                        st.toast(f"อัปเดตราคา {update_note} เรียบร้อย!", icon="✅")
+                        st.rerun()
+    else:
+        st.info("ยังไม่มีข้อมูลพอร์ต DCA")
 
     st.divider()
     st.write("ประวัติการซื้อสะสมทั้งหมด:")
@@ -642,6 +772,7 @@ def render_tab_gold(client):
     physical_df = _migrate_legacy_physical_gold_if_needed(physical_df)
     trades_df = _load_gold_sheet_cached("Gold_Trades", get_active_sheet_name())
     dca_df = _load_gold_sheet_cached("Gold_DCA", get_active_sheet_name())
+    dca_df = _migrate_legacy_fund_gold_if_needed(dca_df)
 
     physical_summary = _compute_physical_summary(physical_df, ref_gold_bar, ref_gold_jewelry)
     trades_summary = _compute_trades_summary(trades_df)
