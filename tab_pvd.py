@@ -15,15 +15,28 @@ def render_tab_pvd():
     st.markdown("### 🏛️ กองทุนสำรองเลี้ยงชีพ (PVD)")
 
     # --- 1. ดึงข้อมูลจาก Google Sheets มาเตรียมไว้ก่อน (ต้องดึงก่อน เพราะการ์ดสรุปด้านบนสุดต้องใช้) ---
+    # 🔧 แก้บั๊ก: เดิม except Exception: pass กลืน error ทุกชนิดเงียบๆ รวมถึง Quota exceeded (429)
+    # ทำให้พอโดน Rate Limit ชั่วคราว หน้าจอจะโชว์ "ยังไม่มีข้อมูล..." เหมือนกับกรณีที่ยังไม่เคยกรอก
+    # ข้อมูลจริงๆ เลย ผู้ใช้แยกไม่ออกว่าเป็นปัญหาโควตาชั่วคราวหรือข้อมูลหายจริง ตอนนี้เปลี่ยนมาใช้
+    # get_worksheet_safely() (มี retry + backoff ในตัวเหมือนแท็บอื่นอยู่แล้ว) และโชว์ข้อความแยกให้
+    # ชัดเจนถ้าลองครบทุกรอบแล้วยังไม่สำเร็จ แทนที่จะเงียบเป็นข้อมูลว่างๆ
     df_pvd_history = pd.DataFrame()
+    _pvd_load_error = None
     try:
         client = get_gsheet_client()
-        sheet_pvd = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Provident_Fund')
-        pvd_records = sheet_pvd.get_all_records()
-        if pvd_records:
-            df_pvd_history = pd.DataFrame(pvd_records)
+        sheet_pvd = get_worksheet_safely(client, get_active_sheet_name(), 'Provident_Fund')
+        if sheet_pvd is not None:
+            pvd_records = sheet_pvd.get_all_records()
+            if pvd_records:
+                df_pvd_history = pd.DataFrame(pvd_records)
     except Exception as e:
-        pass
+        _pvd_load_error = str(e)
+
+    if _pvd_load_error:
+        if "429" in _pvd_load_error or "Quota exceeded" in _pvd_load_error:
+            st.warning("⏳ Google Sheets API เกินโควตาชั่วคราว (Rate Limit) กรุณารอสักครู่ (ประมาณ 1 นาที) แล้วลองรีเฟรชหน้าจอใหม่อีกครั้งครับ")
+        else:
+            st.warning(f"⚠️ โหลดข้อมูลชีต Provident_Fund ไม่สำเร็จ: {_pvd_load_error}")
 
     # --- 🆕 การ์ดสรุปภาพรวมกองทุน PVD (ข้อมูลเดือนล่าสุด) แสดงบนสุด ไม่ซ่อนใน Expander ---
     if not df_pvd_history.empty:
