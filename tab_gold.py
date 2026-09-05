@@ -567,6 +567,11 @@ def _render_dashboard_tab(physical_summary, trades_summary, dca_summary):
     total_value = physical_summary["total_market_value"] + dca_summary["market_value"]
     total_pl = (physical_summary["total_unrealized_pl"] + physical_summary["total_realized_pl"]
                 + dca_summary["unrealized_pl"] + trades_summary["total_realized"])
+    # 🆕 ฐานคิด % = ต้นทุนของทองที่ถือจริง + DCA เท่านั้น (ไม่รวมเทรด Short/Long เพราะไม่มี
+    # "เงินลงทุน" ที่ยังค้างอยู่ให้เทียบ เป็นแค่กำไร/ขาดทุนที่รับรู้แล้วจากมาร์จิ้น) เหมือนฐานคิด
+    # ของ total_value ด้านบนที่ไม่รวมสถานะเทรดที่เปิดอยู่เช่นกัน
+    total_cost_base = physical_summary["total_cost_value"] + dca_summary["total_invested"]
+    total_pl_pct = (total_pl / total_cost_base * 100) if total_cost_base > 0 else 0.0
 
     # แชร์มูลค่าพอร์ตทองไปให้แท็บ "เทรด Short/Long" ใช้คำนวณขนาดสถานะจากความเสี่ยง
     # และให้หน้าภาพรวม Net Worth ดึงไปใช้ได้เหมือนที่ TFEX/Fund ทำไว้
@@ -575,7 +580,7 @@ def _render_dashboard_tab(physical_summary, trades_summary, dca_summary):
     c1, c2, c3 = st.columns(3)
     render_metric_card(c1, "มูลค่าพอร์ตทองรวม (ถือจริง + DCA)", f"{total_value:,.2f} ฿", icon="💰")
     render_metric_card(c2, "กำไร/ขาดทุนรวมทุกประเภท", f"{total_pl:,.2f} ฿", icon="💹",
-                        delta_positive=(total_pl >= 0))
+                        delta=f"{total_pl_pct:+.2f}%", delta_positive=(total_pl >= 0))
     render_metric_card(c3, "กำไรจากเทรด Short/Long (รับรู้แล้ว)", f"{trades_summary['total_realized']:,.2f} ฿",
                         icon="📈", delta=f"Win rate {trades_summary['win_rate']:.1f}%",
                         delta_positive=(trades_summary['total_realized'] >= 0))
