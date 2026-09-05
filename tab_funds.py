@@ -6,9 +6,30 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import time
+import random
 from datetime import date, datetime
+from gspread.exceptions import APIError
 from backend_functions import calculate_fund_result, get_gsheet_client, get_cached_worksheet, get_active_sheet_name
 from theme import style_plotly, render_metric_card, get_theme_colors
+
+
+def _get_all_records_with_retry(client, spreadsheet_name, worksheet_name, retries=4, delay=2):
+    """🔧 แก้บั๊ก 429: เดิม _load_fund_*_cached ด้านล่างยิง API ตรงๆ ครั้งเดียว พอเจอ Quota
+    exceeded (429) ชั่วคราว (เช่น หลายแท็บ/หลายผู้ใช้อ่านพร้อมกัน) จะโยน error ออกไปให้ผู้ใช้เห็น
+    ทันทีโดยไม่ลองใหม่เลย ทั้งที่ 429 ส่วนใหญ่เป็นแค่ปัญหาชั่วคราวไม่กี่วินาที ตอนนี้ลองใหม่พร้อม
+    หน่วงเวลาแบบสุ่ม (เหมือนกับ get_worksheet_safely ใน backend_functions.py) ก่อนค่อยยอมโยน error จริงๆ"""
+    for attempt in range(retries):
+        try:
+            sheet = get_cached_worksheet(client, spreadsheet_name, worksheet_name)
+            return sheet.get_all_records()
+        except APIError as e:
+            is_quota_error = "429" in str(e) or "Quota exceeded" in str(e)
+            if is_quota_error and attempt < retries - 1:
+                wait_time = delay * (attempt + 1) + random.uniform(0.5, 2.5)
+                time.sleep(wait_time)
+                continue
+            raise
 
 
 # 🆕 แก้บั๊ก 429 Rate Limit: เดิมทุก sub-tab (ภาพรวมพอร์ต/ซื้อกองทุนเพิ่ม/อัปเดตราคา) ต่างเรียก
@@ -28,24 +49,21 @@ from theme import style_plotly, render_metric_card, get_theme_colors
 def _load_fund_history_cached(spreadsheet_name):
     """โหลดข้อมูลกองทุนทั้งหมดจากชีต Fund_History (แคชไว้ 2 นาที กันยิง API ซ้ำจนโดน Rate Limit)"""
     client = get_gsheet_client()
-    sheet = get_cached_worksheet(client, spreadsheet_name, 'Fund_History')
-    return sheet.get_all_records()
+    return _get_all_records_with_retry(client, spreadsheet_name, 'Fund_History')
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _load_fund_value_history_cached(spreadsheet_name):
     """โหลดข้อมูลแนวโน้มมูลค่ากองทุนจากชีต Fund_Value_History (แคชไว้ 5 นาที เพราะเป็นข้อมูลย้อนหลังรายเดือน ไม่ต้องอัปเดตบ่อย)"""
     client = get_gsheet_client()
-    sheet = get_cached_worksheet(client, spreadsheet_name, 'Fund_Value_History')
-    return sheet.get_all_records()
+    return _get_all_records_with_retry(client, spreadsheet_name, 'Fund_Value_History')
 
 
 @st.cache_data(ttl=120, show_spinner=False)
 def _load_fund_dividend_cached(spreadsheet_name):
     """🆕 โหลดประวัติปันผลที่บันทึกไว้เองจากชีต Fund_Dividend (แคชไว้ 2 นาทีเหมือน Fund_History)"""
     client = get_gsheet_client()
-    sheet = get_cached_worksheet(client, spreadsheet_name, 'Fund_Dividend')
-    return sheet.get_all_records()
+    return _get_all_records_with_retry(client, spreadsheet_name, 'Fund_Dividend')
 
 
 _FUND_DIVIDEND_COLUMNS = ["Dividend_ID", "Fund_Name", "Date", "Amount", "Note"]
@@ -744,4 +762,11 @@ def render_tab_funds():
             else:
                 st.info("ยังไม่มีข้อมูลกองทุนในชีต")
         except Exception as e:
-            st.warning(f"ยังไม่พบชีต Fund_History หรือเกิดข้อผิดพลาด: {e}")
+            # 🔧 แก้บั๊ก: เดิมโชว์ raw APIError ตรงๆ (ดูน่ากลัวและไม่บอกว่าต้องทำอะไรต่อ) ทั้งที่
+            # ส่วนใหญ่ที่เจอคือ Quota exceeded (429) ชั่วคราว — แม้จะลองใหม่ในตัวแล้ว
+            # (_get_all_records_with_retry ด้านบน) แต่ถ้าชนโควตาต่อเนื่องจนลองครบทุกรอบก็ยังเป็นไปได้
+            # ตอนนี้แยกข้อความให้ชัดเจนกว่าเดิม ว่าเป็นแค่โควตาชั่วคราว ให้รอแล้วรีเฟรชใหม่
+            if "429" in str(e) or "Quota exceeded" in str(e):
+                st.warning("⏳ Google Sheets API เกินโควตาชั่วคราว (Rate Limit) กรุณารอสักครู่ (ประมาณ 1 นาที) แล้วลองรีเฟรชหน้าจอใหม่อีกครั้งครับ")
+            else:
+                st.warning(f"ยังไม่พบชีต Fund_History หรือเกิดข้อผิดพลาด: {e}")
