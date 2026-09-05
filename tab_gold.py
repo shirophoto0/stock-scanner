@@ -185,7 +185,7 @@ def _migrate_legacy_physical_gold_if_needed(physical_df):
         date_str = str(row.get('วันที่บันทึก', '')).split(' ')[0] or datetime.now().strftime('%Y-%m-%d')
         new_rows.append([
             f"GP-MIGRATED-{len(new_rows) + 1}", date_str, g_type, "ซื้อ", weight, unit, price, round(weight * price, 2),
-            f"{note} (ย้ายมาจากระบบเดิม)".strip(),
+            note,
         ])
 
     if not new_rows:
@@ -245,7 +245,7 @@ def _migrate_legacy_fund_gold_if_needed(dca_df):
         amount_invested = round(units * cost_per_unit, 2)
         new_rows.append([
             f"DCA-MIGRATED-{len(new_rows) + 1}", date_str, amount_invested, cost_per_unit, units,
-            f"{note} (ย้ายมาจากระบบเดิม)", current_price,
+            note, current_price,
         ])
 
     if not new_rows:
