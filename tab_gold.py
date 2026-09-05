@@ -18,12 +18,23 @@ import plotly.express as px
 from datetime import datetime
 from gspread.exceptions import WorksheetNotFound
 from backend_functions import (
-    get_gsheet_client, get_cached_spreadsheet, get_worksheet_safely,
+    get_gsheet_client, get_cached_spreadsheet, get_cached_worksheet, get_worksheet_safely,
     get_active_sheet_name, load_data, fetch_live_gold_price,
 )
 from theme import render_metric_card, style_plotly
 
 GOLD_BAHT_TO_GRAM = 15.244  # 1 บาททองคำ = 15.244 กรัม (มาตรฐานสมาคมค้าทองคำไทย)
+
+
+# 🔧 แก้บั๊ก 429: เดิมแท็บนี้เก็บข้อมูลทองทุกประเภทไว้ในชีตเดียว (Gold_Portfolio) พอแยกเป็น 3 ชีต
+# (Gold_Physical/Gold_Trades/Gold_DCA) จำนวนครั้งที่ต้องอ่าน Google Sheets API ต่อการเปิดแท็บนี้
+# 1 ครั้งเพิ่มขึ้นเป็น 3 เท่า ทั้งที่ load_data() มี @st.cache_data(ttl=60) อยู่แล้ว แต่ 60 วินาที
+# สั้นเกินไปเมื่อมีผู้ใช้หลายคนเข้าแท็บนี้พร้อมกัน (ใช้ service account เดียวกันทั้งแอป จึงชนโควตา
+# "Read requests per minute" ร่วมกัน) ตอนนี้ห่อด้วยแคชอีกชั้นที่ TTL ยาวกว่า (3 นาที) เฉพาะจุดนี้
+# ลดจำนวนครั้งที่ยิง API ของ 3 ชีตนี้ลงได้อีก โดยไม่ต้องแก้ TTL ของ load_data() ที่จุดอื่นทั้งแอปใช้ร่วมกัน
+@st.cache_data(ttl=180, show_spinner=False)
+def _load_gold_sheet_cached(sheet_name, active_sheet_name):
+    return load_data(sheet_name, active_sheet_name)
 
 
 # =============================================================
@@ -147,7 +158,9 @@ def _migrate_legacy_physical_gold_if_needed(physical_df):
 
     try:
         client = get_gsheet_client()
-        legacy_sheet = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Gold_Portfolio')
+        # 🔧 แก้บั๊ก 429: เดิมเรียก .worksheet() ตรงๆ ทุกครั้ง (ไม่ผ่านแคช) ยิง API เพิ่มโดยไม่จำเป็น
+        # เปลี่ยนมาใช้ get_cached_worksheet() ที่แคช worksheet object ไว้ 5 นาทีเหมือนจุดอื่นในแอป
+        legacy_sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Gold_Portfolio')
         legacy_records = legacy_sheet.get_all_records()
     except Exception:
         return physical_df
@@ -620,10 +633,10 @@ def render_tab_gold(client):
     ref_gold_bar, ref_gold_jewelry = _render_gold_price_ticker()
     st.markdown("---")
 
-    physical_df = load_data("Gold_Physical", get_active_sheet_name())
+    physical_df = _load_gold_sheet_cached("Gold_Physical", get_active_sheet_name())
     physical_df = _migrate_legacy_physical_gold_if_needed(physical_df)
-    trades_df = load_data("Gold_Trades", get_active_sheet_name())
-    dca_df = load_data("Gold_DCA", get_active_sheet_name())
+    trades_df = _load_gold_sheet_cached("Gold_Trades", get_active_sheet_name())
+    dca_df = _load_gold_sheet_cached("Gold_DCA", get_active_sheet_name())
 
     physical_summary = _compute_physical_summary(physical_df, ref_gold_bar, ref_gold_jewelry)
     trades_summary = _compute_trades_summary(trades_df)
