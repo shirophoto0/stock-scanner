@@ -6,6 +6,24 @@ import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+
+# 🔧 แก้บั๊ก: ค่าตัวเลขที่มาจาก pandas/numpy (เช่น np.int64, np.float64 จาก .sum()/.iloc[]) เขียนลง
+# Firestore ตรงๆ ไม่ได้ ('Cannot convert to a Firestore Value' ... 'Invalid type') เพราะ SDK รู้จัก
+# แค่ type พื้นฐานของ Python เท่านั้น (int, float, str, bool, ...) ต่างจาก gspread เดิมที่ส่งเป็น
+# ข้อความไปที่ Google Sheets API เสมอเลยไม่เจอปัญหานี้ ฟังก์ชันนี้แปลงค่า numpy scalar กลับเป็น
+# native Python type ก่อนเขียนทุกจุด (.item() คือวิธีมาตรฐานของ numpy สำหรับแปลงกลับ)
+def _to_firestore_safe(value):
+    if isinstance(value, dict):
+        return {k: _to_firestore_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_to_firestore_safe(v) for v in value]
+    if hasattr(value, 'item') and not isinstance(value, (str, bytes)):
+        try:
+            return value.item()
+        except Exception:
+            return value
+    return value
+
 # ==========================================================
 # ชั้นเชื่อมต่อ Firebase (แทนที่ get_gsheet_client เดิม)
 # ==========================================================
@@ -192,7 +210,7 @@ class FirestoreWorksheet:
             else:
                 row_dict = {c: (row[i] if i < len(row) else '') for i, c in enumerate(columns)}
             seq = self._next_seq()
-            doc_data = dict(row_dict)
+            doc_data = _to_firestore_safe(dict(row_dict))
             doc_data['_seq'] = seq
             self._collection.document(str(seq)).set(doc_data)
 
@@ -214,7 +232,7 @@ class FirestoreWorksheet:
         if col < 1 or col > len(columns):
             raise IndexError(f"ไม่พบคอลัมน์ที่ {col}")
         field_name = columns[col - 1]
-        self._collection.document(rows[idx]['doc_id']).update({field_name: value})
+        self._collection.document(rows[idx]['doc_id']).update({field_name: _to_firestore_safe(value)})
 
     def update(self, *args, **kwargs):
         """
@@ -264,7 +282,7 @@ class FirestoreWorksheet:
             col_idx = col_start + i
             if col_idx - 1 < len(columns):
                 update_dict[columns[col_idx - 1]] = v
-        self._collection.document(rows[idx]['doc_id']).update(update_dict)
+        self._collection.document(rows[idx]['doc_id']).update(_to_firestore_safe(update_dict))
 
     def _replace_all(self, header, data_rows):
         self._delete_all_docs()

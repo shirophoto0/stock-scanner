@@ -1069,7 +1069,14 @@ def calculate_atr(df, period=14):
     return float(atr) if not pd.isna(atr) else 10.0
 
 
-@st.cache_data(ttl=60)
+# 🔧 แก้บั๊ก: เดิม ttl=60 (1 นาที) ทำให้ทุกชีตที่ใช้ฟังก์ชันนี้ร่วมกัน (Gold_Physical/Trades/DCA,
+# Portfolio_History, CashFlow, JournalData, TFEX_History, Cash_Flow) ต้องอ่าน Firestore ใหม่แทบทุก
+# ครั้งที่มีการโต้ตอบในแอป เพราะ Streamlit รันโค้ดทุกแท็บใหม่ทุกครั้ง (ไม่ใช่แค่แท็บที่เปิดดูอยู่)
+# เป็นตัวการหลักที่ทำให้โควตา Firestore เต็ม (429 Quota exceeded) ยืดเป็น 10 นาทีเพื่อลดจำนวนครั้ง
+# ที่ยิงอ่านลงมาก — ปลอดภัยเพราะทุกจุดที่เขียนข้อมูลลงชีตเหล่านี้ (save_journal, log_cash_transaction,
+# save_portfolio_snapshot, backfill_portfolio_history และจุดอื่นๆ ในแท็บ Gold/TFEX/Funds/PVD) เรียก
+# st.cache_data.clear() ทันทีหลังบันทึกอยู่แล้ว ผู้ใช้จึงเห็นข้อมูลใหม่ทันทีหลังบันทึกไม่ต้องรอ TTL
+@st.cache_data(ttl=600)
 def load_data(sheet_name, active_sheet_name):
     # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ "จำ" ผลลัพธ์แยกตามชื่อ worksheet (เช่น TFEX_History) เท่านั้น
     # โดยไม่รู้ว่าผู้ใช้คนไหนเป็นคนขอ (เรียก get_active_sheet_name() ข้างในเฉยๆ) ทำให้สลับ user
@@ -1184,6 +1191,9 @@ def save_journal():
     
     sheet.clear()
     sheet.update([df_temp.columns.values.tolist()] + df_temp.fillna('').values.tolist())
+    # 🔧 แก้บั๊ก: ล้างแคช load_data() ทันทีหลังบันทึก กัน TTL ที่ยืดยาวขึ้น (ดูคอมเมนต์ที่
+    # @st.cache_data(ttl=...) ของ load_data()) ทำให้เห็นข้อมูล JournalData เก่าค้างอยู่หลังบันทึก
+    st.cache_data.clear()
 
 
 def load_journal():
@@ -1351,7 +1361,10 @@ def save_portfolio_snapshot():
         # บันทึกข้อมูลลงในตาราง Portfolio_History
         # รูปแบบ: [วันที่, มูลค่าพอร์ตรวม, เงินต้นสะสม]
         log_to_sheet("Portfolio_History", [str(datetime.now().date()), total_equity, total_invested_capital()])
-        
+        # 🔧 แก้บั๊ก: ล้างแคช load_data() ทันทีหลังบันทึก กัน TTL ที่ยืดยาวขึ้นทำให้เห็นกราฟ
+        # Portfolio_History เก่าค้างอยู่หลังบันทึกยอดพอร์ตใหม่
+        st.cache_data.clear()
+
     except Exception as e:
         print(f"DEBUG: Error ใน save_portfolio_snapshot: {e}")
     
@@ -1466,7 +1479,10 @@ def backfill_portfolio_history():
         
         sheet.clear()
         sheet.update([df_history.columns.values.tolist()] + df_history.values.tolist())
-        
+        # 🔧 แก้บั๊ก: ล้างแคช load_data() ทันทีหลังบันทึก กัน TTL ที่ยืดยาวขึ้นทำให้เห็นข้อมูล
+        # Portfolio_History เก่าค้างอยู่หลัง backfill
+        st.cache_data.clear()
+
         st.success("อัปเดตเรียบร้อย! กราฟของคุณพร้อมใช้งานแล้ว")
         st.rerun()
     except Exception as e:
@@ -1520,6 +1536,9 @@ def log_cash_transaction(date, trans_type, amount, note):
         
         # เพิ่มแถวใหม่ต่อท้ายข้อมูลเดิม
         sheet.append_row(row_data)
+        # 🔧 แก้บั๊ก: ล้างแคช load_data() ทันทีหลังบันทึก กัน TTL ที่ยืดยาวขึ้นทำให้เห็นข้อมูล
+        # CashFlow เก่าค้างอยู่หลังบันทึกรายการเงินสดใหม่
+        st.cache_data.clear()
         st.toast("บันทึกรายการเงินสดเรียบร้อย!", icon="💰")
     except Exception as e:
         st.error(f"บันทึกรายการเงินสดไม่สำเร็จ: {e}")
@@ -1749,7 +1768,12 @@ def check_alerts(row):
     # ถ้าไม่เข้าเงื่อนไขเลย ให้คืนค่าปกติ
     return "ปกติ"
 
-@st.cache_data(ttl=3600)
+# 🔧 แก้บั๊ก: เดิม ttl=3600 (1 ชั่วโมง) ทำให้ต้องอ่าน Firestore ใหม่ทุกชั่วโมงตลอดวัน ทั้งที่ชีต
+# StockData นี้ถูกอัปเดตแค่วันละครั้งช่วงกลางคืน (ผ่าน daily_scan.py บน GitHub Actions) เท่านั้น
+# ข้อมูลช่วงกลางวันจึงไม่เปลี่ยนเลย ยืด TTL เป็น 12 ชั่วโมงเพื่อลดจำนวนครั้งที่ยิงอ่าน Firestore
+# ลงได้มาก (ตัวการหลักที่ทำให้โควตา 429 Quota exceeded เต็มระหว่างวัน) โดยผู้ใช้ยังเห็นข้อมูลอัปเดต
+# ภายในไม่กี่ชั่วโมงหลังสแกนกลางคืนเสร็จอยู่ดี ไม่ต้องรอข้ามวัน
+@st.cache_data(ttl=43200)
 def load_from_gsheet():
     try:
         client = get_gsheet_client()
@@ -1779,7 +1803,10 @@ def load_from_gsheet():
 
     except Exception as e:
         st.error(f"เกิดข้อผิดพลาดในการดึงข้อมูล: {e}")
-        return None
+        # 🔧 แก้บั๊ก: เดิม return None ตรงนี้เหมือนกับจุด "if not data" ด้านบนที่เคยแก้ไปแล้ว แต่ลืมจุดนี้
+        # ทำให้พอ Google Sheets โควตาเต็ม (429) จะโยน Exception เข้ามาที่นี่แล้วคืน None กลับไปแทน
+        # ตอนนี้คืนตารางเปล่าเหมือนกัน ผู้เรียก (App.py) ที่เช็ค .empty ต่อจะได้ไม่พังด้วย AttributeError
+        return pd.DataFrame()
 
 def log_to_sheet(sheet_name, row_data):
     """ฟังก์ชันอเนกประสงค์สำหรับ append แถวข้อมูลใหม่ลงใน Google Sheets"""
