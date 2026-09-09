@@ -1,7 +1,7 @@
 name: Daily Stock Scanner
 on:
   schedule:
-    - cron: '36 10 * * *'  # ตั้งเวลา 17:30 น. เวลาประเทศไทย
+    - cron: '36 7 * * *'  # ตั้งเวลา 14:36 น. ICT (ถอยจากเดิม 3 ชม. เพื่อชดเชย delay ของ GitHub Actions scheduler ที่สังเกตได้ ~4 ชม. เป้าหมายให้รันจริงราว 17:30-18:30 น. — 2026-09-09 เริ่ม monitor)
   workflow_dispatch:        # ให้กดรันเองได้ด้วย
 jobs:
   build:
