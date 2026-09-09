@@ -877,55 +877,76 @@ def calculate_tfex_result(entry, close, size, comm, Status):
 # =============================================================
 # 4. ฟังก์ชันการจัดการบันทึกข้อมูลและเงินสด (Logging & Cash Balance)
 # =============================================================
+# 🔧 แก้บั๊ก (สำคัญ พบจากผู้ใช้จริง): สูตรเดิมของ load_total_cash_balance() คำนวณ
+# (รวม CashFlow) - (ต้นทุนหุ้นที่ถืออยู่ตอนนี้ จาก shares*avg_price ใน PortfolioData) แต่ทุกครั้งที่
+# ซื้อ/ขายหุ้นผ่านฟอร์มในแอป log_cash_transaction() ก็บันทึกรายการนั้นลง CashFlow ไปแล้วด้วย ทำให้
+# ต้นทุนของหุ้นที่ซื้อผ่านแอป (ไม่ใช่หุ้นเก่าที่มีมาก่อนเริ่มระบบ) ถูกหักออกจากเงินสด "ซ้ำสองรอบ"
+#
+# ลองแก้ด้วยการแยก "หุ้นเก่า (ไม่เคย log)" ออกจาก "หุ้นที่ log แล้ว" แล้วหักต้นทุนเฉพาะกลุ่มแรกครั้ง
+# เดียวดูแล้ว แต่พบว่าบางตัว (เช่น HTECH) เป็นหุ้นผสม — มีทั้งจำนวนที่ถือมาก่อน "และ" จำนวนที่ log
+# ไว้ ปนกันจนต้นทุนเฉลี่ยแยกไม่ออกว่าส่วนไหนคือส่วนไหนแม่นยำ 100% เสี่ยงคำนวณผิดถ้าไล่ทำแบบนี้ต่อ
+#
+# วิธีที่ใช้จริงแทน (ปลอดภัยกว่า เพราะอิงตัวเลขที่ผู้ใช้ยืนยันว่าถูกต้องจริง ไม่ใช่การคำนวณย้อนหลัง):
+# เพิ่มรายการ "ปรับยอดเงินสด" ลง CashFlow 1 ครั้ง ให้ sum(CashFlow) ตรงกับเงินสดจริงที่ผู้ใช้ยืนยัน
+# ณ วันที่ปรับ แล้วนับจากนั้นสูตรก็เหลือแค่ sum(CashFlow) เฉยๆ (เพราะทุกรายการหลังจากนี้ log ครบถ้วน
+# อยู่แล้ว ไม่มีจุดไหนซ้ำซ้อนอีก) — ทำ reconcile ให้ "MyStockData" (บัญชี umwealth) แล้วเมื่อ
+# 2026-09-09 ส่วน "Nujiwealth" ยังไม่ได้ทำ (รอผู้ใช้ยืนยันตัวเลขจริงก่อน) จึงต้องคงสูตรเดิมไว้ให้บัญชี
+# ที่ยังไม่ reconcile ก่อน ไม่งั้นจะโชว์ sum ดิบที่ยังรวมต้นทุนหุ้นเก่าที่ไม่เคย log ปนอยู่ ผิดยิ่งกว่าเดิม
+_CASH_BALANCE_RECONCILED_SHEETS = {"MyStockData"}
+
+
 def load_total_cash_balance():
-    """คำนวณเงินสดคงเหลือที่แท้จริง: (ยอดรวม Cash Flow ทั้งหมด) - (ผลรวม shares * avg_price ของทุกหุ้นในพอร์ต)"""
+    """คำนวณเงินสดคงเหลือที่แท้จริง — ดูคอมเมนต์ด้านบนสำหรับที่มาของ _CASH_BALANCE_RECONCILED_SHEETS"""
     try:
         client = get_gsheet_client()
         spreadsheet_name = get_active_sheet_name()
-        
+
         # 1. ดึงยอดรวมจากชีต Cash_Flow ทั้งหมด
         sheet_cash = get_cached_worksheet(client, spreadsheet_name, 'CashFlow')
         records_cash = sheet_cash.get_all_records()
-        
+
         total_cash_flow = 0.0
         if records_cash:
             df_cash = pd.DataFrame(records_cash)
             if 'Amount' in df_cash.columns:
                 df_cash['Amount'] = pd.to_numeric(df_cash['Amount'], errors='coerce').fillna(0)
                 total_cash_flow = float(df_cash['Amount'].sum())
-                
-        # 2. บังคับคำนวณต้นทุนหุ้นทั้งหมดจาก shares * avg_price โดยตรง
+
+        if spreadsheet_name in _CASH_BALANCE_RECONCILED_SHEETS:
+            return total_cash_flow
+
+        # 2. บัญชีที่ยังไม่ reconcile: ใช้สูตรเดิมไปก่อน (บังคับคำนวณต้นทุนหุ้นทั้งหมดจาก
+        # shares * avg_price โดยตรง แล้วหักออกจาก CashFlow — รู้อยู่แล้วว่ามีบั๊กหักซ้ำสำหรับหุ้นที่
+        # log ไว้แล้ว แต่เป็นพฤติกรรมเดิมที่ยังไม่ได้แก้ ไม่ใช่ของใหม่ที่เพิ่งทำให้แย่ลง)
         sheet_portfolio = get_cached_worksheet(client, spreadsheet_name, 'PortfolioData')
         records_portfolio = sheet_portfolio.get_all_records()
-        
+
         total_stock_cost = 0.0
         if records_portfolio:
             for row in records_portfolio:
                 # จัดการ key ให้สะอาด ป้องกันปัญหาเรื่องเว้นวรรค
                 cleaned_row = {str(k).strip(): v for k, v in row.items()}
-                
+
                 try:
                     # ดึงค่าหุ้น (รองรับทั้งชื่อภาษาอังกฤษและไทย)
                     shares_val = cleaned_row.get('shares', cleaned_row.get('จำนวน', 0))
                     shares = float(str(shares_val).replace(',', '')) if shares_val not in [None, ''] else 0.0
                 except (ValueError, TypeError):
                     shares = 0.0
-                    
+
                 try:
                     # ดึงค่าต้นทุนเฉลี่ย (รองรับทั้งชื่อภาษาอังกฤษและไทย)
                     avg_val = cleaned_row.get('avg_price', cleaned_row.get('ต้นทุนเฉลี่ย', 0.0))
                     avg_price = float(str(avg_val).replace(',', '')) if avg_val not in [None, ''] else 0.0
                 except (ValueError, TypeError):
                     avg_price = 0.0
-                    
+
                 # นำจำนวนหุ้นคูณต้นทุนเฉลี่ย แล้วบวกสะสมเข้าไป
                 total_stock_cost += (shares * avg_price)
-                    
-        # 3. เงินสดคงเหลือที่แท้จริง = ยอดรวม Cash Flow - ต้นทุนหุ้นในพอร์ต
-        actual_cash_balance = total_cash_flow - total_stock_cost
-        
-        return float(actual_cash_balance)
-        
+
+        # 3. เงินสดคงเหลือ (สูตรเดิม) = ยอดรวม Cash Flow - ต้นทุนหุ้นในพอร์ต
+        return float(total_cash_flow - total_stock_cost)
+
     except Exception as e:
         st.error(f"❌ เกิดข้อผิดพลาดในการคำนวณเงินสด: {e}")
         return 0.0
