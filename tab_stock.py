@@ -1171,6 +1171,14 @@ def render_tab_stock():
         st.divider()
         st.subheader("📊 สรุปพอร์ตการลงทุน")
 
+        # 🔧 แก้บั๊ก: เดิม df_p ถูกสร้างแค่ข้างใน "if my_portfolio in session_state และมีข้อมูล:"
+        # เท่านั้น (บรรทัดที่เคยแก้ก่อนหน้านี้ตั้งค่าเริ่มต้นไว้แค่ "ข้างใน" เงื่อนไขนั้นอีกที) ถ้าการ
+        # โหลดพอร์ตล้มเหลวทั้งหมด (เช่น 429 Quota exceeded ตอนอ่าน PortfolioData) my_portfolio จะไม่
+        # ถูกตั้งค่าเลย ตกไปเข้า else (บรรทัด "ยังไม่มีข้อมูลในชีต PortfolioData...") ทำให้ df_p ไม่เคย
+        # ถูกสร้างขึ้นมาเลยตั้งแต่ต้น ส่วนกราฟสรุปพอร์ตด้านล่างที่เช็ค "if not df_p.empty:" จึงพัง
+        # UnboundLocalError อยู่ดี ย้ายค่าเริ่มต้นมาไว้นอกสุดตรงนี้กันไว้ทุกกรณี
+        df_p = pd.DataFrame()
+
         # 1. ตรวจสอบและโหลดข้อมูลพอร์ตจาก Google Sheets (ชีต PortfolioData) ถ้ายังไม่มีใน session_state
         if "my_portfolio" not in st.session_state or not st.session_state["my_portfolio"]:
             try:
@@ -1242,13 +1250,6 @@ def render_tab_stock():
                     })
                     total_invest += cost_value
                     total_value += market_value
-
-            # 🔧 แก้บั๊ก: เดิม df_p ถูกสร้างเฉพาะข้างใน "if portfolio_list:" ด้านล่างเท่านั้น
-            # ถ้าโหลดพอร์ตไม่สำเร็จ (เช่น Google Sheets/Firestore โควตาเต็มชั่วคราว) portfolio_list
-            # จะว่างเปล่า ทำให้ df_p ไม่เคยถูกสร้างเลย แต่ส่วนกราฟสรุปพอร์ตด้านล่าง (กราฟโดนัท/แท่ง)
-            # ยังอ้างอิงตัวแปร df_p อยู่แบบไม่มีเงื่อนไข ทำให้พัง UnboundLocalError ทันที ตอนนี้ตั้งค่า
-            # เริ่มต้นเป็นตารางเปล่าไว้ก่อนเสมอ กันปัญหานี้
-            df_p = pd.DataFrame()
 
             if portfolio_list:
                 # ดึงยอดเงินสดคงเหลือจาก session_state (ถ้ามี ถ้าไม่มีให้เป็น 0)

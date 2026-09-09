@@ -69,7 +69,32 @@ def get_active_sheet_name():
 # ทุก method ในคลาสนี้ query ข้อมูลสดจาก Firestore ทุกครั้ง (ไม่ cache ข้อมูลไว้ในตัว
 # object) เพื่อกันบั๊กเรื่องเลขแถวเพี้ยนจากการที่ object นี้ถูกแชร์ข้ามผู้ใช้/เซสชัน
 # (get_cached_worksheet cache ตัว object นี้ไว้ 5 นาที ใช้ร่วมกันทุกคนที่เปิดชีตเดียวกัน)
+#
+# 🔧 แก้บั๊ก (Firestore reads สูงเกินไป): get_cached_worksheet (@st.cache_resource) จำได้แค่
+# "ตัว collection reference" เท่านั้น — แต่ get_all_records()/get_all_values() ที่เรียกผ่านมันยัง
+# ยิง .stream() อ่านข้อมูลจริงใหม่ทุกครั้งที่ถูกเรียก (คนละชั้นกับ Google Sheets ที่ 1 ชีต = 1 API
+# call เสมอ ไม่ว่าจะกี่แถว — Firestore เก็บทีละแถวเป็น document แยกกัน อ่าน 100 แถว = 100 reads)
+# เพิ่ม cache ชั้น "ข้อมูล" (@st.cache_data ttl=300) ไว้เฉพาะ path อ่านเพื่อแสดงผล
+# (get_all_records/get_all_values ผ่าน _fetch_rows_for_display) โดยตั้งใจ "ไม่" ใช้กับ path ที่ใช้
+# หาตำแหน่งแถวก่อนเขียน (find/update_cell/update/delete_rows ยังเรียก _fetch_rows() สดเหมือนเดิม
+# ทุกครั้ง) เพราะถ้า cache ไว้ path เขียนอาจเจอ index เพี้ยนจากข้อมูลเก่าที่ยังไม่หมดอายุ cache — ทุก
+# method ที่เขียน (append_rows/update_cell/update/delete_rows/clear) เรียก _invalidate_cache()
+# ล้าง cache entry ของชีตนั้นทันทีหลังเขียนเสร็จ กันข้อมูลค้างข้ามไปถึง 5 นาที
 # ==========================================================
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _fetch_rows_cached(_client, spreadsheet_name, worksheet_name):
+    collection_ref = _client.collection('users').document(spreadsheet_name).collection(worksheet_name)
+    docs = collection_ref.order_by('_seq').stream()
+    rows = []
+    for doc in docs:
+        if doc.id == '_meta':
+            continue
+        data = dict(doc.to_dict() or {})
+        data.pop('_seq', None)
+        rows.append({'doc_id': doc.id, 'data': data})
+    return rows
+
 
 class _FirestoreCell:
     """เลียนแบบ gspread.Cell แบบพื้นฐาน (มีแค่ .row/.col/.value ที่โค้ดเดิมใช้จริง)"""
@@ -89,10 +114,12 @@ class FirestoreWorksheet:
 
     _CELL_RE = re.compile(r'^([A-Za-z]+)(\d+)$')
 
-    def __init__(self, client, collection_ref):
+    def __init__(self, client, collection_ref, spreadsheet_name=None, worksheet_name=None):
         self._client = client
         self._collection = collection_ref
         self._meta_ref = collection_ref.document('_meta')
+        self._spreadsheet_name = spreadsheet_name
+        self._worksheet_name = worksheet_name
 
     # --------------------------------------------------------
     # helper ภายใน
@@ -101,6 +128,25 @@ class FirestoreWorksheet:
         snap = self._meta_ref.get()
         meta = snap.to_dict() if snap.exists else {}
         return list(meta.get('columns', []))
+
+    def _fetch_rows_for_display(self):
+        """
+        เหมือน _fetch_rows() แต่ผ่าน cache ข้อมูล (@st.cache_data ttl=300) — ใช้เฉพาะ path อ่าน
+        เพื่อแสดงผล (get_all_records/get_all_values) เท่านั้น ห้ามใช้กับ path ที่ต้องหาตำแหน่งแถว
+        ก่อนเขียน (find/update_cell/update/delete_rows ต้องเรียก _fetch_rows() สดเสมอ ไม่งั้นเสี่ยง
+        แก้ผิดแถวถ้าข้อมูลเพิ่งถูกเขียนโดยคนอื่นแต่ cache ยังไม่หมดอายุ)
+        """
+        if self._spreadsheet_name is None or self._worksheet_name is None:
+            # กันเหนียว: ถ้าไม่มีชื่อชีต (สร้าง FirestoreWorksheet ตรงๆ ไม่ผ่าน get_cached_worksheet)
+            # ให้ตกกลับไปอ่านสดเหมือนเดิม แทนที่จะ cache ผิด key
+            return self._fetch_rows()
+        return _fetch_rows_cached(self._client, self._spreadsheet_name, self._worksheet_name)
+
+    def _invalidate_cache(self):
+        """เรียกหลังเขียนข้อมูลทุกครั้ง (append/update/delete/clear) ล้าง cache ข้อมูลของชีตนี้ทันที
+        กันหน้าจอแสดงข้อมูลเก่าค้างไปจนกว่า cache จะหมดอายุเอง (สูงสุด 5 นาที)"""
+        if self._spreadsheet_name is not None and self._worksheet_name is not None:
+            _fetch_rows_cached.clear(self._client, self._spreadsheet_name, self._worksheet_name)
 
     def _fetch_rows(self):
         """คืน list ของ {'doc_id':..., 'data':...} เรียงตามลำดับที่ถูก append (เหมือนแถวใน gspread)"""
@@ -159,12 +205,12 @@ class FirestoreWorksheet:
     # อ่านข้อมูล
     # --------------------------------------------------------
     def get_all_records(self):
-        return [r['data'] for r in self._fetch_rows()]
+        return [r['data'] for r in self._fetch_rows_for_display()]
 
     def get_all_values(self):
         columns = self._get_columns()
         values = [columns]
-        for r in self._fetch_rows():
+        for r in self._fetch_rows_for_display():
             values.append([r['data'].get(c, '') for c in columns])
         return values
 
@@ -213,6 +259,7 @@ class FirestoreWorksheet:
             doc_data = _to_firestore_safe(dict(row_dict))
             doc_data['_seq'] = seq
             self._collection.document(str(seq)).set(doc_data)
+        self._invalidate_cache()
 
     def append_row(self, values):
         columns = self._get_columns()
@@ -233,6 +280,7 @@ class FirestoreWorksheet:
             raise IndexError(f"ไม่พบคอลัมน์ที่ {col}")
         field_name = columns[col - 1]
         self._collection.document(rows[idx]['doc_id']).update({field_name: _to_firestore_safe(value)})
+        self._invalidate_cache()
 
     def update(self, *args, **kwargs):
         """
@@ -269,6 +317,7 @@ class FirestoreWorksheet:
         if row_start == 1:
             # เขียนแค่แถวหัวตารางแถวเดียว (ไม่พบการใช้งาน pattern นี้จริงในระบบ กันเหนียวไว้)
             self._meta_ref.set({'columns': list(values[0])}, merge=True)
+            self._invalidate_cache()
             return
 
         rows = self._fetch_rows()
@@ -283,12 +332,14 @@ class FirestoreWorksheet:
             if col_idx - 1 < len(columns):
                 update_dict[columns[col_idx - 1]] = v
         self._collection.document(rows[idx]['doc_id']).update(_to_firestore_safe(update_dict))
+        self._invalidate_cache()
 
     def _replace_all(self, header, data_rows):
         self._delete_all_docs()
         self._meta_ref.set({'columns': header, 'next_seq': 0})
         if data_rows:
             self.append_rows(data_rows, columns=header)
+        self._invalidate_cache()
 
     def delete_rows(self, row):
         rows = self._fetch_rows()
@@ -296,15 +347,17 @@ class FirestoreWorksheet:
         if idx < 0 or idx >= len(rows):
             raise IndexError(f"ไม่พบแถวที่ {row}")
         self._collection.document(rows[idx]['doc_id']).delete()
+        self._invalidate_cache()
 
     def clear(self):
         self._delete_all_docs()
+        self._invalidate_cache()
 
 
 @st.cache_resource(ttl=300, show_spinner=False)
 def get_cached_worksheet(_client, spreadsheet_name, worksheet_name):
     collection_ref = _client.collection('users').document(spreadsheet_name).collection(worksheet_name)
-    return FirestoreWorksheet(_client, collection_ref)
+    return FirestoreWorksheet(_client, collection_ref, spreadsheet_name, worksheet_name)
 
 
 def get_worksheet_safely(client, spreadsheet_name, worksheet_name, retries=2, delay=1):
