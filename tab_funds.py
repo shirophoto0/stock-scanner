@@ -67,6 +67,54 @@ def _load_fund_dividend_cached(spreadsheet_name):
 
 
 _FUND_DIVIDEND_COLUMNS = ["Dividend_ID", "Fund_Name", "Date", "Amount", "Note"]
+_FUND_HISTORY_COLUMNS = [
+    "Fund_ID", "Fund_Name", "Date_Buy", "Date_Sell", "Cost_Price",
+    "Current_Price", "Units", "Status", "Price_Updated_Date",
+]
+
+
+# 🆕 แก้ไขข้อมูลที่พิมพ์ผิดได้: ทั้ง Fund_History (ราคา/จำนวนหน่วย/วันที่ตอนซื้อ) และ Fund_Dividend
+# (ปันผลที่บันทึกเอง) เดิมสองชีตนี้มีแต่ฟอร์ม "เพิ่มรายการใหม่" อย่างเดียว ไม่มีตารางแก้ไขข้อมูลเก่า
+# เลย (ต่างจาก Journal/Dividend ในแท็บหุ้นที่มี st.data_editor + ปุ่มบันทึกอยู่แล้ว) ผู้ใช้ที่กรอก
+# ราคา/จำนวนหน่วย/วันที่ผิดจึงแก้เองในแอปไม่ได้ ต้องเข้าไปแก้ตรงใน Google Sheets/Firestore Console
+# แทน ฟังก์ชันด้านล่างนี้เขียนทับทั้งชีต (เหมือน pattern save_journal/save_portfolio ใน
+# backend_functions.py) จากตารางที่ผู้ใช้แก้ไขแล้วใน st.data_editor
+def _save_fund_history_edit(df_edited):
+    df_clean = df_edited.copy()
+    for date_col in ("Date_Buy", "Date_Sell", "Price_Updated_Date"):
+        if date_col in df_clean.columns:
+            df_clean[date_col] = pd.to_datetime(df_clean[date_col], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+    for num_col in ("Cost_Price", "Current_Price", "Units"):
+        if num_col in df_clean.columns:
+            df_clean[num_col] = df_clean[num_col].apply(_safe_float)
+    if "Fund_ID" in df_clean.columns:
+        df_clean["Fund_ID"] = pd.to_numeric(df_clean["Fund_ID"], errors='coerce').fillna(0).astype(int)
+    if "Status" in df_clean.columns:
+        df_clean["Status"] = df_clean["Status"].fillna("Holding").replace("", "Holding")
+
+    client = get_gsheet_client()
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Fund_History')
+    sheet.clear()
+    if not df_clean.empty:
+        sheet.update([df_clean.columns.tolist()] + df_clean.fillna('').values.tolist())
+    st.cache_data.clear()
+
+
+def _save_fund_dividend_edit(df_edited):
+    df_clean = df_edited.copy()
+    if "Date" in df_clean.columns:
+        df_clean["Date"] = pd.to_datetime(df_clean["Date"], errors='coerce').dt.strftime('%Y-%m-%d').fillna('')
+    if "Amount" in df_clean.columns:
+        df_clean["Amount"] = df_clean["Amount"].apply(_safe_float)
+    if "Dividend_ID" in df_clean.columns:
+        df_clean["Dividend_ID"] = pd.to_numeric(df_clean["Dividend_ID"], errors='coerce').fillna(0).astype(int)
+
+    client = get_gsheet_client()
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Fund_Dividend')
+    sheet.clear()
+    if not df_clean.empty:
+        sheet.update([df_clean.columns.tolist()] + df_clean.fillna('').values.tolist())
+    st.cache_data.clear()
 
 
 def _append_row_with_columns(sheet, row_values, columns):
@@ -375,6 +423,38 @@ def render_tab_funds():
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูล: {e}")
 
+        # 🆕 แก้ไขข้อมูลการซื้อกองทุนที่พิมพ์ผิด (ราคา/จำนวนหน่วย/วันที่/สถานะ) — เดิมแท็บนี้มีแต่ฟอร์ม
+        # "อัปเดตราคา"/"ขาย" ซึ่งเพิ่มแถวใหม่หรือแก้แค่บางคอลัมน์เท่านั้น ถ้าพิมพ์ผิดตอนซื้อครั้งแรก
+        # (เช่น ราคาต้นทุน/จำนวนหน่วย/วันที่ซื้อผิด) ไม่มีทางแก้เองในแอปได้เลย ตารางนี้แสดงทุกรายการ
+        # ซื้อกองทุนทั้งหมด (ทุกกอง ทุกสถานะ) ให้แก้ไขตรงๆ ได้เลย
+        st.divider()
+        with st.expander("✏️ แก้ไขข้อมูลการซื้อกองทุนที่พิมพ์ผิด (ราคา/จำนวนหน่วย/วันที่/สถานะ)"):
+            st.caption(
+                "ตารางนี้แสดงทุกรายการซื้อกองทุนทั้งหมด (ทุกกอง ทุกสถานะ) แก้ตัวเลข/วันที่/สถานะที่"
+                "พิมพ์ผิดได้โดยตรงในตาราง หรือลบทั้งแถวด้วยไอคอนถังขยะท้ายแถว แล้วกดบันทึก — คอลัมน์ "
+                "Status ต้องเป็น \"Holding\" หรือ \"Sold\" เท่านั้น"
+            )
+            try:
+                _all_fund_history = _load_fund_history_cached(get_active_sheet_name())
+            except Exception:
+                _all_fund_history = []
+
+            if _all_fund_history:
+                df_fund_hist_edit = pd.DataFrame(_all_fund_history)
+                df_fund_hist_edit = df_fund_hist_edit[
+                    [c for c in _FUND_HISTORY_COLUMNS if c in df_fund_hist_edit.columns]
+                ]
+                edited_fund_hist = st.data_editor(
+                    df_fund_hist_edit, use_container_width=True, num_rows="dynamic",
+                    hide_index=True, key="fund_history_editor",
+                )
+                if st.button("💾 บันทึกการแก้ไขรายการซื้อกองทุน", key="save_fund_history_edit", type="primary"):
+                    _save_fund_history_edit(edited_fund_hist)
+                    st.success("บันทึกการแก้ไขเรียบร้อย!")
+                    st.rerun()
+            else:
+                st.info("ยังไม่มีข้อมูลการซื้อกองทุนในระบบ")
+
     # 3. Tab บันทึกปันผลที่ได้รับ (🆕 บางกองทุนมีจ่ายปันผล ระบบไม่ได้ดึงข้อมูลนี้อัตโนมัติจากที่ไหน
     # จึงต้องให้กรอกเองเป็นรายครั้ง แล้วนำไปรวมกับกำไร/ขาดทุนจากราคาในแท็บภาพรวมพอร์ต เพื่อดู
     # "ผลตอบแทนรวม" ที่แท้จริงของแต่ละกองทุน)
@@ -448,6 +528,21 @@ def render_tab_funds():
                 use_container_width=True, hide_index=True
             )
             st.caption(f"รวมปันผลที่บันทึกไว้ทั้งหมด: {df_div_display['จำนวนเงิน (บาท)'].sum():,.2f} บาท")
+
+            # 🆕 แก้ไขข้อมูลปันผลที่พิมพ์ผิด — เดิมตารางด้านบนเป็นแค่ตารางแสดงผลอย่างเดียว
+            # (st.dataframe แบบ read-only) พิมพ์ยอดเงิน/วันที่/ชื่อกองทุนผิดตอนบันทึกแล้วแก้เอง
+            # ในแอปไม่ได้เลย ตอนนี้เพิ่มตารางแก้ไขได้จริงด้านล่าง (เหมือน pattern เดียวกับตาราง
+            # ปันผลในแท็บหุ้น) ผูกกับข้อมูลดิบของชีต Fund_Dividend ตรงๆ
+            with st.expander("✏️ แก้ไขข้อมูลปันผลที่พิมพ์ผิด (แก้จำนวนเงิน/วันที่/กองทุน หรือลบทั้งแถว)"):
+                df_div_edit = df_div[[c for c in _FUND_DIVIDEND_COLUMNS if c in df_div.columns]].copy()
+                edited_div = st.data_editor(
+                    df_div_edit, use_container_width=True, num_rows="dynamic",
+                    hide_index=True, key="fund_dividend_editor",
+                )
+                if st.button("💾 บันทึกการแก้ไขปันผล", key="save_fund_dividend_edit", type="primary"):
+                    _save_fund_dividend_edit(edited_div)
+                    st.success("บันทึกการแก้ไขเรียบร้อย!")
+                    st.rerun()
         else:
             st.info("ยังไม่มีประวัติปันผลที่บันทึกไว้ครับ")
 

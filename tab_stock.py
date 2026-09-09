@@ -1387,6 +1387,43 @@ def render_tab_stock():
 
                 if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
                     st.session_state.edit_mode = True
+
+                # 🔧 แก้บั๊ก: เดิมปุ่มด้านบนแค่ตั้งค่า edit_mode = True ไว้เฉยๆ ไม่มีโค้ดส่วนไหนอ่าน
+                # ค่านี้เลย กดแล้วไม่มีอะไรเกิดขึ้นจริง (เป็นแบบนี้มาตั้งแต่ก่อนย้ายไป Firestore แล้ว)
+                # ทำให้พิมพ์จำนวนหุ้น/ราคาต้นทุนผิดแล้วแก้เองในแอปไม่ได้เลย ต้องเข้าไปแก้ตรงใน
+                # Google Sheets/Firestore Console แทน ตอนนี้เพิ่มตารางแก้ไขได้จริง (เหมือน pattern
+                # เดียวกับตาราง Journal/Dividend ด้านล่างในไฟล์นี้) ผูกกับ st.session_state.my_portfolio
+                # ตรงๆ (ข้อมูลดิบก่อนคำนวณราคาตลาด/กำไรขาดทุน) แก้ตัวเลข/ชื่อ/Sector หรือลบทั้งแถวได้
+                # เลยผ่าน num_rows="dynamic" แล้วกดบันทึกเพื่อเขียนทับชีต PortfolioData ทั้งหมด (ใช้
+                # save_portfolio() ฟังก์ชันเดิมที่ระบบเรียกอยู่แล้วตอนบันทึกซื้อ/แก้ SL-TP)
+                if st.session_state.get('edit_mode'):
+                    st.divider()
+                    st.markdown("#### ✏️ แก้ไขข้อมูลหุ้นในพอร์ต")
+                    st.caption(
+                        "แก้ตัวเลข/ข้อความที่พิมพ์ผิดได้โดยตรงในตารางด้านล่าง (เช่น จำนวนหุ้น, "
+                        "ต้นทุนเฉลี่ย, Sector) หรือลบทั้งแถวด้วยไอคอนถังขยะท้ายแถว แล้วกด "
+                        "\"บันทึกการแก้ไข\" — ราคาตลาดในตารางด้านบนดึงสดจากตลาดเสมอ ไม่ต้องแก้ตรงนี้"
+                    )
+                    df_edit_portfolio = pd.DataFrame(st.session_state["my_portfolio"])
+                    edited_portfolio_df = st.data_editor(
+                        df_edit_portfolio,
+                        use_container_width=True,
+                        num_rows="dynamic",
+                        hide_index=True,
+                        key="portfolio_editor",
+                    )
+
+                    col_edit_save, col_edit_cancel = st.columns(2)
+                    with col_edit_save:
+                        if st.button("💾 บันทึกการแก้ไข", key="save_portfolio_edit", type="primary", use_container_width=True):
+                            st.session_state["my_portfolio"] = edited_portfolio_df.fillna('').to_dict('records')
+                            save_portfolio()
+                            st.session_state.edit_mode = False
+                            st.rerun()
+                    with col_edit_cancel:
+                        if st.button("❌ ยกเลิก", key="cancel_portfolio_edit", use_container_width=True):
+                            st.session_state.edit_mode = False
+                            st.rerun()
             else:
                 st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตการลงทุนครับ")
         else:
