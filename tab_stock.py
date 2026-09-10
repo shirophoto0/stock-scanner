@@ -2328,7 +2328,18 @@ def render_tab_stock():
                         if col in edited_journal.columns:
                             edited_journal[col] = pd.to_datetime(edited_journal[col], errors='coerce').dt.strftime('%Y-%m-%d')
 
-                    st.session_state.journal_data = edited_journal.to_dict('records')
+                    # 🔧 แก้บั๊กร้ายแรง: เดิมโค้ดเขียนทับ journal_data ทั้งหมดด้วยข้อมูลแค่หน้าปัจจุบัน
+                    # (สูงสุด items_per_page แถว) ทำให้รายการเทรดในหน้าอื่นๆ ที่ไม่ได้แก้ไขหายไปหมด
+                    # ตอนนี้ใช้ index เดิมของแต่ละแถว (data_editor คงค่า index จาก df_display ไว้อยู่
+                    # แล้ว เพราะตารางนี้ไม่เปิด num_rows="dynamic" ให้เพิ่ม/ลบแถวได้) เพื่ออัปเดตเฉพาะ
+                    # แถวที่แก้ไขจริงกลับเข้าไปในชุดข้อมูลเต็ม ไม่แตะแถวอื่นที่ไม่ได้อยู่ในหน้านี้
+                    df_journal_full = pd.DataFrame(st.session_state.journal_data)
+                    for idx in edited_journal.index:
+                        if idx in df_journal_full.index:
+                            for col in edited_journal.columns:
+                                df_journal_full.loc[idx, col] = edited_journal.loc[idx, col]
+
+                    st.session_state.journal_data = df_journal_full.to_dict('records')
                     save_journal()
                     st.success("บันทึกข้อมูลเรียบร้อยแล้วครับ!")
 
