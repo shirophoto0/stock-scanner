@@ -2128,6 +2128,10 @@ def load_and_calculate_stock_data_optimized():
             volume_spike_ratio = (latest_vol / avg_vol_50) if avg_vol_50 > 0 else 0.0
             is_volume_spike = bool(volume_spike_ratio >= 2.0)  # ปริมาณมากกว่าค่าเฉลี่ย 2 เท่าขึ้นไป
 
+            # 🆕 แท่งเทียนวันนี้ปิดเขียวไหม (ราคาปิด > ราคาเปิด ของวันเดียวกัน) ใช้กรอง Volume Spike
+            # สำหรับแจ้งเตือน Telegram โดยเฉพาะ — ไม่เอาหุ้นที่ Volume พุ่งแต่ปิดแท่งแดง (เทขายหนัก)
+            is_green_candle_today = bool(latest_price > df['Open'].iloc[-1])
+
             # 🆕 4. หุ้นแกว่งตัวแคบก่อนวิ่ง (Volatility Contraction): ช่วงแกว่งราคา 10 วันล่าสุด แคบกว่า 50 วันก่อนหน้า
             daily_range_pct = (df['High'] - df['Low']) / df['Close'] * 100
             recent_volatility = daily_range_pct.tail(10).mean()
@@ -2197,6 +2201,7 @@ def load_and_calculate_stock_data_optimized():
                 'Recovered_From_Low': recovered_from_low,
                 'Volume_Spike_Ratio': round(float(volume_spike_ratio), 2),
                 'Is_Volume_Spike': is_volume_spike,
+                'Is_Green_Candle_Today': is_green_candle_today,
                 'Is_Volatility_Contracting': is_volatility_contracting,
                 # 🆕 3 สัญญาณใหม่สำหรับ Backtest + ตัวกรองในแท็บวิเคราะห์กราฟเทคนิคัล
                 'Is_Golden_Cross_Today': is_golden_cross_today,

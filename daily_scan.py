@@ -108,8 +108,12 @@ def find_notable_stocks(df_old, df_new):
 
     # 🆕 4. Volume พุ่งผิดปกติวันนี้ (Is_Volume_Spike เป็นค่ารายวันอยู่แล้ว ไม่ใช่สถานะสะสมหลายวัน
     # แบบ Trend Template จึงไม่ต้องเทียบกับเมื่อวานเพิ่ม เช็คแค่ค่าวันนี้ก็ถือว่า "เพิ่งเกิด" แล้ว)
+    # 🔧 กรองเฉพาะหุ้นที่ปิดแท่งเขียว (Is_Green_Candle_Today) เท่านั้น — Volume พุ่งพร้อมแท่งแดง
+    # มักหมายถึงเทขายหนัก ไม่ใช่สัญญาณน่าสนใจแบบที่ต้องการแจ้งเตือน
     if 'Is_Volume_Spike' in df_new.columns:
         volume_spike_today = df_new[df_new['Is_Volume_Spike'] == True]
+        if 'Is_Green_Candle_Today' in df_new.columns:
+            volume_spike_today = volume_spike_today[volume_spike_today['Is_Green_Candle_Today'] == True]
         result['volume_spike'] = volume_spike_today['Ticker'].tolist()
 
     # 🆕 5-7. Golden Cross / RSI ดีดกลับจาก Oversold / VCP Breakout — คำนวณเทียบ "เมื่อวาน vs วันนี้"
