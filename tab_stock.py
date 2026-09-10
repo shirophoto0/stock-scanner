@@ -2186,6 +2186,9 @@ def render_tab_stock():
             df['Holding_Days'] = (df['วันที่ขาย'] - df['วันที่ซื้อ']).dt.days.clip(lower=0)
 
             # 2. คำนวณเป็น % (Profit / Cost) * 100
+            # แปลงเป็นตัวเลขก่อนหารเสมอ กันแถวที่เพิ่งแก้จาก Open เป็น Closed แล้วค่ายังเป็นค่าว่าง/ข้อความ
+            df['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(df['กำไร/ขาดทุน (บาท)'], errors='coerce').fillna(0)
+            df['ต้นทุน (บาท)'] = pd.to_numeric(df['ต้นทุน (บาท)'], errors='coerce').fillna(0)
             df['ROI_Percent'] = (df['กำไร/ขาดทุน (บาท)'] / df['ต้นทุน (บาท)'].replace(0, np.nan)) * 100
 
             df['Year'] = df['วันที่ขาย'].dt.year
@@ -2318,6 +2321,7 @@ def render_tab_stock():
                     edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] = pd.to_numeric(edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'], errors='coerce')
                     edited_journal['จำนวนหุ้นที่ซื้อ'] = pd.to_numeric(edited_journal['จำนวนหุ้นที่ซื้อ'], errors='coerce')
                     edited_journal['ต้นทุน (บาท)'] = edited_journal['ราคาหุ้นที่ซื้อ (บาท/หุ้น)'] * edited_journal['จำนวนหุ้นที่ซื้อ']
+                    edited_journal['กำไร/ขาดทุน (บาท)'] = pd.to_numeric(edited_journal['กำไร/ขาดทุน (บาท)'], errors='coerce').fillna(0)
 
                     date_cols = ['วันที่', 'วันที่ซื้อ', 'วันที่ขาย']
                     for col in date_cols:
