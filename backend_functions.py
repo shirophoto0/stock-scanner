@@ -689,6 +689,80 @@ def extract_pvd_from_image(image_file, year_be, month_name="ธันวาค�
         st.error(f"เกิดข้อผิดพลาดในการประมวลผลรูปภาพ: {e}")
         return None
 
+
+def extract_dividend_from_image(image_file):
+    """อ่านตาราง "รายงานสรุปการจ่ายสิทธิประโยชน์และยอดหักภาษี ณ ที่จ่าย" จาก TSD (Thailand Securities
+    Depository) จากรูปภาพด้วย AI แบบเดียวกับ extract_pvd_from_image() แต่รายงานนี้เป็นตารางหลายแถว
+    (หนึ่งแถวต่อหนึ่งรายการจ่ายปันผล) จึงคืนค่าเป็น DataFrame หลายแถวแทนที่จะเป็นแถวเดียว
+
+    คอลัมน์ผลลัพธ์ตรงกับชีต 'Dividend' ทุกประการ (เรียงตามลำดับคอลัมน์จริงในชีต) เพื่อให้ต่อกับ
+    save_dividend_data() ได้ทันที — รายงาน TSD ไม่มีข้อมูล "จำนวนหุ้นที่ได้รับสิทธิ์", "ต้นทุนหุ้น"
+    และ "เงินปันผลต่อหุ้น" จึงปล่อยเป็นค่าว่างไว้ก่อน ผู้ใช้ที่ต้องการกรอกเพิ่มสามารถแก้ไขได้ทีหลังผ่าน
+    ตาราง "ดูตารางประวัติและแก้ไขข้อมูลปันผล"
+    """
+    try:
+        api_key = st.secrets.get("GOOGLE_API_KEY", "")
+        if not api_key:
+            st.error("ไม่พบ GOOGLE_API_KEY ใน st.secrets กรุณาตรวจสอบการตั้งค่า")
+            return None
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-3.5-flash')
+
+        prompt = """
+        คุณเป็นผู้ช่วยทางการเงินอัจฉริยะ หน้าที่ของคุณคืออ่านรูปภาพ "รายงานสรุปการจ่ายสิทธิประโยชน์
+        และยอดหักภาษี ณ ที่จ่าย" (Benefit Payment and Withholding Tax Summary) จาก TSD (Thailand
+        Securities Depository) ในรูปนี้ ซึ่งเป็นตารางรายการจ่ายเงินปันผล/ดอกเบี้ยหุ้นกู้หลายแถว
+
+        ตารางในรูปมีคอลัมน์: ลำดับ (No.), วันที่จ่าย (Payment Date), ชื่อย่อหลักทรัพย์ (Securities
+        Symbol), จำนวนเงินที่จ่าย Total(Baht), ภาษีหักและนำส่งไว้ Less Income Tax (Baht), คงเหลือ
+        จ่ายจริง Net Balance (Baht) และคอลัมน์อื่นๆ ที่ไม่ต้องสนใจ (บัญชีธนาคาร, วันกำหนดให้สิทธิ ฯลฯ)
+
+        โปรดอ่านทุกแถวรายการที่มีเลขลำดับจริงในตาราง (ไม่รวมแถวสรุปรวม "รวมเงินได้ / Total" ที่อยู่
+        ท้ายตาราง) แล้วส่งออกมาเป็น CSV ตามหัวตารางนี้:
+
+        Payment_Date,Ticker,Total_Before_Tax,Withholding_Tax,Net_Amount
+
+        คำอธิบายฟิลด์:
+        - Payment_Date: วันที่จ่าย แปลงเป็นรูปแบบ YYYY-MM-DD (ค.ศ./Gregorian ตามที่ระบุในรายงานอยู่แล้ว) เช่น 29/04/2026 -> 2026-04-29
+        - Ticker: ชื่อย่อหลักทรัพย์ ตัวพิมพ์ใหญ่ทั้งหมด (เช่น FORTH, HTECH) ห้ามเติม .BK ต่อท้าย
+        - Total_Before_Tax: จำนวนเงินที่จ่าย (Total Baht) เฉพาะตัวเลข ไม่มีคอมมาคั่น เช่น 11950.00
+        - Withholding_Tax: ภาษีหักและนำส่งไว้ (Baht) เฉพาะตัวเลข ไม่มีคอมมาคั่น เช่น 1195.00
+        - Net_Amount: คงเหลือจ่ายจริง (Net Balance) เฉพาะตัวเลข ไม่มีคอมมาคั่น เช่น 10755.00
+
+        กฎสำคัญ:
+        - อ่านทุกแถวที่มีเลขลำดับจริงในตาราง ห้ามข้ามแถวใดแถวหนึ่ง และห้ามใส่แถวสรุปรวมท้ายตาราง
+        - ถ้ารูปนี้เป็นหน้าต่อจากรูปอื่น (เช่น หน้า 2/2) ให้อ่านเฉพาะแถวที่อยู่ในรูปนี้เท่านั้น
+        - โปรดส่งกลับมาเฉพาะข้อมูล CSV ที่สะอาด (หัวตาราง 1 บรรทัด และ 1 บรรทัดต่อ 1 รายการ) ไม่มีคำอธิบายเพิ่มเติม ไม่ต้องใส่เครื่องหมาย ```csv ครอบ
+        """
+
+        img = Image.open(image_file)
+        response = model.generate_content([prompt, img])
+
+        csv_text = response.text.replace("```csv", "").replace("```", "").strip()
+        df_raw = pd.read_csv(io.StringIO(csv_text))
+
+        if df_raw.empty:
+            return None
+
+        df_result = pd.DataFrame({
+            "วันที่ได้รับ": df_raw["Payment_Date"].astype(str).str.strip(),
+            "Ticker": df_raw["Ticker"].astype(str).str.strip().str.upper(),
+            "จำนวนหุ้น": "",
+            "ต้นทุนหุ้น": "",
+            "ปันผลต่อหุ้น": "",
+            "ยอดรวมก่อนภาษี": pd.to_numeric(df_raw["Total_Before_Tax"], errors='coerce').fillna(0.0),
+            "ภาษีหัก ณ ที่จ่าย": pd.to_numeric(df_raw["Withholding_Tax"], errors='coerce').fillna(0.0),
+            "ยอดรับสุทธิ": pd.to_numeric(df_raw["Net_Amount"], errors='coerce').fillna(0.0),
+            "หมายเหตุ": "นำเข้าจากรูปภาพรายงาน TSD (AI)"
+        })
+        return df_result
+
+    except Exception as e:
+        st.error(f"เกิดข้อผิดพลาดในการประมวลผลรูปภาพปันผล: {e}")
+        return None
+
+
 def st_neumorphic_container():
     # สร้าง Container ที่มีขอบนูน
     return st.container(border=True) # ปัจจุบัน streamlit มี parameter border=True ที่สวยงามอยู่แล้ว
@@ -1052,11 +1126,37 @@ def save_dividend_data(df_div=None):
             client = get_gsheet_client()
             sheet = get_cached_worksheet(client, get_active_sheet_name(), 'Dividend')
             
-            df_clean = df_div.fillna("")
-            data_to_write = [df_clean.columns.tolist()] + df_clean.astype(str).values.tolist()
-            
+            # 🔧 แก้บั๊ก: เดิม .astype(str) ทั้งตารางก่อนเขียนเสมอ (กันปัญหา numpy scalar ส่งไม่ได้) ทำให้
+            # คอลัมน์ตัวเลข (ยอดรวมก่อนภาษี/ภาษี/ยอดรับสุทธิ ฯลฯ) กลายเป็น "ข้อความ" ล้วนๆ ทุกครั้งที่บันทึก
+            # ทับทั้งตาราง (เช่น กดบันทึกปันผลใหม่ 1 รายการ ก็เขียนทับทั้ง 56 แถว) บัญชีที่ใช้ Firestore
+            # (ดู _use_firestore()) ไม่ auto-parse ข้อความตัวเลขกลับเป็นตัวเลขให้เหมือนที่ Google Sheets
+            # ทำได้ถ้าตั้ง value_input_option เป็น USER_ENTERED ทำให้โค้ดส่วนอื่นที่เรียก .sum() แล้ว
+            # format ด้วย ":,.2f" ที่แท็บสรุปปันผลพังทันที (ValueError: บวก/ฟอร์แมตเลขจาก string ไม่ได้)
+            # ตอนนี้แปลงเฉพาะคอลัมน์ที่เป็นตัวเลขจริงๆ เป็น float (ปล่อยว่างไว้ถ้าเดิมว่าง/แปลงไม่ได้)
+            # ส่วนคอลัมน์ข้อความ (Ticker/วันที่ได้รับ/หมายเหตุ) ยังแปลงเป็น str เหมือนเดิม ให้ได้ชนิดข้อมูล
+            # ตัวเลขจริงไม่ว่าจะเก็บบน Google Sheets หรือ Firestore ก็ตาม พร้อมใส่ raw=False (=USER_ENTERED)
+            # ให้ Google Sheets ช่วยตีความค่าที่ยังเป็นข้อความเป็นตัวเลขเพิ่มอีกชั้นด้วย
+            numeric_cols = ['จำนวนหุ้น', 'ปันผลต่อหุ้น', 'ยอดรวมก่อนภาษี', 'ภาษีหัก ณ ที่จ่าย', 'ยอดรับสุทธิ', 'ต้นทุนหุ้น']
+            df_clean = df_div.copy()
+            for col in df_clean.columns:
+                if col in numeric_cols:
+                    df_clean[col] = pd.to_numeric(df_clean[col], errors='coerce')
+                else:
+                    df_clean[col] = df_clean[col].fillna("").astype(str)
+
+            data_to_write = [df_clean.columns.tolist()]
+            for _, row in df_clean.iterrows():
+                row_out = []
+                for col in df_clean.columns:
+                    val = row[col]
+                    if col in numeric_cols:
+                        row_out.append("" if pd.isna(val) else float(val))
+                    else:
+                        row_out.append(val)
+                data_to_write.append(row_out)
+
             if len(data_to_write) > 0:
-                sheet.update(range_name=f"A1:I{len(data_to_write)}", values=data_to_write)
+                sheet.update(range_name=f"A1:I{len(data_to_write)}", values=data_to_write, raw=False)
                 
         except Exception as gsheet_err:
             st.warning(f"⚠️ บันทึกลงเครื่องสำเร็จ แต่ซิงค์ Google Sheets ไม่สำเร็จ: {gsheet_err}")

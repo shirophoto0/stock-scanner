@@ -47,7 +47,7 @@ from tab_backtest import render_tab_backtest
 from tab_correlation import render_tab_correlation
 from tab_document_analysis import render_tab_document_analysis
 from tab_fundamental_watchlist import render_tab_fundamental_watchlist
-from tab_pvd import render_tab_pvd, render_tab_manual_records
+from tab_pvd import render_tab_pvd, render_tab_manual_records, run_coop_auto_topup
 from tab_tech import render_tab_tech
 from tab_tfex import render_tab_tfex
 from tab_stock import render_tab_stock
@@ -237,6 +237,13 @@ def main():
         except Exception as e:
             print(f"GitHub Mode Error: {e}")
         return # จบการทำงานทันที
+
+    # 🆕 Auto เติมเงินสหกรณ์: เช็คและเขียนยอดลง Google Sheets ทันทีตอนเปิดแอป (ครั้งเดียวต่อ session)
+    # ไม่ต้องรอให้ผู้ใช้เข้าหน้า "บันทึกข้อมูล (สหกรณ์/ประกัน/ธนาคาร)" แล้วกดปุ่มบันทึกเองเหมือนเดิม
+    try:
+        run_coop_auto_topup()
+    except Exception:
+        pass
 
     # 3. จัดการสถานะข้อมูลหุ้นด้วย st.session_state
     if 'df_all_stocks' not in st.session_state:

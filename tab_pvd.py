@@ -11,6 +11,69 @@ from backend_functions import extract_pvd_from_image, get_cached_spreadsheet, ge
 from theme import style_plotly, render_metric_card, get_theme_colors
 
 
+def run_coop_auto_topup():
+    """🆕 Auto เติมเงินสหกรณ์แบบทำงานจริง (ไม่ใช่แค่เติมค่าเริ่มต้นในฟอร์มเหมือนเดิม)
+
+    ของเดิม: `calculate_auto_coop_value()` ในฟอร์ม "บันทึกข้อมูลสหกรณ์" จะคำนวณยอดที่ควรเพิ่ม
+    ให้ก็จริง แต่แค่เอาไปเติมเป็นค่าเริ่มต้นในช่องกรอกเท่านั้น ยังต้องรอผู้ใช้เปิดหน้านั้นแล้วกด
+    "บันทึก" เองอยู่ดี ถ้าผ่านไปทั้งเดือนไม่มีใครเข้าไปกดปุ่ม ยอดที่ควรจะเพิ่มก็หายไปเฉยๆ (ไม่ถูก
+    เขียนลง Google Sheets เลย) ฟังก์ชันนี้จึงเรียกจาก App.py ให้ทำงานทันทีตอนเปิดแอป (ครั้งเดียวต่อ
+    session กันยิง Google Sheets API รัวๆ ทุกครั้งที่มีการ rerun) แล้วเขียนยอดสะสมลงชีตให้เลยถ้าพบว่า
+    ข้ามเดือนมาแล้วนับจากรายการล่าสุด โดยตั้งใจไม่กลืน error เงียบๆ แบบเดิม: ถ้าโหลดข้อมูลชีตไม่สำเร็จ
+    (เช่น โดน Rate Limit) จะข้ามรอบนี้ไปเฉยๆ ไม่เดาว่ายอดเป็น 0 เพื่อกันไม่ให้ auto เขียนทับยอดเดิมผิดๆ
+    """
+    if st.session_state.get('_coop_auto_checked_session'):
+        return
+    st.session_state['_coop_auto_checked_session'] = True
+
+    if 'coop_auto_active' not in st.session_state:
+        st.session_state['coop_auto_active'] = True
+    if 'coop_monthly_amount' not in st.session_state:
+        st.session_state['coop_monthly_amount'] = 10000.0
+
+    if not st.session_state['coop_auto_active']:
+        return
+    monthly_add = st.session_state['coop_monthly_amount']
+    if monthly_add <= 0:
+        return
+
+    try:
+        client = get_gsheet_client()
+        sheet_coop = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Coop')
+        coop_records = sheet_coop.get_all_records()
+    except Exception:
+        return  # โหลดไม่สำเร็จ (เช่น 429) ข้ามรอบนี้ไปก่อน ไม่เดาว่ายอดเป็น 0
+
+    if not coop_records:
+        return
+
+    last_row = coop_records[-1]
+    try:
+        latest_coop_date = str(last_row.get('Date'))
+        latest_coop_val = float(str(last_row.get('Value', 0)).replace(',', ''))
+        last_dt = datetime.strptime(latest_coop_date, "%Y-%m-%d").date()
+    except Exception:
+        return  # รูปแบบวันที่/ยอดในชีตผิดปกติ ข้ามรอบนี้ไปก่อนเช่นกัน
+
+    today_dt = date.today()
+    diff_months = (today_dt.year - last_dt.year) * 12 + (today_dt.month - last_dt.month)
+    if diff_months <= 0:
+        return
+
+    new_val = latest_coop_val + diff_months * monthly_add
+    new_date_str = today_dt.strftime("%Y-%m-%d")
+
+    try:
+        sheet_coop.append_row([new_date_str, today_dt.year, new_val])
+        st.cache_data.clear()
+        st.toast(
+            f"✅ Auto เติมเงินสหกรณ์อัตโนมัติ {diff_months} เดือนที่ผ่านมา (+{diff_months * monthly_add:,.0f} บาท) ยอดใหม่ {new_val:,.2f} บาท",
+            icon="💰"
+        )
+    except Exception as e:
+        st.session_state['_coop_auto_topup_last_error'] = str(e)
+
+
 def render_tab_pvd():
     st.markdown("### 🏛️ กองทุนสำรองเลี้ยงชีพ (PVD)")
 

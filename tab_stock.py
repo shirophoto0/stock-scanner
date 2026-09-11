@@ -18,7 +18,8 @@ from backend_functions import (
     get_sector_from_mapping, load_data, load_data_from_file, load_total_cash_balance,
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet,
-    load_watchlist, remove_from_watchlist, fetch_set_index_history, update_watchlist_target, add_to_watchlist
+    load_watchlist, remove_from_watchlist, fetch_set_index_history, update_watchlist_target, add_to_watchlist,
+    extract_dividend_from_image
 )
 from theme import style_plotly, style_altair, get_theme_colors, render_metric_card
 
@@ -1658,132 +1659,123 @@ def render_tab_stock():
             else:
                 st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตสำหรับแสดงวันขึ้น XD")
 
-        # --- ส่วนที่ 1: อัปโหลดไฟล์ TSD Portal หรือ CSV ---
-        with st.expander("📤 อัปโหลดประวัติเงินปันผลจากรายงาน TSD หรือไฟล์ Excel/CSV"):
-            uploaded_div_file = st.file_uploader("เลือกไฟล์รายงานปันผล", type=['csv', 'xlsx', 'xls'], key="div_file")
-            if uploaded_div_file:
-                if st.button("ยืนยันการนำเข้าไฟล์ปันผล"):
+        # --- ส่วนที่ 1: อัปโหลดรูปภาพรายงานปันผลจาก TSD แล้วให้ AI อ่านให้ (แบบเดียวกับ PVD) ---
+        # 🆕 เปลี่ยนจากเดิมที่ต้องแปลงรายงานเป็นไฟล์ Excel/CSV ก่อนค่อยอัปโหลด มาเป็นถ่ายรูป/แคปหน้าจอ
+        # รายงาน TSD ตรงๆ แล้วให้ AI (Gemini) อ่านตารางในรูปแทน — รองรับอัปโหลดได้หลายรูปพร้อมกัน
+        # (เผื่อรายงานมีหลายหน้า) แล้วรวมผลลัพธ์เป็นตารางเดียวก่อนให้ผู้ใช้ตรวจสอบและกดยืนยันบันทึก
+        with st.expander("📤 อัปโหลดรูปภาพรายงานปันผลจาก TSD แล้วให้ AI อ่านให้"):
+            uploaded_div_images = st.file_uploader(
+                "เลือกรูปภาพรายงานปันผล (ถ่ายรูปหรือแคปหน้าจอรายงาน TSD ได้เลย อัปโหลดได้หลายรูป/หลายหน้าพร้อมกัน)",
+                type=["jpg", "jpeg", "png"],
+                accept_multiple_files=True,
+                key="div_image_files"
+            )
+
+            if uploaded_div_images:
+                if st.button("🔍 อ่านข้อมูลจากรูปภาพด้วย AI", key="div_ai_read_btn"):
+                    with st.spinner("กำลังให้ AI อ่านและวิเคราะห์ข้อมูลปันผลจากภาพ..."):
+                        extracted_frames = []
+                        for img_file in uploaded_div_images:
+                            df_one = extract_dividend_from_image(img_file)
+                            if df_one is not None and not df_one.empty:
+                                extracted_frames.append(df_one)
+
+                        if extracted_frames:
+                            df_extracted = pd.concat(extracted_frames, ignore_index=True)
+                            st.success(f"อ่านข้อมูลสำเร็จ! พบทั้งหมด {len(df_extracted)} รายการ ตรวจสอบความถูกต้องด้านล่างก่อนบันทึก:")
+                            st.dataframe(df_extracted, use_container_width=True)
+                            st.session_state['temp_div_df'] = df_extracted
+                        else:
+                            st.warning("ไม่สามารถดึงข้อมูลจากรูปภาพได้ กรุณาลองใหม่อีกครั้ง")
+
+            # ส่วนยืนยันบันทึกข้อมูล (อยู่นอกปุ่มอ่านรูป เพื่อให้ตรวจสอบข้อมูลก่อนกดยืนยันได้)
+            if 'temp_div_df' in st.session_state and st.session_state['temp_div_df'] is not None:
+                st.write("---")
+                st.write("📋 **ข้อมูลที่พร้อมบันทึก:**")
+                st.dataframe(st.session_state['temp_div_df'], use_container_width=True)
+
+                if st.button("💾 ยืนยันบันทึกข้อมูลนี้ลง Google Sheets", key="confirm_div_save"):
                     try:
-                        if uploaded_div_file.name.endswith('.csv'):
-                            df_upload = pd.read_csv(uploaded_div_file)
-                        else:
-                            df_upload = pd.read_excel(uploaded_div_file)
-
-                        processed_rows = []
-
-                        if 'ชื่อย่อหลักทรัพย์' in df_upload.columns and 'วันที่จ่าย' in df_upload.columns:
-                            for idx, row in df_upload.iterrows():
-                                ticker = str(row.get('ชื่อย่อหลักทรัพย์', '')).strip().upper()
-                                if not ticker or ticker == 'NAN':
-                                    continue
-                                if not ticker.endswith('.BK'):
-                                    ticker = f"{ticker}.BK"
-
-                                pay_date = str(row.get('วันที่จ่าย', ''))[:10]
-                                total_div_before_tax = 0.0
-                                total_tax = 0.0
-
-                                for col in df_upload.columns:
-                                    col_str = str(col)
-                                    val = row.get(col, 0)
-                                    try:
-                                        val_num = float(val) if pd.notna(val) else 0.0
-                                    except:
-                                        val_num = 0.0
-
-                                    if 'จำนวนเงินปันผล' in col_str or 'ดอกเบี้ยหุ้นกู้' in col_str or 'เงินเทียบเท่าเงินปันผล' in col_str:
-                                        total_div_before_tax += val_num
-                                    elif 'ภาษีของเงินปันผล' in col_str or 'ภาษีของดอกเบี้ย' in col_str:
-                                        total_tax += val_num
-
-                                net_receive = total_div_before_tax - total_tax
-
-                                cost_val = 0.0
-                                for cost_col in ['ต้นทุน', 'Cost', 'ทุนรวม', 'มูลค่าลงทุน']:
-                                    if cost_col in df_upload.columns:
-                                        try:
-                                            cost_val = float(row.get(cost_col, 0))
-                                        except:
-                                            pass
-
-                                processed_rows.append({
-                                    "วันที่ได้รับ": pay_date,
-                                    "Ticker": ticker,
-                                    "จำนวนหุ้น": 0.0,
-                                    "ปันผลต่อหุ้น": 0.0,
-                                    "ยอดรวมก่อนภาษี": total_div_before_tax,
-                                    "ภาษีหัก ณ ที่จ่าย": total_tax,
-                                    "ยอดรับสุทธิ": net_receive,
-                                    "ต้นทุนหุ้น": cost_val,
-                                    "หมายเหตุ": "นำเข้าจาก TSD Portal"
-                                })
-                        else:
-                            if 'ต้นทุนหุ้น' not in df_upload.columns:
-                                df_upload['ต้นทุนหุ้น'] = 0.0
-                            processed_rows = df_upload.to_dict('records')
-
                         existing_df = pd.DataFrame(st.session_state.dividend_data)
-                        new_df = pd.DataFrame(processed_rows)
+                        new_df = st.session_state['temp_div_df']
 
-                        if not existing_df.empty:
-                            combined_df = pd.concat([existing_df, new_df]).drop_duplicates(
-                                subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], 
+                        # เช็คข้อมูลซ้ำด้วยเงื่อนไขเดียวกับของเดิม: วันที่ + Ticker + ยอดรับสุทธิ ตรงกันเป๊ะ
+                        dedupe_cols = ['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ']
+                        if not existing_df.empty and all(c in existing_df.columns for c in dedupe_cols):
+                            combined_df = pd.concat([existing_df, new_df], ignore_index=True).drop_duplicates(
+                                subset=dedupe_cols,
                                 keep='first'
                             )
                             added_count = len(combined_df) - len(existing_df)
                         else:
-                            combined_df = new_df.drop_duplicates(subset=['วันที่ได้รับ', 'Ticker', 'ยอดรับสุทธิ'], keep='first')
+                            combined_df = new_df.drop_duplicates(subset=dedupe_cols, keep='first')
                             added_count = len(combined_df)
 
-                        st.session_state.dividend_data = combined_df.to_dict('records')
-
-                        # 🟢 ส่ง combined_df เข้าไปในฟังก์ชันบันทึกเพื่อป้องกัน Error missing positional argument
                         save_dividend_data(combined_df)
+                        del st.session_state['temp_div_df']
 
                         if added_count > 0:
                             st.success(f"✅ นำเข้าข้อมูลสำเร็จ! (เพิ่มรายการใหม่ {added_count} รายการ, ข้ามรายการซ้ำ)")
                         else:
-                            st.info("ℹ️ ข้อมูลในไฟล์นี้มีอยู่แล้วในระบบทั้งหมด จึงไม่มีการเพิ่มรายการซ้ำ")
+                            st.info("ℹ️ ข้อมูลในรูปนี้มีอยู่แล้วในระบบทั้งหมด จึงไม่มีการเพิ่มรายการซ้ำ")
                         st.rerun()
 
                     except Exception as e:
-                        st.error(f"❌ เกิดข้อผิดพลาดในการอ่านไฟล์: {e}")
+                        st.error(f"❌ เกิดข้อผิดพลาดในการบันทึก: {e}")
 
         # --- ส่วนที่ 2: ฟอร์มกรอกข้อมูลแบบ Manual ---
+        # 🆕 ปรับฟิลด์หลักให้สอดคล้องกับข้อมูลที่รายงาน TSD ให้มาจริงๆ (เงินปันผลรวมก่อนภาษี + ภาษีหัก
+        # ณ ที่จ่ายจริง) แทนที่จะบังคับให้กรอกจำนวนหุ้น+ปันผลต่อหุ้นก่อนแล้วค่อยคูณออกมาเป็นยอดรวมเหมือน
+        # เดิม เพราะรายงาน TSD ไม่มี 2 ค่านี้ให้ ย้ายไปเป็นช่อง "ข้อมูลเสริม (ไม่บังคับ)" แทน และเปลี่ยน
+        # ภาษีหัก ณ ที่จ่าย จากเดิมคำนวณตายตัว 10% เป็นช่องกรอกเอง (มีเลข 10% ให้เป็นค่าเริ่มต้นแนะนำ)
+        # เพราะข้อมูลจริงจาก TSD พบว่าอัตราภาษีที่หักจริงไม่ใช่ 10% เสมอไป (บางรายการหักน้อยกว่าหรือไม่หัก
+        # เลยก็มี ขึ้นอยู่กับประเภทเงินได้) — และเลิกบังคับเติม ".BK" ต่อท้าย Ticker เพราะข้อมูลปันผลเดิม
+        # ทั้งหมดในชีตใช้ Ticker เปล่าอยู่แล้ว (ไม่มี .BK) การบังคับเติมจะทำให้ Ticker เดียวกันไม่ตรงกัน
+        # ระหว่างรายการที่กรอกเองกับรายการที่นำเข้าจาก AI/รายงาน TSD
         with st.expander("➕ เพิ่มรายการรับเงินปันผล (Manual Input)", expanded=False):
             with st.form("dividend_form", clear_on_submit=True):
+                st.caption("กรอกตามยอดจริงจากรายงาน TSD หรือหนังสือแจ้งปันผล (เงินปันผลรวมก่อนภาษี + ภาษีหัก ณ ที่จ่าย)")
                 col1, col2 = st.columns(2)
                 with col1:
                     div_date = st.date_input("วันที่ได้รับเงินปันผล", value=date.today())
                     ticker = st.text_input("ชื่อหุ้น (Ticker)").upper()
-                    shares = st.number_input("จำนวนหุ้นที่ได้รับสิทธิ์", min_value=0.0, step=1.0)
-                    total_cost = st.number_input("ต้นทุนหุ้นรวม (บาท)", min_value=0.0, step=100.0, format="%.2f", help="มูลค่าเงินลงทุนหรือต้นทุนรวมของหุ้นตัวนี้")
+                    gross_div = st.number_input(
+                        "เงินปันผลรวมก่อนภาษี (บาท)", min_value=0.0, format="%.2f", step=1.0,
+                        help='ตรงกับช่อง "จำนวนเงินที่จ่าย / Total (Baht)" ในรายงาน TSD'
+                    )
 
                 with col2:
-                    dps = st.number_input("เงินปันผลต่อหุ้น (บาท/หุ้น)", min_value=0.0000, format="%.4f", step=0.01)
-                    auto_gross = shares * dps
-                    gross_div = st.number_input("เงินปันผลรวมก่อนภาษี (บาท)", value=auto_gross, format="%.2f", step=1.0)
-
-                    tax_wht = gross_div * 0.10
+                    tax_wht = st.number_input(
+                        "ภาษีหัก ณ ที่จ่าย (บาท)", min_value=0.0, format="%.2f", step=1.0,
+                        value=round(gross_div * 0.10, 2),
+                        help='ตรงกับช่อง "ภาษีหักและนำส่งไว้ / Less Income Tax (Baht)" ในรายงาน TSD — ค่าเริ่มต้นคำนวณแนะนำที่ 10% แต่แก้ไขได้เอง เพราะอัตราจริงไม่ใช่ 10% เสมอไป'
+                    )
                     net_div = gross_div - tax_wht
+                    st.caption(f"💡 ยอดรับสุทธิ = {net_div:,.2f} ฿ (เงินปันผลรวมก่อนภาษี − ภาษีหัก ณ ที่จ่าย)")
 
-                    st.caption(f"💡 คำนวณอัตโนมัติ: ภาษีหัก ณ ที่จ่าย 10% = {tax_wht:,.2f} ฿ | รับสุทธิ = {net_div:,.2f} ฿")
+                st.markdown("###### ข้อมูลเสริม (ไม่บังคับ — กรอกถ้าทราบ)")
+                col3, col4, col5 = st.columns(3)
+                with col3:
+                    shares = st.number_input("จำนวนหุ้นที่ได้รับสิทธิ์", min_value=0.0, step=1.0)
+                with col4:
+                    dps = st.number_input("เงินปันผลต่อหุ้น (บาท/หุ้น)", min_value=0.0000, format="%.4f", step=0.01)
+                with col5:
+                    total_cost = st.number_input("ต้นทุนหุ้นรวม (บาท)", min_value=0.0, step=100.0, format="%.2f", help="มูลค่าเงินลงทุนหรือต้นทุนรวมของหุ้นตัวนี้")
 
                 notes = st.text_input("หมายเหตุ (เช่น ปันผล Q2/2026)")
                 submitted = st.form_submit_button("💾 บันทึกเงินปันผล")
 
                 if submitted:
                     if ticker:
-                        formatted_ticker = ticker if ticker.endswith('.BK') else f"{ticker}.BK"
                         new_entry = {
                             "วันที่ได้รับ": str(div_date),
-                            "Ticker": formatted_ticker,
-                            "จำนวนหุ้น": shares,
-                            "ปันผลต่อหุ้น": dps,
+                            "Ticker": ticker,
+                            "จำนวนหุ้น": shares if shares > 0 else "",
+                            "ต้นทุนหุ้น": total_cost if total_cost > 0 else "",
+                            "ปันผลต่อหุ้น": dps if dps > 0 else "",
                             "ยอดรวมก่อนภาษี": gross_div,
                             "ภาษีหัก ณ ที่จ่าย": tax_wht,
                             "ยอดรับสุทธิ": net_div,
-                            "ต้นทุนหุ้น": total_cost,
                             "หมายเหตุ": notes
                         }
                         st.session_state.dividend_data.append(new_entry)
@@ -1792,7 +1784,7 @@ def render_tab_stock():
                         final_df = pd.DataFrame(st.session_state.dividend_data)
                         save_dividend_data(final_df)
 
-                        st.success(f"✅ บันทึกเงินปันผลของหุ้น {formatted_ticker} เรียบร้อยแล้วครับ!")
+                        st.success(f"✅ บันทึกเงินปันผลของหุ้น {ticker} เรียบร้อยแล้วครับ!")
                         st.rerun()
                     else:
                         st.warning("⚠️ กรุณากรอกชื่อหุ้น (Ticker)")
