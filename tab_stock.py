@@ -158,10 +158,25 @@ def _render_market_comparison():
     )
 
 
+def _last_known_dividend_value(series):
+    """คืนค่าตัวเลขล่าสุดที่ "ไม่ว่าง" ในคอลัมน์ จำนวนหุ้น/ต้นทุนหุ้น ของประวัติปันผล (ข้ามแถวที่เว้น
+    ว่างไว้ แทนที่จะใช้ .agg('last') ตรงๆ)
+
+    รายการปันผลที่นำเข้าจากรายงาน TSD ด้วย AI ไม่มีข้อมูล "จำนวนหุ้นที่ได้รับสิทธิ์"/"ต้นทุนหุ้น" ให้
+    (รายงาน TSD ไม่ได้บอกไว้) จึงเว้นว่างไว้ตั้งใจ — แต่พอแถวว่างเหล่านี้ถูกต่อท้ายรายการเก่าที่เคยกรอก
+    จำนวนหุ้น/ต้นทุนไว้จริง การ groupby('Ticker').agg({'ต้นทุนหุ้น': 'last'}) แบบเดิมจะได้ค่า "ล่าสุด"
+    เป็นค่าว่างทันที (เพราะนับแถวว่างที่เพิ่งเพิ่มเป็น "ล่าสุด") ทำให้ต้นทุนของหุ้นตัวนั้นหายไปทั้งที่จริง
+    ยังมีข้อมูลต้นทุนเดิมอยู่ กราฟ Dividend Yield on Cost เลยว่างเปล่าไปเกือบทุกตัว ยกเว้นตัวที่บังเอิญ
+    ไม่มีแถวว่างต่อท้าย ฟังก์ชันนี้เลยข้ามแถวว่าง/แปลงเป็นตัวเลขไม่ได้ไปหาแถวล่าสุดที่มีค่าจริงแทน
+    """
+    numeric = pd.to_numeric(series, errors='coerce').dropna()
+    return numeric.iloc[-1] if not numeric.empty else 0.0
+
+
 def render_tab_stock():
     ##########################
     # 8.แท็บข้อมูล
-    ##############################  
+    ##############################
     st.markdown("---") # เส้นคั่น เพื่อแยกส่วนกับตารางด้านบนให้ชัด
     st.subheader("🛠 ระบบจัดการข้อมูลและวิเคราะห์พอร์ต")
 
@@ -1887,8 +1902,8 @@ def render_tab_stock():
                     df_div_sum = df_calc.groupby('Ticker')['ยอดรับสุทธิ'].sum().reset_index()
 
                     df_latest = df_calc.groupby('Ticker').agg({
-                        'จำนวนหุ้น': 'last',
-                        'ต้นทุนหุ้น': 'last'
+                        'จำนวนหุ้น': _last_known_dividend_value,
+                        'ต้นทุนหุ้น': _last_known_dividend_value
                     }).reset_index()
 
                     # 1. รวมข้อมูลยอดรับสุทธิและต้นทุนหุ้นรายตัวหุ้นเข้าด้วยกัน
@@ -2077,8 +2092,17 @@ def render_tab_stock():
                     df_stack_calc = df_div_local.copy()
 
                     if 'วันที่ได้รับ' in df_stack_calc.columns:
-                        df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], errors='coerce')
+                        # 🔧 แก้บั๊ก: เดิม parse ทั้งคอลัมน์รวดเดียวด้วย pd.to_datetime() ตรงๆ ซึ่งเดา
+                        # format เดียวจากข้อมูลส่วนใหญ่มาใช้กับทุกแถว (ปัญหาเดียวกับกราฟยอดรายปีด้านบน)
+                        # แถวที่เคยกรอกเป็นปี พ.ศ. (format "M/D/YYYY" หรือ "YYYY-MM-DD HH:MM:SS") จะ
+                        # parse ได้ปีดิบๆ แบบ พ.ศ. (เช่น 2569) ไม่ถูกแปลงเป็น ค.ศ. ให้ ใช้
+                        # normalize_dividend_date() ทีละแถวแทน ให้ผลตรงกับกราฟอื่นๆ ในหน้านี้ทั้งหมด
+                        df_stack_calc['วันที่ได้รับ'] = df_stack_calc['วันที่ได้รับ'].apply(normalize_dividend_date)
+                        df_stack_calc['วันที่ได้รับ_dt'] = pd.to_datetime(df_stack_calc['วันที่ได้รับ'], format='%Y-%m-%d', errors='coerce')
                         df_stack_calc['Year'] = df_stack_calc['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
+                        # เรียงตามวันที่จริงก่อนหา "ต้นทุน/จำนวนหุ้นล่าสุด" ด้านล่าง (ไม่งั้น "ล่าสุด"
+                        # จะหมายถึง "แถวท้ายสุดตามลำดับที่บันทึกในชีต" ซึ่งไม่ตรงกับวันที่จริงเสมอไป)
+                        df_stack_calc = df_stack_calc.sort_values(by='วันที่ได้รับ_dt', ascending=True)
                     else:
                         df_stack_calc['Year'] = 0
 
@@ -2094,14 +2118,16 @@ def render_tab_stock():
                     if selected_stack_period != "All Time (ทั้งหมด)":
                         df_stack_filtered = df_stack_calc[df_stack_calc['Year'] == int(selected_stack_period)].copy()
                     else:
-                        df_stack_filtered = df_stack_calc.copy()
+                        # 🔧 แก้บั๊ก: เดิมตอนเลือก "All Time" ไม่กรอง Year > 0 ออก ทำให้แถวที่วันที่ parse
+                        # ไม่สำเร็จ (Year=0) หลุดเข้ามาปนในกราฟเป็นสีแยกต่างหาก (เห็นเป็น "0" ใน legend)
+                        df_stack_filtered = df_stack_calc[df_stack_calc['Year'] > 0].copy()
 
                     if not df_stack_filtered.empty:
                         df_stack_filtered['Year_Str'] = df_stack_filtered['Year'].astype(str)
 
                         df_latest = df_stack_calc.groupby('Ticker').agg({
-                            'จำนวนหุ้น': 'last',
-                            'ต้นทุนหุ้น': 'last'
+                            'จำนวนหุ้น': _last_known_dividend_value,
+                            'ต้นทุนหุ้น': _last_known_dividend_value
                         }).reset_index()
 
                         # แปลงข้อมูลเป็นตัวเลขอย่างปลอดภัยก่อนนำมาคูณกัน
