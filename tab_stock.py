@@ -19,7 +19,7 @@ from backend_functions import (
     log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet,
     load_watchlist, remove_from_watchlist, fetch_set_index_history, update_watchlist_target, add_to_watchlist,
-    extract_dividend_from_image
+    extract_dividend_from_image, normalize_dividend_date
 )
 from theme import style_plotly, style_altair, get_theme_colors, render_metric_card
 
@@ -1808,6 +1808,15 @@ def render_tab_stock():
         if st.session_state.dividend_data:
             df_div = pd.DataFrame(st.session_state.dividend_data)
 
+            # 🔧 แก้บั๊ก: คอลัมน์ "วันที่ได้รับ" มีข้อมูลเก่าหลาย format ปนกัน ("M/D/YYYY" ปี พ.ศ.,
+            # "YYYY-MM-DD HH:MM:SS" ปี พ.ศ., "YYYY-MM-DD" ปี ค.ศ.) เดิม pd.to_datetime() parse ทั้ง
+            # คอลัมน์รวดเดียวจะเดา format เดียวจากข้อมูลส่วนใหญ่มาใช้กับทุกแถว แถวที่ format ไม่ตรงจะ
+            # กลายเป็นค่าว่าง (NaT/Year=0) หายไปจากกราฟ/ตัวกรองปีเงียบๆ โดยไม่แจ้งเตือน ทำให้ยอดรวมราย
+            # ปีอ่านขาดไป ตอนนี้แปลงให้เป็น "YYYY-MM-DD" (ค.ศ.) แบบเดียวกันทุกแถวก่อนใช้งานทุกจุด (ตาราง/
+            # CSV export/กราฟ) ด้วย normalize_dividend_date() ที่ parse ทีละแถวแทน ไม่เจอปัญหานี้
+            if 'วันที่ได้รับ' in df_div.columns:
+                df_div['วันที่ได้รับ'] = df_div['วันที่ได้รับ'].apply(normalize_dividend_date)
+
             total_received = df_div['ยอดรับสุทธิ'].sum() if 'ยอดรับสุทธิ' in df_div.columns else 0
             total_tax = df_div['ภาษีหัก ณ ที่จ่าย'].sum() if 'ภาษีหัก ณ ที่จ่าย' in df_div.columns else 0
 
@@ -1839,8 +1848,10 @@ def render_tab_stock():
             st.markdown("##### 📊 วิเคราะห์ข้อมูลเงินปันผล (Dividend Analytics)")
 
             if 'วันที่ได้รับ' in df_div.columns:
-                df_div['วันที่ได้รับ'] = pd.to_datetime(df_div['วันที่ได้รับ'], errors='coerce')
-                df_div['Year'] = df_div['วันที่ได้รับ'].dt.year.fillna(0).astype(int)
+                # ณ จุดนี้ 'วันที่ได้รับ' ถูก normalize เป็น "YYYY-MM-DD" ล้วนแล้ว (ด้านบน) จึง parse
+                # ด้วย format ตายตัวได้เลย ไม่ต้องให้ pandas เดา format จากข้อมูลทั้งคอลัมน์อีกต่อไป
+                df_div['วันที่ได้รับ_dt'] = pd.to_datetime(df_div['วันที่ได้รับ'], format='%Y-%m-%d', errors='coerce')
+                df_div['Year'] = df_div['วันที่ได้รับ_dt'].dt.year.fillna(0).astype(int)
 
             col_f1, col_f2 = st.columns([2, 2])
             with col_f1:

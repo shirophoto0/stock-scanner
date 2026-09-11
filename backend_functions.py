@@ -1167,6 +1167,57 @@ def save_dividend_data(df_div=None):
         return False
 
 
+def normalize_dividend_date(date_str):
+    """แปลงวันที่ในคอลัมน์ "วันที่ได้รับ" ของชีตปันผลให้เป็นรูปแบบเดียวกันเสมอ: "YYYY-MM-DD" (ค.ศ.)
+
+    ข้อมูลเก่าถูกกรอก/นำเข้ามาหลายยุคหลายวิธี เลยมีอย่างน้อย 3 รูปแบบปนกันอยู่ในคอลัมน์เดียว:
+    "M/D/YYYY" (ปี พ.ศ., ไม่เติมศูนย์นำหน้า), "YYYY-MM-DD HH:MM:SS" (ปี พ.ศ.) และ "YYYY-MM-DD"
+    (ปี ค.ศ., รูปแบบที่ใช้อยู่ปัจจุบัน) — ปัญหาคือ pd.to_datetime() แบบเดิมที่ parse ทั้งคอลัมน์รวด
+    เดียวจะ "เดา" รูปแบบเดียวจากข้อมูลส่วนใหญ่ในคอลัมน์มาใช้กับทุกแถว แถวที่ format ไม่ตรงกับที่เดาไว้
+    จะกลายเป็น NaT (ว่าง) หายไปเงียบๆ ทำให้กราฟ/ตัวกรองปีอ่านยอดขาดไปครึ่งหนึ่งโดยไม่มีการแจ้งเตือนใดๆ
+    ฟังก์ชันนี้ parse ทีละแถวตาม pattern ที่ตรวจพบจริงแทน จึงไม่เจอปัญหานี้ และแก้เรื่องปี พ.ศ./ค.ศ.
+    ปนกันด้วยการเช็คว่าปีที่ได้มากกว่า 2400 หรือไม่ (ปี ค.ศ. จริงไม่มีทางถึง 2400 ในทางปฏิบัติ ส่วนปี
+    พ.ศ. ของวันที่ปันผลย้อนหลังที่เป็นไปได้จะอยู่แถว 2560 ปลายๆ ขึ้นไปเสมอ) ถ้าใช่ถือว่าเป็นปี พ.ศ.
+    แล้วลบ 543 ให้เป็น ค.ศ. อัตโนมัติ คืนค่า None ถ้า parse ไม่ได้เลย (ปล่อยให้ผู้เรียกตัดสินใจเอง)
+    """
+    if date_str is None:
+        return None
+    s = str(date_str).strip()
+    if not s or s.lower() == 'nan':
+        return None
+
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})$', s)
+    if m:
+        month, day, year = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if year > 2400:
+            year -= 543
+        try:
+            return f"{date(year, month, day):%Y-%m-%d}"
+        except ValueError:
+            return None
+
+    m = re.match(r'^(\d{4})-(\d{1,2})-(\d{1,2})', s)
+    if m:
+        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        if year > 2400:
+            year -= 543
+        try:
+            return f"{date(year, month, day):%Y-%m-%d}"
+        except ValueError:
+            return None
+
+    # เผื่อ format แปลกๆ อื่นที่ไม่เข้ากรณีข้างบน ลอง parse แบบเดี่ยว (parse ทีละค่า ไม่ปนกับแถวอื่นใน
+    # คอลัมน์เดียวกัน จึงไม่เจอปัญหา format ถูกเดาผิดจากข้อมูลแถวอื่นเหมือนตอน parse รวดเดียวทั้งคอลัมน์)
+    try:
+        ts = pd.to_datetime(s, errors='coerce')
+        if pd.notna(ts):
+            year = ts.year - 543 if ts.year > 2400 else ts.year
+            return f"{date(year, ts.month, ts.day):%Y-%m-%d}"
+    except Exception:
+        pass
+    return None
+
+
 # =============================================================
 # 7. ฟังก์ชันการคำนวณทางเทคนิคและดึงข้อมูลตลาด (Technical & Market Data)
 # =============================================================
