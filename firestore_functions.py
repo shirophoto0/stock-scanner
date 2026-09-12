@@ -225,6 +225,18 @@ class FirestoreWorksheet:
         data = rows[idx]['data']
         return [data.get(c, '') for c in columns] if columns else list(data.values())
 
+    def col_values(self, col):
+        """เลียนแบบ gspread Worksheet.col_values(col) — คืนค่าทุกแถวของคอลัมน์ที่ระบุ (นับจาก 1) รวม
+        แถวหัวตาราง (row 1) เป็นสมาชิกตัวแรกเหมือน gspread จริง เรียก _fetch_rows() แบบสดเสมอ (ไม่ผ่าน
+        cache) เพราะโค้ดที่เรียกใช้ (เช่น หน้าสหกรณ์/ประกันสังคม/ประกันบำนาญ) ใช้ผลลัพธ์นี้หาตำแหน่งแถว
+        ก่อนตัดสินใจอัปเดตหรือเพิ่มแถวใหม่ ต้องเห็นข้อมูลล่าสุดจริงๆ ไม่ใช่ค่าที่ cache ไว้"""
+        columns = self._get_columns()
+        if col < 1 or col > len(columns):
+            return []
+        field_name = columns[col - 1]
+        rows = self._fetch_rows()
+        return [field_name] + [r['data'].get(field_name, '') for r in rows]
+
     def find(self, query):
         columns = self._get_columns()
         for i, r in enumerate(self._fetch_rows()):
