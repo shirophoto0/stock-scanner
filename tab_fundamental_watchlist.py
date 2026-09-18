@@ -227,6 +227,8 @@ def render_tab_fundamental_watchlist():
                     st.success(msg)
                     st.cache_data.clear()
                     st.rerun()
+                else:
+                    st.error(msg)
 
             # --- 2. อัปโหลดงบไตรมาสใหม่ ให้ AI วิเคราะห์ ---
             with st.expander(f"📤 อัปโหลดงบการเงินไตรมาสใหม่ — {ticker}"):

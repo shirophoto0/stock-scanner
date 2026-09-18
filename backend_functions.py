@@ -3181,10 +3181,15 @@ def remove_from_fundamental_watchlist(spreadsheet_name, ticker):
         records = sheet.get_all_records()
         ticker_clean = ticker.strip().upper()
         rows_to_keep = [r for r in records if str(r.get('Ticker', '')).strip().upper() != ticker_clean]
+        # 🔧 แก้บั๊ก: เดิม sheet.clear() แล้วค่อย append_row() ทีละแถวใหม่ — สำหรับบัญชีที่ข้อมูลอยู่บน
+        # Firestore (ผ่าน FirestoreWorksheet) การ clear() จะลบ schema (_meta) ทิ้งไปด้วย ทำให้
+        # append_row() ถัดมาพังเพราะไม่มี schema เหลือให้ append ใส่ ผลคือลบหุ้นทุกตัวหายหมดแทนที่จะ
+        # ลบแค่ตัวเดียว เปลี่ยนมาใช้ clear() + update('A1', ...) แบบเดียวกับฟังก์ชันอื่นในไฟล์นี้ ซึ่ง
+        # ปลอดภัยเพราะสร้าง schema ใหม่ก่อนเขียนแถวข้อมูลกลับเข้าไป
+        header = ["Ticker", "Date_Added", "Note"]
+        data_to_save = [header] + [[r.get('Ticker', ''), r.get('Date_Added', ''), r.get('Note', '')] for r in rows_to_keep]
         sheet.clear()
-        sheet.append_row(["Ticker", "Date_Added", "Note"])
-        for r in rows_to_keep:
-            sheet.append_row([r.get('Ticker', ''), r.get('Date_Added', ''), r.get('Note', '')])
+        sheet.update('A1', data_to_save)
         return True, f"ลบ {ticker_clean} ออกจาก Watchlist สำเร็จ"
     except Exception as e:
         return False, f"ลบไม่สำเร็จ: {e}"
