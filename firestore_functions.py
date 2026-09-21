@@ -164,19 +164,39 @@ class FirestoreWorksheet:
         if columns:
             self._meta_ref.set({'columns': list(columns)}, merge=True)
 
-    def _next_seq(self):
-        """เพิ่มเลขลำดับถัดไปแบบ atomic ด้วย transaction กันปัญหาสองคนเขียนพร้อมกันได้เลขซ้ำ"""
+    def _reserve_seq_range(self, count):
+        """
+        🔧 แก้บั๊ก (ประสิทธิภาพ): เดิม append_rows() เรียก _next_seq() ทีละแถว แถวละ 1 transaction
+        (1 อ่าน + 1 เขียนไปที่ document _meta) แยกจากตัวข้อมูลจริงอีก 1 เขียน รวม 472 แถว = เกือบ
+        1,000 ครั้งที่ต้องรอ round-trip เครือข่ายทีละครั้ง (บันทึกผลสแกนหุ้นรายวันช้าจาก 2-6 นาที
+        เป็นเกือบ 20 นาที) ตอนนี้ "จอง" ช่วงเลขลำดับทั้งก้อนด้วย transaction เดียว (อ่าน next_seq
+        ปัจจุบันครั้งเดียว แล้วขยับไปข้างหน้าทีเดียว count ค่า) คืนเลขเริ่มต้นของช่วงกลับไปให้ผู้เรียก
+        ไปใช้กับทุกแถวในก้อนเดียวกัน ยังคง atomic เหมือนเดิม (กันสองคนเขียนพร้อมกันได้เลขซ้ำ) แค่ไม่ต้อง
+        เปิด transaction ใหม่ทุกแถวอีกต่อไป
+        """
+        if count <= 0:
+            return 0
         meta_ref = self._meta_ref
 
         @firestore.transactional
         def _txn(transaction):
             snap = meta_ref.get(transaction=transaction)
             meta = snap.to_dict() if snap.exists else {}
-            seq = meta.get('next_seq', 0)
-            transaction.set(meta_ref, {'next_seq': seq + 1}, merge=True)
-            return seq
+            start = meta.get('next_seq', 0)
+            transaction.set(meta_ref, {'next_seq': start + count}, merge=True)
+            return start
 
         return _txn(self._client.transaction())
+
+    def _commit_in_batches(self, doc_data_by_ref):
+        """เขียนหลาย document พร้อมกันเป็นก้อนๆ ละไม่เกิน 400 (Firestore จำกัดสูงสุด 500 ต่อ batch)
+        แทนการ .set() ทีละ document ทีละ round-trip เหมือนเดิม"""
+        items = list(doc_data_by_ref.items())
+        for i in range(0, len(items), 400):
+            batch = self._client.batch()
+            for ref, data in items[i:i + 400]:
+                batch.set(ref, data)
+            batch.commit()
 
     def _delete_all_docs(self):
         refs = [d.reference for d in self._collection.stream()]
@@ -259,7 +279,10 @@ class FirestoreWorksheet:
             else:
                 raise ValueError("append_rows กับข้อมูลแบบ list ต้องระบุ columns=[...] ด้วย")
         self._ensure_columns(columns)
-        for row in rows:
+
+        start_seq = self._reserve_seq_range(len(rows))
+        doc_data_by_ref = {}
+        for offset, row in enumerate(rows):
             # เติม '' ให้คอลัมน์ที่ไม่ได้ส่งค่ามาเสมอ (เช่น add_to_watchlist ส่งมาแค่ 4 ค่า
             # ทั้งที่หัวตารางมี 7 คอลัมน์) ให้ตรงกับ gspread จริงที่เซลล์ว่างอ่านกลับมาเป็น '' เสมอ
             # ไม่ใช่ field หายไปเลยจาก document (ต่างจาก dict(zip(...)) ที่ตัดคอลัมน์ส่วนเกินทิ้ง)
@@ -267,10 +290,12 @@ class FirestoreWorksheet:
                 row_dict = {c: row.get(c, '') for c in columns}
             else:
                 row_dict = {c: (row[i] if i < len(row) else '') for i, c in enumerate(columns)}
-            seq = self._next_seq()
+            seq = start_seq + offset
             doc_data = _to_firestore_safe(dict(row_dict))
             doc_data['_seq'] = seq
-            self._collection.document(str(seq)).set(doc_data)
+            doc_data_by_ref[self._collection.document(str(seq))] = doc_data
+
+        self._commit_in_batches(doc_data_by_ref)
         self._invalidate_cache()
 
     def append_row(self, values):

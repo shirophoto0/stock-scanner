@@ -390,6 +390,19 @@ def render_tab_manual_records():
     st.markdown("### 📝 บันทึกและอัปเดตข้อมูลสินทรัพย์ระยะยาว (สหกรณ์ / ประกัน / ธนาคาร)")
 
     # --- 1. ส่วนประกันภัย Unit Linked ---
+    # 🔧 แก้บั๊ก: เดิม value=0.0 ตายตัว ทำให้เปิด Expander มาแก้ไขทีไรเห็นเป็น 0 ทุกครั้ง
+    # ทั้งที่มีข้อมูลอยู่แล้วในชีต ตอนนี้ดึงยอดล่าสุดมาตั้งเป็นค่าเริ่มต้นเหมือนฟอร์มสหกรณ์
+    latest_ins_val = 0.0
+    try:
+        client = get_gsheet_client()
+        sheet_ins_peek = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('Insurance')
+        ins_records_peek = sheet_ins_peek.get_all_records()
+        if ins_records_peek:
+            last_ins_row = ins_records_peek[-1]
+            latest_ins_val = float(str(last_ins_row.get('Redemption_Value', last_ins_row.get('Value', 0))).replace(',', '') or 0)
+    except Exception:
+        pass
+
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันควบการลงทุน (Unit Linked)", expanded=False):
         with st.form("insurance_upload_form"):
             col_d, col_v = st.columns(2)
@@ -399,10 +412,10 @@ def render_tab_manual_records():
 
             with col_v:
                 ins_redemption_value = st.number_input(
-                    "มูลค่ารับซื้อคืนหน่วยลงทุน (บาท)", 
-                    min_value=0.0, 
-                    format="%.2f", 
-                    value=0.0,
+                    "มูลค่ารับซื้อคืนหน่วยลงทุน (บาท)",
+                    min_value=0.0,
+                    format="%.2f",
+                    value=latest_ins_val,
                     key="ins_redemption_input",
                     help="กรอกยอดมูลค่าพอร์ตประกันตามใบแจ้งยอดหรือแอปพลิเคชัน ณ วันที่อัปเดต"
                 )
@@ -559,6 +572,16 @@ def render_tab_manual_records():
                 else:
                     st.warning("กรุณากรอกยอดเงินให้มากกว่า 0")
     # --- ส่วนประกันสังคม ---
+    # 🔧 แก้บั๊ก: ดึงยอดล่าสุดจากชีตมาตั้งเป็นค่าเริ่มต้น แทนที่จะโชว์ 0 ทุกครั้งที่เปิด Expander
+    latest_sso_val = 0.0
+    try:
+        sheet_sso_peek = get_sso_sheet()
+        sso_records_peek = sheet_sso_peek.get_all_records()
+        if sso_records_peek:
+            latest_sso_val = float(str(sso_records_peek[-1].get('Value', 0)).replace(',', '') or 0)
+    except Exception:
+        pass
+
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันสังคม", expanded=False):
         with st.form("sso_upload_form"):
             col_d, col_v = st.columns(2)
@@ -566,8 +589,8 @@ def render_tab_manual_records():
                 sso_date = st.date_input("เลือกวันที่อัปเดตข้อมูลประกันสังคม", value=date.today(), key="sso_date_input")
             with col_v:
                 sso_value = st.number_input(
-                    "ยอดสะสมประกันสังคม / เงินสมทบ (บาท)", 
-                    min_value=0.0, format="%.2f", value=0.0, key="sso_value_input",
+                    "ยอดสะสมประกันสังคม / เงินสมทบ (บาท)",
+                    min_value=0.0, format="%.2f", value=latest_sso_val, key="sso_value_input",
                     help="กรอกยอดเงินสะสมหรือเงินสมทบประกันสังคม ณ วันที่อัปเดต"
                 )
 
@@ -637,21 +660,36 @@ def render_tab_manual_records():
                     st.error(f"❌ เกิดข้อผิดพลาดในการบันทึกบัญชี: {e}")
 
     with st.expander("📤 เพิ่ม/อัปเดตข้อมูลประกันบำนาญตามอายุ", expanded=False):
+        # 🔧 แก้บั๊ก: เดิมยอดเงินตายตัวเป็น 0 ทุกครั้ง ทำให้เปิดมาแก้ไขแล้วต้องพิมพ์ใหม่ทั้งหมด
+        # ตอนนี้ดึงตารางอายุ->ยอดเงินที่มีอยู่แล้วมาไว้ก่อน แล้วย้ายช่องเลือกอายุออกมานอกฟอร์ม
+        # (ฟอร์มของ Streamlit ไม่รีรันตามการพิมพ์ในช่องจนกว่าจะกดส่ง) เพื่อให้พอเปลี่ยนอายุ
+        # หน้าจอรีเฟรชและโชว์ยอดเงินที่เคยบันทึกไว้ของอายุนั้นๆ ทันที ถ้ายังไม่เคยบันทึกอายุนั้นค่อยเป็น 0
+        pension_values_by_age = {}
+        try:
+            client = get_gsheet_client()
+            sheet_pension_peek = get_worksheet_safely(client, get_active_sheet_name(), 'Pension')
+            if sheet_pension_peek is not None:
+                for row in sheet_pension_peek.get_all_records():
+                    age_key = str(row.get('Age', '')).strip()
+                    if age_key:
+                        pension_values_by_age[age_key] = float(str(row.get('Value', 0)).replace(',', '') or 0)
+        except Exception:
+            pass
+
+        pension_age = st.number_input(
+            "อายุที่เริ่มรับเงินบำนาญ (ปี)",
+            min_value=55, max_value=100, value=55, step=1,
+            key="pension_age_input",
+            help="ประกันบำนาญมักเริ่มถอน/รับเงินได้ตั้งแต่ช่วงอายุ 55 ปีขึ้นไป"
+        )
+        default_pension_value = pension_values_by_age.get(str(int(pension_age)), 0.0)
+
         with st.form("pension_upload_form"):
-            col_p1, col_p2 = st.columns(2)
-            with col_p1:
-                pension_age = st.number_input(
-                    "อายุที่เริ่มรับเงินบำนาญ (ปี)", 
-                    min_value=55, max_value=100, value=55, step=1, 
-                    key="pension_age_input",
-                    help="ประกันบำนาญมักเริ่มถอน/รับเงินได้ตั้งแต่ช่วงอายุ 55 ปีขึ้นไป"
-                )
-            with col_p2:
-                pension_value = st.number_input(
-                    "ยอดเงินบำนาญที่จะได้รับ (บาท)", 
-                    min_value=0.0, format="%.2f", value=0.0, key="pension_value_input",
-                    help="กรอกยอดเงินตามตารางกรมธรรม์ ณ อายุที่เลือก"
-                )
+            pension_value = st.number_input(
+                "ยอดเงินบำนาญที่จะได้รับ (บาท)",
+                min_value=0.0, format="%.2f", value=default_pension_value, key="pension_value_input",
+                help="กรอกยอดเงินตามตารางกรมธรรม์ ณ อายุที่เลือก"
+            )
 
             submitted_pension = st.form_submit_button("💾 บันทึก/อัปเดตข้อมูลประกันบำนาญ")
 
