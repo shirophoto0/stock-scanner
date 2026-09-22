@@ -2590,7 +2590,18 @@ def log_signal_history(spreadsheet_name, notable, price_map):
                     if price:
                         rows_to_add.append([today_str, t, signal_type, price, '', '', ''])
             if rows_to_add:
-                sheet.append_rows(rows_to_add)
+                # 🔧 แก้บั๊ก: ตั้งแต่ MyStockData/Nujiwealth ย้ายไป Firestore (2026-09-02/03)
+                # FirestoreWorksheet.append_rows() กับข้อมูลแบบ list (ไม่ใช่ dict) ต้องระบุ
+                # columns=[...] เสมอ (บังคับไว้ตั้งแต่สร้างคลาส) ไม่งั้น raise ValueError ทุกครั้ง
+                # แต่ except ด้านล่างจับไว้เงียบๆ ทำให้ backtest ไม่มีข้อมูลใหม่บันทึกเข้ามาเลยตั้งแต่
+                # วันนั้น (ตารางล่าสุดค้างที่ 2026-09-02) โดยไม่กระทบการสแกนหลักจนไม่มีใครสังเกตเห็น
+                # ส่วน gspread เวอร์ชันจริง (บัญชีที่ยังไม่ได้ย้ายไป Firestore) ไม่รับ kwarg นี้ จึง
+                # ส่งเฉพาะตอนใช้ Firestore เท่านั้น (เหมือน pattern ใน save_cash_to_gsheet)
+                kwargs = {'columns': [
+                    'Date', 'Ticker', 'Signal_Type', 'Price_At_Signal',
+                    'Return_30D', 'Return_60D', 'Return_90D',
+                ]} if _use_firestore() else {}
+                sheet.append_rows(rows_to_add, **kwargs)
             return len(rows_to_add)
         except Exception as e:
             print(f"⚠️ บันทึกประวัติสัญญาณไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
