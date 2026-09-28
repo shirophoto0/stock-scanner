@@ -48,37 +48,47 @@ def render_tab_real_estate():
 
     # ฟังก์ชันช่วยบันทึกข้อมูลลง Google Sheets พร้อม Retry ป้องกัน API พัง
     # 🔧 ปรับปรุง: ลดชั้นนอกเหลือ 2 รอบด้วยเหตุผลเดียวกัน (get_worksheet_safely มี retry ในตัวแล้ว)
+    # 🔧 แก้บั๊ก: เดิม sheet.clear() แล้วค่อย append_row() หัวตาราง + append_rows() ข้อมูล — สำหรับ
+    # บัญชีที่ข้อมูลอยู่บน Firestore (ผ่าน FirestoreWorksheet) การ clear() จะลบ schema (_meta) ทิ้ง
+    # ไปด้วย ทำให้ append_row() ถัดมาพังทันทีเพราะไม่มี schema เหลือให้ append ใส่ (ValueError ถูก
+    # except ด้านล่างจับไว้เงียบๆ แล้วโชว์ข้อความ "ติดขีดจำกัด API" ที่เข้าใจผิดสาเหตุ) และถ้าไปเกิดใน
+    # ปุ่มลบ/ล้างข้อมูลทั้งหมด จะทำให้ทรัพย์สินทุกรายการหายหมดแทนที่จะลบแค่รายการเดียว เหมือนบั๊กเดียวกัน
+    # ที่เคยแก้ไว้แล้วใน remove_from_fundamental_watchlist() — เปลี่ยนมาใช้ clear() + update('A1', ...)
+    # แบบเดียวกัน ซึ่งปลอดภัยเพราะสร้าง schema ใหม่ก่อนเขียนแถวข้อมูลกลับเข้าไป
     def save_real_estate_to_sheet_safe(portfolio_items):
         client = get_gsheet_client()
+        header = ["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"]
+        current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        rows_to_append = []
+        for item in portfolio_items:
+            net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
+            rows_to_append.append([
+                item["ชื่อทรัพย์สิน"],
+                item["มูลค่าตลาด"],
+                item["ยอดหนี้คงเหลือ"],
+                net_val,
+                item["หมายเหตุ"],
+                current_date
+            ])
+
+        last_error = None
         for attempt in range(2):
             try:
                 sheet_re = get_worksheet_safely(client, get_active_sheet_name(), 'Real_Estate')
                 if sheet_re is not None:
                     sheet_re.clear()
-                    sheet_re.append_row(["ชื่อทรัพย์สิน", "มูลค่าตลาด (บาท)", "ยอดหนี้คงเหลือ (บาท)", "มูลค่าสุทธิ (บาท)", "หมายเหตุ", "วันที่บันทึก"])
-
-                    current_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    rows_to_append = []
-                    for item in portfolio_items:
-                        net_val = item["มูลค่าตลาด"] - item["ยอดหนี้คงเหลือ"]
-                        rows_to_append.append([
-                            item["ชื่อทรัพย์สิน"],
-                            item["มูลค่าตลาด"],
-                            item["ยอดหนี้คงเหลือ"],
-                            net_val,
-                            item["หมายเหตุ"],
-                            current_date
-                        ])
-                    if rows_to_append:
-                        sheet_re.append_rows(rows_to_append)
+                    sheet_re.update('A1', [header] + rows_to_append)
 
                     # เคลียร์ Cache ทันทีที่มีการเปลี่ยนแปลงข้อมูล เพื่อให้ดึงข้อมูลล่าสุดรอบหน้า
                     fetch_real_estate_data_cached.clear()
                     # 🆕 อัปเดต badge "บันทึกล่าสุด" บนการ์ดสรุปทันที ไม่ต้องรอโหลดจากชีตใหม่รอบหน้า
                     st.session_state['real_estate_last_updated'] = current_date if rows_to_append else None
                     return True
-            except Exception:
+            except Exception as e:
+                last_error = str(e)
                 time.sleep((2 ** (attempt + 1)) + random.uniform(0.5, 2.5))
+        if last_error:
+            st.session_state['real_estate_save_error'] = last_error
         return False
 
     # ปุ่มโหลดข้อมูลใหม่ (เคลียร์ Cache และ Session)
@@ -209,7 +219,11 @@ def render_tab_real_estate():
                     st.success(f"บันทึกข้อมูล '{re_name}' สำเร็จ!")
                     st.rerun()
                 else:
-                    st.error("⚠️ บันทึกลง Google Sheets ไม่สำเร็จเนื่องจากติดขีดจำกัด API หรือเชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง")
+                    _err_detail = st.session_state.pop('real_estate_save_error', None)
+                    st.error(
+                        f"⚠️ บันทึกไม่สำเร็จ: {_err_detail}" if _err_detail
+                        else "⚠️ บันทึกลง Google Sheets ไม่สำเร็จเนื่องจากติดขีดจำกัด API หรือเชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง"
+                    )
             else:
                 st.error("กรุณากรอกชื่อทรัพย์สินและมูลค่าประเมินตลาดให้ถูกต้อง")
 
@@ -241,15 +255,20 @@ def render_tab_real_estate():
             if existing_names:
                 del_target = st.selectbox("เลือกรายการที่จะลบ", existing_names, key="re_del_select")
                 if st.button("🗑️ ลบรายการที่เลือก", key="btn_del_single_re"):
-                    st.session_state['real_estate_portfolio'] = [item for item in st.session_state['real_estate_portfolio'] if item["ชื่อทรัพย์สิน"] != del_target]
-                    save_real_estate_to_sheet_safe(st.session_state['real_estate_portfolio'])
-                    st.success(f"ลบ {del_target} สำเร็จ")
+                    _remaining = [item for item in st.session_state['real_estate_portfolio'] if item["ชื่อทรัพย์สิน"] != del_target]
+                    if save_real_estate_to_sheet_safe(_remaining):
+                        st.session_state['real_estate_portfolio'] = _remaining
+                        st.success(f"ลบ {del_target} สำเร็จ")
+                    else:
+                        st.error(f"⚠️ ลบไม่สำเร็จ: {st.session_state.pop('real_estate_save_error', 'ไม่ทราบสาเหตุ')}")
                     st.rerun()
 
                 if st.button("🗑️ ล้างข้อมูลอสังหาริมทรัพย์ทั้งหมด", key="btn_clear_all_re"):
-                    st.session_state['real_estate_portfolio'] = []
-                    st.session_state['total_real_estate_value'] = 0.0
-                    save_real_estate_to_sheet_safe([])
+                    if save_real_estate_to_sheet_safe([]):
+                        st.session_state['real_estate_portfolio'] = []
+                        st.session_state['total_real_estate_value'] = 0.0
+                    else:
+                        st.error(f"⚠️ ล้างข้อมูลไม่สำเร็จ: {st.session_state.pop('real_estate_save_error', 'ไม่ทราบสาเหตุ')}")
                     st.rerun()
     else:
         st.info("ยังไม่มีข้อมูลอสังหาริมทรัพย์ กรุณากดปุ่ม '🔄 โหลดข้อมูลใหม่จาก Sheet' ด้านบน")
