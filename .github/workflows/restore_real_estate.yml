@@ -1,0 +1,24 @@
+name: Restore Real Estate Data (one-time)
+on:
+  workflow_dispatch:        # กดรันเองครั้งเดียวเท่านั้น ไม่มี schedule
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run Restore Script
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          FIREBASE_APPLICATION_CREDENTIALS: ${{ secrets.FIREBASE_APPLICATION_CREDENTIALS }}
+          FIRESTORE_ENABLED_SHEETS: "MyStockData,Nujiwealth"
+        run: |
+          python restore_real_estate.py
