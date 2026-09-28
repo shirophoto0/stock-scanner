@@ -2650,8 +2650,15 @@ def resolve_pending_signals(spreadsheet_name):
             if not tickers_list:
                 return 0
 
-            # ดึงราคาย้อนหลังเฉพาะหุ้นที่จำเป็นต้องใช้เท่านั้น (คนละก้อนกับการสแกนหลักทั้ง 472 ตัว)
-            raw_data = yf.download(tickers_list, period="1y", group_by='ticker', threads=True)
+            # 🔧 แก้บั๊ก: คอลัมน์ Ticker ใน Signal_History เก็บชื่อหุ้นแบบตัด ".BK" ออกแล้ว (ตรงกับที่
+            # ตารางแสดงผล เช่น "AKR" ไม่ใช่ "AKR.BK" — ดู stock_list.append ใน backend_functions.py
+            # ที่ทำ ticker.replace('.BK', '') ตอนสแกน) แต่โค้ดเดิมเอาชื่อที่ตัด .BK ออกไปนี้ไปยิง
+            # yf.download() ตรงๆ โดยไม่ใส่ .BK กลับเข้าไป ทำให้ Yahoo Finance จับคู่กับหุ้นคนละตัวที่
+            # บังเอิญใช้ชื่อย่อเดียวกันในตลาดอื่น (เช่น "AKR" เปล่าๆ = Acadia Realty Trust ที่สหรัฐฯ
+            # ราคา ~$19 ไม่ใช่หุ้นไทย AKR ราคา ~1 บาท) ผลตอบแทน % ที่คำนวณได้เลยเพี้ยนหลักพันเปอร์เซ็นต์
+            # ตอนนี้ต่อ ".BK" กลับก่อนดาวน์โหลด แล้ว map กลับด้วย ticker+".BK" เหมือนกันตอนอ่านผล
+            yf_tickers = [f"{t}.BK" for t in tickers_list]
+            raw_data = yf.download(yf_tickers, period="1y", group_by='ticker', threads=True)
 
             updated_count = 0
             col_index_map = {30: 5, 60: 6, 90: 7}  # ตำแหน่งคอลัมน์ Return_30D/60D/90D (นับจาก 1)
@@ -2665,8 +2672,14 @@ def resolve_pending_signals(spreadsheet_name):
                 if price_at_signal <= 0:
                     continue
 
+                # 🔧 แก้บั๊ก: yf.download() กับ group_by='ticker' คืน column เป็น MultiIndex
+                # (ticker เป็น level บนสุด) เสมอ แม้ดาวน์โหลดแค่ ticker เดียว — โค้ดเดิมมี special
+                # case สำหรับกรณีเหลือ ticker เดียว (raw_data['Close']) ที่ใช้ไม่ได้กับ yfinance
+                # เวอร์ชันปัจจุบัน (raise KeyError ทุกครั้ง ถูก except ด้านล่างดักไว้เงียบๆ กลายเป็น
+                # ข้ามไปเฉยๆ ไม่เคยคำนวณผลตอบแทนให้เลยเวลาเหลือ ticker เดียวที่รอผล) ตอนนี้เข้าถึง
+                # ผ่าน raw_data[ticker+'.BK']['Close'] แบบเดียวกันเสมอไม่ว่าจะมีกี่ ticker
                 try:
-                    ticker_hist = raw_data['Close'] if len(tickers_list) == 1 else raw_data[ticker]['Close']
+                    ticker_hist = raw_data[f"{ticker}.BK"]['Close']
                 except (KeyError, TypeError):
                     continue
                 ticker_hist = ticker_hist.dropna()
@@ -2689,6 +2702,36 @@ def resolve_pending_signals(spreadsheet_name):
             return updated_count
         except Exception as e:
             print(f"⚠️ อัปเดตผลตอบแทนสัญญาณเก่าไม่สำเร็จ (ไม่กระทบการทำงานหลัก): {e}")
+            return 0
+
+
+def repair_corrupted_signal_returns(spreadsheet_name):
+    """
+    🔧 ฟังก์ชันแก้ข้อมูลครั้งเดียว (one-time repair) — resolve_pending_signals() เดิมเอาชื่อหุ้นที่
+    ตัด ".BK" ออกแล้วไปยิง yf.download() ตรงๆ (ดูคอมเมนต์ที่ resolve_pending_signals) ทำให้ค่า
+    Return_30D/60D/90D ทุกช่องที่เคยคำนวณไว้ก่อนแก้บั๊กนี้ผิดทั้งหมด (จับคู่กับหุ้นคนละตัวที่บังเอิญ
+    ใช้ชื่อย่อเดียวกันในตลาดอื่น เช่น AKR/TRC/CHOW) ฟังก์ชันนี้ล้างค่าที่ผิดเหล่านั้นทิ้งกลับเป็นค่าว่าง
+    ให้ resolve_pending_signals() คำนวณใหม่ให้ถูกต้องเองในรอบสแกนถัดๆ ไปตามปกติ (ไม่ต้องมาเรียกซ้ำ
+    อีกหลังรันครั้งเดียว) คืนค่าเป็นจำนวนช่องที่ถูกล้าง
+    """
+    with _force_active_sheet_for_backend_routing(spreadsheet_name):
+        try:
+            client = get_gsheet_client()
+            sheet = get_cached_worksheet(client, spreadsheet_name, 'Signal_History')
+            records = sheet.get_all_records()
+            if not records:
+                return 0
+
+            col_index_map = {'Return_30D': 5, 'Return_60D': 6, 'Return_90D': 7}
+            cleared_count = 0
+            for idx, row in enumerate(records):
+                for col_name, col_idx in col_index_map.items():
+                    if str(row.get(col_name, '')).strip():
+                        sheet.update_cell(idx + 2, col_idx, '')
+                        cleared_count += 1
+            return cleared_count
+        except Exception as e:
+            print(f"⚠️ ล้างข้อมูลผลตอบแทนที่ผิดพลาดไม่สำเร็จ: {e}")
             return 0
 
 
