@@ -2967,7 +2967,13 @@ def compute_live_net_worth(spreadsheet_name):
     total_withdraw = sum(safe_float(row.get('Amount', 0)) for row in cash_flow_records if str(row.get('Type', '')).strip().lower() == 'withdraw')
     tfex_net_worth = (total_deposit - total_withdraw) + total_pnl
 
-    total_stock_and_tfex = total_stock_value + tfex_net_worth
+    # 🔧 แก้บั๊ก: เดิมการ์ด "พอร์ตหุ้น + TFEX" นับแค่มูลค่าตลาดของหุ้นที่ถืออยู่ (total_stock_value)
+    # กับยอด TFEX เท่านั้น ไม่เคยบวกเงินสดคงเหลือในพอร์ตหุ้น (ชีต CashFlow ตัวเดียวกับที่แท็บหุ้นใช้
+    # แสดงการ์ด "เงินสดคงเหลือ" ผ่าน load_total_cash_balance()) เข้ามาเลย ทำให้ทุกครั้งที่ขายหุ้นออก
+    # เงินที่ขายได้ (กลายเป็นเงินสดในพอร์ต) หายไปจาก Net Worth ทันที เพราะหุ้นตัวนั้นหลุดจาก
+    # total_stock_value แต่ไม่มีที่ไหนบวกเงินสดกลับเข้ามาแทน
+    stock_cash_balance = load_total_cash_balance()
+    total_stock_and_tfex = total_stock_value + stock_cash_balance + tfex_net_worth
 
     # --- ทองคำ: ดึงราคาสดจากเว็บสมาคมค้าทองคำ (ใช้ฟังก์ชันกลาง fetch_live_gold_price() ที่แก้
     # ไปแล้ว ดึงจากเว็บ classic แทนเว็บใหม่ที่โหลดราคาผ่าน JavaScript) ---
