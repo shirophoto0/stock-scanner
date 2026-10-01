@@ -978,6 +978,8 @@ def render_tab_stock():
     
     #########################            
     with tab_portfolio:
+        summary_placeholder = st.empty()
+
         st.markdown("#### 💼 ระบบบันทึกพอร์ตโฟลิโอส่วนตัว")
 
         # 1. จัดการเงินสด (แก้ไขด้วยตัวเองได้ตลอดเวลา)
@@ -1184,9 +1186,6 @@ def render_tab_stock():
         # เทคนิค placeholder (เหมือนที่ใช้กับหน้าทองคำ) แทนการย้ายโค้ดคำนวณทั้งหมดขึ้นมา ปลอดภัยกว่า
         sl_tp_placeholder = st.empty()
 
-        st.divider()
-        st.subheader("📊 สรุปพอร์ตการลงทุน")
-
         # 🔧 แก้บั๊ก: เดิม df_p ถูกสร้างแค่ข้างใน "if my_portfolio in session_state และมีข้อมูล:"
         # เท่านั้น (บรรทัดที่เคยแก้ก่อนหน้านี้ตั้งค่าเริ่มต้นไว้แค่ "ข้างใน" เงื่อนไขนั้นอีกที) ถ้าการ
         # โหลดพอร์ตล้มเหลวทั้งหมด (เช่น 429 Quota exceeded ตอนอ่าน PortfolioData) my_portfolio จะไม่
@@ -1194,256 +1193,261 @@ def render_tab_stock():
         # ถูกสร้างขึ้นมาเลยตั้งแต่ต้น ส่วนกราฟสรุปพอร์ตด้านล่างที่เช็ค "if not df_p.empty:" จึงพัง
         # UnboundLocalError อยู่ดี ย้ายค่าเริ่มต้นมาไว้นอกสุดตรงนี้กันไว้ทุกกรณี
         df_p = pd.DataFrame()
+        portfolio_list = []  # ค่าเริ่มต้นกันเหนียว เผื่อ SL/TP ด้านล่างอ้างถึงตอนยังไม่มีข้อมูลพอร์ต
 
-        # 1. ตรวจสอบและโหลดข้อมูลพอร์ตจาก Google Sheets (ชีต PortfolioData) ถ้ายังไม่มีใน session_state
-        if "my_portfolio" not in st.session_state or not st.session_state["my_portfolio"]:
-            try:
-                client = get_gsheet_client()
-                sheet_portfolio = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('PortfolioData')
-                raw_portfolio_data = sheet_portfolio.get_all_records()
+        with summary_placeholder.container():
+            st.divider()
+            st.subheader("📊 สรุปพอร์ตการลงทุน")
 
-                if raw_portfolio_data:
-                    # แปลงชื่อคอลัมน์ให้สะอาด ป้องกันปัญหาช่องว่าง
-                    cleaned_portfolio = []
-                    for row in raw_portfolio_data:
-                        cleaned_row = {str(k).strip(): v for k, v in row.items()}
-                        cleaned_portfolio.append(cleaned_row)
-                    st.session_state["my_portfolio"] = cleaned_portfolio
-            except Exception as e:
-                st.error(f"❌ ไม่สามารถดึงข้อมูลพอร์ตจาก Google Sheets (PortfolioData) ได้: {e}")
-
-        # 2. ตรวจสอบว่ามีข้อมูลในพอร์ตหรือไม่
-        if "my_portfolio" in st.session_state and st.session_state["my_portfolio"]:
-            portfolio_list = []
-            total_invest = 0
-            total_value = 0
-
-            # ฟังก์ชันกำหนดสีสำหรับตารางพอร์ต
-            def color_portfolio(val):
-                if isinstance(val, (int, float)):
-                    color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
-                    return f'color: {color}'
-                return None
-
-            for row in st.session_state["my_portfolio"]:
-                # รองรับชื่อคอลัมน์ได้ทั้งภาษาไทยและอังกฤษ (กันเหนียว)
-                ticker = str(row.get('หุ้น', row.get('Ticker', ''))).strip()
-
+            # 1. ตรวจสอบและโหลดข้อมูลพอร์ตจาก Google Sheets (ชีต PortfolioData) ถ้ายังไม่มีใน session_state
+            if "my_portfolio" not in st.session_state or not st.session_state["my_portfolio"]:
                 try:
-                    shares = float(str(row.get('จำนวน', row.get('shares', 0))).replace(',', ''))
-                except:
-                    shares = 0.0
+                    client = get_gsheet_client()
+                    sheet_portfolio = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('PortfolioData')
+                    raw_portfolio_data = sheet_portfolio.get_all_records()
 
-                try:
-                    avg_price = float(str(row.get('ต้นทุนเฉลี่ย', row.get('avg_price', 0.0))).replace(',', ''))
-                except:
-                    avg_price = 0.0
+                    if raw_portfolio_data:
+                        # แปลงชื่อคอลัมน์ให้สะอาด ป้องกันปัญหาช่องว่าง
+                        cleaned_portfolio = []
+                        for row in raw_portfolio_data:
+                            cleaned_row = {str(k).strip(): v for k, v in row.items()}
+                            cleaned_portfolio.append(cleaned_row)
+                        st.session_state["my_portfolio"] = cleaned_portfolio
+                except Exception as e:
+                    st.error(f"❌ ไม่สามารถดึงข้อมูลพอร์ตจาก Google Sheets (PortfolioData) ได้: {e}")
 
-                sector_val = row.get('Sector', 'General / Unspecified')
+            # 2. ตรวจสอบว่ามีข้อมูลในพอร์ตหรือไม่
+            if "my_portfolio" in st.session_state and st.session_state["my_portfolio"]:
+                portfolio_list = []
+                total_invest = 0
+                total_value = 0
 
-                if ticker:
+                # ฟังก์ชันกำหนดสีสำหรับตารางพอร์ต
+                def color_portfolio(val):
+                    if isinstance(val, (int, float)):
+                        color = '#26A69A' if val > 0 else '#EF5350' if val < 0 else 'black'
+                        return f'color: {color}'
+                    return None
+
+                for row in st.session_state["my_portfolio"]:
+                    # รองรับชื่อคอลัมน์ได้ทั้งภาษาไทยและอังกฤษ (กันเหนียว)
+                    ticker = str(row.get('หุ้น', row.get('Ticker', ''))).strip()
+
                     try:
-                        # ดึงราคาตลาดล่าสุดผ่าน yfinance
-                        m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+                        shares = float(str(row.get('จำนวน', row.get('shares', 0))).replace(',', ''))
                     except:
-                        m_price = avg_price
+                        shares = 0.0
 
-                    cost_value = shares * avg_price
-                    market_value = shares * m_price
-                    profit = market_value - cost_value
-                    profit_pct = (profit / cost_value * 100) if cost_value > 0 else 0
+                    try:
+                        avg_price = float(str(row.get('ต้นทุนเฉลี่ย', row.get('avg_price', 0.0))).replace(',', ''))
+                    except:
+                        avg_price = 0.0
 
-                    portfolio_list.append({
-                        "หุ้น": ticker,
-                        "Sector": sector_val,
-                        "จำนวน": shares,
-                        "ต้นทุนเฉลี่ย": avg_price,
-                        "มูลค่าต้นทุน": cost_value,
-                        "ราคาตลาด": m_price,
-                        "มูลค่าตลาด": market_value,
-                        "กำไร/ขาดทุน": profit,
-                        "% กำไร/ขาดทุน": profit_pct
-                    })
-                    total_invest += cost_value
-                    total_value += market_value
+                    sector_val = row.get('Sector', 'General / Unspecified')
 
-            if portfolio_list:
-                # ดึงยอดเงินสดคงเหลือจาก session_state (ถ้ามี ถ้าไม่มีให้เป็น 0)
-                cash_bal = st.session_state.get('cash_balance', 0.0)
+                    if ticker:
+                        try:
+                            # ดึงราคาตลาดล่าสุดผ่าน yfinance
+                            m_price = yf.Ticker(f"{ticker}.BK").history(period="1d")['Close'].iloc[-1]
+                        except:
+                            m_price = avg_price
 
-                # 🔧 ปรับปรุง: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดสไตล์เดียวกับหน้าอื่นในแอป
-                col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-                render_metric_card(col_s1, "เงินสดคงเหลือ", f"{cash_bal:,.0f} ฿", icon="💵")
-                render_metric_card(col_s2, "เงินลงทุนรวม", f"{total_invest:,.0f} ฿", icon="📥")
-                render_metric_card(col_s3, "มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿", icon="📈")
-                # 🔧 แก้บั๊ก: ส่งค่ามูลค่าพอร์ตหุ้นผ่าน session_state (เหมือนที่ TFEX ทำอยู่แล้ว)
-                # เพราะหลังแยกไฟล์ แท็บ "ภาพรวม Net Worth" อยู่คนละไฟล์แล้ว มองไม่เห็นตัวแปร total_value โดยตรง
-                st.session_state['stock_net_worth'] = total_value
-                diff = total_value - total_invest
-                diff_pct = ((diff) / total_invest) * 100 if total_invest > 0 else 0.0
-                render_metric_card(col_s4, "กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", icon="💹",
-                                    delta=f"{diff_pct:.2f}%", delta_positive=(diff >= 0))
+                        cost_value = shares * avg_price
+                        market_value = shares * m_price
+                        profit = market_value - cost_value
+                        profit_pct = (profit / cost_value * 100) if cost_value > 0 else 0
 
-                # แสดงตารางพอร์ตหลัก
-                df_p = pd.DataFrame(portfolio_list)
-                df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
+                        portfolio_list.append({
+                            "หุ้น": ticker,
+                            "Sector": sector_val,
+                            "จำนวน": shares,
+                            "ต้นทุนเฉลี่ย": avg_price,
+                            "มูลค่าต้นทุน": cost_value,
+                            "ราคาตลาด": m_price,
+                            "มูลค่าตลาด": market_value,
+                            "กำไร/ขาดทุน": profit,
+                            "% กำไร/ขาดทุน": profit_pct
+                        })
+                        total_invest += cost_value
+                        total_value += market_value
 
-                # 🔧 ปรับปรุง: ตกแต่งตารางให้ทันสมัยขึ้น (สีหัวตาราง/เส้นขอบตามธีมของแอป, ซ่อนคอลัมน์
-                # เลขแถวที่ไม่มีประโยชน์) แทนที่จะปล่อยให้หน้าตาเป็นตารางดิบแบบ Excel เหมือนเดิม
-                _tc = get_theme_colors()
-                st.dataframe(
-                    df_display_p.style.format({
-                        "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
-                        "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
-                        "% กำไร/ขาดทุน": "{:.2f}%"
-                    })
-                    # 🔧 แก้บั๊ก: เดิมพยายามกำหนดสีตัวหนังสือทั่วทั้งตารางผ่าน .set_properties() (color)
-                    # พร้อมกับกำหนดสีเขียว/แดงเฉพาะคอลัมน์กำไร/ขาดทุนผ่าน .map() ทำให้ 2 คำสั่งนี้
-                    # แย่งกันคุม CSS property เดียวกัน (สลับลำดับก็ยังไม่พอ) ตอนนี้ตัดสีตัวหนังสือ
-                    # ทั่วไปออกจาก .set_properties() เหลือแค่ text-align/background-color เท่านั้น
-                    # ให้ .map() เป็นตัวเดียวที่คุมสี "color" ของตาราง ไม่มีจุดไหนมาแย่งกันอีก
-                    .set_properties(**{'text-align': 'right', 'background-color': _tc['bg']})
-                    .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
-                    # 🔧 แก้บั๊ก: เดิมใช้ .hide(axis='index') สั่งผ่านตัว Styler ซึ่งไม่ทำงานในจุดนี้
-                    # (คอลัมน์เลขแถวยังโผล่อยู่) เปลี่ยนมาใช้พารามิเตอร์ hide_index=True ของ
-                    # st.dataframe() โดยตรงแทน (วิธีเดียวกับจุดอื่นในไฟล์นี้ที่ซ่อนคอลัมน์ได้สำเร็จจริง)
-                    .set_table_styles([
-                        {'selector': 'th', 'props': [
-                            ('text-align', 'right'), ('background-color', '#F1EEE8'),
-                            ('color', _tc['text']), ('font-family', "'Prompt',sans-serif"),
-                            ('font-weight', '600'), ('border-color', _tc['border'])
-                        ]},
-                        {'selector': 'td', 'props': [('border-color', _tc['border'])]},
-                    ])
-                    , use_container_width=True, hide_index=True
-                )
+                if portfolio_list:
+                    # ดึงยอดเงินสดคงเหลือจาก session_state (ถ้ามี ถ้าไม่มีให้เป็น 0)
+                    cash_bal = st.session_state.get('cash_balance', 0.0)
 
-                # 🆕 เตือนความเสี่ยงกระจุกตัวรายหุ้น (ถือหุ้นตัวเดียวหนักเกินไป)
-                if total_value > 0:
-                    _heavy_stocks = [
-                        p for p in portfolio_list
-                        if (p["มูลค่าตลาด"] / total_value * 100) >= 20
-                    ]
-                    if _heavy_stocks:
-                        _warn_lines = "\n".join(
-                            f"- **{p['หุ้น']}**: {(p['มูลค่าตลาด'] / total_value * 100):.1f}% ของพอร์ต"
-                            for p in sorted(_heavy_stocks, key=lambda x: x["มูลค่าตลาด"], reverse=True)
-                        )
-                        st.warning(f"⚠️ **กระจุกตัวรายหุ้นสูง** (เกิน 20% ของพอร์ต):\n{_warn_lines}")
+                    # 🔧 ปรับปรุง: เปลี่ยนจาก st.metric ธรรมดา เป็นการ์ดสไตล์เดียวกับหน้าอื่นในแอป
+                    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+                    render_metric_card(col_s1, "เงินสดคงเหลือ", f"{cash_bal:,.0f} ฿", icon="💵")
+                    render_metric_card(col_s2, "เงินลงทุนรวม", f"{total_invest:,.0f} ฿", icon="📥")
+                    render_metric_card(col_s3, "มูลค่าปัจจุบัน", f"{total_value:,.0f} ฿", icon="📈")
+                    # 🔧 แก้บั๊ก: ส่งค่ามูลค่าพอร์ตหุ้นผ่าน session_state (เหมือนที่ TFEX ทำอยู่แล้ว)
+                    # เพราะหลังแยกไฟล์ แท็บ "ภาพรวม Net Worth" อยู่คนละไฟล์แล้ว มองไม่เห็นตัวแปร total_value โดยตรง
+                    st.session_state['stock_net_worth'] = total_value
+                    diff = total_value - total_invest
+                    diff_pct = ((diff) / total_invest) * 100 if total_invest > 0 else 0.0
+                    render_metric_card(col_s4, "กำไร/ขาดทุนรวม", f"{diff:,.0f} ฿", icon="💹",
+                                        delta=f"{diff_pct:.2f}%", delta_positive=(diff >= 0))
 
-                # 🆕 ตั้งจุดตัดขาดทุน (Stop Loss) / จุดขายทำกำไร (Take Profit) ต่อหุ้น สำหรับระบบ
-                # แจ้งเตือนอัตโนมัติผ่าน Telegram (เช็คทุกวันตอน Daily Scan ทำงาน คล้ายกับระบบ
-                # ราคาเป้าหมายใน Watchlist แต่แยกกันคนละระบบ เพราะเป็นหุ้นที่ถืออยู่จริงในพอร์ต)
-                # 🔧 ย้ายมาแสดงในตำแหน่ง placeholder ที่จองไว้ด้านบน (ต่อท้ายส่วนบันทึกซื้อขายหุ้น
-                # ตามที่ขอ) แทนที่จะแสดงตรงนี้เหมือนเดิม — คำนวณข้อมูลตรงนี้เหมือนเดิมทุกประการ
-                # เปลี่ยนแค่ "ตำแหน่งที่แสดงผลจริงบนจอ" เท่านั้น
-                with sl_tp_placeholder.container():
-                    # 🔧 แก้บั๊ก: เดิม _new_sl/_new_tp (ช่องตัวเลข) อยู่นอกฟอร์ม ใช้ .number_input()
-                    # เรียกผ่านคอลัมน์ (ไม่ใช่ st.number_input() ตรงๆ) พิมพ์ตัวเลขทีละตัวแล้วหน้าเว็บ
-                    # รันใหม่ทันที ตอนนี้ครอบด้วย st.form() ให้กรอกครบก่อนค่อยกดปุ่มบันทึกทีเดียว —
-                    # เลือกหุ้น (selectbox) ยังคงอยู่นอกฟอร์มเหมือนเดิม เพราะต้องอัปเดตสดจริงๆ (โชว์
-                    # "ปัจจุบัน: Stop Loss/Take Profit" ของหุ้นที่เพิ่งเลือกทันที) ซึ่งพอครอบด้วยฟอร์ม
-                    # แล้ว การพิมพ์ตัวเลขจะไม่ trigger rerun เลยจนกว่าจะกดปุ่ม ทำให้กล่องนี้ไม่ปิดเอง
-                    # ระหว่างพิมพ์อีกต่อไป (ไม่ต้องพึ่งกลไก "จำสถานะเปิดค้าง" ผ่าน on_change สำหรับ
-                    # ช่องตัวเลขอีกแล้ว แต่ selectbox เลือกหุ้นยังต้องใช้ on_change อยู่ เพราะยังอยู่
-                    # นอกฟอร์ม การเปลี่ยนหุ้นก็ยัง trigger rerun ปกติ)
-                    if 'sl_tp_expander_open' not in st.session_state:
-                        st.session_state['sl_tp_expander_open'] = False
+                    # แสดงตารางพอร์ตหลัก
+                    df_p = pd.DataFrame(portfolio_list)
+                    df_display_p = df_p.drop(columns=['Sector']) if 'Sector' in df_p.columns else df_p
 
-                    def _mark_sltp_open():
-                        st.session_state['sl_tp_expander_open'] = True
+                    # 🔧 ปรับปรุง: ตกแต่งตารางให้ทันสมัยขึ้น (สีหัวตาราง/เส้นขอบตามธีมของแอป, ซ่อนคอลัมน์
+                    # เลขแถวที่ไม่มีประโยชน์) แทนที่จะปล่อยให้หน้าตาเป็นตารางดิบแบบ Excel เหมือนเดิม
+                    _tc = get_theme_colors()
+                    st.dataframe(
+                        df_display_p.style.format({
+                            "จำนวน": "{:,.0f}", "ต้นทุนเฉลี่ย": "{:.2f}", "มูลค่าต้นทุน": "{:,.0f}",
+                            "ราคาตลาด": "{:.2f}", "มูลค่าตลาด": "{:,.0f}", "กำไร/ขาดทุน": "{:,.0f}",
+                            "% กำไร/ขาดทุน": "{:.2f}%"
+                        })
+                        # 🔧 แก้บั๊ก: เดิมพยายามกำหนดสีตัวหนังสือทั่วทั้งตารางผ่าน .set_properties() (color)
+                        # พร้อมกับกำหนดสีเขียว/แดงเฉพาะคอลัมน์กำไร/ขาดทุนผ่าน .map() ทำให้ 2 คำสั่งนี้
+                        # แย่งกันคุม CSS property เดียวกัน (สลับลำดับก็ยังไม่พอ) ตอนนี้ตัดสีตัวหนังสือ
+                        # ทั่วไปออกจาก .set_properties() เหลือแค่ text-align/background-color เท่านั้น
+                        # ให้ .map() เป็นตัวเดียวที่คุมสี "color" ของตาราง ไม่มีจุดไหนมาแย่งกันอีก
+                        .set_properties(**{'text-align': 'right', 'background-color': _tc['bg']})
+                        .map(color_portfolio, subset=["กำไร/ขาดทุน", "% กำไร/ขาดทุน"])
+                        # 🔧 แก้บั๊ก: เดิมใช้ .hide(axis='index') สั่งผ่านตัว Styler ซึ่งไม่ทำงานในจุดนี้
+                        # (คอลัมน์เลขแถวยังโผล่อยู่) เปลี่ยนมาใช้พารามิเตอร์ hide_index=True ของ
+                        # st.dataframe() โดยตรงแทน (วิธีเดียวกับจุดอื่นในไฟล์นี้ที่ซ่อนคอลัมน์ได้สำเร็จจริง)
+                        .set_table_styles([
+                            {'selector': 'th', 'props': [
+                                ('text-align', 'right'), ('background-color', '#F1EEE8'),
+                                ('color', _tc['text']), ('font-family', "'Prompt',sans-serif"),
+                                ('font-weight', '600'), ('border-color', _tc['border'])
+                            ]},
+                            {'selector': 'td', 'props': [('border-color', _tc['border'])]},
+                        ])
+                        , use_container_width=True, hide_index=True
+                    )
 
-                    with st.expander(
-                        "🛡️ ตั้งจุดตัดขาดทุน / ทำกำไร (Stop Loss / Take Profit)",
-                        expanded=st.session_state['sl_tp_expander_open']
-                    ):
-                        _sltp_tickers = [p["หุ้น"] for p in portfolio_list]
-                        _sltp_selected = st.selectbox(
-                            "เลือกหุ้น", _sltp_tickers, key="sltp_select_ticker", on_change=_mark_sltp_open
-                        )
-
-                        _current_holding = next((p for p in st.session_state.my_portfolio if p.get('หุ้น') == _sltp_selected), None)
-                        if _current_holding:
-                            _cur_sl = _current_holding.get('stop_loss_price')
-                            _cur_tp = _current_holding.get('take_profit_price')
-                            if _cur_sl or _cur_tp:
-                                st.caption(
-                                    f"🎯 ปัจจุบัน: "
-                                    + (f"Stop Loss {float(_cur_sl):,.2f} ฿ " if _cur_sl else "")
-                                    + (f"| Take Profit {float(_cur_tp):,.2f} ฿" if _cur_tp else "")
-                                )
-
-                        with st.form("sltp_form"):
-                            _sltp_col1, _sltp_col2, _sltp_col3 = st.columns([1, 1, 1])
-                            _new_sl = _sltp_col1.number_input(
-                                "Stop Loss (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_sl_price"
+                    # 🆕 เตือนความเสี่ยงกระจุกตัวรายหุ้น (ถือหุ้นตัวเดียวหนักเกินไป)
+                    if total_value > 0:
+                        _heavy_stocks = [
+                            p for p in portfolio_list
+                            if (p["มูลค่าตลาด"] / total_value * 100) >= 20
+                        ]
+                        if _heavy_stocks:
+                            _warn_lines = "\n".join(
+                                f"- **{p['หุ้น']}**: {(p['มูลค่าตลาด'] / total_value * 100):.1f}% ของพอร์ต"
+                                for p in sorted(_heavy_stocks, key=lambda x: x["มูลค่าตลาด"], reverse=True)
                             )
-                            _new_tp = _sltp_col2.number_input(
-                                "Take Profit (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_tp_price"
-                            )
-                            _sltp_submitted = _sltp_col3.form_submit_button("💾 บันทึกจุด SL/TP")
+                            st.warning(f"⚠️ **กระจุกตัวรายหุ้นสูง** (เกิน 20% ของพอร์ต):\n{_warn_lines}")
 
-                        if _sltp_submitted:
-                            if _new_sl <= 0 and _new_tp <= 0:
-                                st.warning("กรุณาระบุอย่างน้อย Stop Loss หรือ Take Profit อย่างใดอย่างหนึ่ง")
-                            else:
-                                for p in st.session_state.my_portfolio:
-                                    if p.get('หุ้น') == _sltp_selected:
-                                        if _new_sl > 0:
-                                            p['stop_loss_price'] = _new_sl
-                                            p['sl_alert_sent'] = "FALSE"
-                                        if _new_tp > 0:
-                                            p['take_profit_price'] = _new_tp
-                                            p['tp_alert_sent'] = "FALSE"
-                                        break
+                    if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
+                        st.session_state.edit_mode = True
+
+                    # 🔧 แก้บั๊ก: เดิมปุ่มด้านบนแค่ตั้งค่า edit_mode = True ไว้เฉยๆ ไม่มีโค้ดส่วนไหนอ่าน
+                    # ค่านี้เลย กดแล้วไม่มีอะไรเกิดขึ้นจริง (เป็นแบบนี้มาตั้งแต่ก่อนย้ายไป Firestore แล้ว)
+                    # ทำให้พิมพ์จำนวนหุ้น/ราคาต้นทุนผิดแล้วแก้เองในแอปไม่ได้เลย ต้องเข้าไปแก้ตรงใน
+                    # Google Sheets/Firestore Console แทน ตอนนี้เพิ่มตารางแก้ไขได้จริง (เหมือน pattern
+                    # เดียวกับตาราง Journal/Dividend ด้านล่างในไฟล์นี้) ผูกกับ st.session_state.my_portfolio
+                    # ตรงๆ (ข้อมูลดิบก่อนคำนวณราคาตลาด/กำไรขาดทุน) แก้ตัวเลข/ชื่อ/Sector หรือลบทั้งแถวได้
+                    # เลยผ่าน num_rows="dynamic" แล้วกดบันทึกเพื่อเขียนทับชีต PortfolioData ทั้งหมด (ใช้
+                    # save_portfolio() ฟังก์ชันเดิมที่ระบบเรียกอยู่แล้วตอนบันทึกซื้อ/แก้ SL-TP)
+                    if st.session_state.get('edit_mode'):
+                        st.divider()
+                        st.markdown("#### ✏️ แก้ไขข้อมูลหุ้นในพอร์ต")
+                        st.caption(
+                            "แก้ตัวเลข/ข้อความที่พิมพ์ผิดได้โดยตรงในตารางด้านล่าง (เช่น จำนวนหุ้น, "
+                            "ต้นทุนเฉลี่ย, Sector) หรือลบทั้งแถวด้วยไอคอนถังขยะท้ายแถว แล้วกด "
+                            "\"บันทึกการแก้ไข\" — ราคาตลาดในตารางด้านบนดึงสดจากตลาดเสมอ ไม่ต้องแก้ตรงนี้"
+                        )
+                        df_edit_portfolio = pd.DataFrame(st.session_state["my_portfolio"])
+                        edited_portfolio_df = st.data_editor(
+                            df_edit_portfolio,
+                            use_container_width=True,
+                            num_rows="dynamic",
+                            hide_index=True,
+                            key="portfolio_editor",
+                        )
+
+                        col_edit_save, col_edit_cancel = st.columns(2)
+                        with col_edit_save:
+                            if st.button("💾 บันทึกการแก้ไข", key="save_portfolio_edit", type="primary", use_container_width=True):
+                                st.session_state["my_portfolio"] = edited_portfolio_df.fillna('').to_dict('records')
                                 save_portfolio()
-                                st.session_state['sl_tp_expander_open'] = False  # บันทึกสำเร็จแล้ว ปิดกลับให้เรียบร้อย
-                                st.success(f"บันทึกจุด SL/TP ของ {_sltp_selected} เรียบร้อย")
+                                st.session_state.edit_mode = False
                                 st.rerun()
-
-                if st.button("✏️ แก้ไขข้อมูลหุ้นในพอร์ต"):
-                    st.session_state.edit_mode = True
-
-                # 🔧 แก้บั๊ก: เดิมปุ่มด้านบนแค่ตั้งค่า edit_mode = True ไว้เฉยๆ ไม่มีโค้ดส่วนไหนอ่าน
-                # ค่านี้เลย กดแล้วไม่มีอะไรเกิดขึ้นจริง (เป็นแบบนี้มาตั้งแต่ก่อนย้ายไป Firestore แล้ว)
-                # ทำให้พิมพ์จำนวนหุ้น/ราคาต้นทุนผิดแล้วแก้เองในแอปไม่ได้เลย ต้องเข้าไปแก้ตรงใน
-                # Google Sheets/Firestore Console แทน ตอนนี้เพิ่มตารางแก้ไขได้จริง (เหมือน pattern
-                # เดียวกับตาราง Journal/Dividend ด้านล่างในไฟล์นี้) ผูกกับ st.session_state.my_portfolio
-                # ตรงๆ (ข้อมูลดิบก่อนคำนวณราคาตลาด/กำไรขาดทุน) แก้ตัวเลข/ชื่อ/Sector หรือลบทั้งแถวได้
-                # เลยผ่าน num_rows="dynamic" แล้วกดบันทึกเพื่อเขียนทับชีต PortfolioData ทั้งหมด (ใช้
-                # save_portfolio() ฟังก์ชันเดิมที่ระบบเรียกอยู่แล้วตอนบันทึกซื้อ/แก้ SL-TP)
-                if st.session_state.get('edit_mode'):
-                    st.divider()
-                    st.markdown("#### ✏️ แก้ไขข้อมูลหุ้นในพอร์ต")
-                    st.caption(
-                        "แก้ตัวเลข/ข้อความที่พิมพ์ผิดได้โดยตรงในตารางด้านล่าง (เช่น จำนวนหุ้น, "
-                        "ต้นทุนเฉลี่ย, Sector) หรือลบทั้งแถวด้วยไอคอนถังขยะท้ายแถว แล้วกด "
-                        "\"บันทึกการแก้ไข\" — ราคาตลาดในตารางด้านบนดึงสดจากตลาดเสมอ ไม่ต้องแก้ตรงนี้"
-                    )
-                    df_edit_portfolio = pd.DataFrame(st.session_state["my_portfolio"])
-                    edited_portfolio_df = st.data_editor(
-                        df_edit_portfolio,
-                        use_container_width=True,
-                        num_rows="dynamic",
-                        hide_index=True,
-                        key="portfolio_editor",
-                    )
-
-                    col_edit_save, col_edit_cancel = st.columns(2)
-                    with col_edit_save:
-                        if st.button("💾 บันทึกการแก้ไข", key="save_portfolio_edit", type="primary", use_container_width=True):
-                            st.session_state["my_portfolio"] = edited_portfolio_df.fillna('').to_dict('records')
-                            save_portfolio()
-                            st.session_state.edit_mode = False
-                            st.rerun()
-                    with col_edit_cancel:
-                        if st.button("❌ ยกเลิก", key="cancel_portfolio_edit", use_container_width=True):
-                            st.session_state.edit_mode = False
-                            st.rerun()
+                        with col_edit_cancel:
+                            if st.button("❌ ยกเลิก", key="cancel_portfolio_edit", use_container_width=True):
+                                st.session_state.edit_mode = False
+                                st.rerun()
+                else:
+                    st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตการลงทุนครับ")
             else:
-                st.info("ยังไม่มีข้อมูลหุ้นในพอร์ตการลงทุนครับ")
-        else:
-            st.info("ยังไม่มีข้อมูลในชีต PortfolioData กรุณาตรวจสอบ Google Sheets อีกครั้งครับ")
+                st.info("ยังไม่มีข้อมูลในชีต PortfolioData กรุณาตรวจสอบ Google Sheets อีกครั้งครับ")
+
+        # 🆕 ตั้งจุดตัดขาดทุน (Stop Loss) / จุดขายทำกำไร (Take Profit) ต่อหุ้น สำหรับระบบแจ้งเตือน
+        # อัตโนมัติผ่าน Telegram — แสดงในตำแหน่ง placeholder ที่จองไว้ข้างบน (ต่อท้ายส่วนบันทึก
+        # ซื้อขายหุ้น) แต่คำนวณ/เช็คเงื่อนไข portfolio_list ตรงนี้ เพราะข้อมูลเพิ่งถูกคำนวณเสร็จ
+        # ในส่วนสรุปพอร์ตด้านบนไปแล้ว
+        if portfolio_list:
+            with sl_tp_placeholder.container():
+                # 🔧 แก้บั๊ก: เดิม _new_sl/_new_tp (ช่องตัวเลข) อยู่นอกฟอร์ม ใช้ .number_input()
+                # เรียกผ่านคอลัมน์ (ไม่ใช่ st.number_input() ตรงๆ) พิมพ์ตัวเลขทีละตัวแล้วหน้าเว็บ
+                # รันใหม่ทันที ตอนนี้ครอบด้วย st.form() ให้กรอกครบก่อนค่อยกดปุ่มบันทึกทีเดียว —
+                # เลือกหุ้น (selectbox) ยังคงอยู่นอกฟอร์มเหมือนเดิม เพราะต้องอัปเดตสดจริงๆ (โชว์
+                # "ปัจจุบัน: Stop Loss/Take Profit" ของหุ้นที่เพิ่งเลือกทันที) ซึ่งพอครอบด้วยฟอร์ม
+                # แล้ว การพิมพ์ตัวเลขจะไม่ trigger rerun เลยจนกว่าจะกดปุ่ม ทำให้กล่องนี้ไม่ปิดเอง
+                # ระหว่างพิมพ์อีกต่อไป (ไม่ต้องพึ่งกลไก "จำสถานะเปิดค้าง" ผ่าน on_change สำหรับ
+                # ช่องตัวเลขอีกแล้ว แต่ selectbox เลือกหุ้นยังต้องใช้ on_change อยู่ เพราะยังอยู่
+                # นอกฟอร์ม การเปลี่ยนหุ้นก็ยัง trigger rerun ปกติ)
+                if 'sl_tp_expander_open' not in st.session_state:
+                    st.session_state['sl_tp_expander_open'] = False
+
+                def _mark_sltp_open():
+                    st.session_state['sl_tp_expander_open'] = True
+
+                with st.expander(
+                    "🛡️ ตั้งจุดตัดขาดทุน / ทำกำไร (Stop Loss / Take Profit)",
+                    expanded=st.session_state['sl_tp_expander_open']
+                ):
+                    _sltp_tickers = [p["หุ้น"] for p in portfolio_list]
+                    _sltp_selected = st.selectbox(
+                        "เลือกหุ้น", _sltp_tickers, key="sltp_select_ticker", on_change=_mark_sltp_open
+                    )
+
+                    _current_holding = next((p for p in st.session_state.my_portfolio if p.get('หุ้น') == _sltp_selected), None)
+                    if _current_holding:
+                        _cur_sl = _current_holding.get('stop_loss_price')
+                        _cur_tp = _current_holding.get('take_profit_price')
+                        if _cur_sl or _cur_tp:
+                            st.caption(
+                                f"🎯 ปัจจุบัน: "
+                                + (f"Stop Loss {float(_cur_sl):,.2f} ฿ " if _cur_sl else "")
+                                + (f"| Take Profit {float(_cur_tp):,.2f} ฿" if _cur_tp else "")
+                            )
+
+                    with st.form("sltp_form"):
+                        _sltp_col1, _sltp_col2, _sltp_col3 = st.columns([1, 1, 1])
+                        _new_sl = _sltp_col1.number_input(
+                            "Stop Loss (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_sl_price"
+                        )
+                        _new_tp = _sltp_col2.number_input(
+                            "Take Profit (ราคา)", min_value=0.0, step=0.01, format="%.2f", key="new_tp_price"
+                        )
+                        _sltp_submitted = _sltp_col3.form_submit_button("💾 บันทึกจุด SL/TP")
+
+                    if _sltp_submitted:
+                        if _new_sl <= 0 and _new_tp <= 0:
+                            st.warning("กรุณาระบุอย่างน้อย Stop Loss หรือ Take Profit อย่างใดอย่างหนึ่ง")
+                        else:
+                            for p in st.session_state.my_portfolio:
+                                if p.get('หุ้น') == _sltp_selected:
+                                    if _new_sl > 0:
+                                        p['stop_loss_price'] = _new_sl
+                                        p['sl_alert_sent'] = "FALSE"
+                                    if _new_tp > 0:
+                                        p['take_profit_price'] = _new_tp
+                                        p['tp_alert_sent'] = "FALSE"
+                                    break
+                            save_portfolio()
+                            st.session_state['sl_tp_expander_open'] = False  # บันทึกสำเร็จแล้ว ปิดกลับให้เรียบร้อย
+                            st.success(f"บันทึกจุด SL/TP ของ {_sltp_selected} เรียบร้อย")
+                            st.rerun()
+
 
         # --- ส่วนแสดงกราฟสรุปพอร์ต ---
         st.divider()
