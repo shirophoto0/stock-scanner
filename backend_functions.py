@@ -1368,6 +1368,20 @@ def save_journal():
     st.cache_data.clear()
 
 
+def save_cashflow(df_cashflow):
+    """เขียนตาราง CashFlow ทั้งก้อนทับชีต/Firestore เดิม — ใช้สำหรับแก้ไขรายการเก่าที่บันทึกไปแล้ว
+    เช่น ปรับยอด Amount ของรายการซื้อ/ขายหุ้นให้รวมค่าคอมมิชชั่นจริงที่คำนวณได้ทีหลังจากพอร์ตจริง
+    (ตอนบันทึกครั้งแรกผ่านฟอร์มซื้อขายหุ้น ค่าคอมฯ ที่กรอกอาจเป็นแค่ค่าประมาณ)"""
+    client = get_gsheet_client()
+    sheet = get_cached_worksheet(client, get_active_sheet_name(), 'CashFlow')
+
+    sheet.clear()
+    sheet.update([df_cashflow.columns.values.tolist()] + df_cashflow.fillna('').values.tolist())
+    # ล้างแคช load_data() ทันทีหลังบันทึก (เหมือน save_journal()) กันข้อมูล CashFlow เก่าค้างจาก
+    # cache (ttl=600 วินาที) ทำให้ยอดเงินสดคงเหลือ/กราฟ HPR ไม่อัปเดตตามทันที
+    st.cache_data.clear()
+
+
 def load_journal():
     # 🔧 แก้บั๊ก: เดิมฟังก์ชันนี้ไม่มีระบบลองใหม่อัตโนมัติเลย พอเจอโควตา Google Sheets ชั่วคราว (429)
     # จะ error ทันที ต่างจากฟังก์ชันอื่นๆ ในแอปที่มีระบบลองใหม่อยู่แล้ว ตอนนี้เพิ่มให้เหมือนกัน

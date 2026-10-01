@@ -16,7 +16,7 @@ from backend_functions import (
     backfill_portfolio_history, check_alerts, clear_and_save_data,
     display_performance_dashboard, get_cached_spreadsheet, get_gsheet_client,
     get_sector_from_mapping, load_data, load_data_from_file, load_total_cash_balance,
-    log_cash_transaction, save_cash_balance, save_dividend_data, save_journal,
+    log_cash_transaction, save_cash_balance, save_cashflow, save_dividend_data, save_journal,
     save_portfolio, save_portfolio_snapshot, get_active_sheet_name, load_from_gsheet,
     load_watchlist, remove_from_watchlist, fetch_set_index_history, update_watchlist_target, add_to_watchlist,
     extract_dividend_from_image, normalize_dividend_date
@@ -1196,7 +1196,6 @@ def render_tab_stock():
         portfolio_list = []  # ค่าเริ่มต้นกันเหนียว เผื่อ SL/TP ด้านล่างอ้างถึงตอนยังไม่มีข้อมูลพอร์ต
 
         with summary_placeholder.container():
-            st.divider()
             st.subheader("📊 สรุปพอร์ตการลงทุน")
 
             # 1. ตรวจสอบและโหลดข้อมูลพอร์ตจาก Google Sheets (ชีต PortfolioData) ถ้ายังไม่มีใน session_state
@@ -2380,3 +2379,64 @@ def render_tab_stock():
                 st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv, file_name="trading_journal.csv", mime="text/csv", key="export_journal_csv")
         else:
             st.info("ยังไม่มีข้อมูลรายการเทรดในระบบครับ")
+
+        ########################################################################
+        # 4. ตารางประวัติรายการเงินสด (CashFlow) - แก้ไขย้อนหลังได้ เช่น ปรับยอด Amount ของรายการ
+        # ซื้อ/ขายหุ้นให้รวมค่าคอมมิชชั่นจริงที่เพิ่งคำนวณได้จากพอร์ตจริงทีหลัง (ตอนบันทึกครั้งแรก
+        # ผ่านฟอร์มซื้อขายหุ้น ค่าคอมฯ ที่กรอกไว้อาจเป็นแค่ค่าประมาณ) แก้ที่นี่แล้วยอด "เงินสดคงเหลือ"
+        # จะถูกต้องตรงกับพอร์ตจริงทันที เพราะยอดเงินสดคงเหลือคำนวณจาก sum(CashFlow.Amount) โดยตรง
+        st.divider()
+        st.markdown("#### 💵 ประวัติรายการเงินสด (CashFlow)")
+
+        try:
+            client = get_gsheet_client()
+            sheet_cashflow = get_cached_spreadsheet(client, get_active_sheet_name()).worksheet('CashFlow')
+            cashflow_records = sheet_cashflow.get_all_records()
+        except Exception as e:
+            cashflow_records = []
+            st.error(f"❌ ไม่สามารถดึงข้อมูล CashFlow ได้: {e}")
+
+        with st.expander("📂 ดูประวัติรายการเงินสด / แก้ไขย้อนหลัง", expanded=False):
+            if cashflow_records:
+                df_cashflow_full = pd.DataFrame(cashflow_records)
+                df_cashflow_full['Amount'] = pd.to_numeric(df_cashflow_full['Amount'], errors='coerce').fillna(0)
+                # เรียงรายการล่าสุดขึ้นก่อน เพื่อให้หารายการที่เพิ่งซื้อ/ขายไปง่ายขึ้น (Date เป็น
+                # string รูปแบบ YYYY-MM-DD อยู่แล้ว เรียงแบบ string ได้ผลลัพธ์เหมือนเรียงวันที่จริง)
+                df_cashflow_sorted = df_cashflow_full.sort_values(by='Date', ascending=False)
+
+                items_per_page = 50
+                total_pages = (len(df_cashflow_sorted) - 1) // items_per_page + 1
+                page = st.number_input("หน้า:", min_value=1, max_value=total_pages, value=1, key="cashflow_page")
+
+                start_idx = (page - 1) * items_per_page
+                df_cf_display = df_cashflow_sorted.iloc[start_idx : start_idx + items_per_page]
+
+                st.caption(
+                    "แก้ตัวเลขในช่อง \"Amount\" ของรายการที่ต้องการได้โดยตรง (เช่น ปรับยอดรวมค่า"
+                    "คอมมิชชั่นที่คำนวณใหม่จากพอร์ตจริง) แล้วกด \"บันทึกตารางหน้านี้\" — ยอด "
+                    "\"เงินสดคงเหลือ\" จะอัปเดตตามทันทีหลังบันทึก"
+                )
+                edited_cf = st.data_editor(df_cf_display, use_container_width=True, key="cashflow_editor")
+
+                if st.button("💾 บันทึกตารางหน้านี้", key="save_cashflow_page"):
+                    edited_cf['Amount'] = pd.to_numeric(edited_cf['Amount'], errors='coerce').fillna(0)
+
+                    # 🔧 เหมือนตาราง Journal ด้านบน: อัปเดตเฉพาะแถวที่แก้ไขจริงกลับเข้าไปในชุดข้อมูล
+                    # เต็ม (ใช้ index เดิมจับคู่) ไม่เขียนทับรายการในหน้าอื่นที่ไม่ได้แก้ไข
+                    for idx in edited_cf.index:
+                        if idx in df_cashflow_full.index:
+                            for col in edited_cf.columns:
+                                df_cashflow_full.loc[idx, col] = edited_cf.loc[idx, col]
+
+                    save_cashflow(df_cashflow_full)
+                    # บังคับให้คำนวณยอดเงินสดคงเหลือใหม่จาก CashFlow ที่เพิ่งแก้ แทนค่าที่ค้างอยู่ใน
+                    # session_state (ซึ่งถูกปรับแบบบวก/ลบสะสมมาตั้งแต่ตอนโหลดแอปครั้งแรก ไม่รู้เรื่อง
+                    # การแก้ไขย้อนหลังนี้)
+                    st.session_state.pop('cash_balance', None)
+                    st.success("บันทึกข้อมูล CashFlow เรียบร้อยแล้วครับ!")
+                    st.rerun()
+
+                csv_cf = df_cashflow_full.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("📥 Export เป็นไฟล์ Excel (CSV)", data=csv_cf, file_name="cashflow_history.csv", mime="text/csv", key="export_cashflow_csv")
+            else:
+                st.info("ยังไม่มีรายการเงินสดในระบบครับ")
