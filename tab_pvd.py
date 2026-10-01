@@ -50,7 +50,7 @@ def run_coop_auto_topup():
     last_row = coop_records[-1]
     try:
         latest_coop_date = str(last_row.get('Date'))
-        latest_coop_val = float(str(last_row.get('Value', 0)).replace(',', ''))
+        latest_coop_val = float(str(last_row.get('Coop_Value', last_row.get('Value', 0))).replace(',', ''))
         last_dt = datetime.strptime(latest_coop_date, "%Y-%m-%d").date()
     except Exception:
         return  # รูปแบบวันที่/ยอดในชีตผิดปกติ ข้ามรอบนี้ไปก่อนเช่นกัน
@@ -506,7 +506,7 @@ def render_tab_manual_records():
             if coop_records:
                 last_row = coop_records[-1]
                 latest_coop_date = str(last_row.get('Date', date.today().strftime("%Y-%m-%d")))
-                latest_coop_val = float(str(last_row.get('Value', 0)).replace(',', ''))
+                latest_coop_val = float(str(last_row.get('Coop_Value', last_row.get('Value', 0))).replace(',', ''))
         except Exception:
             pass
 
