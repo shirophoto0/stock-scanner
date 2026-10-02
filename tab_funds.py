@@ -14,6 +14,20 @@ from backend_functions import calculate_fund_result, get_gsheet_client, get_cach
 from theme import style_plotly, render_metric_card, get_theme_colors
 
 
+def resolve_fund_buy_inputs(cost_price: float, units: float, total_cost_value: float):
+    """รับค่า 3 ช่องจากฟอร์มซื้อกองทุน (ราคาต่อหน่วย, จำนวนหน่วย, มูลค่ารวม) แล้วคำนวณ
+    ช่องที่ขาดจากอีก 2 ช่องที่กรอกมา (ต้องกรอกอย่างน้อย 2 ใน 3 ช่อง)
+    คืนค่า (cost_price, units, filled_count, ok) โดย ok=False ถ้ากรอกไม่ครบ 2 ช่อง"""
+    filled_count = sum([cost_price > 0, units > 0, total_cost_value > 0])
+    if filled_count < 2:
+        return cost_price, units, filled_count, False
+    if units <= 0:
+        units = total_cost_value / cost_price
+    elif cost_price <= 0:
+        cost_price = total_cost_value / units
+    return round(cost_price, 4), round(units, 4), filled_count, True
+
+
 def _get_all_records_with_retry(client, spreadsheet_name, worksheet_name, retries=4, delay=2):
     """🔧 แก้บั๊ก 429: เดิม _load_fund_*_cached ด้านล่างยิง API ตรงๆ ครั้งเดียว พอเจอ Quota
     exceeded (429) ชั่วคราว (เช่น หลายแท็บ/หลายผู้ใช้อ่านพร้อมกัน) จะโยน error ออกไปให้ผู้ใช้เห็น
@@ -199,34 +213,35 @@ def render_tab_funds():
             )
 
             col3, col4 = st.columns(2)
+            # 🔧 กรอกแค่ 2 ใน 3 ช่อง (ราคาต่อหน่วย, จำนวนหน่วย, มูลค่ารวม) ก็พอ ระบบจะคำนวณ
+            # ช่องที่เหลือให้อัตโนมัติ (ดู logic คำนวณตอน submit ด้านล่าง)
             units = col3.number_input(
                 "จำนวนหน่วย (Units):",
                 min_value=0.0, step=0.0001, format="%.4f", key=f"fund_buy_units_{_nonce}",
+                help="ไม่กรอกก็ได้ถ้ากรอกราคาต้นทุนเฉลี่ยต่อหน่วย + มูลค่าเงินลงทุนรวมไว้แล้ว ระบบจะคำนวณจำนวนหน่วยให้อัตโนมัติ"
             )
-            # 🆕 ช่องกรอกทางเลือก: กรอก "ราคาต้นทุนเฉลี่ยต่อหน่วย" ด้านบน หรือ "มูลค่าเงินลงทุนรวม"
-            # ด้านล่างนี้ อย่างใดอย่างหนึ่งก็ได้ ถ้าไม่กรอกราคาต่อหน่วย ระบบจะคำนวณราคาต่อหน่วยให้เอง
-            # จาก มูลค่ารวม ÷ จำนวนหน่วย
             total_cost_value = col4.number_input(
                 "หรือกรอกมูลค่าเงินลงทุนรวมแทน:",
                 min_value=0.0, step=0.0001, format="%.4f", key=f"fund_buy_total_{_nonce}",
-                help="กรอกอย่างใดอย่างหนึ่งพอครับ: ราคาต้นทุนเฉลี่ยต่อหน่วยด้านบน หรือมูลค่าเงินลงทุนรวมช่องนี้ ระบบจะคำนวณอีกค่าให้อัตโนมัติจากจำนวนหน่วย"
+                help="กรอกอย่างน้อย 2 ใน 3 ช่องนี้พอครับ: ราคาต้นทุนเฉลี่ยต่อหน่วย, จำนวนหน่วย, มูลค่าเงินลงทุนรวม ระบบจะคำนวณช่องที่เหลือให้อัตโนมัติ"
             )
 
             submitted = st.form_submit_button("บันทึกการซื้อกองทุน", use_container_width=True, type="primary")
             if submitted:
                 fund_name = (new_fund_name or "").strip() if fund_choice == _NEW_FUND_OPTION else fund_choice
 
+                # 🔧 แก้บั๊ก: เดิมบังคับให้กรอกทั้ง "จำนวนหน่วย" และ "ราคาต้นทุนเฉลี่ยต่อหน่วย"
+                # (หรือมูลค่ารวม) เสมอ ทั้งที่ข้อความ help ของช่อง "มูลค่าเงินลงทุนรวม" บอกว่า
+                # กรอกแค่ 2 ใน 3 ช่อง (ราคาต่อหน่วย, จำนวนหน่วย, มูลค่ารวม) ก็พอ ระบบจะคำนวณ
+                # ช่องที่เหลือให้เอง — ดึง logic ไปเป็นฟังก์ชัน resolve_fund_buy_inputs() ด้านบน
+                # เพื่อให้ unit test ได้โดยไม่ต้องยิง Google Sheets/Firestore
+                cost_price, units, _filled_count, _ok = resolve_fund_buy_inputs(cost_price, units, total_cost_value)
+
                 if not fund_name:
                     st.warning("กรุณาเลือกกองทุน หรือกรอกชื่อกองทุนใหม่ครับ")
-                elif units <= 0:
-                    st.warning("กรุณากรอกจำนวนหน่วย (Units) ครับ")
-                elif cost_price <= 0 and total_cost_value <= 0:
-                    st.warning("กรุณากรอกราคาต้นทุนเฉลี่ยต่อหน่วย หรือ มูลค่าเงินลงทุนรวม อย่างใดอย่างหนึ่งครับ")
+                elif not _ok:
+                    st.warning("กรุณากรอกอย่างน้อย 2 ใน 3 ช่องนี้ครับ: ราคาต้นทุนเฉลี่ยต่อหน่วย, จำนวนหน่วย, มูลค่าเงินลงทุนรวม (ระบบจะคำนวณช่องที่เหลือให้อัตโนมัติ)")
                 else:
-                    if cost_price <= 0:
-                        cost_price = total_cost_value / units
-                    cost_price = round(cost_price, 4)
-                    units = round(units, 4)
                     try:
                         client = get_gsheet_client()
                         # 🔧 แก้บั๊ก: เดิมเขียน ID ของ Google Sheet ตายตัวไว้ (ไม่ใช่ชื่อ "MyStockData")
